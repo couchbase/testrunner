@@ -182,6 +182,33 @@ class bucket_config(unittest.TestCase):
             shell.disconnect()
         time.sleep(30)
 
+    # REBOOT
+    def _reboot_server(self):
+        try:
+            for server in self.servers[:]:
+                shell = RemoteMachineShellConnection(server)
+                if shell.extract_remote_info().type.lower() == 'windows':
+                    o, r = shell.execute_command("shutdown -r -f -t 0")
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} is being stopped".format(server.ip))
+                elif shell.extract_remote_info().type.lower() == 'linux':
+                    o, r = shell.execute_command("reboot")
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} is being stopped".format(server.ip))
+
+                    time.sleep(120)
+                    shell = RemoteMachineShellConnection(server)
+                    command = "/sbin/iptables -F"
+                    o, r = shell.execute_command(command)
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} backup".format(server.ip))
+        finally:
+            self.log.info("Warming-up server ..".format(self.servers.ip))
+            time.sleep(100)
+
     def _check_config(self):
         result = self.rest.get_bucket_json(self.bucket)["timeSynchronization"]
         print result
