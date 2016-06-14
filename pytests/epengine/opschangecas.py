@@ -27,7 +27,7 @@ class OpsChangeCasTests(BucketConfig):
         KEY_NAME = 'key1'
 
         rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, 'default')
+        client = VBucketAwareMemcached(rest, self.bucket)
 
         for i in range(10):
             # set a key
@@ -44,7 +44,7 @@ class OpsChangeCasTests(BucketConfig):
         KEY_NAME = 'key2'
 
         rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, 'default')
+        client = VBucketAwareMemcached(rest, self.bucket)
 
         for i in range(10):
             # set a key
@@ -67,7 +67,7 @@ class OpsChangeCasTests(BucketConfig):
         KEY_NAME = 'key2'
 
         rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, 'default')
+        client = VBucketAwareMemcached(rest, self.bucket)
 
         for i in range(10):
             # set a key
