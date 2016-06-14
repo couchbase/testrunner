@@ -112,7 +112,6 @@ class OpsChangeCasTests(BucketConfig):
             mc_active = client.memcached(KEY_NAME)
             cas = mc_active.getMeta(KEY_NAME)[4]
             get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=True)
-            print 'get_meta_resp {0}'.format(get_meta_resp)
 
         max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
 
@@ -149,8 +148,9 @@ class OpsChangeCasTests(BucketConfig):
 
         rebalance.result()
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
+        get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=True)
         print 'replica CAS {0}'.format(replica_CAS)
-
+        print 'replica ext meta {0}'.format(get_meta_resp)
 
         # add the node back
         self.log.info('Add the node back, the max_cas should be healed')
@@ -165,6 +165,7 @@ class OpsChangeCasTests(BucketConfig):
         print 'active cas {0}'.format(active_CAS)
 
         self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_failover(self):
         KEY_NAME = 'key2'
@@ -213,8 +214,10 @@ class OpsChangeCasTests(BucketConfig):
         active_CAS = mc_active.getMeta(KEY_NAME)[4]
         print 'active cas {0}'.format(active_CAS)
 
+        get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=True)
+        print 'replica CAS {0}'.format(replica_CAS)
+        print 'replica ext meta {0}'.format(get_meta_resp)
+
         self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
-
-
-
+        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
