@@ -99,3 +99,122 @@ class OpsChangeCasTests(BucketConfig):
             else:
                 raise Exception(error)
 
+    def test_cas_getMeta(self):
+        KEY_NAME = 'key1'
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, self.bucket)
+
+        for i in range(10):
+            # set a key
+            value = 'value' + str(i)
+            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
+            mc_active = client.memcached(KEY_NAME)
+            cas = mc_active.getMeta(KEY_NAME)[4]
+            get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=True)
+            print 'get_meta_resp {0}'.format(get_meta_resp)
+
+        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
+
+        self.assertTrue(cas == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas))
+        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+
+    def test_meta_rebalance_out(self):
+        KEY_NAME = 'key1'
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, self.bucket)
+
+        for i in range(10):
+            # set a key
+            value = 'value' + str(i)
+            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
+            vbucket_id = client._get_vBucket_id(KEY_NAME)
+            print 'vbucket_id is {0}'.format(vbucket_id)
+            mc_active = client.memcached(KEY_NAME)
+            mc_master = client.memcached_for_vbucket( vbucket_id )
+            mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
+
+            cas_active = mc_active.getMeta(KEY_NAME)[4]
+            print 'cas_a {0} '.format(cas_active)
+
+        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
+
+        self.assertTrue(cas_active == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas_active))
+
+        # remove that node
+        self.log.info('Remove the node with active data')
+
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [] ,[self.master])
+
+        rebalance.result()
+        replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
+        print 'replica CAS {0}'.format(replica_CAS)
+
+
+        # add the node back
+        self.log.info('Add the node back, the max_cas should be healed')
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [self.master], [])
+
+        rebalance.result()
+
+        # verify the CAS is good
+        client = VBucketAwareMemcached(rest, self.bucket)
+        mc_active = client.memcached(KEY_NAME)
+        active_CAS = mc_active.getMeta(KEY_NAME)[4]
+        print 'active cas {0}'.format(active_CAS)
+
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+
+    def test_meta_failover(self):
+        KEY_NAME = 'key2'
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, self.bucket)
+
+        for i in range(10):
+            # set a key
+            value = 'value' + str(i)
+            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
+            vbucket_id = client._get_vBucket_id(KEY_NAME)
+            print 'vbucket_id is {0}'.format(vbucket_id)
+            mc_active = client.memcached(KEY_NAME)
+            mc_master = client.memcached_for_vbucket( vbucket_id )
+            mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
+
+            cas_active = mc_active.getMeta(KEY_NAME)[4]
+            print 'cas_a {0} '.format(cas_active)
+
+        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
+
+        self.assertTrue(cas_active == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas_active))
+
+        # failover that node
+        self.log.info('Failing over node with active data {0}'.format(self.master))
+        self.cluster.failover(self.servers, [self.master])
+
+        self.log.info('Remove the node with active data {0}'.format(self.master))
+
+        rebalance = self.cluster.async_rebalance(self.servers[:], [] ,[self.master])
+
+        rebalance.result()
+        replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
+        print 'replica CAS {0}'.format(replica_CAS)
+
+        # add the node back
+        self.log.info('Add the node back, the max_cas should be healed')
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [self.master], [])
+
+        rebalance.result()
+
+        # verify the CAS is good
+        client = VBucketAwareMemcached(rest, self.bucket)
+        mc_active = client.memcached(KEY_NAME)
+        active_CAS = mc_active.getMeta(KEY_NAME)[4]
+        print 'active cas {0}'.format(active_CAS)
+
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+
+
+
+
