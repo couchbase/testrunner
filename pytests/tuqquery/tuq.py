@@ -2057,8 +2057,9 @@ class QueryTests(BaseTestCase):
             res = self.run_cbq_query()
             self.log.info(res)
 	    plan = ExplainPlanHelper(res)
-            self.assertTrue(plan['~children'][1]['~child']['~children'][1]['scan']['index'] == index,
-                            "Type should be %s, but is: %s" %(index,plan["~children"][1]['~child']))
+            print plan['~children'][2]['~child']['~children'][0]['scan']['index']
+            self.assertTrue(plan['~children'][2]['~child']['~children'][0]['scan']['index'] == index,
+                            "wrong index used")
 
 
 ###############################################################################################

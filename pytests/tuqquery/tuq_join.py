@@ -31,7 +31,7 @@ class JoinTests(QueryTests):
     def test_simple_join_keys(self):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
-            "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
+            "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids"
             time.sleep(30)
             actual_result = self.run_cbq_query()
@@ -49,7 +49,7 @@ class JoinTests(QueryTests):
     def test_prepared_simple_join_keys(self):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
-            "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
+            "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids"
             self.prepared_common_body()
 
