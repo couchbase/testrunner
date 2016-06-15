@@ -17,106 +17,16 @@ class OpsChangeCasTests(BucketConfig):
 
     def setUp(self):
         super(OpsChangeCasTests, self).setUp()
+        self.prefix = "test_"
         self.expire_time = self.input.param("expire_time", 5)
         self.item_flag = self.input.param("item_flag", 0)
+        self.value_size = self.input.param("value_size", 256)
+
+        self.rest = RestConnection(self.master)
+        self.client = VBucketAwareMemcached(self.rest, self.bucket)
 
     def tearDown(self):
         super(OpsChangeCasTests, self).tearDown()
-
-    def test_cas_set(self):
-        KEY_NAME = 'key1'
-
-        rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, self.bucket)
-
-        for i in range(10):
-            # set a key
-            value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
-            mc_active = client.memcached(KEY_NAME)
-            cas = mc_active.getMeta(KEY_NAME)[4]
-
-        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
-
-        self.assertTrue(cas == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas))
-
-    def test_cas_delete(self):
-        KEY_NAME = 'key2'
-
-        rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, self.bucket)
-
-        for i in range(10):
-            # set a key
-            value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
-            mc_active = client.memcached(KEY_NAME)
-
-            cas = mc_active.getMeta(KEY_NAME)[4]
-
-        rc  = client.memcached(KEY_NAME).delete(KEY_NAME)
-        mc_active = client.memcached(KEY_NAME)
-
-        cas = mc_active.getMeta(KEY_NAME)[4]
-
-        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
-
-        self.assertTrue(cas == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(max_cas))
-
-    def test_cas_expiry(self):
-        KEY_NAME = 'key2'
-
-        rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, self.bucket)
-
-        for i in range(10):
-            # set a key
-            value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
-            mc_active = client.memcached(KEY_NAME)
-
-            cas = mc_active.getMeta(KEY_NAME)[4]
-
-        rc = client.memcached(KEY_NAME).set(KEY_NAME, self.expire_time, 0, 'new_value')
-        mc_active = client.memcached(KEY_NAME)
-
-        cas = mc_active.getMeta(KEY_NAME)[4]
-
-        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
-
-        self.assertTrue(cas == max_cas, 'max cas  is not 0 it is {0}'.format(max_cas))
-
-        time.sleep(self.expire_time+1)
-        self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
-        try:
-            client.memcached(KEY_NAME).cas(KEY_NAME, 0, self.item_flag, cas, 'new')
-            raise Exception("The item should already be expired. We can't mutate it anymore")
-        except MemcachedError as error:
-        #It is expected to raise MemcachedError becasue the key is expired.
-            if error.status == ERR_NOT_FOUND:
-                self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.msg))
-                pass
-            else:
-                raise Exception(error)
-
-    def test_cas_getMeta(self):
-        KEY_NAME = 'key1'
-
-        rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, self.bucket)
-
-        for i in range(10):
-            # set a key
-            value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
-            mc_active = client.memcached(KEY_NAME)
-            cas = mc_active.getMeta(KEY_NAME)[4]
-            get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=True)
-
-        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
-
-        self.assertTrue(cas == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas))
-        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_rebalance_out(self):
         KEY_NAME = 'key1'
@@ -286,12 +196,156 @@ class OpsChangeCasTests(BucketConfig):
         # restart nodes
         self._reboot_server()
 
-    ''' Common function to verify the expected values on cas
+    ''' Test Incremental sets on cas and max cas values for keys
     '''
-    def _check_cas(self):
+    def test_cas_set(self):
+        self.log.info(' Starting test-sets')
+        self._load_ops(ops='set', mutations=20)
+        #self._load_ops(ops='add')
+        #self._load_ops(ops='replace')
+        #self._load_ops(ops='delete')
+        self._check_cas(check_conflict_resolution=True)
+
+    ''' Test Incremental updates on cas and max cas values for keys
+    '''
+    def test_cas_updates(self):
+        self.log.info(' Starting test-updates')
+        self._load_ops(ops='set', mutations=20)
+        #self._load_ops(ops='add')
+        self._load_ops(ops='replace',mutations=20)
+        #self._load_ops(ops='delete')
+        self._check_cas(check_conflict_resolution=True)
+
+    ''' Test Incremental deletes on cas and max cas values for keys
+    '''
+    def test_cas_deletes(self):
+        self.log.info(' Starting test-deletes')
+        self._load_ops(ops='set', mutations=20)
+        #self._load_ops(ops='add')
+        self._load_ops(ops='replace',mutations=20)
+        self._load_ops(ops='delete')
+        self._check_cas(check_conflict_resolution=True)
+
+    ''' Test expiry on cas and max cas values for keys
+    '''
+    def test_cas_expiry(self):
+        self.log.info(' Starting test-expiry')
+        self._load_ops(ops='set', mutations=20)
+        #self._load_ops(ops='add')
+        #self._load_ops(ops='replace',mutations=20)
+        self._load_ops(ops='expiry')
+        self._check_cas(check_conflict_resolution=True)
+        self._check_expiry()
+
+    ''' Test touch on cas and max cas values for keys
+    '''
+    def test_cas_touch(self):
+        self.log.info(' Starting test-touch')
+        self._load_ops(ops='set', mutations=20)
+        #self._load_ops(ops='add')
+        #self._load_ops(ops='replace',mutations=20)
+        self._load_ops(ops='touch')
+        self._check_cas(check_conflict_resolution=True)
+
+    ''' Test getMeta on cas and max cas values for keys
+    '''
+    def test_cas_getMeta(self):
+        self.log.info(' Starting test-getMeta')
+        self._load_ops(ops='set', mutations=20)
+        self._check_cas(check_conflict_resolution=True)
+        #self._load_ops(ops='add')
+        self._load_ops(ops='replace',mutations=20)
+        self._check_cas(check_conflict_resolution=True)
+
+        self._load_ops(ops='delete')
+        self._check_cas(check_conflict_resolution=True)
+
+    ''' Test setMeta on cas and max cas values for keys
+    '''
+    def test_cas_setMeta(self):
         pass
 
-    ''' Common function to add set delete operations on the bucket
+    ''' Test deleteMeta on cas and max cas values for keys
     '''
-    def _load_ops(self):
+    def test_cas_deleteMeta(self):
         pass
+
+    ''' Test addMeta on cas and max cas values for keys
+    '''
+    def test_cas_addMeta(self):
+        pass
+
+
+    ''' Common function to verify the expected values on cas
+    '''
+    def _check_cas(self, check_conflict_resolution=False):
+        self.log.info(' Verifying cas and max cas for the keys')
+        k=0
+
+        while k<10:
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+            mc_active = self.client.memcached(key)
+
+            cas = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            #print 'max_cas is {0}'.format(max_cas)
+            self.assertTrue(cas == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas))
+
+            if check_conflict_resolution:
+                get_meta_resp = mc_active.getMeta(key,request_extended_meta_data=True)
+                self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+
+    ''' Common function to add set delete etc operations on the bucket
+    '''
+    def _load_ops(self, ops=None, mutations=1):
+
+        k=0
+        payload = MemcachedClientHelper.create_value('*', self.value_size)
+
+        while k<10:
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+            for i in range(mutations):
+                if ops=='set':
+                    #print 'set'
+                    self.client.memcached(key).set(key, 0, 0,payload)
+                elif ops=='add':
+                    #print 'add'
+                    self.client.memcached(key).add(key, 0, 0,payload)
+                elif ops=='replace':
+                    self.client.memcached(key).replace(key, 0, 0,payload)
+                    #print 'Replace'
+                elif ops=='delete':
+                    #print 'delete'
+                    self.client.memcached(key).delete(key)
+                elif ops=='expiry':
+                    #print 'expiry'
+                    self.client.memcached(key).set(key, 0, self.expire_time ,payload)
+                elif ops=='touch':
+                    #print 'touch'
+                    self.client.memcached(key).touch(key, 10)
+
+        self.log.info("Done with specified {0} ops".format(ops))
+
+    '''Check if items are expired as expected'''
+    def _check_expiry(self):
+        time.sleep(self.expire_time+1)
+
+        k=0
+        while k<10:
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+            mc_active = self.client.memcached(key)
+            cas = mc_active.getMeta(key)[4]
+            self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
+            try:
+                self.client.memcached(key).cas(key, 0, self.item_flag, cas, 'new')
+                raise Exception("The item should already be expired. We can't mutate it anymore")
+            except MemcachedError as error:
+            #It is expected to raise MemcachedError becasue the key is expired.
+                if error.status == ERR_NOT_FOUND:
+                    self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.msg))
+                    pass
+                else:
+                    raise Exception(error)
