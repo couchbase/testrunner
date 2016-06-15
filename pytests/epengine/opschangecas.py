@@ -275,6 +275,56 @@ class OpsChangeCasTests(BucketConfig):
     def test_cas_addMeta(self):
         pass
 
+    ''' Test getMeta on cas and max cas values for empty vbucket
+    '''
+    def test_cas_getMeta_empty_vBucket(self):
+        self.log.info(' Starting test-getMeta')
+        self._load_ops(ops='set', mutations=20)
+
+        k=0
+        all_keys = []
+        while k<10:
+            k+=1
+            key = "{0}{1}".format(self.prefix, k)
+            all_keys.append(key)
+
+        vbucket_ids = self.client._get_vBucket_ids(all_keys)
+
+        i=0
+        if i not in vbucket_ids and i <= 1023:
+            vb_non_existing=i
+        elif i>1023:
+            i +=1
+        else:
+            self.log.info('ERROR generating empty vbucket id')
+
+        mc_active = self.client.memcached(all_keys[0]) #Taking a temp connection to the mc.
+        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(vb_non_existing) + ':max_cas'] )
+        self.assertTrue( max_cas == 0, msg='[ERROR] Max cas is non-zero')
+
+
+    ''' Test addMeta on cas and max cas values for keys
+    '''
+    def test_meta_backup(self):
+        self.log.info(' Starting test-getMeta')
+        self._load_ops(ops='set', mutations=20)
+
+        '''Do the backup on the bucket '''
+        self.shell = RemoteMachineShellConnection(self.master)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
+                                               self.input.membase_settings.rest_password)
+        self.backup_location = "/tmp/backup"
+        self.command_options = self.input.param("command_options", '')
+        try:
+            shell = RemoteMachineShellConnection(self.master)
+            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
+
+            time.sleep(5)
+            shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
+            print 'Done with restore'
+        finally:
+            self._check_cas(check_conflict_resolution=True)
 
     ''' Common function to verify the expected values on cas
     '''
