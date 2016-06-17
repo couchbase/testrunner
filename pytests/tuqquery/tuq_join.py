@@ -30,7 +30,7 @@ class JoinTests(QueryTests):
 
     def test_simple_join_keys(self):
         for bucket in self.buckets:
-            self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
+            self.query = "SELECT employee.name, employee.tasks_ids, new_project.project " +\
             "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids"
             time.sleep(30)
@@ -39,16 +39,16 @@ class JoinTests(QueryTests):
             full_list = self._generate_full_joined_docs_list(join_type=self.type_join)
             expected_result = [doc for doc in full_list if not doc]
             expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                     "new_project" : doc['project']}
+                                     "project" : doc['project']}
                                     for doc in full_list if doc and 'project' in doc])
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
-                                    for doc in full_list if doc and not 'project' in doc])
+            #expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
+                                    #for doc in full_list if doc and not 'project' in doc])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_simple_join_keys(self):
         for bucket in self.buckets:
-            self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
+            self.query = "SELECT employee.name, employee.tasks_ids, new_project.project " +\
             "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids"
             self.prepared_common_body()
