@@ -404,12 +404,12 @@ class OpsChangeCasTests(BucketConfig):
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
 
-            get_meta_resp = mc_active.getMeta(key)
-            print 'meta befor delete is {0}'.format(get_meta_resp)
+            self.log.info('Doing delete with meta, using a lower CAS value')
+            get_meta_pre = mc_active.getMeta(key)[4]
             del_with_meta_resp = mc_active.del_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, TEST_CAS+1)
-            print 'del meta is {0}'.format(del_with_meta_resp)
-            get_meta_resp = mc_active.getMeta(key)
-            print 'cas after delete is {0}'.format(get_meta_resp)
+            get_meta_post = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas > TEST_CAS+1, '[ERROR]Max cas {0} is not greater than delete cas {1}'.format(max_cas, TEST_CAS))
 
 
     ''' Test addMeta on cas and max cas values for keys
