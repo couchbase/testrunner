@@ -260,10 +260,99 @@ class OpsChangeCasTests(BucketConfig):
         self._load_ops(ops='delete')
         self._check_cas(check_conflict_resolution=True)
 
-    ''' Test setMeta on cas and max cas values for keys
-    '''
-    def test_cas_setMeta(self):
-        pass
+    def test_cas_setMeta_lower(self):
+
+        self.log.info(' Starting test-getMeta')
+        self._load_ops(ops='set', mutations=20)
+        self._check_cas(check_conflict_resolution=True)
+
+        k=0
+        # Select arbit key
+        while k<10:
+
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+
+            vbucket_id = self.client._get_vBucket_id(key)
+            #print 'vbucket_id is {0}'.format(vbucket_id)
+            mc_active = self.client.memcached(key)
+            mc_master = self.client.memcached_for_vbucket( vbucket_id )
+            mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+            TEST_SEQNO = 123
+            TEST_CAS = k
+
+            cas = mc_active.getMeta(key)[4]
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(cas_post_meta < max_cas, '[ERROR]Max cas  is not higher it is lower than {0}'.format(cas_post_meta))
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to original cas {0}'.format(cas))
+
+            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            cas = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
+
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, 125, TEST_CAS, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(cas_post_meta < max_cas, '[ERROR]Max cas  is not higher it is lower than {0}'.format(cas_post_meta))
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to original cas {0}'.format(cas))
+
+            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            cas = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
+
+    def test_cas_setMeta_higher(self):
+
+        self.log.info(' Starting test-getMeta')
+        self._load_ops(ops='set', mutations=20)
+        self._check_cas(check_conflict_resolution=True)
+
+        k=0
+
+        while k<10:
+
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+
+            vbucket_id = self.client._get_vBucket_id(key)
+            #print 'vbucket_id is {0}'.format(vbucket_id)
+            mc_active = self.client.memcached(key)
+            mc_master = self.client.memcached_for_vbucket( vbucket_id )
+            mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+            TEST_SEQNO = 123
+            TEST_CAS = 9966180844186042368
+
+            cas = mc_active.getMeta(key)[4]
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(cas_post_meta == max_cas, '[ERROR]Max cas  is not equal it is {0}'.format(cas_post_meta))
+            self.assertTrue(max_cas > cas, '[ERROR]Max cas  is not higher than original cas {0}'.format(cas))
+
+            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            cas = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
+
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, 125, TEST_CAS, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(cas_post_meta < max_cas, '[ERROR]Max cas  is not higher it is lower than {0}'.format(cas_post_meta))
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to original cas {0}'.format(cas))
+
+            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            cas = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
 
     ''' Test deleteMeta on cas and max cas values for keys
     '''
