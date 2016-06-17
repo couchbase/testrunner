@@ -12,7 +12,9 @@ class Rebalance(XDCRNewBaseTest):
         self.dest_cluster = self.get_cb_cluster_by_name('C2')
         self.dest_master = self.dest_cluster.get_master_node()
         self.__rebalance = self._input.param("rebalance", "").split('-')
+        self.__failover = self._input.param("failover","").split('-')
         self.__num_rebalance = self._input.param("num_rebalance", 1)
+        self.__num_failover = self._input.param("num_failover", 1)
 
     def tearDown(self):
         super(Rebalance, self).tearDown()
@@ -57,6 +59,37 @@ class Rebalance(XDCRNewBaseTest):
 
             self.perform_update_delete()
 
+            self.verify_results()
+        finally:
+            pass
+
+    def failover_and_rebalance_in_out(self):
+        """
+        MB-18887
+        This test makes use of async_load,
+        we start loading, then failover and rebalance-in-out required nodes
+        on respective clusters and then after loading completes, perform deletes
+        and then verify data.
+        """
+        try:
+            tasks = self.setup_xdcr_async_load()
+
+            if "C1" in self.__failover:
+                self.src_cluster.failover(
+                    num_nodes=self.__num_failover)
+                tasks.append(self.src_cluster.async_rebalance_in_out(
+                    num_add_nodes=self.__num_rebalance,
+                    remove_nodes=[]))
+            if "C2" in self.__failover:
+                self.dest_cluster.failover(
+                    num_nodes=self.__num_failover)
+                tasks.append(self.dest_cluster.async_rebalance_in_out(
+                    num_add_nodes=self.__num_rebalance,
+                    remove_nodes=[]))
+            for task in tasks:
+                task.result()
+
+            self.perform_update_delete()
             self.verify_results()
         finally:
             pass

@@ -388,12 +388,19 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_goxdcr_log(server, str):
+    def check_goxdcr_log(server, str, goxdcr_log, print_matches=None):
         """ Checks if a string 'str' is present in goxdcr.log on server
             and returns the number of occurances
+            @param goxdcr_log: goxdcr log location on the server
         """
         shell = RemoteMachineShellConnection(server)
-        goxdcr_log = NodeHelper.get_goxdcr_log_dir(server) + '/goxdcr.log*'
+        matches = []
+        if print_matches:
+            matches, err = shell.execute_command("zgrep \"{0}\" {1}".
+                                        format(str, goxdcr_log))
+            if matches:
+                NodeHelper._log.info(print_matches)
+
         count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
                                         format(str, goxdcr_log))
         if isinstance(count, list):
@@ -402,6 +409,8 @@ class NodeHelper:
             count = int(count)
         NodeHelper._log.info(count)
         shell.disconnect()
+        if print_matches:
+            return matches, count
         return count
 
     @staticmethod
@@ -1334,6 +1343,7 @@ class CouchbaseCluster:
             seed,
             seed,
             value_size,
+            start=0,
             end=num_items)
         tasks = []
         for bucket in self.__buckets:
@@ -1729,6 +1739,48 @@ class CouchbaseCluster:
 
         return task
 
+    def async_rebalance_in_out(self, remove_nodes, num_add_nodes=1, master=False):
+        """Rebalance-in-out nodes from Cluster
+        @param remove_nodes: a list of nodes to be rebalanced-out
+        @param master: True if rebalance-out master node only.
+        @param num_nodes: number of nodes to add back to cluster.
+        """
+        raise_if(len(FloatingServers._serverlist) < num_add_nodes,
+            XDCRException(
+                "Cluster needs {0} nodes for rebalance-in, current: {1}".
+                format((num_add_nodes),
+                       len(FloatingServers._serverlist)))
+        )
+
+        add_nodes = []
+        for _ in range(num_add_nodes):
+            add_nodes.append(FloatingServers._serverlist.pop())
+
+        self.__log.info(
+            "Starting rebalance-out: {0}, rebalance-in: {1} at {2} cluster {3}".
+            format(
+                remove_nodes,
+                add_nodes,
+                self.__name,
+                self.__master_node.ip))
+        task = self.__clusterop.async_rebalance(
+            self.__nodes,
+            add_nodes,
+            remove_nodes)
+
+        if not remove_nodes:
+            remove_nodes = self.__fail_over_nodes
+
+        for node in remove_nodes:
+            for server in self.__nodes:
+                if node.ip == server.ip:
+                    self.__nodes.remove(server)
+        self.__nodes.extend(add_nodes)
+
+        if master:
+            self.__master_node = self.__nodes[0]
+        return task
+
     def async_rebalance_out_master(self):
         return self.__async_rebalance_out(master=True)
 
@@ -1844,6 +1896,9 @@ class CouchbaseCluster:
 
     def async_failover(self, num_nodes=1, graceful=False):
         return self.__async_failover(num_nodes=num_nodes, graceful=graceful)
+
+    def failover(self, num_nodes=1, graceful=False):
+        self.__async_failover(num_nodes=num_nodes, graceful=graceful).result()
 
     def failover_and_rebalance_master(self, graceful=False, rebalance=True,master=True):
         """Failover master node
@@ -2392,7 +2447,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
         self.__lww = self._input.param("lww", 0)
-        self.__fail_on_errors = self._input.param("fail_on_errors", False)
+        self.__fail_on_errors = self._input.param("fail_on_errors", True)
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
         if self.__fail_on_errors:
@@ -2403,6 +2458,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__error_count_dict = {}
         if len(self.__report_error_list) > 0:
             self.__initialize_error_count_dict()
+
+        self._repl_restart_count_dict = {}
+        self.__initialize_repl_restart_count_dict()
 
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
@@ -2452,11 +2510,36 @@ class XDCRNewBaseTest(unittest.TestCase):
             initializes self.__error_count_dict with ip, error and err count
             like {ip1: {"panic": 2, "KEY_ENOENT":3}}
         """
+        if not self.__is_cluster_run():
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
         for node in self._input.servers:
+            if self.__is_cluster_run():
+                goxdcr_log = NodeHelper.get_goxdcr_log_dir(node)\
+                     + '/goxdcr.log*'
             self.__error_count_dict[node.ip] = {}
             for error in self.__report_error_list:
-                self.__error_count_dict[node.ip][error] = NodeHelper.check_goxdcr_log(node, error)
+                self.__error_count_dict[node.ip][error] = \
+                    NodeHelper.check_goxdcr_log(node, error, goxdcr_log)
         self.log.info(self.__error_count_dict)
+
+    def __initialize_repl_restart_count_dict(self):
+        """
+            initializes self.__error_count_dict with ip, repl restart count
+            like {{ip1: 3}, {ip2: 4}}
+        """
+        if not self.__is_cluster_run():
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+        for node in self._input.servers:
+            if self.__is_cluster_run():
+                goxdcr_log = NodeHelper.get_goxdcr_log_dir(node)\
+                     + '/goxdcr.log*'
+            self._repl_restart_count_dict[node.ip] = \
+                NodeHelper.check_goxdcr_log(node,
+                                            "Try to fix Pipeline",
+                                            goxdcr_log)
+        self.log.info(self._repl_restart_count_dict)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
@@ -2478,9 +2561,15 @@ class XDCRNewBaseTest(unittest.TestCase):
         cluster_nodes = []
         for _, nodes in self._input.clusters.iteritems():
             cluster_nodes.extend(nodes)
-
-        FloatingServers._serverlist = [
-            server for server in total_servers if server not in cluster_nodes]
+        for server in total_servers:
+            for cluster_node in cluster_nodes:
+                if server.ip == cluster_node.ip and\
+                                server.port == cluster_node.port:
+                    break
+                else:
+                    continue
+            else:
+                FloatingServers._serverlist.append(server)
 
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
@@ -2687,6 +2776,23 @@ class XDCRNewBaseTest(unittest.TestCase):
                 )
             counter += 2
 
+    def __async_load_chain(self):
+        for i, cluster in enumerate(self.__cb_clusters):
+            if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
+                if i > len(self.__cb_clusters) - 1:
+                    break
+            else:
+                if i >= len(self.__cb_clusters) - 1:
+                    break
+            if not self._dgm_run:
+                return cluster.async_load_all_buckets(self._num_items,
+                                                      self._value_size)
+            else:
+                #TODO: async this!
+                cluster.load_all_buckets_till_dgm(
+                    active_resident_threshold=self._active_resident_threshold,
+                    items=self._num_items)
+
     def __load_chain(self):
         for i, cluster in enumerate(self.__cb_clusters):
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
@@ -2711,8 +2817,21 @@ class XDCRNewBaseTest(unittest.TestCase):
         else:
             hub.load_all_buckets(self._num_items, self._value_size)
 
+    def __async_load_star(self):
+        hub = self.__cb_clusters[0]
+        if self._dgm_run:
+            #TODO: async this
+            hub.load_all_buckets_till_dgm(
+                active_resident_threshold=self._active_resident_threshold,
+                item=self._num_items)
+        else:
+            return hub.async_load_all_buckets(self._num_items, self._value_size)
+
     def __load_ring(self):
         self.__load_chain()
+
+    def __async_load_ring(self):
+        self.__async_load_chain()
 
     def load_data_topology(self):
         """load data as per ctopology test parameter
@@ -2725,6 +2844,22 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__load_ring()
         elif self._input.param(TOPOLOGY.HYBRID, 0):
             self.__load_star()
+        else:
+            raise XDCRException(
+                'Unknown topology set: {0}'.format(
+                    self.__topology))
+
+    def async_load_data_topology(self):
+        """load data as per ctopology test parameter
+        """
+        if self.__topology == TOPOLOGY.CHAIN:
+            return self.__async_load_chain()
+        elif self.__topology == TOPOLOGY.STAR:
+            return self.__async_load_star()
+        elif self.__topology == TOPOLOGY.RING:
+            return self.__async_load_ring()
+        elif self._input.param(TOPOLOGY.HYBRID, 0):
+            return self.__async_load_star()
         else:
             raise XDCRException(
                 'Unknown topology set: {0}'.format(
@@ -2820,6 +2955,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.setup_xdcr()
         self.load_data_topology()
         self.sleep(10)
+
+    def setup_xdcr_async_load(self):
+        self.setup_xdcr()
+        return self.async_load_data_topology()
 
     def load_and_setup_xdcr(self):
         """Initial xdcr
@@ -2962,9 +3101,17 @@ class XDCRNewBaseTest(unittest.TestCase):
         were found on any of the goxdcr.logs
         """
         error_found_logger = []
+        if not self.__is_cluster_run():
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
         for node in self._input.servers:
+            if self.__is_cluster_run():
+                goxdcr_log = NodeHelper.get_goxdcr_log_dir(node)\
+                     + '/goxdcr.log*'
             for error in self.__report_error_list:
-                new_error_count = NodeHelper.check_goxdcr_log(node, error)
+                new_error_count = NodeHelper.check_goxdcr_log(node,
+                                                              error,
+                                                              goxdcr_log)
                 self.log.info("Initial {0} count on {1} :{2}, now :{3}".
                             format(error,
                                 node.ip,
@@ -2978,6 +3125,39 @@ class XDCRNewBaseTest(unittest.TestCase):
         if error_found_logger:
             self.log.error(error_found_logger)
         return error_found_logger
+
+    def check_replication_restarted(self):
+        """
+            Checks if replication restarted
+        """
+        repl_restart_fail = self._input.param("fail_repl_restart", False)
+        restarted = False
+        if not self.__is_cluster_run():
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+        for node in self._input.servers:
+            if self.__is_cluster_run():
+                goxdcr_log = NodeHelper.get_goxdcr_log_dir(node)\
+                     + '/goxdcr.log*'
+            reasons, new_repl_res_count = NodeHelper.check_goxdcr_log(node,
+                                                          "Try to fix Pipeline",
+                                                          goxdcr_log=goxdcr_log,
+                                                          print_matches=True)
+            self.log.info("Initial replication restart count on {0} :{1}, now :{2}".
+                        format(node.ip,
+                            self._repl_restart_count_dict[node.ip],
+                            new_repl_res_count))
+            if (new_repl_res_count  > self._repl_restart_count_dict[node.ip]):
+                new_count = new_repl_res_count - \
+                           self._repl_restart_count_dict[node.ip]
+                restarted = True
+                self.log.info("Number of new replication restarts this run: %s"
+                    % new_count)
+                for reason in reasons[-new_count:]:
+                    self.log.info(reason)
+        if repl_restart_fail and restarted:
+            self.fail("Replication restarted on one of the nodes, scroll above"
+                      "for reason")
 
     def _wait_for_replication_to_catchup(self, timeout=300):
 
@@ -3022,6 +3202,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             5. Verify items value on each bucket.
             6. Verify Revision id of each item.
         """
+        skip_key_validation = self._input.param("skip_key_validation", False)
         self.__merge_all_buckets()
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
@@ -3050,31 +3231,33 @@ class XDCRNewBaseTest(unittest.TestCase):
                 except Exception as e:
                     # just log any exception thrown, do not fail test
                     self.log.error(e)
-                try:
-                    src_active_passed, src_replica_passed =\
-                        src_cluster.verify_items_count(timeout=self._item_count_timeout)
-                    dest_active_passed, dest_replica_passed = \
-                        dest_cluster.verify_items_count(timeout=self._item_count_timeout)
+                if not skip_key_validation:
+                    try:
+                        src_active_passed, src_replica_passed =\
+                            src_cluster.verify_items_count(timeout=self._item_count_timeout)
+                        dest_active_passed, dest_replica_passed = \
+                            dest_cluster.verify_items_count(timeout=self._item_count_timeout)
 
-                    src_cluster.verify_data(max_verify=self._max_verify)
-                    dest_cluster.verify_data(max_verify=self._max_verify)
-                except Exception as e:
-                    self.log.error(e)
-                finally:
-                    rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications())
-                    # we're done with the test, now report specific errors
-                    if (not(src_active_passed and dest_active_passed)) and \
-                        (not(src_dcp_queue_drained and dest_dcp_queue_drained)):
-                        self.fail("Incomplete replication: Keys stuck in dcp queue")
-                    if not (src_active_passed and dest_active_passed):
-                        self.fail("Incomplete replication: Active key count is incorrect")
-                    if not (src_replica_passed and dest_replica_passed):
-                        self.fail("Incomplete intra-cluster replication: "
-                                  "replica count did not match active count")
-                    if rev_err_count > 0:
-                        self.fail("RevID verification failed for remote-cluster: {0}".
-                            format(remote_cluster_ref))
+                        src_cluster.verify_data(max_verify=self._max_verify)
+                        dest_cluster.verify_data(max_verify=self._max_verify)
+                    except Exception as e:
+                        self.log.error(e)
+                    finally:
+                        rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications())
+                        # we're done with the test, now report specific errors
+                        if (not(src_active_passed and dest_active_passed)) and \
+                            (not(src_dcp_queue_drained and dest_dcp_queue_drained)):
+                            self.fail("Incomplete replication: Keys stuck in dcp queue")
+                        if not (src_active_passed and dest_active_passed):
+                            self.fail("Incomplete replication: Active key count is incorrect")
+                        if not (src_replica_passed and dest_replica_passed):
+                            self.fail("Incomplete intra-cluster replication: "
+                                      "replica count did not match active count")
+                        if rev_err_count > 0:
+                            self.fail("RevID verification failed for remote-cluster: {0}".
+                                format(remote_cluster_ref))
 
+        self.check_replication_restarted()
         # treat errors in self.__report_error_list as failures
         if len(self.__report_error_list) > 0:
             error_logger = self.check_errors_in_goxdcr_logs()

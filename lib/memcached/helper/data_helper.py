@@ -1060,17 +1060,17 @@ class VBucketAwareMemcached(object):
         # set keys in their respective vbuckets and identify the server for each vBucketId
         server_keyval = self._get_server_keyval_dic(key_val_dic)
         # get memcached client against each server and multi set
-        for server_str , keyval in server_keyval.items() :
+        for server_str , keyval in server_keyval.items():
             #if the server has been removed after server_keyval has been gotten
             if server_str not in self.memcacheds:
                 self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
             else:
                 mc = self.memcacheds[server_str]
-                errors = self._setMulti_rec(mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_seq)
+                errors = self._setMulti_rec(mc, exp, flags, keyval, pause_sec,
+                                            timeout_sec, self._setMulti_seq)
                 if errors:
                     self.log.error(list(set(str(error) for error in errors)), exc_info=1)
                     raise errors[0]
-
 
     def _setMulti_parallel(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5):
         # set keys in their respective vbuckets and identify the server for each vBucketId
@@ -1106,17 +1106,32 @@ class VBucketAwareMemcached(object):
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
                 rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Start all over again for these key vals.
                 return []  # Note: If used for async,too many recursive threads could get spawn here.
-        except (EOFError, socket.error) , error:
-            if "Got empty data (remote died?)" in error.message or \
-               "Timeout waiting for socket" in error.message or \
-               "Broken pipe" in error.message or "Connection reset by peer" in error.message\
-                and timeout > 0:
-                time.sleep(pause)
-                self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)
-                return []
-            else:
-                return [error]
+        except (EOFError, socket.error), error:
+            try:
+                if "Got empty data (remote died?)" in error.strerror or \
+                   "Timeout waiting for socket" in error.strerror or \
+                   "Broken pipe" in error.strerror or \
+                   "Connection reset by peer" in error.strerror\
+                    and timeout > 0:
+                    time.sleep(pause)
+                    self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
+                    rec_caller_fn(exp, flags, keyval, pause, timeout - pause)
+                    return []
+                else:
+                    return [error]
+            except AttributeError:
+                if "Got empty data (remote died?)" in error.message or \
+                   "Timeout waiting for socket" in error.message or \
+                   "Broken pipe" in error.message or \
+                   "Connection reset by peer" in error.message\
+                    and timeout > 0:
+                    time.sleep(pause)
+                    self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
+                    rec_caller_fn(exp, flags, keyval, pause, timeout - pause)
+                    return []
+                else:
+                    return [error]
+
         except BaseException as error:
             if timeout <= 0:
                 return [error]
