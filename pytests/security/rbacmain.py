@@ -329,38 +329,3 @@ class rbacmain:
                 final_result = False
 
         return final_result
-
-
-        '''
-        f = open(user_role,'r')
-        final_output = f.read()
-        f.close()
-        log.info(" -------- FINAL RESULT for role - {0} ---------".format(user_role))
-        log.info(final_output)
-        log.info("----------END FINAL RESULT ------------")
-        return final_result
-        '''''
-
-
-        '''
-        for permission in temp_dict.iterkeys():
-            if "[<bucket_name>]" in permission:
-                new_key = permission.replace("<bucket_name>",bucket_name)
-                temp_dict[new_key] = temp_dict.pop(permission)
-        permission_set = master['permissionSet'].split(',')
-        for idx, permission in enumerate(permission_set):
-            if "[<bucket_name>]" in permission:
-                permission = permission.replace("<bucket_name>",bucket_name)
-                permission_set[idx] = permission
-        permission_str = ','.join(permission_set)
-        status, content, header = rbacmain(self.master_ip)._check_user_permission(user_details[0],user_details[1],permission_str)
-        content = json.loads(content)
-        log.info ("Value of content is {0}".format(content))
-
-        for item in temp_dict.iterkeys():
-            if temp_dict[item] != content[item]:
-
-                log.info ("Item is {0} -- Expected Value is - {1} and Actual Value is {2}".format(item,temp_dict[item],content[item]))
-                result = False
-        return result
-        '''
