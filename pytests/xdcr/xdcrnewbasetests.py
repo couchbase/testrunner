@@ -1229,6 +1229,18 @@ class CouchbaseCluster:
     def get_buckets(self):
         return self.__buckets
 
+    def add_bucket(self, bucket='',
+                   ramQuotaMB=1,
+                   authType='none',
+                   saslPassword='',
+                   replicaNumber=1,
+                   proxyPort=11211,
+                   bucketType='membase',
+                   evictionPolicy='valueOnly'):
+        self.__buckets.append(Bucket(bucket_size=ramQuotaMB, name=bucket, authType=authType,
+                                     saslPassword=saslPassword, num_replicas=replicaNumber,
+                                     port=proxyPort, type=bucketType, eviction_policy=evictionPolicy))
+
     def get_bucket_by_name(self, bucket_name):
         """Return the bucket with given name
         @param bucket_name: bucket name.
@@ -1995,11 +2007,11 @@ class CouchbaseCluster:
         NodeHelper.reboot_server(reboot_node, test_case)
         return reboot_node
 
-    def restart_couchbase_on_all_nodes(self):
+    def restart_couchbase_on_all_nodes(self, bucket_names=["default"]):
         for node in self.__nodes:
             NodeHelper.do_a_warm_up(node)
 
-        NodeHelper.wait_warmup_completed(self.__nodes)
+        NodeHelper.wait_warmup_completed(self.__nodes, bucket_names)
 
     def set_xdcr_param(self, param, value):
         """Set Replication parameter on couchbase server:
@@ -2193,7 +2205,7 @@ class CouchbaseCluster:
         ssh_conn.disconnect()
 
     def verify_data(self, kv_store=1, timeout=None,
-                    max_verify=None, only_store_hash=True, batch_size=1000):
+                    max_verify=None, only_store_hash=True, batch_size=1000, skip=[]):
         """Verify data of all the buckets. Function read data from cb server and
         compare it with bucket's kv_store.
         @param kv_store: Index of kv_store where item values are stored on
@@ -2207,15 +2219,16 @@ class CouchbaseCluster:
         self.__data_verified = False
         tasks = []
         for bucket in self.__buckets:
-            tasks.append(
-                self.__clusterop.async_verify_data(
-                    self.__master_node,
-                    bucket,
-                    bucket.kvs[kv_store],
-                    max_verify,
-                    only_store_hash,
-                    batch_size,
-                    timeout_sec=60))
+            if bucket.name not in skip:
+                tasks.append(
+                        self.__clusterop.async_verify_data(
+                                self.__master_node,
+                                bucket,
+                                bucket.kvs[kv_store],
+                                max_verify,
+                                only_store_hash,
+                                batch_size,
+                                timeout_sec=60))
         for task in tasks:
             task.result(timeout)
 
@@ -2382,7 +2395,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 NodeHelper.collect_logs(server, self.__is_cluster_run())
 
         try:
-            if self.__is_cleanup_needed():
+            if self.__is_cleanup_needed() or self._input.param("skip_cleanup", False):
                 self.log.warn("CLEANUP WAS SKIPPED")
                 return
             self.log.info(
@@ -2427,7 +2440,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cleanup_previous()
         self.__init_clusters()
         self.__set_free_servers()
-        if str(self.__class__).find('upgradeXDCR') == -1:
+        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
             self.__create_buckets()
 
     def __init_parameters(self):
@@ -2498,6 +2511,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             "").split('-')
         self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._checkpoint_interval = self._input.param("checkpoint_interval",60)
+        self._optimistic_threshold = self._input.param("optimistic_threshold", 256)
         self._dgm_run = self._input.param("dgm_run", False)
         self._active_resident_threshold = \
             self._input.param("active_resident_threshold", 100)
@@ -2967,7 +2981,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.load_data_topology()
         self.setup_xdcr()
 
-    def verify_rev_ids(self, xdcr_replications, kv_store=1, timeout=1200):
+    def verify_rev_ids(self, xdcr_replications, kv_store=1, timeout=1200, skip=[]):
         """Verify RevId (sequence number, cas, flags value) for each item on
         every source and destination bucket.
         @param xdcr_replications: list of XDCRReplication objects.
@@ -2976,18 +2990,19 @@ class XDCRNewBaseTest(unittest.TestCase):
         error_count = 0
         tasks = []
         for repl in xdcr_replications:
-            self.log.info("Verifying RevIds for {0} -> {1}, bucket {2}".format(
-                repl.get_src_cluster(),
-                repl.get_dest_cluster(),
-                repl.get_src_bucket().name))
-            task_info = self.__cluster_op.async_verify_revid(
-                repl.get_src_cluster().get_master_node(),
-                repl.get_dest_cluster().get_master_node(),
-                repl.get_src_bucket(),
-                repl.get_src_bucket().kvs[kv_store],
-                repl.get_dest_bucket().kvs[kv_store],
-                max_verify=self._max_verify)
-            tasks.append(task_info)
+            if repl.get_src_bucket().name not in skip and repl.get_dest_bucket().name not in skip:
+                self.log.info("Verifying RevIds for {0} -> {1}, bucket {2}".format(
+                        repl.get_src_cluster(),
+                        repl.get_dest_cluster(),
+                        repl.get_src_bucket().name))
+                task_info = self.__cluster_op.async_verify_revid(
+                        repl.get_src_cluster().get_master_node(),
+                        repl.get_dest_cluster().get_master_node(),
+                        repl.get_src_bucket(),
+                        repl.get_src_bucket().kvs[kv_store],
+                        repl.get_dest_bucket().kvs[kv_store],
+                        max_verify=self._max_verify)
+                tasks.append(task_info)
         for task in tasks:
             if self._dgm_run:
                 task.result()
@@ -3192,7 +3207,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
-    def verify_results(self):
+    def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
         """Verify data between each couchbase and remote clusters.
         Run below steps for each source and destination cluster..
             1. Run expiry pager.
@@ -3238,12 +3253,12 @@ class XDCRNewBaseTest(unittest.TestCase):
                         dest_active_passed, dest_replica_passed = \
                             dest_cluster.verify_items_count(timeout=self._item_count_timeout)
 
-                        src_cluster.verify_data(max_verify=self._max_verify)
-                        dest_cluster.verify_data(max_verify=self._max_verify)
+                        src_cluster.verify_data(max_verify=self._max_verify, skip=skip_verify_data)
+                        dest_cluster.verify_data(max_verify=self._max_verify, skip=skip_verify_data)
                     except Exception as e:
                         self.log.error(e)
                     finally:
-                        rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications())
+                        rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications(), skip=skip_verify_revid)
                         # we're done with the test, now report specific errors
                         if (not(src_active_passed and dest_active_passed)) and \
                             (not(src_dcp_queue_drained and dest_dcp_queue_drained)):

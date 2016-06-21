@@ -1785,6 +1785,14 @@ class RestConnection(object):
             raise GetBucketInfoFailed(bucket, content)
         return json.loads(content)
 
+    def is_lww_enabled(self, bucket='default'):
+        bucket_info = self.get_bucket_json(bucket=bucket)
+        try:
+            if bucket_info['timeSynchronization'] == 'enabledWithoutDrift':
+                return True
+        except KeyError:
+            return False
+
     def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
         api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket)
@@ -1831,61 +1839,51 @@ class RestConnection(object):
                       threadsNumber=3,
                       flushEnabled=1,
                       evictionPolicy='valueOnly',
-                      timeSynchronization=''):
+                      lww=False):
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
 
+        # this only works for default bucket ?
         if bucket == 'default':
-            params = urllib.urlencode({'name': bucket,
-                                       'authType': 'sasl',
-                                       'saslPassword': saslPassword,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': proxyPort,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                        'evictionPolicy': evictionPolicy})
+            init_params = {'name': bucket,
+                           'authType': 'sasl',
+                           'saslPassword': saslPassword,
+                           'ramQuotaMB': ramQuotaMB,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': proxyPort,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
+
         elif authType == 'none':
-            params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': proxyPort,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy})
+            init_params = {'name': bucket,
+                           'ramQuotaMB': ramQuotaMB,
+                           'authType': authType,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': proxyPort,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
         elif authType == 'sasl':
-            params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'saslPassword': saslPassword,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': self.get_nodes_self().moxi,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy})
-
-        # this only works for default bucket i?
-        if timeSynchronization:
-         params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'saslPassword': saslPassword,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': self.get_nodes_self().moxi,
-                                       'bucketType': bucketType,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy,
-                                       'timeSynchronization': timeSynchronization})
-
+            init_params = {'name': bucket,
+                           'ramQuotaMB': ramQuotaMB,
+                           'authType': authType,
+                           'saslPassword': saslPassword,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': self.get_nodes_self().moxi,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
+        if lww:
+            init_params['timeSynchronization'] = 'enabledWithoutDrift'
+        params = urllib.urlencode(init_params)
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
 
