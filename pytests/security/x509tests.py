@@ -179,9 +179,14 @@ class x509tests(BaseTestCase):
             rest.add_node('Administrator','password',servs_inout.ip)
         except Exception, ex:
             ex = str(ex)
-            expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file\"]"
-            #self.assertEqual(ex,expected_result)
+            #expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file\"]"
+            expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip
             self.assertTrue(expected_result in ex,"Incorrect Error message in exception")
+            expected_result  = "Error applying node certificate. Unable to read certificate chain file"
+            self.assertTrue(expected_result in ex,"Incorrect Error message in exception")
+            expected_result  = "The file does not exist."
+            self.assertTrue(expected_result in ex,"Incorrect Error message in exception")
+
 
     def test_add_node_with_cert(self):
         servs_inout = self.servers[1:4]

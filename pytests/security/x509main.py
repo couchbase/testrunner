@@ -60,7 +60,7 @@ class x509main:
 
     def setup_cluster_nodes_ssl(self,servers=[],reload_cert=False):
         for server in servers:
-            x509main(server)._setup_node_certificates(reload_cert=reload_cert)
+            x509main(server)._setup_node_certificates(reload_cert=reload_cert,host=server)
 
     def _generate_cert(self,servers,root_cn='Root\ Authority',type='go',encryption="",key_length=1024):
         if type == 'go':
@@ -162,18 +162,20 @@ class x509main:
         shell = RemoteMachineShellConnection(host)
         shell.copy_file_local_to_remote(src_path,dest_path)
 
-    def _setup_node_certificates(self,chain_cert=True,node_key=True,reload_cert=True):
-        self._create_inbox_folder(self.host)
-        src_chain_file = "/tmp/newcerts/long_chain" + self.host.ip + ".pem"
+    def _setup_node_certificates(self,chain_cert=True,node_key=True,reload_cert=True,host=None):
+        if host == None:
+            host = self.host
+        self._create_inbox_folder(host)
+        src_chain_file = "/tmp/newcerts/long_chain" + host.ip + ".pem"
         dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.CHAINCERTFILE
-        src_node_key = "/tmp/newcerts/" + self.host.ip + ".key"
+        src_node_key = "/tmp/newcerts/" + host.ip + ".key"
         dest_node_key = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.NODECAKEYFILE
         if chain_cert:
-            self._copy_node_key_chain_cert(self.host, src_chain_file, dest_chain_file)
+            self._copy_node_key_chain_cert(host, src_chain_file, dest_chain_file)
         if node_key:
-            self._copy_node_key_chain_cert(self.host, src_node_key, dest_node_key)
+            self._copy_node_key_chain_cert(host, src_node_key, dest_node_key)
         if reload_cert:
-            status, content = self._reload_node_certificate(self.host)
+            status, content = self._reload_node_certificate(host)
             return status, content
 
 
