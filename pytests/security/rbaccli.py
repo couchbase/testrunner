@@ -122,7 +122,7 @@ class rbacclitest(rbacTest):
         user_list = "temp1"
         options = "--roles=" + user_list
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("ERROR: You must specify either '--get-roles', '--set-users', or '--delete-users'" in output[0],"for incorrect switch")
+        self.assertTrue("ERROR: You must specify lists of both users and roles for those users." in output[0],"for incorrect switch")
 
 
     def test_set_roles_with_name(self):
