@@ -133,6 +133,7 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
         x509main(servs_inout)._setup_node_certificates(reload_cert=False)
+        self.sleep(30)
         servs_inout = self.servers[1]
         rest.add_node('Administrator','password',servs_inout.ip)
         for server in self.servers[:2]:
