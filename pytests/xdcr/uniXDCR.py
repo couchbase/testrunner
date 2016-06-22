@@ -589,3 +589,53 @@ class unidirectional(XDCRNewBaseTest):
                 self.shell.delete_files("cbcollect_info*")
         except Exception as e:
             self.log.info(e)
+
+    def test_retry_connections_on_errors_before_restart(self):
+        """
+        CBQE-3373: Do not restart pipeline as soon as connection errors are
+        detected, backoff and retry 5 times before trying to restart pipeline.
+        """
+        passed = False
+        # start data load after setting up xdcr
+        load_tasks = self.setup_xdcr_async_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+
+        # block port 11210 on target to simulate a connection error
+        shell = RemoteMachineShellConnection(self.dest_master)
+        out, err = shell.execute_command("/sbin/iptables -A INPUT -p tcp --dport"
+                                         " 11210 -j DROP")
+        shell.log_command_output(out, err)
+        out, err = shell.execute_command("/sbin/iptables -L")
+        shell.log_command_output(out, err)
+
+        # complete loading
+        for task in load_tasks:
+            task.result()
+
+        # wait for goxdcr to detect i/o timeout and try repairing
+        self.sleep(self._wait_timeout*5)
+
+        # unblock port 11210 so replication can continue
+        out, err = shell.execute_command("/sbin/iptables -D INPUT -p tcp --dport"
+                                         " 11210 -j DROP")
+        shell.log_command_output(out, err)
+        out, err = shell.execute_command("/sbin/iptables -L")
+        shell.log_command_output(out, err)
+        shell.disconnect()
+
+        # check logs for traces of retry attempts
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                            node,
+                            "Failed to repair connections to target cluster",
+                            goxdcr_log)
+            if count > 0:
+                self.log.info('SUCCESS: We tried to repair connections before'
+                              ' restarting pipeline')
+                passed = True
+
+        if not passed:
+            self.fail("No attempts were made to repair connections on %s before"
+                      " restarting pipeline" % self.src_cluster.get_nodes())
+        self.verify_results()
