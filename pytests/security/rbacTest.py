@@ -7,6 +7,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from security.auditmain import audit
 import commands
+import socket
 
 class ServerInfo():
     def __init__(self,
