@@ -26,7 +26,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.load_query_definitions.append(query_definition)
         find_index_lost_list = self._find_list_of_indexes_lost()
         self._create_replica_index_when_indexer_is_down(find_index_lost_list)
-        self.initialize_multi_create_index(buckets = self.buckets,
+        self.multi_create_index(buckets = self.buckets,
                     query_definitions = self.load_query_definitions)
         self.drop_indexes_in_between = self.input.param("drop_indexes_in_between", False)
         if len(self.index_nodes_out) == len(self.services_map["index"]):

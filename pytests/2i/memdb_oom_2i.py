@@ -33,9 +33,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             query_definition = QueryDefinition(index_name=index_name, index_fields = ["job_title"],
                         query_template = self.query_template, groups = ["simple"])
             self.load_query_definitions.append(query_definition)
-        self._initialize_multi_create_index(buckets = self.buckets,
-                                           query_definitions = self.load_query_definitions,
-                                           deploy_node_info=self.deploy_node_info)
+        self.multi_create_index(buckets=self.buckets, query_definitions=self.load_query_definitions,
+                                deploy_node_info=self.deploy_node_info)
         log.info("Setting indexer memory quota to 300 MB...")
         rest.set_indexer_memoryQuota(indexMemoryQuota=300)
         self.sleep(30)
@@ -438,30 +437,6 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         rest = RestConnection(self.oomServer)
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
-
-    def _initialize_multi_create_index(self,  buckets = [], query_definitions =[], deploy_node_info = None):
-        create_tasks = []
-        build_tasks = []
-        index_info = {}
-        for bucket in buckets:
-            if not bucket in index_info.keys():
-                index_info[bucket] = []
-            for query_definition in query_definitions:
-                index_info[bucket].append(query_definition.index_name)
-                task = self.async_create_index(bucket.name, query_definition, deploy_node_info)
-                create_tasks.append(task)
-        for task in create_tasks:
-            task.result()
-        if self.defer_build:
-            for key, val in index_info.iteritems():
-                task = self.async_build_index(bucket=key, index_list=val)
-                build_tasks.append(task)
-            for task in build_tasks:
-                task.result()
-        check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name,
-                                                             server = self.n1ql_node,
-                                                             timeout = self.timeout_for_index_online)
-        self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def _reboot_node(self, node):
         self.log.info("Rebooting node '{0}'....".format(node.ip))

@@ -27,9 +27,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
                                 query_template=query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
-        self.initialize_multi_create_index(buckets = self.buckets,
+        self.multi_create_index(buckets = self.buckets,
                 query_definitions = self.load_query_definitions)
-
 
     def tearDown(self):
         self.upgrade_servers = self.servers
