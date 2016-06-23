@@ -13,6 +13,9 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexingScanTests, self).tearDown()
 
+    def test_dummy(self):
+        pass
+
     def test_create_query_explain_drop_index(self):
         self.use_primary_index= self.input.param("use_primary_index",False)
         self.indexes= self.input.param("indexes","").split(":")
@@ -50,15 +53,9 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
             raise
         finally:
-            tasks = self.async_run_multi_operations(
-                buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                drop_index = self.run_drop_index)
+            tasks = self.async_run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                                    drop_index=self.run_drop_index)
             self._run_tasks(tasks)
-
-    def test_multi_create_query_explain_drop_index_with_mutations(self):
-        self.doc_ops=True
-        self.test_multi_create_query_explain_drop_index()
 
     def test_multi_create_query_explain_drop_index_with_concurrent_mutations(self):
         try:
@@ -71,10 +68,10 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
             raise
         finally:
-            tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = self.run_drop_index,
-                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            tasks = self.async_run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                                    create_index=False, drop_index=self.run_drop_index,
+                                                    query_with_explain=False, query=False,
+                                                    scan_consistency=self.scan_consistency)
             self._run_tasks(tasks)
 
     def test_concurrent_mutations_index_create_query_drop(self):
