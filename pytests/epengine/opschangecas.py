@@ -39,13 +39,13 @@ class OpsChangeCasTests(BucketConfig):
             value = 'value' + str(i)
             client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
             vbucket_id = client._get_vBucket_id(KEY_NAME)
-            print 'vbucket_id is {0}'.format(vbucket_id)
+            #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = client.memcached(KEY_NAME)
             mc_master = client.memcached_for_vbucket( vbucket_id )
             mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
 
             cas_active = mc_active.getMeta(KEY_NAME)[4]
-            print 'cas_a {0} '.format(cas_active)
+            #print 'cas_a {0} '.format(cas_active)
 
         max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
 
@@ -58,7 +58,7 @@ class OpsChangeCasTests(BucketConfig):
 
         rebalance.result()
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
-        get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=True)
+        get_meta_resp = mc_replica.getMeta(KEY_NAME,request_extended_meta_data=True)
         print 'replica CAS {0}'.format(replica_CAS)
         print 'replica ext meta {0}'.format(get_meta_resp)
 
