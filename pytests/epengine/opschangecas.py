@@ -8,6 +8,7 @@ from mc_bin_client import MemcachedError
 
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 import json
 
 
@@ -18,7 +19,7 @@ class OpsChangeCasTests(BucketConfig):
     def setUp(self):
         super(OpsChangeCasTests, self).setUp()
         self.prefix = "test_"
-        self.expire_time = self.input.param("expire_time", 5)
+        self.expire_time = self.input.param("expire_time", 35)
         self.item_flag = self.input.param("item_flag", 0)
         self.value_size = self.input.param("value_size", 256)
 
@@ -513,7 +514,7 @@ class OpsChangeCasTests(BucketConfig):
                     self.client.memcached(key).delete(key)
                 elif ops=='expiry':
                     #print 'expiry'
-                    self.client.memcached(key).set(key, 0, self.expire_time ,payload)
+                    self.client.memcached(key).set(key, self.expire_time ,0, payload)
                 elif ops=='touch':
                     #print 'touch'
                     self.client.memcached(key).touch(key, 10)
@@ -522,7 +523,7 @@ class OpsChangeCasTests(BucketConfig):
 
     '''Check if items are expired as expected'''
     def _check_expiry(self):
-        time.sleep(self.expire_time+1)
+        time.sleep(self.expire_time+30)
 
         k=0
         while k<10:
@@ -532,7 +533,11 @@ class OpsChangeCasTests(BucketConfig):
             cas = mc_active.getMeta(key)[4]
             self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
             try:
+                all = mc_active.getMeta(key)
+                a=self.client.memcached(key).get(key)
                 self.client.memcached(key).cas(key, 0, self.item_flag, cas, 'new')
+                all = mc_active.getMeta(key)
+
                 raise Exception("The item should already be expired. We can't mutate it anymore")
             except MemcachedError as error:
             #It is expected to raise MemcachedError becasue the key is expired.
@@ -541,3 +546,4 @@ class OpsChangeCasTests(BucketConfig):
                     pass
                 else:
                     raise Exception(error)
+
