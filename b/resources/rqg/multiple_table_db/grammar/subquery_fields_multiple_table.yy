@@ -3,9 +3,9 @@ query:
 
 select:
 #	SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_fields_comparisons |
-    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists |
-	SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_agg_exists |
-    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME  WHERE subquery_in;
+    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists ;
+	#SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_agg_exists |
+    #SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME  WHERE subquery_in;
 
 subquery_fields_comparisons:
 	INNER_SUBQUERY_FIELDS comparison_operator START_FIELDS_COMPARISON_SUBQUERY ( rule_subquery_fields_comparisons ) END_FIELDS_COMPARISON_SUBQUERY ;
@@ -23,13 +23,13 @@ subquery_selects:
 	subquery_agg_exists  | subquery_condition_exists | subquery_in | subquery_fields_comparisons;
 
 subquery_where_condition:
-	complex_condition | subquery_selects ;
+	MYSQL_OPEN_PAR complex_condition MYSQL_CLOSED_PAR | subquery_selects ;
 
 use_key_conditions:
 	USE KEYS META(OUTER_BUCKET_ALIAS).id | USE KEYS OUTER_PRIMARY_KEY;
 
 rule_subquery_exists:
-	SELECT * FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON subquery_where_condition ;
+	SELECT * FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON  MYSQL_OPEN_PAR subquery_where_condition MYSQL_CLOSED_PAR;
 
 rule_subquery_fields_comparisons:
 	SELECT OUTER_SUBQUERY_FIELDS FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON complex_condition LIMIT 1;
