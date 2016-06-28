@@ -388,11 +388,15 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_goxdcr_log(server, str, goxdcr_log, print_matches=None):
+    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None):
         """ Checks if a string 'str' is present in goxdcr.log on server
             and returns the number of occurances
             @param goxdcr_log: goxdcr log location on the server
         """
+        if not goxdcr_log:
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(server)\
+                     + '/goxdcr.log*'
+
         shell = RemoteMachineShellConnection(server)
         matches = []
         if print_matches:
