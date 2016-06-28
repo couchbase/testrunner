@@ -21,7 +21,7 @@ from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
-
+from membase.helper.bucket_helper import BucketOperationHelper
 
 class UpgradeTests(NewUpgradeBaseTest):
 
@@ -390,6 +390,26 @@ class UpgradeTests(NewUpgradeBaseTest):
                 queue.put(False)
         if node_warmuped and queue is not None:
             queue.put(True)
+
+    def create_lww_bucket(self):
+        self.time_synchronization='enabledWithOutDrift'
+        bucket='default'
+        print 'time_sync {0}'.format(self.time_synchronization)
+
+        helper = RestHelper(self.rest)
+        if not helper.bucket_exists(bucket):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(
+                self.servers)
+            info = self.rest.get_nodes_self()
+            self.rest.create_bucket(bucket=bucket,
+                ramQuotaMB=512,authType='sasl',timeSynchronization=self.time_synchronization)
+            try:
+                ready = BucketOperationHelper.wait_for_memcached(self.master,
+                    bucket)
+                self.assertTrue(ready, '', msg = '[ERROR] Expect bucket creation to not work.')
+            finally:
+                self.log.info("Success, created lww bucket")
+
 
     def bucket_flush(self, queue=None):
         bucket_flushed = False

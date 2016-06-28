@@ -16,6 +16,14 @@ from remote.remote_util import RemoteMachineShellConnection
 
 class OpsChangeCasTests(BucketConfig):
 
+    def __init__(self):
+        print ' I am in init'
+        self.prefix = "test_"
+        self.expire_time = 5
+        self.item_flag = 0
+        self.value_size = 256
+        self.log = logger.Logger.get_logger()
+
     def setUp(self):
         super(OpsChangeCasTests, self).setUp()
         self.prefix = "test_"
@@ -471,8 +479,12 @@ class OpsChangeCasTests(BucketConfig):
 
     ''' Common function to verify the expected values on cas
     '''
-    def _check_cas(self, check_conflict_resolution=False):
+    def _check_cas(self, check_conflict_resolution=False, master=None, bucket=None, time_sync=None):
         self.log.info(' Verifying cas and max cas for the keys')
+        if master:
+            self.rest = RestConnection(master)
+            self.client = VBucketAwareMemcached(self.rest, bucket)
+
         k=0
 
         while k<10:
@@ -487,11 +499,19 @@ class OpsChangeCasTests(BucketConfig):
 
             if check_conflict_resolution:
                 get_meta_resp = mc_active.getMeta(key,request_extended_meta_data=True)
-                self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+                if time_sync == 'enabledWithoutDrift':
+                    self.assertTrue( get_meta_resp[5] == 1, msg='[ERROR] Metadata indicate conflict resolution is not set')
+                elif time_sync == 'disabled':
+                    self.assertTrue( get_meta_resp[5] == 0, msg='[ERROR] Metadata indicate conflict resolution is set')
 
     ''' Common function to add set delete etc operations on the bucket
     '''
-    def _load_ops(self, ops=None, mutations=1):
+    def _load_ops(self, ops=None, mutations=1, master=None, bucket=None):
+
+        if master:
+            self.rest = RestConnection(master)
+        if bucket:
+            self.client = VBucketAwareMemcached(self.rest, bucket)
 
         k=0
         payload = MemcachedClientHelper.create_value('*', self.value_size)
