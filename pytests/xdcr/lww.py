@@ -18,13 +18,15 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster = self.get_cb_cluster_by_name('C1')
         self.c2_cluster = self.get_cb_cluster_by_name('C2')
 
-        self._clocks = self._input.param("clocks", "0:0").split(":")
+        self.skip_ntp = self._input.param("skip_ntp", False)
 
-        self._enable_ntp_and_sync()
+        if not self.skip_ntp:
+            self._enable_ntp_and_sync()
 
     def tearDown(self):
         super(Lww, self).tearDown()
-        self._disable_ntp()
+        if not self.skip_ntp:
+            self._disable_ntp()
 
     def _enable_ntp_and_sync(self, ntp_server="0.north-america.pool.ntp.org"):
         for node in self._input.servers:
@@ -42,6 +44,21 @@ class Lww(XDCRNewBaseTest):
             output, error = conn.execute_command("chkconfig ntpd off")
             conn.log_command_output(output, error)
             output, error = conn.execute_command("/etc/init.d/ntpd stop")
+            conn.log_command_output(output, error)
+
+    def _offset_wall_clock(self, cluster=None, offset_secs=0, inc=True):
+        for node in cluster.get_nodes():
+            conn = RemoteMachineShellConnection(node)
+            output, error = conn.execute_command("date +%s")
+            conn.log_command_output(output, error)
+            curr_time = int(output[-1])
+            if inc:
+                new_time = curr_time + offset_secs
+            else:
+                new_time = curr_time - offset_secs
+            output, error = conn.execute_command("date --date @" + str(new_time))
+            conn.log_command_output(output, error)
+            output, error = conn.execute_command("date --set='" + output[-1] + "'")
             conn.log_command_output(output, error)
 
     def _create_buckets(self, bucket='',
@@ -1117,3 +1134,179 @@ class Lww(XDCRNewBaseTest):
         conn.unpause_memcached()
 
         self.verify_results()
+
+    def test_seq_upd_on_bi_with_target_clock_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+                            dst_lww=False)
+        self.assertFalse(src_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on source bucket")
+        self.log.info("LWW not enabled on source bucket as expected")
+        self.assertFalse(dest_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on dest bucket")
+        self.log.info("LWW not enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c2_cluster, offset_secs=3600)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+        self.c2_cluster.pause_all_replications()
+
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        self.sleep(10)
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        self.sleep(10)
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        self.sleep(10)
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        self.sleep(10)
+
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+        self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+        self.c2_cluster.resume_all_replications()
+        self._wait_for_replication_to_catchup()
+
+        obj = src_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        self.log.info("Target doc won using LWW as expected")
+
+        obj = dest_nolww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = src_nolww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        self.log.info("Target doc won using Rev Id as expected")
+
+        self.verify_results(skip_verify_data=['lww','nolww'])
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+    def test_seq_upd_on_bi_with_src_clock_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
+                            dst_lww=False)
+        self.assertFalse(src_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on source bucket")
+        self.log.info("LWW not enabled on source bucket as expected")
+        self.assertFalse(dest_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on dest bucket")
+        self.log.info("LWW not enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c1_cluster, offset_secs=3600)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+        self.c2_cluster.pause_all_replications()
+
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        self.sleep(10)
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        self.sleep(10)
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        self.sleep(10)
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        self.sleep(10)
+
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+        self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self._upsert(conn=src_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+        self.c2_cluster.resume_all_replications()
+        self._wait_for_replication_to_catchup()
+
+        obj = src_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using LWW")
+        self.log.info("Src doc won using LWW as expected")
+
+        obj = dest_nolww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        obj = src_nolww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        self.log.info("Src doc won using Rev Id as expected")
+
+        self.verify_results(skip_verify_data=['lww','nolww'])
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+    def test_seq_add_del_on_bi_with_target_clock_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c2_cluster, offset_secs=3600)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+        self._wait_for_replication_to_catchup()
+
+        self.c1_cluster.pause_all_replications()
+        self.c2_cluster.pause_all_replications()
+
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        self.sleep(10)
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        self.sleep(10)
+
+        dest_lww.remove(key='lww-0')
+        self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+
+        self.c1_cluster.resume_all_replications()
+        self.c2_cluster.resume_all_replications()
+        self._wait_for_replication_to_catchup()
+
+        try:
+            obj = src_lww.get(key='lww-0')
+            if obj:
+                self.fail("Doc not deleted in src cluster using LWW")
+        except NotFoundError:
+            self.log.info("Doc deleted in src cluster using LWW as expected")
+
+        try:
+            obj = dest_lww.get(key='lww-0')
+            if obj:
+                self.fail("Doc not deleted in target cluster using LWW")
+        except NotFoundError:
+            self.log.info("Doc deleted in target cluster using LWW as expected")
+
+        # TODO - figure out how to verify results in this case
+        # self.verify_results(skip_verify_data=['lww'])
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
