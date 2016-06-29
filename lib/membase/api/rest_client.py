@@ -1946,6 +1946,10 @@ class RestConnection(object):
 
         log.info("%s with param: %s" % (api, params))
         status, content, header = self._http_request(api, 'POST', params)
+        if timeSynchronization:
+            if status:
+                raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket))
+            return status, content
         if not status:
             raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket))
         log.info("bucket %s updated" % bucket)

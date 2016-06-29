@@ -18,6 +18,7 @@ from couchbase_helper.cluster import Cluster
 
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.rebalance_helper import RebalanceHelper
+import re
 
 
 class BucketConfig(unittest.TestCase):
@@ -154,7 +155,7 @@ class BucketConfig(unittest.TestCase):
                 self.servers)
             info = self.rest.get_nodes_self()
             self.rest.create_bucket(bucket=self.bucket,
-                ramQuotaMB=512,authType='sasl',timeSynchronization=self.time_synchronization)
+                ramQuotaMB=512,authType='sasl',lww=True)
             try:
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
@@ -167,11 +168,12 @@ class BucketConfig(unittest.TestCase):
             self.servers)
         info = self.rest.get_nodes_self()
 
-        self.rest.change_bucket_props(bucket=self.bucket,
+        status, content = self.rest.change_bucket_props(bucket=self.bucket,
             ramQuotaMB=512,authType='sasl',timeSynchronization=self.time_synchronization)
-        ready = BucketOperationHelper.wait_for_memcached(self.master,
-                self.bucket)
-        self.assertFalse(ready, '', msg = '[PASS] Expect modify to not work.')
+        if re.search('TimeSyncronization not allowed in update bucket', content):
+            self.log.info('[PASS]Expected modify bucket to disallow Time Synchronization.')
+        else:
+            self.fail('[ERROR] Not expected to allow modify bucket for Time Synchronization')
 
     def _restart_server(self, servers):
         for server in servers:
