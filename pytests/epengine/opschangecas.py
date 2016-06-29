@@ -11,18 +11,9 @@ from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientH
 from membase.helper.cluster_helper import ClusterOperationHelper
 import json
 
-
 from remote.remote_util import RemoteMachineShellConnection
 
 class OpsChangeCasTests(BucketConfig):
-
-    def __init__(self):
-        print ' I am in init'
-        self.prefix = "test_"
-        self.expire_time = 5
-        self.item_flag = 0
-        self.value_size = 256
-        self.log = logger.Logger.get_logger()
 
     def setUp(self):
         super(OpsChangeCasTests, self).setUp()
@@ -208,6 +199,7 @@ class OpsChangeCasTests(BucketConfig):
     ''' Test Incremental sets on cas and max cas values for keys
     '''
     def test_cas_set(self):
+        print 'AM I HERE ?'
         self.log.info(' Starting test-sets')
         self._load_ops(ops='set', mutations=20)
         #self._load_ops(ops='add')
