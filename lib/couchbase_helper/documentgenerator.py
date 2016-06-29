@@ -164,7 +164,7 @@ class BatchedDocumentGenerator(object):
     def __init__(self, document_generator, batch_size_int=100):
         self._doc_gen = document_generator
         self._batch_size = batch_size_int
-        if self._batch_size <= 0 :
+        if self._batch_size <= 0:
             raise ValueError("Invalid Batch size {0}".format(self._batch_size))
 
     def has_next(self):
@@ -177,6 +177,9 @@ class BatchedDocumentGenerator(object):
             key, val = self._doc_gen.next()
             key_val[key] = val
             count += 1
+        key_list = key_val.keys()
+        key_list.sort()
+        print len(key_list), key_list[0], key_list[-1]
         return key_val
 
 class JSONNonDocGenerator(KVGenerator):
@@ -301,9 +304,9 @@ class JsonDocGenerator(KVGenerator):
                         doc_dict['manages']['reports'].append(self.generate_name())
                 self.gen_docs[count-1] = doc_dict
         elif op_type == "delete":
-            # for deletes, just keep/return empty docs
+            # for deletes, just keep/return empty docs with just type field
             for count in xrange(self.start, self.end):
-                self.gen_docs[count] = {}
+                self.gen_docs[count] = {'type': 'emp'}
 
     def update(self, fields_to_update=None):
         """
@@ -381,7 +384,8 @@ class JsonDocGenerator(KVGenerator):
 
 class WikiJSONGenerator(KVGenerator):
 
-    def __init__(self, name, lang='EN', encoding="utf-8", *args, **kwargs):
+    def __init__(self, name, lang='EN', encoding="utf-8", op_type="create",
+                 *args, **kwargs):
 
         """Wikipedia JSON document generator
 
@@ -448,7 +452,12 @@ class WikiJSONGenerator(KVGenerator):
         if 'end' in kwargs:
             self.end = int(kwargs['end'])
 
-        self.read_from_wiki_dump()
+        if op_type == "create":
+            self.read_from_wiki_dump()
+        elif op_type == "delete":
+            # for deletes, just keep/return empty docs with just type field
+            for count in xrange(self.start, self.end):
+                self.gen_docs[count] = {'type': 'wiki'}
 
     def read_from_wiki_dump(self):
         count = 0
@@ -480,7 +489,12 @@ class WikiJSONGenerator(KVGenerator):
     def next(self):
         if self.itr >= self.end:
             raise StopIteration
-        doc = eval(self.gen_docs[self.itr])
+        doc = {}
+        try:
+            doc = eval(self.gen_docs[self.itr])
+        except TypeError:
+            # happens with 'delete' gen
+            pass
         doc['mutated'] = 0
         doc['type'] = 'wiki'
         self.itr += 1

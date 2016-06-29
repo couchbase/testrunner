@@ -1039,8 +1039,9 @@ class ESBulkLoadGeneratorTask(Task):
         self.index_name = index_name
         self.generator = generator
         self.iterator = 0
+        self.op_type = op_type
         self.batch_size = batch
-        self.log.info("Starting to load data into Elastic Search ...")
+        self.log.info("Starting operation '%s' on Elastic Search ..." % op_type)
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1053,14 +1054,19 @@ class ESBulkLoadGeneratorTask(Task):
         batched = 0
         for key, doc in self.generator:
             doc = json.loads(doc)
-            es_doc = {"index": {
-                                "_index": self.index_name,
-                                "_type": doc['type'],
-                                "_id": key,
-                                }
-                     }
+            es_doc = {
+                self.op_type: {
+                    "_index": self.index_name,
+                    "_type": doc['type'],
+                    "_id": key,
+                }
+            }
             es_bulk_docs.append(json.dumps(es_doc))
-            es_bulk_docs.append(json.dumps(doc))
+            if self.op_type == "create":
+                es_bulk_docs.append(json.dumps(doc))
+            elif self.op_type == "update":
+                doc['mutated'] += 1
+                es_bulk_docs.append(json.dumps({"doc": doc}))
             batched += 1
             if batched == self.batch_size or not self.generator.has_next():
                 es_file = open(es_filename, "wb")

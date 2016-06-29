@@ -2146,6 +2146,8 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.es = None
         self.create_gen = None
+        self.update_gen = None
+        self.delete_gen = None
 
         self.__fail_on_errors = self._input.param("fail-on-errors", True)
 
@@ -2327,32 +2329,73 @@ class FTSBaseTest(unittest.TestCase):
           the test.
           @param fields_to_update - list of fields to update in JSON
         """
-        tasks = []
+        load_tasks = []
         # UPDATES
         if self._update:
             self.log.info("Updating keys @ {0} with expiry={1}".
                           format(self._cb_cluster.get_name(), self._expires))
-            tasks.extend(self._cb_cluster.async_update_delete(
-                OPS.UPDATE,
-                fields_to_update=fields_to_update,
-                perc=self._perc_upd,
-                expiration=self._expires))
+            self.populate_update_gen(fields_to_update)
+            if self.compare_es:
+                gen = copy.deepcopy(self.update_gen)
+                if not self._expires:
+                    if isinstance(gen, list):
+                        for generator in gen:
+                            load_tasks.append(self.es.async_bulk_load_ES(
+                                index_name='es_index',
+                                gen=generator,
+                                op_type=OPS.UPDATE))
+                    else:
+                        load_tasks.append(self.es.async_bulk_load_ES(
+                            index_name='es_index',
+                            gen=gen,
+                            op_type=OPS.UPDATE))
+                else:
+                    # an expire on CB translates to delete on ES
+                    if isinstance(gen, list):
+                        for generator in gen:
+                            load_tasks.append(self.es.async_bulk_load_ES(
+                                index_name='es_index',
+                                gen=generator,
+                                op_type=OPS.DELETE))
+                    else:
+                        load_tasks.append(self.es.async_bulk_load_ES(
+                            index_name='es_index',
+                            gen=gen,
+                            op_type=OPS.DELETE))
 
-        [task.result() for task in tasks]
-        if tasks:
+            load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
+                kv_gen = self.update_gen,
+                ops=OPS.UPDATE,
+                exp=self._expires)
+
+
+        [task.result() for task in load_tasks]
+        if load_tasks:
             self.log.info("Batched updates loaded to cluster(s)")
 
-        tasks = []
+        load_tasks = []
         # DELETES
         if self._delete:
             self.log.info("Deleting keys @ {0}".format(self._cb_cluster.get_name()))
-            tasks.extend(
-                self._cb_cluster.async_update_delete(
-                    OPS.DELETE,
-                    perc=self._perc_del))
+            self.populate_delete_gen()
+            if self.compare_es:
+                del_gen = copy.deepcopy(self.delete_gen)
+                if isinstance(del_gen, list):
+                    for generator in del_gen:
+                        load_tasks.append(self.es.async_bulk_load_ES(
+                            index_name='es_index',
+                            gen=generator,
+                            op_type=OPS.DELETE))
+                else:
+                    load_tasks.append(self.es.async_bulk_load_ES(
+                        index_name='es_index',
+                        gen=del_gen,
+                        op_type=OPS.DELETE))
+            load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
+                self.delete_gen, OPS.DELETE)
 
-        [task.result() for task in tasks]
-        if tasks:
+        [task.result() for task in load_tasks]
+        if load_tasks:
             self.log.info("Batched deletes sent to cluster(s)")
 
         if self._wait_for_expiration and self._expires:
@@ -2724,13 +2767,72 @@ class FTSBaseTest(unittest.TestCase):
 
     def populate_create_gen(self):
         if self.dataset == "emp":
-            self.create_gen = self.get_generator(self.dataset, num_items=self._num_items)
+            self.create_gen = self.get_generator(
+                self.dataset, num_items=self._num_items)
         elif self.dataset == "wiki":
-            self.create_gen = self.get_generator(self.dataset, num_items=self._num_items)
+            self.create_gen = self.get_generator(
+                self.dataset, num_items=self._num_items)
         elif self.dataset == "all":
             self.create_gen = []
-            self.create_gen.append(self.get_generator("emp", num_items=self._num_items/2))
-            self.create_gen.append(self.get_generator("wiki", num_items=self._num_items/2))
+            self.create_gen.append(self.get_generator(
+                "emp", num_items=self._num_items/2))
+            self.create_gen.append(self.get_generator(
+                "wiki", num_items=self._num_items/2))
+
+    def populate_update_gen(self, fields_to_update=None):
+        if self.dataset == "emp":
+            self.update_gen = copy.deepcopy(self.create_gen)
+            self.update_gen.start = 0
+            self.update_gen.end = int(self.create_gen.end *
+                                      (float)(self._perc_upd)/100)
+            self.update_gen.update(fields_to_update=fields_to_update)
+        elif self.dataset == "wiki":
+            self.update_gen = copy.deepcopy(self.create_gen)
+            self.update_gen.start = 0
+            self.update_gen.end = int(self.create_gen.end *
+                                      (float)(self._perc_upd)/100)
+        elif self.dataset == "all":
+            self.update_gen = []
+            self.update_gen = copy.deepcopy(self.create_gen)
+            for itr, _ in enumerate(self.update_gen):
+                self.update_gen[itr].start = 0
+                self.update_gen[itr].end = int(self.create_gen[itr].end *
+                                      (float)(self._perc_upd)/100)
+                if self.update_gen[itr].name == "emp":
+                    self.update_gen[itr].update(fields_to_update=fields_to_update)
+
+    def populate_delete_gen(self):
+        if self.dataset == "emp":
+            self.delete_gen = JsonDocGenerator(
+                                    self.create_gen.name,
+                                    op_type= OPS.DELETE,
+                                    encoding="utf-8",
+                                    start=int((self.create_gen.end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen.end)
+        elif self.dataset == "wiki":
+            self.delete_gen = WikiJSONGenerator(name="wiki",
+                                    encoding="utf-8",
+                                    start=int((self.create_gen.end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen.end,
+                                    op_type=OPS.DELETE)
+
+        elif self.dataset == "all":
+            self.delete_gen = []
+            self.delete_gen.append(JsonDocGenerator(
+                                    "emp",
+                                    op_type= OPS.DELETE,
+                                    encoding="utf-8",
+                                    start=int((self.create_gen[0].end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen[0].end))
+            self.delete_gen.append(WikiJSONGenerator(name="wiki",
+                                    encoding="utf-8",
+                                    start=int((self.create_gen[1].end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen[1].end,
+                                    op_type=OPS.DELETE))
 
     def load_data(self):
         """
