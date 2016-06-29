@@ -1622,21 +1622,6 @@ class RestConnection(object):
                     raise Exception("Duplicate entry in the stats command {0}".format(stat_name))
         return stats
 
-    def get_bucket_status(self, bucket):
-        if not bucket:
-            log.error("Bucket Name not Specified")
-            return None
-        api = self.baseUrl + 'pools/default/buckets'
-        status, content, header = self._http_request(api)
-        if status:
-            json_parsed = json.loads(content)
-            for item in json_parsed:
-                if item["name"] == bucket:
-                    return item["nodes"][0]["status"]
-            log.error("Bucket {} doesn't exist".format(bucket))
-            return None
-
-
     def fetch_bucket_stats(self, bucket='default', zoom='minute'):
         """Return deserialized buckets stats.
         Keyword argument:
@@ -1800,6 +1785,14 @@ class RestConnection(object):
             raise GetBucketInfoFailed(bucket, content)
         return json.loads(content)
 
+    def is_lww_enabled(self, bucket='default'):
+        bucket_info = self.get_bucket_json(bucket=bucket)
+        try:
+            if bucket_info['timeSynchronization'] == 'enabledWithoutDrift':
+                return True
+        except KeyError:
+            return False
+
     def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
         api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket)
@@ -1846,61 +1839,51 @@ class RestConnection(object):
                       threadsNumber=3,
                       flushEnabled=1,
                       evictionPolicy='valueOnly',
-                      timeSynchronization=''):
+                      lww=False):
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
 
+        # this only works for default bucket ?
         if bucket == 'default':
-            params = urllib.urlencode({'name': bucket,
-                                       'authType': 'sasl',
-                                       'saslPassword': saslPassword,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': proxyPort,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                        'evictionPolicy': evictionPolicy})
+            init_params = {'name': bucket,
+                           'authType': 'sasl',
+                           'saslPassword': saslPassword,
+                           'ramQuotaMB': ramQuotaMB,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': proxyPort,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
+
         elif authType == 'none':
-            params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': proxyPort,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy})
+            init_params = {'name': bucket,
+                           'ramQuotaMB': ramQuotaMB,
+                           'authType': authType,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': proxyPort,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
         elif authType == 'sasl':
-            params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'saslPassword': saslPassword,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': self.get_nodes_self().moxi,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy})
-
-        # this only works for default bucket i?
-        if timeSynchronization:
-         params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'saslPassword': saslPassword,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': self.get_nodes_self().moxi,
-                                       'bucketType': bucketType,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy,
-                                       'timeSynchronization': timeSynchronization})
-
+            init_params = {'name': bucket,
+                           'ramQuotaMB': ramQuotaMB,
+                           'authType': authType,
+                           'saslPassword': saslPassword,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': self.get_nodes_self().moxi,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
+        if lww:
+            init_params['timeSynchronization'] = 'enabledWithoutDrift'
+        params = urllib.urlencode(init_params)
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
 
@@ -2480,29 +2463,6 @@ class RestConnection(object):
         params = urllib.urlencode(params)
         log.info("'%s' bucket's settings will be changed with parameters: %s" % (bucket, params))
         return self._http_request(api, "POST", params)
-
-    def set_indexer_compaction(self, mode="circular", indexDayOfWeek=None, indexFromHour=0,
-                                indexFromMinute=0, abortOutside=False,
-                                indexToHour=0, indexToMinute=0, fragmentation=30):
-        """Reset compaction values to default, try with old fields (dp4 build)
-        and then try with newer fields"""
-        params = {}
-        api = self.baseUrl + "controller/setAutoCompaction"
-        params["indexCompactionMode"] = mode
-        params["indexCircularCompaction[interval][fromHour]"] = indexFromHour
-        params["indexCircularCompaction[interval][fromMinute]"] = indexFromMinute
-        params["indexCircularCompaction[interval][toHour]"] = indexToHour
-        params["indexCircularCompaction[interval][toMinute]"] = indexToMinute
-        if indexDayOfWeek:
-            params["indexCircularCompaction[daysOfWeek]"] = indexDayOfWeek
-        params["indexCircularCompaction[interval][abortOutside]"] = str(abortOutside).lower()
-        params["parallelDBAndViewCompaction"] = "false"
-        if mode == "full":
-            params["indexFragmentationThreshold[percentage]"] = fragmentation
-        log.info("Indexer Compaction Settings: %s" % (params))
-        params = urllib.urlencode(params)
-        return self._http_request(api, "POST", params)
-
 
     def set_global_loglevel(self, loglevel='error'):
         """Set cluster-wide logging level for core components
