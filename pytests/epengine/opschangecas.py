@@ -199,7 +199,6 @@ class OpsChangeCasTests(BucketConfig):
     ''' Test Incremental sets on cas and max cas values for keys
     '''
     def test_cas_set(self):
-        print 'AM I HERE ?'
         self.log.info(' Starting test-sets')
         self._load_ops(ops='set', mutations=20)
         #self._load_ops(ops='add')
