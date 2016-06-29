@@ -208,7 +208,7 @@ class BucketConfig(unittest.TestCase):
                     shell.disconnect()
                     self.log.info("Node {0} backup".format(server.ip))
         finally:
-            self.log.info("Warming-up server ..".format(self.servers.ip))
+            self.log.info("Warming-up servers ..")
             time.sleep(100)
 
     def _check_config(self):

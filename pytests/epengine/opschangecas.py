@@ -181,20 +181,33 @@ class OpsChangeCasTests(BucketConfig):
             value = 'value' + str(i)
             client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
             vbucket_id = client._get_vBucket_id(KEY_NAME)
-            print 'vbucket_id is {0}'.format(vbucket_id)
+            #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = client.memcached(KEY_NAME)
             mc_master = client.memcached_for_vbucket( vbucket_id )
             mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
 
             cas_pre = mc_active.getMeta(KEY_NAME)[4]
-            print 'cas_a {0} '.format(cas_pre)
+            #print 'cas_a {0} '.format(cas_pre)
 
         max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(KEY_NAME)) + ':max_cas'] )
 
         self.assertTrue(cas_pre == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas_pre))
 
-        # restart nodes
+        # reboot nodes
         self._reboot_server()
+
+        # verify the CAS is good
+        client = VBucketAwareMemcached(rest, self.bucket)
+        mc_active = client.memcached(KEY_NAME)
+        cas_post = mc_active.getMeta(KEY_NAME)[4]
+        print 'post cas {0}'.format(cas_post)
+
+        get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=True)
+        print 'post CAS {0}'.format(cas_post)
+        print 'post ext meta {0}'.format(get_meta_resp)
+
+        self.assertTrue(cas_pre == cas_post, 'cas mismatch active: {0} replica {1}'.format(cas_pre, cas_post))
+        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     ''' Test Incremental sets on cas and max cas values for keys
     '''
