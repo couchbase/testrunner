@@ -21,7 +21,7 @@ class OpsChangeCasTests(BucketConfig):
         self.expire_time = self.input.param("expire_time", 35)
         self.item_flag = self.input.param("item_flag", 0)
         self.value_size = self.input.param("value_size", 256)
-
+        self.items = self.input.param("items", 200)
         self.rest = RestConnection(self.master)
         self.client = VBucketAwareMemcached(self.rest, self.bucket)
 
@@ -214,9 +214,6 @@ class OpsChangeCasTests(BucketConfig):
     def test_cas_set(self):
         self.log.info(' Starting test-sets')
         self._load_ops(ops='set', mutations=20)
-        #self._load_ops(ops='add')
-        #self._load_ops(ops='replace')
-        #self._load_ops(ops='delete')
         self._check_cas(check_conflict_resolution=True)
 
     ''' Test Incremental updates on cas and max cas values for keys
@@ -424,11 +421,62 @@ class OpsChangeCasTests(BucketConfig):
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas > TEST_CAS+1, '[ERROR]Max cas {0} is not greater than delete cas {1}'.format(max_cas, TEST_CAS))
 
+    def test_cas_CR(self):
 
-    ''' Test addMeta on cas and max cas values for keys
-    '''
-    def test_cas_addMeta(self):
-        pass
+        self.log.info(' Starting test-CR')
+        self._load_ops(ops='set', mutations=20)
+        self._check_cas(check_conflict_resolution=True)
+
+        k=0
+
+        while k<1:
+
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+
+            vbucket_id = self.client._get_vBucket_id(key)
+            mc_active = self.client.memcached(key)
+            mc_master = self.client.memcached_for_vbucket( vbucket_id )
+            mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+            TEST_SEQNO = 123
+            TEST_CAS = 456
+
+            low_seq=22
+
+            cas = mc_active.getMeta(key)[4]
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, low_seq, TEST_CAS, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(cas_post_meta < max_cas, '[ERROR]Max cas  is not higher it is lower than {0}'.format(cas_post_meta))
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas, cas))
+            print 'cas post {0}'.format(cas_post_meta)
+
+
+            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            cas = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
+
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, 125, TEST_CAS, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(cas_post_meta < max_cas, '[ERROR]Max cas  is not higher it is lower than {0}'.format(cas_post_meta))
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to original cas {0}'.format(cas))
+
+            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            cas = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
+
+            self.log.info('Doing delete with meta, using a lower CAS value')
+            get_meta_pre = mc_active.getMeta(key)[4]
+            del_with_meta_resp = mc_active.del_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, TEST_CAS+1)
+            get_meta_post = mc_active.getMeta(key)[4]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.assertTrue(max_cas > TEST_CAS+1, '[ERROR]Max cas {0} is not greater than delete cas {1}'.format(max_cas, TEST_CAS))
 
     ''' Test getMeta on cas and max cas values for empty vbucket
     '''
@@ -485,13 +533,14 @@ class OpsChangeCasTests(BucketConfig):
     '''
     def _check_cas(self, check_conflict_resolution=False, master=None, bucket=None, time_sync=None):
         self.log.info(' Verifying cas and max cas for the keys')
+        #select_count = 20 #Verifying top 20 keys
         if master:
             self.rest = RestConnection(master)
             self.client = VBucketAwareMemcached(self.rest, bucket)
 
         k=0
 
-        while k<10:
+        while k < self.items:
             key = "{0}{1}".format(self.prefix, k)
             k += 1
             mc_active = self.client.memcached(key)
@@ -520,7 +569,7 @@ class OpsChangeCasTests(BucketConfig):
         k=0
         payload = MemcachedClientHelper.create_value('*', self.value_size)
 
-        while k<10:
+        while k < self.items:
             key = "{0}{1}".format(self.prefix, k)
             k += 1
             for i in range(mutations):
