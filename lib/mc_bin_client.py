@@ -258,7 +258,6 @@ class MemcachedClient(object):
         self._set_vbucket(key, vbucket)
 
         if skipCR:
-            self.log.info(' Forcibly causing the sequence number to be lower ..')
             return self._doCmd(memcacheConstants.CMD_SET_WITH_META,
                 key,
                 val,
