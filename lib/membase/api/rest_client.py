@@ -1622,6 +1622,20 @@ class RestConnection(object):
                     raise Exception("Duplicate entry in the stats command {0}".format(stat_name))
         return stats
 
+    def get_bucket_status(self, bucket):
+        if not bucket:
+            log.error("Bucket Name not Specified")
+            return None
+        api = self.baseUrl + 'pools/default/buckets'
+        status, content, header = self._http_request(api)
+        if status:
+            json_parsed = json.loads(content)
+            for item in json_parsed:
+                if item["name"] == bucket:
+                    return item["nodes"][0]["status"]
+            log.error("Bucket {} doesn't exist".format(bucket))
+            return None
+
     def fetch_bucket_stats(self, bucket='default', zoom='minute'):
         """Return deserialized buckets stats.
         Keyword argument:
@@ -2466,6 +2480,28 @@ class RestConnection(object):
 
         params = urllib.urlencode(params)
         log.info("'%s' bucket's settings will be changed with parameters: %s" % (bucket, params))
+        return self._http_request(api, "POST", params)
+
+    def set_indexer_compaction(self, mode="circular", indexDayOfWeek=None, indexFromHour=0,
+                                indexFromMinute=0, abortOutside=False,
+                                indexToHour=0, indexToMinute=0, fragmentation=30):
+        """Reset compaction values to default, try with old fields (dp4 build)
+        and then try with newer fields"""
+        params = {}
+        api = self.baseUrl + "controller/setAutoCompaction"
+        params["indexCompactionMode"] = mode
+        params["indexCircularCompaction[interval][fromHour]"] = indexFromHour
+        params["indexCircularCompaction[interval][fromMinute]"] = indexFromMinute
+        params["indexCircularCompaction[interval][toHour]"] = indexToHour
+        params["indexCircularCompaction[interval][toMinute]"] = indexToMinute
+        if indexDayOfWeek:
+            params["indexCircularCompaction[daysOfWeek]"] = indexDayOfWeek
+        params["indexCircularCompaction[interval][abortOutside]"] = str(abortOutside).lower()
+        params["parallelDBAndViewCompaction"] = "false"
+        if mode == "full":
+            params["indexFragmentationThreshold[percentage]"] = fragmentation
+        log.info("Indexer Compaction Settings: %s" % (params))
+        params = urllib.urlencode(params)
         return self._http_request(api, "POST", params)
 
     def set_global_loglevel(self, loglevel='error'):
