@@ -177,9 +177,6 @@ class BatchedDocumentGenerator(object):
             key, val = self._doc_gen.next()
             key_val[key] = val
             count += 1
-        key_list = key_val.keys()
-        key_list.sort()
-        print len(key_list), key_list[0], key_list[-1]
         return key_val
 
 class JSONNonDocGenerator(KVGenerator):
