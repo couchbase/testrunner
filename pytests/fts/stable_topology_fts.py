@@ -66,6 +66,11 @@ class StableTopFTS(FTSBaseTest):
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         self.wait_for_indexing_complete()
+        if self._update or self._delete:
+            self.async_perform_update_delete(self.upd_del_fields)
+            if self._update:
+                self.sleep(60, "Waiting for updates to get indexed...")
+            self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
         self.run_query_and_compare(index)
 
@@ -78,6 +83,11 @@ class StableTopFTS(FTSBaseTest):
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         self.wait_for_indexing_complete()
+        if self._update or self._delete:
+            self.async_perform_update_delete(self.upd_del_fields)
+            if self._update:
+                self.sleep(60, "Waiting for updates to get indexed...")
+            self.wait_for_indexing_complete()
         alias = self.create_alias([index])
         self.generate_random_queries(alias, self.num_queries, self.query_types)
         self.run_query_and_compare(alias)
@@ -320,6 +330,11 @@ class StableTopFTS(FTSBaseTest):
         self.create_es_index_mapping(index.es_custom_map)
         self.load_data()
         self.wait_for_indexing_complete()
+        if self._update or self._delete:
+            self.async_perform_update_delete(self.upd_del_fields)
+            if self._update:
+                self.sleep(60, "Waiting for updates to get indexed...")
+            self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
         self.run_query_and_compare(index)
 
