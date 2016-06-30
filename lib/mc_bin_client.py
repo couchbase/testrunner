@@ -253,9 +253,23 @@ class MemcachedClient(object):
                                key, value, 0, exp, flags, seqno, remote_cas)
 
     def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
-                      adjusted_time=0, conflict_resolution_mode=0):
+                      adjusted_time=0, conflict_resolution_mode=0, skipCR=False):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
+
+        if skipCR:
+            self.log.info(' Forcibly causing the sequence number to be lower ..')
+            return self._doCmd(memcacheConstants.CMD_SET_WITH_META,
+                key,
+                val,
+                struct.pack(memcacheConstants.SKIP_META_CMD_FMT,
+                    flags,
+                    exp,
+                    seqno,
+                    cas,
+                    memcacheConstants.CR
+                ))
+
 
         if add_extended_meta_data:
             extended_meta_data =  self.pack_the_extended_meta_data( adjusted_time, conflict_resolution_mode)

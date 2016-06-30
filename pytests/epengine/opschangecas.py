@@ -421,15 +421,18 @@ class OpsChangeCasTests(BucketConfig):
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas > TEST_CAS+1, '[ERROR]Max cas {0} is not greater than delete cas {1}'.format(max_cas, TEST_CAS))
 
-    def test_cas_CR(self):
+    ''' Testing skipping conflict resolution, whereby the last write wins, and it does neither cas CR nor rev id CR
+    '''
+    def test_cas_skip_conflict_resolution(self):
 
-        self.log.info(' Starting test-CR')
+        self.log.info(' Starting test_cas_skip_conflict_resolution ..')
         self._load_ops(ops='set', mutations=20)
         self._check_cas(check_conflict_resolution=True)
 
         k=0
 
-        while k<1:
+        #Check for first 20 keys
+        while k<20:
 
             key = "{0}{1}".format(self.prefix, k)
             k += 1
@@ -439,44 +442,28 @@ class OpsChangeCasTests(BucketConfig):
             mc_master = self.client.memcached_for_vbucket( vbucket_id )
             mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
 
-            TEST_SEQNO = 123
-            TEST_CAS = 456
-
-            low_seq=22
+            low_seq=12
 
             cas = mc_active.getMeta(key)[4]
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, low_seq, TEST_CAS, '123456789',vbucket_id)
-            cas_post_meta = mc_active.getMeta(key)[4]
+            pre_seq = mc_active.getMeta(key)[3]
+            all = mc_active.getMeta(key)
+            self.log.info('all meta data before set_meta_force {0}'.format(all))
 
+            self.log.info('Forcing conflict_resolution to allow insertion of lower Seq Number')
+            lower_cas = int(cas)-1
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, low_seq, lower_cas, '123456789',vbucket_id, skipCR=True)
+            cas_post_meta = mc_active.getMeta(key)[4]
+            all_post_meta = mc_active.getMeta(key)
+            post_seq = mc_active.getMeta(key)[3]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
-            self.assertTrue(cas_post_meta < max_cas, '[ERROR]Max cas  is not higher it is lower than {0}'.format(cas_post_meta))
+            self.log.info('Expect No conflict_resolution to occur, and the last updated mutation to be the winner..')
+
+            #print 'cas meta data after set_meta_force {0}'.format(cas_post_meta)
+            #print 'all meta data after set_meta_force {0}'.format(all_post_meta)
+            self.log.info('all meta data after set_meta_force {0}'.format(all_post_meta))
+
             self.assertTrue(max_cas == cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas, cas))
-            print 'cas post {0}'.format(cas_post_meta)
-
-
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
-            cas = mc_active.getMeta(key)[4]
-            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
-            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
-
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, 125, TEST_CAS, '123456789',vbucket_id)
-            cas_post_meta = mc_active.getMeta(key)[4]
-
-            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
-            self.assertTrue(cas_post_meta < max_cas, '[ERROR]Max cas  is not higher it is lower than {0}'.format(cas_post_meta))
-            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to original cas {0}'.format(cas))
-
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
-            cas = mc_active.getMeta(key)[4]
-            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
-            self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
-
-            self.log.info('Doing delete with meta, using a lower CAS value')
-            get_meta_pre = mc_active.getMeta(key)[4]
-            del_with_meta_resp = mc_active.del_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, TEST_CAS+1)
-            get_meta_post = mc_active.getMeta(key)[4]
-            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
-            self.assertTrue(max_cas > TEST_CAS+1, '[ERROR]Max cas {0} is not greater than delete cas {1}'.format(max_cas, TEST_CAS))
+            self.assertTrue(pre_seq > post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
 
     ''' Test getMeta on cas and max cas values for empty vbucket
     '''
