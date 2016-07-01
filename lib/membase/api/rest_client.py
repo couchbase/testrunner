@@ -1853,7 +1853,8 @@ class RestConnection(object):
                       threadsNumber=3,
                       flushEnabled=1,
                       evictionPolicy='valueOnly',
-                      lww=False):
+                      lww=False,
+                      drift=False):
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
@@ -1896,7 +1897,10 @@ class RestConnection(object):
                            'flushEnabled': flushEnabled,
                            'evictionPolicy': evictionPolicy}
         if lww:
-            init_params['timeSynchronization'] = 'enabledWithoutDrift'
+            if drift:
+                init_params['timeSynchronization'] = 'enabledWithDrift'
+            else:
+                init_params['timeSynchronization'] = 'enabledWithoutDrift'
         params = urllib.urlencode(init_params)
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
