@@ -30,8 +30,6 @@ class BucketConfig(unittest.TestCase):
         self.servers = self.input.servers
         #self.time_synchronization = self.input.param("time_sync", "enabledWithoutDrift")
         self.lww = self.input.param("lww", True)
-        print 'self.lww'
-        print self.lww
         self.drift = self.input.param("drift", False)
         self.bucket='bucket-1'
         self.master = self.servers[0]
@@ -149,9 +147,6 @@ class BucketConfig(unittest.TestCase):
     def _create_bucket(self, lww=True, drift=False, name=None):
         if lww:
             self.lww=lww
-            print '-'*100
-            print 'lww is {0}'.format(lww)
-            print '-'*100
 
         if  name:
             self.bucket=name
@@ -221,16 +216,12 @@ class BucketConfig(unittest.TestCase):
 
     def _check_config(self):
         result = self.rest.get_bucket_json(self.bucket)["timeSynchronization"]
-        print result
         if self.lww and not self.drift:
             time_sync = 'enabledWithoutDrift'
-            print time_sync
         elif self.lww and self.drift:
             time_sync = 'enabledWithDrift'
-            print time_sync
         elif not self.lww:
             time_sync = 'disabled'
-            print time_sync
         self.assertEqual(result,time_sync, msg='ERROR, Mismatch on expected time synchronization values, ' \
                                                'expected {0} but got {1}'.format(time_sync, result))
         self.log.info("Verified results")
