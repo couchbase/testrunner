@@ -465,6 +465,87 @@ class OpsChangeCasTests(BucketConfig):
             self.assertTrue(max_cas == cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas, cas))
             self.assertTrue(pre_seq > post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
 
+    ''' Testing revid based conflict resolution with timeSync enabled, where cas on either mutations match and it does rev id CR
+        '''
+    def test_revid_conflict_resolution(self):
+
+        self.log.info(' Starting test_cas_revid_conflict_resolution ..')
+        self._load_ops(ops='set', mutations=20)
+        self._check_cas(check_conflict_resolution=True)
+
+        k=0
+
+        #Check for first 20 keys
+        while k<20:
+
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+
+            vbucket_id = self.client._get_vBucket_id(key)
+            mc_active = self.client.memcached(key)
+            mc_master = self.client.memcached_for_vbucket( vbucket_id )
+            mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+            new_seq=121
+
+            cas = mc_active.getMeta(key)[4]
+            pre_seq = mc_active.getMeta(key)[3]
+            all = mc_active.getMeta(key)
+            self.log.info('all meta data before set_meta_force {0}'.format(all))
+
+            self.log.info('Forcing conflict_resolution to rev-id by matching inserting cas ')
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, cas, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+            all_post_meta = mc_active.getMeta(key)
+            post_seq = mc_active.getMeta(key)[3]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.log.info('Expect No conflict_resolution to occur, and the last updated mutation to be the winner..')
+            self.log.info('all meta data after set_meta_force {0}'.format(all_post_meta))
+
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas, cas))
+            self.assertTrue(pre_seq < post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
+
+    ''' Testing conflict resolution, where timeSync is enabled and cas is lower but higher revid, expect Higher Cas to Win
+        '''
+    def test_cas_conflict_resolution(self):
+
+        self.log.info(' Starting test_cas_conflict_resolution ..')
+        self._load_ops(ops='set', mutations=20)
+        self._check_cas(check_conflict_resolution=True)
+
+        k=0
+
+        #Check for first 20 keys
+        while k<20:
+
+            key = "{0}{1}".format(self.prefix, k)
+            k += 1
+
+            vbucket_id = self.client._get_vBucket_id(key)
+            mc_active = self.client.memcached(key)
+            mc_master = self.client.memcached_for_vbucket( vbucket_id )
+            mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+            new_seq=121
+
+            cas = mc_active.getMeta(key)[4]
+            pre_seq = mc_active.getMeta(key)[3]
+            all = mc_active.getMeta(key)
+            self.log.info('all meta data before set_meta_force {0}'.format(all))
+
+            lower_cas = int(cas)-100
+            self.log.info('Forcing lower rev-id to win with higher CAS value, instead of higher rev-id with Lower Cas ')
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, lower_cas, '123456789',vbucket_id)
+            cas_post_meta = mc_active.getMeta(key)[4]
+            all_post_meta = mc_active.getMeta(key)
+            post_seq = mc_active.getMeta(key)[3]
+            max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+            self.log.info('Expect CAS conflict_resolution to occur, and the first mutation to be the winner..')
+
+            self.log.info('all meta data after set_meta_force {0}'.format(all_post_meta))
+            self.assertTrue(max_cas == cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas, cas))
+            self.assertTrue(pre_seq < post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
+
     ''' Test getMeta on cas and max cas values for empty vbucket
     '''
     def test_cas_getMeta_empty_vBucket(self):
