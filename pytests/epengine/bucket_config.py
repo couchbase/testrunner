@@ -28,7 +28,11 @@ class BucketConfig(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
-        self.time_synchronization = self.input.param("time_sync", "enabledWithoutDrift")
+        #self.time_synchronization = self.input.param("time_sync", "enabledWithoutDrift")
+        self.lww = self.input.param("lww", True)
+        print 'self.lww'
+        print self.lww
+        self.drift = self.input.param("drift", False)
         self.bucket='bucket-1'
         self.master = self.servers[0]
         self.rest = RestConnection(self.master)
@@ -56,7 +60,7 @@ class BucketConfig(unittest.TestCase):
             except Exception, e:
                 self.fail(e, 'cluster is not rebalanced')
 
-        self._create_bucket()
+        self._create_bucket(self.lww, self.drift)
 
     def tearDown(self):
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
@@ -132,7 +136,7 @@ class BucketConfig(unittest.TestCase):
             self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
             time.sleep(5)
-            self._create_bucket(time_sync="disabled",name="new_bucket")
+            self._create_bucket(lww=False,name="new_bucket")
             self.buckets = RestConnection(self.master).get_buckets()
             shell.restore_backupFile(self.couchbase_login_info, self.backup_location, ["new_bucket"])
 
@@ -142,9 +146,12 @@ class BucketConfig(unittest.TestCase):
     ''' Helper functions for above testcases
     '''
     #create a bucket if it doesn't exist
-    def _create_bucket(self, time_sync=None, name=None):
-        if time_sync:
-            self.time_synchronization=time_sync
+    def _create_bucket(self, lww=True, drift=False, name=None):
+        if lww:
+            self.lww=lww
+            print '-'*100
+            print 'lww is {0}'.format(lww)
+            print '-'*100
 
         if  name:
             self.bucket=name
@@ -155,13 +162,14 @@ class BucketConfig(unittest.TestCase):
                 self.servers)
             info = self.rest.get_nodes_self()
             self.rest.create_bucket(bucket=self.bucket,
-                ramQuotaMB=512,authType='sasl',lww=True)
+                ramQuotaMB=512,authType='sasl',lww=self.lww,drift=self.drift)
             try:
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
             except Exception, e:
                 self.fail(e, 'unable to create bucket')
 
+    # KETAKI tochange this
     def _modify_bucket(self):
         helper = RestHelper(self.rest)
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(
@@ -169,7 +177,7 @@ class BucketConfig(unittest.TestCase):
         info = self.rest.get_nodes_self()
 
         status, content = self.rest.change_bucket_props(bucket=self.bucket,
-            ramQuotaMB=512,authType='sasl',timeSynchronization=self.time_synchronization)
+            ramQuotaMB=512,authType='sasl',timeSynchronization='enabledWithOutDrift')
         if re.search('TimeSyncronization not allowed in update bucket', content):
             self.log.info('[PASS]Expected modify bucket to disallow Time Synchronization.')
         else:
@@ -214,5 +222,15 @@ class BucketConfig(unittest.TestCase):
     def _check_config(self):
         result = self.rest.get_bucket_json(self.bucket)["timeSynchronization"]
         print result
-        self.assertEqual(result,self.time_synchronization, msg='ERROR, Mismatch on expected time synchronization values')
+        if self.lww and not self.drift:
+            time_sync = 'enabledWithoutDrift'
+            print time_sync
+        elif self.lww and self.drift:
+            time_sync = 'enabledWithDrift'
+            print time_sync
+        elif not self.lww:
+            time_sync = 'disabled'
+            print time_sync
+        self.assertEqual(result,time_sync, msg='ERROR, Mismatch on expected time synchronization values, ' \
+                                               'expected {0} but got {1}'.format(time_sync, result))
         self.log.info("Verified results")
