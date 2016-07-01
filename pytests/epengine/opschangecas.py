@@ -109,8 +109,10 @@ class OpsChangeCasTests(BucketConfig):
         rebalance = self.cluster.async_rebalance(self.servers[:], [] ,[self.master])
 
         rebalance.result()
+        time.sleep(60)
+
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
-        print 'replica CAS {0}'.format(replica_CAS)
+        #print 'replica CAS {0}'.format(replica_CAS)
 
         # add the node back
         self.log.info('Add the node back, the max_cas should be healed')
