@@ -21,7 +21,7 @@ class OpsChangeCasTests(BucketConfig):
         self.expire_time = self.input.param("expire_time", 35)
         self.item_flag = self.input.param("item_flag", 0)
         self.value_size = self.input.param("value_size", 256)
-        self.items = self.input.param("items", 200)
+        self.items = self.input.param("items", 20)
         self.rest = RestConnection(self.master)
         self.client = VBucketAwareMemcached(self.rest, self.bucket)
 
