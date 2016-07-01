@@ -677,8 +677,8 @@ class OpsChangeCasTests(BucketConfig):
         self.log.info('Remove the node with active data')
 
         rebalance = self.cluster.async_rebalance(self.servers[-1:], [] ,[self.master])
-
         rebalance.result()
+        time.sleep(60)
         replica_CAS = mc_replica.getMeta(key)[4]
         get_meta_resp = mc_replica.getMeta(key,request_extended_meta_data=True)
         #print 'replica CAS {0}'.format(replica_CAS)
