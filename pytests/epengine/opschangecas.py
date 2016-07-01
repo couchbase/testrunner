@@ -546,6 +546,240 @@ class OpsChangeCasTests(BucketConfig):
             self.assertTrue(max_cas == cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas, cas))
             self.assertTrue(pre_seq < post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
 
+    ''' Testing revid based conflict resolution with timeSync enabled, where cas on either mutations match and it does rev id CR
+        and retains it after a restart server'''
+    def test_restart_revid_conflict_resolution(self):
+
+        self.log.info(' Starting test_restart_revid_conflict_resolution ..')
+        self._load_ops(ops='set', mutations=20)
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, self.bucket)
+
+        k=0
+
+        key = "{0}{1}".format(self.prefix, k)
+
+        vbucket_id = self.client._get_vBucket_id(key)
+        mc_active = self.client.memcached(key)
+        mc_master = self.client.memcached_for_vbucket( vbucket_id )
+        mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+
+        # set a key
+        value = 'value0'
+        client.memcached(key).set(key, 0, 0,json.dumps({'value':value}))
+        vbucket_id = client._get_vBucket_id(key)
+        print 'vbucket_id is {0}'.format(vbucket_id)
+        mc_active = client.memcached(key)
+        mc_master = client.memcached_for_vbucket( vbucket_id )
+        mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
+
+        new_seq=121
+
+        pre_cas = mc_active.getMeta(key)[4]
+        pre_seq = mc_active.getMeta(key)[3]
+        pre_max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+        all = mc_active.getMeta(key)
+        get_meta_1 = mc_active.getMeta(key,request_extended_meta_data=True)
+        print 'cr {0}'.format(get_meta_1)
+        self.log.info('all meta data before set_meta_force {0}'.format(all))
+        self.log.info('max_cas before set_meta_force {0}'.format(pre_max_cas))
+
+        self.log.info('Forcing conflict_resolution to rev-id by matching inserting cas ')
+        set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, pre_cas, '123456789',vbucket_id)
+        cas_post = mc_active.getMeta(key)[4]
+        all_post_meta = mc_active.getMeta(key)
+        post_seq = mc_active.getMeta(key)[3]
+        get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=True)
+        print 'cr {0}'.format(get_meta_2)
+        max_cas_post = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+        self.log.info('Expect RevId conflict_resolution to occur, and the last updated mutation to be the winner..')
+        self.log.info('all meta data after set_meta_force {0}'.format(all_post_meta))
+
+        self.assertTrue(max_cas_post == pre_cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas_post, pre_cas))
+        self.assertTrue(pre_seq < post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
+
+
+        # Restart Nodes
+        self._restart_server(self.servers[:])
+
+        # verify the CAS is good
+        client = VBucketAwareMemcached(rest, self.bucket)
+        mc_active = client.memcached(key)
+        cas_restart = mc_active.getMeta(key)[4]
+        #print 'post cas {0}'.format(cas_post)
+
+        get_meta_resp = mc_active.getMeta(key,request_extended_meta_data=True)
+        #print 'post CAS {0}'.format(cas_post)
+        #print 'post ext meta {0}'.format(get_meta_resp)
+
+        self.assertTrue(pre_cas == cas_post, 'cas mismatch active: {0} replica {1}'.format(pre_cas, cas_post))
+        #self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+
+    ''' Testing revid based conflict resolution with timeSync enabled, where cas on either mutations match and it does rev id CR
+        and retains it after a rebalance server'''
+    def test_rebalance_revid_conflict_resolution(self):
+
+        self.log.info(' Starting test_rebalance_revid_conflict_resolution ..')
+        self._load_ops(ops='set', mutations=20)
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, self.bucket)
+
+        k=0
+
+        key = "{0}{1}".format(self.prefix, k)
+
+        vbucket_id = self.client._get_vBucket_id(key)
+        mc_active = self.client.memcached(key)
+        mc_master = self.client.memcached_for_vbucket( vbucket_id )
+        mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+
+        # set a key
+        value = 'value0'
+        client.memcached(key).set(key, 0, 0,json.dumps({'value':value}))
+        vbucket_id = client._get_vBucket_id(key)
+        print 'vbucket_id is {0}'.format(vbucket_id)
+        mc_active = client.memcached(key)
+        mc_master = client.memcached_for_vbucket( vbucket_id )
+        mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
+
+        new_seq=121
+
+        pre_cas = mc_active.getMeta(key)[4]
+        pre_seq = mc_active.getMeta(key)[3]
+        pre_max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+        all = mc_active.getMeta(key)
+        get_meta_1 = mc_active.getMeta(key,request_extended_meta_data=True)
+        #print 'cr {0}'.format(get_meta_1)
+        self.log.info('all meta data before set_meta_force {0}'.format(all))
+        self.log.info('max_cas before set_meta_force {0}'.format(pre_max_cas))
+
+        self.log.info('Forcing conflict_resolution to rev-id by matching inserting cas ')
+        set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, pre_cas, '123456789',vbucket_id)
+        cas_post = mc_active.getMeta(key)[4]
+        all_post_meta = mc_active.getMeta(key)
+        post_seq = mc_active.getMeta(key)[3]
+        get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=True)
+        #print 'cr {0}'.format(get_meta_2)
+        max_cas_post = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+        self.log.info('Expect RevId conflict_resolution to occur, and the last updated mutation to be the winner..')
+        self.log.info('all meta data after set_meta_force {0}'.format(all_post_meta))
+
+        self.assertTrue(max_cas_post == pre_cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas_post, pre_cas))
+        self.assertTrue(pre_seq < post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
+
+        # remove that node
+        self.log.info('Remove the node with active data')
+
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [] ,[self.master])
+
+        rebalance.result()
+        replica_CAS = mc_replica.getMeta(key)[4]
+        get_meta_resp = mc_replica.getMeta(key,request_extended_meta_data=True)
+        #print 'replica CAS {0}'.format(replica_CAS)
+        #print 'replica ext meta {0}'.format(get_meta_resp)
+
+        # add the node back
+        self.log.info('Add the node back, the max_cas should be healed')
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [self.master], [])
+
+        rebalance.result()
+
+        # verify the CAS is good
+        client = VBucketAwareMemcached(rest, self.bucket)
+        mc_active = client.memcached(key)
+        active_CAS = mc_active.getMeta(key)[4]
+        print 'active cas {0}'.format(active_CAS)
+
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        #self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+
+    ''' Testing revid based conflict resolution with timeSync enabled, where cas on either mutations match and it does rev id CR
+        and retains it after a failover server'''
+    def test_failover_revid_conflict_resolution(self):
+
+        self.log.info(' Starting test_rebalance_revid_conflict_resolution ..')
+        self._load_ops(ops='set', mutations=20)
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, self.bucket)
+
+        k=0
+
+        key = "{0}{1}".format(self.prefix, k)
+
+        vbucket_id = self.client._get_vBucket_id(key)
+        mc_active = self.client.memcached(key)
+        mc_master = self.client.memcached_for_vbucket( vbucket_id )
+        mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
+
+
+        # set a key
+        value = 'value0'
+        client.memcached(key).set(key, 0, 0,json.dumps({'value':value}))
+        vbucket_id = client._get_vBucket_id(key)
+        print 'vbucket_id is {0}'.format(vbucket_id)
+        mc_active = client.memcached(key)
+        mc_master = client.memcached_for_vbucket( vbucket_id )
+        mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
+
+        new_seq=121
+
+        pre_cas = mc_active.getMeta(key)[4]
+        pre_seq = mc_active.getMeta(key)[3]
+        pre_max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+        all = mc_active.getMeta(key)
+        get_meta_1 = mc_active.getMeta(key,request_extended_meta_data=True)
+        #print 'cr {0}'.format(get_meta_1)
+        self.log.info('all meta data before set_meta_force {0}'.format(all))
+        self.log.info('max_cas before set_meta_force {0}'.format(pre_max_cas))
+
+        self.log.info('Forcing conflict_resolution to rev-id by matching inserting cas ')
+        set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, pre_cas, '123456789',vbucket_id)
+        cas_post = mc_active.getMeta(key)[4]
+        all_post_meta = mc_active.getMeta(key)
+        post_seq = mc_active.getMeta(key)[3]
+        get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=True)
+        #print 'cr {0}'.format(get_meta_2)
+        max_cas_post = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
+        self.log.info('Expect RevId conflict_resolution to occur, and the last updated mutation to be the winner..')
+        self.log.info('all meta data after set_meta_force {0}'.format(all_post_meta))
+
+        self.assertTrue(max_cas_post == pre_cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas_post, pre_cas))
+        self.assertTrue(pre_seq < post_seq, '[ERROR]Pre rev id {0} is not greater than post rev id {1}'.format(pre_seq, post_seq))
+
+        # failover that node
+        self.log.info('Failing over node with active data {0}'.format(self.master))
+        self.cluster.failover(self.servers, [self.master])
+
+        self.log.info('Remove the node with active data {0}'.format(self.master))
+
+        rebalance = self.cluster.async_rebalance(self.servers[:], [] ,[self.master])
+
+        rebalance.result()
+        replica_CAS = mc_replica.getMeta(key)[4]
+        get_meta_resp = mc_replica.getMeta(key,request_extended_meta_data=True)
+        #print 'replica CAS {0}'.format(replica_CAS)
+        #print 'replica ext meta {0}'.format(get_meta_resp)
+
+        # add the node back
+        self.log.info('Add the node back, the max_cas should be healed')
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [self.master], [])
+
+        rebalance.result()
+
+        # verify the CAS is good
+        client = VBucketAwareMemcached(rest, self.bucket)
+        mc_active = client.memcached(key)
+        active_CAS = mc_active.getMeta(key)[4]
+        #print 'active cas {0}'.format(active_CAS)
+
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        #self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+
     ''' Test getMeta on cas and max cas values for empty vbucket
     '''
     def test_cas_getMeta_empty_vBucket(self):
