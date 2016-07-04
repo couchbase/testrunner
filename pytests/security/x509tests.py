@@ -31,6 +31,8 @@ class x509tests(BaseTestCase):
 
     def tearDown(self):
         self._reset_original()
+        shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
+        shell.execute_command("rm " + x509main.CACERTFILEPATH)
         super(x509tests, self).tearDown()
 
 

@@ -6,6 +6,7 @@ import httplib2
 import base64
 import requests
 import urllib
+import random
 
 class ServerInfo():
     def __init__(self,
@@ -31,20 +32,20 @@ class x509main:
     LININSTALLPATH = "/opt/couchbase/var/lib/couchbase/"
     MACINSTALLPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/"
     DOWNLOADPATH = "/tmp/"
-    CACERTFILEPATH = "/tmp/newcerts/"
+    CACERTFILEPATH = "/tmp/newcerts" + str(random.randint(1,100)) + "/"
     CHAINFILEPATH = "inbox"
     GOCERTGENFILE = "gencert.go"
     INCORRECT_ROOT_CERT = "incorrect_root_cert.crt"
+    SLAVE_HOST = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
 
     def __init__(self,
                  host=None,
                  method='REST'):
 
-        print host
         if host is not None:
             self.host = host
             self.install_path = self._get_install_path(self.host)
-        self.slave_host = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
+        self.slave_host = x509main.SLAVE_HOST
 
     def getLocalIPAddress(self):
 
@@ -63,54 +64,52 @@ class x509main:
             x509main(server)._setup_node_certificates(reload_cert=reload_cert,host=server)
 
     def _generate_cert(self,servers,root_cn='Root\ Authority',type='go',encryption="",key_length=1024):
+        shell = RemoteMachineShellConnection(self.slave_host)
+        shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
+        shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
+
         if type == 'go':
             files = []
             cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
-            shell = RemoteMachineShellConnection(self.slave_host)
-            shell.execute_command("rm -rf /tmp/newcerts")
-            shell.execute_command("mkdir /tmp/newcerts")
 
-            shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/root -common-name="+root_cn)
-            shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/interm -sign-with=/tmp/newcerts/root -common-name=Intemediate\ Authority")
+            shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "root -common-name="+root_cn)
+            shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "interm -sign-with=" + x509main.CACERTFILEPATH + "root -common-name=Intemediate\ Authority")
             for server in servers:
-                shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/" + server.ip + " -sign-with=/tmp/newcerts/interm -common-name=" + server.ip + " -final=true")
-                shell.execute_command("cat /tmp/newcerts/" + server.ip + ".crt /tmp/newcerts/interm.crt  > " + " /tmp/newcerts/long_chain"+server.ip+".pem")
+                shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + server.ip + " -sign-with=" + x509main.CACERTFILEPATH + "interm -common-name=" + server.ip + " -final=true")
+                shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".crt " + x509main.CACERTFILEPATH + "interm.crt  > " + " " + x509main.CACERTFILEPATH + "long_chain"+server.ip+".pem")
 
-            shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/incorrect_root_cert -common-name=Incorrect\ Authority")
+            shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "incorrect_root_cert -common-name=Incorrect\ Authority")
         elif type == 'openssl':
             files = []
             v3_ca = "./pytests/security/v3_ca.crt"
-            shell = RemoteMachineShellConnection(self.slave_host)
-            output,error = shell.execute_command("rm -rf /tmp/newcerts")
+            output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + "ca.key " + str(key_length))
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            shell.execute_command("mkdir /tmp/newcerts")
+            output,error = shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key " + x509main.CACERTFILEPATH + "ca.key -out " + x509main.CACERTFILEPATH + "ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA'")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            shell.execute_command("openssl genrsa " + encryption + " -out /tmp/newcerts/ca.key " + str(key_length))
+            output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + "int.key " + str(key_length))
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            output,error = shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key /tmp/newcerts/ca.key -out /tmp/newcerts/ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA'")
+            output, error = shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + "int.key -out " + x509main.CACERTFILEPATH + "int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
-
-            output, error = shell.execute_command("openssl genrsa " + encryption + " -out /tmp/newcerts/int.key " + str(key_length))
-            log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            output, error = shell.execute_command("openssl req -new -key /tmp/newcerts/int.key -out /tmp/newcerts/int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
-            log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            output, error = shell.execute_command("openssl x509 -req -in /tmp/newcerts/int.csr -CA /tmp/newcerts/ca.pem -CAkey /tmp/newcerts/ca.key -CAcreateserial -CAserial /tmp/newcerts/rootCA.srl -extfile ./pytests/security/v3_ca.ext -out /tmp/newcerts/int.pem -days 365 -sha256")
+            output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + "int.csr -CA " + x509main.CACERTFILEPATH + "ca.pem -CAkey " + x509main.CACERTFILEPATH + "ca.key -CAcreateserial -CAserial " \
+                            + x509main.CACERTFILEPATH + "rootCA.srl -extfile ./pytests/security/v3_ca.ext -out " + x509main.CACERTFILEPATH +"int.pem -days 365 -sha256")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
 
             for server in servers:
-                output, error = shell.execute_command("openssl genrsa " + encryption + " -out /tmp/newcerts/"+server.ip + ".key " + str(key_length))
+                output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH +server.ip + ".key " + str(key_length))
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
-                output, error= shell.execute_command("openssl req -new -key /tmp/newcerts/" + server.ip + ".key -out /tmp/newcerts/" + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "'")
+                output, error= shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "'")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
-                output, error = shell.execute_command("openssl x509 -req -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -CAcreateserial -CAserial /tmp/newcerts/intermediateCA.srl -out /tmp/newcerts" + server.ip + ".pem -days 365 -sha256")
+                output, error = shell.execute_command("openssl x509 -req -in "+ x509main.CACERTFILEPATH + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
+                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
-                output, error = shell.execute_command("openssl x509 -req -days 300 -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -set_serial 01 -out /tmp/newcerts/" + server.ip + ".pem")
+                output, error = shell.execute_command("openssl x509 -req -days 300 -in " + x509main.CACERTFILEPATH  + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
+                                x509main.CACERTFILEPATH + "int.key -set_serial 01 -out " + x509main.CACERTFILEPATH + server.ip + ".pem")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
-                output, error = shell.execute_command("cat /tmp/newcerts/" + server.ip + ".pem /tmp/newcerts/int.pem > /tmp/newcerts/long_chain"+server.ip+".pem")
+                output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".pem " + x509main.CACERTFILEPATH + "int.pem > " + x509main.CACERTFILEPATH + "long_chain"+server.ip+".pem")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
-            output, error = shell.execute_command("cp /tmp/newcerts/ca.pem /tmp/newcerts/root.crt")
+            output, error = shell.execute_command("cp " + x509main.CACERTFILEPATH + "ca.pem " + x509main.CACERTFILEPATH + "root.crt")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
 
@@ -121,8 +120,6 @@ class x509main:
         http = httplib2.Http()
         status, content = http.request(api, 'POST', headers=self._create_rest_headers('Administrator','password'))
         #status, content, header = rest._http_request(api, 'POST')
-        print status
-        print content
         return status, content
 
     def _get_install_path(self,host):
@@ -166,9 +163,9 @@ class x509main:
         if host == None:
             host = self.host
         self._create_inbox_folder(host)
-        src_chain_file = "/tmp/newcerts/long_chain" + host.ip + ".pem"
+        src_chain_file = x509main.CACERTFILEPATH + "/long_chain" + host.ip + ".pem"
         dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.CHAINCERTFILE
-        src_node_key = "/tmp/newcerts/" + host.ip + ".key"
+        src_node_key = x509main.CACERTFILEPATH + "/" + host.ip + ".key"
         dest_node_key = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.NODECAKEYFILE
         if chain_cert:
             self._copy_node_key_chain_cert(host, src_chain_file, dest_chain_file)
@@ -200,12 +197,12 @@ class x509main:
         rest = RestConnection(self.host)
         url = "controller/uploadClusterCA"
         api = rest.baseUrl + url
-        self._rest_upload_file(api,"/tmp/newcerts/" + x509main.CACERTFILE,"Administrator",'password')
+        self._rest_upload_file(api,x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE,"Administrator",'password')
 
 
     def _validate_ssl_login(self,host=None,port=18091,username='Administrator',password='password'):
-        key_file = x509main.CACERTFILEPATH + x509main.CAKEYFILE
-        cert_file = x509main.CACERTFILEPATH + x509main.CACERTFILE
+        key_file = x509main.CACERTFILEPATH + "/" + x509main.CAKEYFILE
+        cert_file = x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE
         if host is None:
             host = self.host.ip
         try:
@@ -216,8 +213,8 @@ class x509main:
                 r = requests.post("https://"+host+":18091/uilogin",data=params,headers=header,verify=cert_file)
                 return r.status_code
         except Exception, ex:
-            print "into exception"
-            print ex
+            log.info ("into exception form validate_ssl_login")
+            log.info (" Exception is {0}".format(ex))
             return 'error'
 
     def _get_cluster_ca_cert(self):
