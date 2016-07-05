@@ -2112,6 +2112,8 @@ class QueryTests(BaseTestCase):
             else:
                 self.log.error("cover keyword missing from json children ")
                 self.fail("cover keyword missing from json children ")
+            if 'IntersectScan' in s:
+                self.log.error("This is a covered query, Intersec scan should not be used")
 
 
 

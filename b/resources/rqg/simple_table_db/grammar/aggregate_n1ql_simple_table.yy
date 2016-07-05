@@ -2,7 +2,7 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY select_from |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition |
 	SELECT sel_from FROM BUCKET_NAME WHERE numeric_condition |
