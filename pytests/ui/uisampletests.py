@@ -1859,9 +1859,18 @@ class DdocViewHelper():
             if self.get_error():
                 raise Exception("Error '%s' appeared" % self.get_error())
         if action == 'save':
+            self.wait.until(lambda fn:
+                            self.controls.view_map_reduce_fn().save_btn.is_displayed(),
+                            "Save Button is not displayed")
             self.controls.view_map_reduce_fn().save_btn.click()
         if action == 'save_as':
+            self.wait.until(lambda fn:
+                            self.controls.view_map_reduce_fn().saveas_btn.is_displayed(),
+                            "Save As Button is not displayed")
             self.controls.view_map_reduce_fn().saveas_btn.click()
+            self.wait.until(lambda fn:
+                            self.controls.create_pop_up().view_name.is_displayed(),
+                            "Popup is not displayed")
             self.controls.create_pop_up().view_name.type(new_view_name)
             self.controls.create_pop_up().save_btn.click()
             self.click_view_tab(text='Views')

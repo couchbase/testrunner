@@ -6,6 +6,7 @@ from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection
 from uibasetest import *
 from uisampletests import Bucket, NavigationHelper, BucketHelper
+from selenium.common.exceptions import StaleElementReferenceException
 
 
 class XDCRTests(BaseUITestCase):
@@ -222,10 +223,13 @@ class XDCRHelper():
             raise Exception('Reference is not created: %s' % self.controls.error_reference().get_text())
 
     def _cluster_reference_pop_up_reaction(self):
-        if self.controls.create_reference_pop_up().pop_up.is_present() or \
-           self.controls.error_reference().is_present():
-            return (not self.controls.create_reference_pop_up().pop_up.is_displayed()) or \
-                    self.controls.error_reference().is_displayed()
+        try:
+            if not (self.controls.create_reference_pop_up().pop_up.is_displayed()):
+                return not self.controls.create_reference_pop_up().pop_up.is_displayed()
+            else:
+                return self.controls.error_reference().is_displayed()
+        except StaleElementReferenceException as e:
+            return False
 
     def _get_error(self):
         return self.controls.error().get_text()
@@ -276,9 +280,13 @@ class XDCRHelper():
                         "there is no reaction in %d sec" % (self.wait._timeout))
 
     def _cluster_replication_pop_up_reaction(self):
-        if self.controls.create_replication_pop_up().pop_up.is_present() or \
-           self.controls.error_replica().is_present():
-            return (not self.controls.create_replication_pop_up().pop_up.is_displayed()) or self.controls.error_replica().is_displayed()
+        try:
+            if not (self.controls.create_replication_pop_up().pop_up.is_displayed()):
+                return not self.controls.create_replication_pop_up().pop_up.is_displayed()
+            else:
+                return self.controls.error_replica().is_displayed()
+        except StaleElementReferenceException as e:
+            return False
 
     def is_cluster_reference_created(self, name, ip):
         all_ref = self.controls._all_cluster_references()
