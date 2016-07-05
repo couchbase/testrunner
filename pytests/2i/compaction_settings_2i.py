@@ -241,7 +241,6 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.sleep(140)
         self.change_system_date(servers, "tomorrow")
-        self.change_indexer_time = True
         self.sleep(30)
         final_index_map = rest.get_index_stats()
         self.check_compaction_number(initial_index_map, final_index_map)
@@ -273,11 +272,12 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         self.check_compaction_number(first_index_map, second_index_map)
         self._run_tasks(kv_ops)
 
-    def change_system_day(servers, date):
+    def change_system_date(self, servers, date):
         for server in servers:
             remote = RemoteMachineShellConnection(server)
             cmd = "date -s '{0}'".format(date)
-            remote.execute_cmd(cmd)
+            remote.execute_command(cmd)
+        self.change_indexer_time = True
 
     def check_compaction_number(self, initial_map, final_map, buckets=None):
         if not buckets:
