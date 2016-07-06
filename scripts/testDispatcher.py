@@ -46,7 +46,7 @@ def main():
     parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y','--serverType', dest='serverType', default='VM')
-
+    #parser.add_option('-u','--url', dest='url', default=None) - toy build option is not there yet
 
     options, args = parser.parse_args()
 
@@ -59,7 +59,7 @@ def main():
 
     print 'nolaunch', options.noLaunch
     print 'os', options.os
-    print 'serverType', options.serverType
+    #print 'url', options.url
 
 
     print 'subcomponent is', options.subcomponent
@@ -248,10 +248,8 @@ def main():
                                     urllib.quote( parameters ), options.os, testsToLaunch[i]['initNodes'],
                                     testsToLaunch[i]['installParameters'])
 
-                        if options.serverType.lower() == 'docker':
-                            url = url + '&client=' + content + ':2375'
-                            pass
-                        else:
+
+                        if options.serverType.lower() != 'docker':
                             r2 = json.loads(content)
                             url = url + '&servers=' + urllib.quote(json.dumps(r2).replace(' ',''))
 
@@ -263,9 +261,12 @@ def main():
                             print 'would launch', url
                             # free the VMs
                             time.sleep(3)
-                            response, content = httplib2.Http(timeout=60).\
-                                request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
-                            print 'the release response', response, content
+                            if options.serverType.lower() == 'docker':
+                                pass # figure docker out later
+                            else:
+                                response, content = httplib2.Http(timeout=60).\
+                                    request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
+                                print 'the release response', response, content
                         else:
                             response, content = httplib2.Http(timeout=60).request(url, 'GET')
 
