@@ -285,6 +285,20 @@ class NodeHelper:
         shell.disconnect()
 
     @staticmethod
+    def set_cbft_env_fdb_options(server):
+        shell = RemoteMachineShellConnection(server)
+        shell.stop_couchbase()
+        cmd = "sed -i 's/^export CBFT_ENV_OPTIONS.*$/" \
+              "export CBFT_ENV_OPTIONS=bleveMaxResultWindow=10000000," \
+              "forestdbCompactorSleepDuration={0},forestdbCompactionThreshold={1}/g'\
+              /opt/couchbase/bin/couchbase-server".format(
+            int(TestInputSingleton.input.param("fdb_compact_interval", None)),
+            int(TestInputSingleton.input.param("fdb_compact_threshold", None)))
+        shell.execute_command(cmd)
+        shell.start_couchbase()
+        shell.disconnect()
+
+    @staticmethod
     def wait_service_started(server, wait_time=120):
         """Function will wait for Couchbase service to be in
         running phase.
@@ -915,7 +929,10 @@ class CouchbaseCluster:
 
             self.__nodes += nodes_to_add
         self.__separate_nodes_on_services()
-
+        if TestInputSingleton.input.param("fdb_compact_interval", None) or \
+                TestInputSingleton.input.param("fdb_compact_threshold", None):
+            for node in self.__fts_nodes:
+                NodeHelper.set_cbft_env_fdb_options(node)
 
     def cleanup_cluster(
             self,
@@ -2254,7 +2271,6 @@ class FTSBaseTest(unittest.TestCase):
             num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
-
 
     def load_employee_dataset(self, num_items=None):
         """
