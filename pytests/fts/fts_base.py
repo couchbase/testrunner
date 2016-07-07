@@ -105,9 +105,6 @@ class INDEX_DEFAULTS:
                     "default_field": "_all",
                     "byte_array_converter": "json",
                     "analysis": {}
-                  },
-                  "store": {
-                    "kvStoreName": "forestdb"
                   }
               }
 
@@ -569,6 +566,10 @@ class FTSIndex:
 
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
+
+        if TestInputSingleton.input.param("kvstore", None):
+            self.index_definition['params']['store'] = {"kvStoreName":
+                        TestInputSingleton.input.param("kvstore", None)}
 
         self.moss_enabled = TestInputSingleton.input.param("moss", True)
         if not self.moss_enabled:
@@ -2662,8 +2663,6 @@ class FTSBaseTest(unittest.TestCase):
         bucket_password = ""
         if bucket.authType == "sasl":
             bucket_password = bucket.saslPassword
-        if self.index_kv_store:
-            index_params = {"store": {"kvStoreName": self.index_kv_store}}
         if not plan_params:
             plan_params = self.construct_plan_params()
         index = self._cb_cluster.create_fts_index(
