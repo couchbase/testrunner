@@ -1873,6 +1873,7 @@ class DdocViewHelper():
                             "Popup is not displayed")
             self.controls.create_pop_up().view_name.type(new_view_name)
             self.controls.create_pop_up().save_btn.click()
+            time.sleep(2)
             self.click_view_tab(text='Views')
             self.wait.until(lambda fn:
                             self.is_view_present(new_view_name),
@@ -1883,11 +1884,26 @@ class DdocViewHelper():
     def verify_view_results(self, view_set, reduce_fn, value=0):
         self.tc.log.info('Verify View Results')
         if view_set == 'dev':
+            self.wait.until(lambda fn:
+                            self.controls.view_results_container().dev_subset.is_displayed,
+                            "View Results Container Dev Subset is not displayed")
             self.controls.view_results_container().dev_subset.click()
         else:
+            self.wait.until(lambda fn:
+                            self.controls.view_results_container().full_subset.is_displayed,
+                            "View Results Container Full Subset is not displayed")
             self.controls.view_results_container().full_subset.click()
+        self.wait.until(lambda fn:
+                        self.controls.view_results_container().doc_arrow.is_displayed,
+                        "Doc Arrow is not displayed")
         self.controls.view_results_container().doc_arrow.click()
+        self.wait.until(lambda fn:
+                        self.controls.view_results_container().view_arrow.is_displayed,
+                        "View Arrow is not displayed")
         self.controls.view_results_container().view_arrow.click()
+        self.wait.until(lambda fn:
+                        self.controls.view_results_container().show_results_btn.is_displayed,
+                        "Show Results Button is not displayed")
         self.controls.view_results_container().show_results_btn.click()
         self.wait.until(lambda fn:
                         self.reaction_with_stale_element(self.controls.view_results_container().table_id.is_displayed),

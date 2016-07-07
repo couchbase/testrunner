@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection
 from uibasetest import *
 from uisampletests import Bucket, NavigationHelper, BucketHelper
 from selenium.common.exceptions import StaleElementReferenceException
+from membase.helper.bucket_helper import BucketOperationHelper
 
 
 class XDCRTests(BaseUITestCase):
@@ -14,6 +15,10 @@ class XDCRTests(BaseUITestCase):
         super(XDCRTests, self).setUp()
         self.bucket = Bucket()
         self._initialize_nodes()
+        # Delete all buckets before creating new buckets
+        self.log.info("Deleting all existing buckets")
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        self.log.info("Creating new buckets")
         src_bucket = self.input.param('src_bucket', self.bucket)
         dest_bucket = self.input.param('dest_bucket', self.bucket)
         if src_bucket:
