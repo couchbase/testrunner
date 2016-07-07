@@ -1369,6 +1369,46 @@ class QueriesIndexTests(QueryTests):
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
 
+    def test_partial_like_covering(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'_id')+\
+                             " where _id like '%s' " %('query-test%') + \
+                             " USING %s" % (self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = "EXPLAIN select meta().id from %s WHERE _id like '%s' " %(bucket.name,'query-test%')
+
+                self.test_explain_covering_index(idx)
+
+                self.query = "EXPLAIN select meta().id from %s WHERE _id like '%s' " %(bucket.name,'query-testemployee10%')
+
+                self.test_explain_covering_index(idx)
+                self.query = "select meta().id from %s WHERE _id like '%s' " %(bucket.name,'query-testemployee10%')
+
+                actual_result = self.run_cbq_query()
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+                    self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
+                    self.sleep(15,'wait for index')
+                    self.query = "select meta().id from %s use index(`#primary`) WHERE _id like '%s' " %(bucket.name,'query-testemployee10%')
+                    result = self.run_cbq_query()
+                    self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
+                    self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
 
     def test_array_partial_index_all(self):
         for bucket in self.buckets:
