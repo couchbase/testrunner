@@ -1485,7 +1485,69 @@ class Lww(XDCRNewBaseTest):
         self.async_perform_update_delete()
 
         graceful = self._input.param("graceful", False)
+        self.recoveryType = self._input.param("recoveryType", None)
         task = self.c1_cluster.async_failover(graceful=graceful)
         task.result()
+
+        if self.recoveryType:
+            src_conn.set_recovery_type(otpNode=self._input.servers[1].id, recoveryType=self.recoveryType)
+            src_conn.add_back_node(otpNode=self._input.servers[1].id)
+            rebalance = self.c1_cluster.async_rebalance(self.c1_cluster.get_nodes(), [], [])
+            rebalance.result()
+
+        self.verify_results()
+
+    def test_lww_with_src_bucket_flush(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
+
+        self.c1_cluster.flush_buckets()
+
+        self.async_perform_update_delete()
+
+        self.verify_results()
+
+    def test_lww_with_src_bucket_delete(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
+
+        self.c1_cluster.delete_bucket(bucket_name='default')
+        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+
+        self.async_perform_update_delete()
 
         self.verify_results()
