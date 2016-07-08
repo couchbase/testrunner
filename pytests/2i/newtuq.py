@@ -1,23 +1,9 @@
-import logger
-import json
-import uuid
-import copy
-import math
-import re
-
-import testconstants
-import datetime
-import time
-from datetime import date
 from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.tuq_generators import JsonGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
-from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.tuq_helper import N1QLHelper
-from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import MemcachedClientHelper
 
 class QueryTests(BaseTestCase):
     def setUp(self):
@@ -144,7 +130,7 @@ class QueryTests(BaseTestCase):
             if self.dataset == "bigdata":
                 return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
             if self.dataset == "array":
-                return self.generate_ops(num_items, start, json_generator.generate_docs_array)
+                return self.generate_ops(num_items, start, json_generator.generate_docs_employee_array)
         except Exception, ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
@@ -176,7 +162,7 @@ class QueryTests(BaseTestCase):
 
     def generate_docs_array(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_array(docs_per_day=docs_per_day,
+        return json_generator.generate_docs_employee_array(docs_per_day=docs_per_day,
             start=start)
 
     def generate_ops(self, docs_per_day, start=0, method=None):
@@ -211,6 +197,7 @@ class QueryTests(BaseTestCase):
             tasks = self.async_ops_all_buckets(self.docs_gen_map, batch_size=self.batch_size)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
+            self.log.info("------ KV OPS Done ------")
             return tasks
         return []
 
@@ -219,7 +206,7 @@ class QueryTests(BaseTestCase):
         if self.scan_consistency == "request_plus":
             verify_data = False
         if self.doc_ops:
-            self.sync_ops_all_buckets(self.docs_gen_map, batch_size=self.batch_size, verify_data=verify_data)
+            self.sync_ops_all_buckets(docs_gen_map=self.docs_gen_map, batch_size=self.batch_size, verify_data=verify_data)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
 
