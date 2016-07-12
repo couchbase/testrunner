@@ -1368,6 +1368,46 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_indexcountscan(self):
+        for bucket in self.buckets:
+                created_indexes = []
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'_id')+\
+                             " USING %s" % (self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = "EXPLAIN select count(1) from %s WHERE _id like '%s' " %(bucket.name,'query-test%')
+
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                result1 = plan['~children'][0]['index']
+                self.assertTrue(result1 == idx)
+                self.query = "select count(1) from %s WHERE _id like '%s' " %(bucket.name,'query-test%')
+                actual_result = self.run_cbq_query()
+                self.assertTrue(
+                    plan['~children'][0]['#operator'] == 'IndexCountScan',
+                    "IndexCountScan is not being used")
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+                    self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
+                    self.sleep(15,'wait for index')
+                    self.query = "select count(1) from %s use index(`#primary`) WHERE _id like '%s'  " %(bucket.name,'query-test%')
+                    result = self.run_cbq_query()
+                    self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
+                    self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
+
 
     def test_partial_like_covering(self):
         for bucket in self.buckets:
@@ -2248,6 +2288,126 @@ class QueriesIndexTests(QueryTests):
                                                                                                 self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
                     actual_result = self.run_cbq_query()
                     self.assertTrue(len(actual_result['results']), self.num_items)
+            except Exception, ex:
+                content = self.cluster.query_view(self.master, "ddl_%s" % view_name, view_name, {"stale" : "ok"},
+                                                  bucket="default", retry_time=1)
+                self.log.info("Generated view has %s items" % len(content['rows']))
+                raise ex
+            finally:
+                for view_name in created_indexes:
+                    self.query = "DROP INDEX %s.%s" % (bucket.name, view_name)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind - 1]), bucket.name,
+                                                                                                self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
+                actual_result = self.run_cbq_query(query_params={'scan_consistency' : 'statement_plus'})
+                self.assertTrue(len(actual_result['results']), self.num_items)
+
+    def test_create_delete_index_with_query_loop(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                for ind in xrange(self.num_indexes):
+                    idx_name = "tuq_index1%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(a)  USING GSI" % (idx_name, bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self._wait_for_index_online(bucket, idx_name)
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append(idx_name)
+                    idx_name = "tuq_index2%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(b)  USING GSI" % (idx_name, bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self._wait_for_index_online(bucket, idx_name)
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append(idx_name)
+                    self.query = "CREATE INDEX `a1s_idx_search_legacy` ON `default`(`_class`,`typeRef`,(`fields`.`accountNumber`),`createdDate`) USING GSI"
+                    actual_result = self.run_cbq_query()
+                    self._wait_for_index_online(bucket, "a1s_idx_search_legacy")
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append('a1s_idx_search_legacy')
+                    self.query = "create index `idx_class_name` on `default`(`_class`,`name`) USING GSI "
+                    actual_result = self.run_cbq_query()
+                    self._wait_for_index_online(bucket, "idx_class_name")
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append("idx_class_name")
+
+                    self.query = "create index `idx_class` on `default`(`_class`) USING GSI"
+                    actual_result = self.run_cbq_query()
+                    self._wait_for_index_online(bucket, "idx_class")
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append("idx_class")
+
+
+                    for i in range(0,100):
+                        self.query = "select * from %s where b is not missing and a is not missing " %(bucket.name)
+                        actual_result = self.run_cbq_query()
+                        print actual_result['results']
+                        self.query = "delete from %s where a is not missing and b is not missing" %(bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("%s", {"_class":"com.comcast.esp.unifiednotes.entity.TypeDefinition", "name":"MemoBillingNote", "c":"pq"})' % (bucket.name,i+1)
+
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("%s", {"_class":"com.comcast.esp.unifiednotes.entity.UNote", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673"},"createdDate":1456790401005})' % (bucket.name,i+2)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("3", {"_class":"com.comcast.esp.unifiednotes.entity.UNote", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673"})' % (bucket.name,i+3)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("4", {"_class":"com.comcast.esp.unifiednotes.entity.UNote", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673"})' % (bucket.name,i+4)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("5", {"_class":"com.comcast.esp.unifiednotes.entity.UNote", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673","createdDate":1456790401004})' % (bucket.name,i+5)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("6", {"_class":"com.comcast.esp.unifiednotes.entity.UNote", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673","createdDate":1456790401003})' % (bucket.name,i+6)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("7", {"_class":"com.comcast.esp.unifiednotes.entity.TypeDefinition", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673","createdDate":1456790401002})' % (bucket.name,i+7)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("8", {"_class":"com.comcast.esp.unifiednotes.entity.TypeDefinition", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673","createdDate":1456790401001})' % (bucket.name,i+8)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("9", {"_class":"com.comcast.esp.unifiednotes.entity.TypeDefinition", "typeRef":"dd833af2-405e-11e5-a151-feff819cdc9f", "fields.accountNumber":"8771300052225673","createdDate":1456790401001})' % (bucket.name,i+9)
+                        self.run_cbq_query()
+                        self.query = 'explain select * from `default` where _class="com.comcast.esp.unifiednotes.entity.TypeDefinition" ' \
+                                     'and name="MemoBillingNote" limit 1'
+
+                        actual_result = self.run_cbq_query()
+                        self.query = 'EXPLAIN SELECT * FROM `default` WHERE _class = "com.comcast.esp.unifiednotes.entity.UNote" AND typeRef = "dd833af2-405e-11e5-a151-feff819cdc9f" AND createdDate BETWEEN 1456790401000 AND 1490897416000 AND fields.accountNumber = "8771300052225673" '
+                        self.run_cbq_query()
+                        self.query = 'delete from %s where b = 1' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'select * from %s where a = "m"' % (bucket.name)
+                        self.run_cbq_query()
+
+                        self.query = 'explain select * from `default` where _class="com.comcast.esp.unifiednotes.entity.TypeDefinition" order by acs'
+                        self.run_cbq_query()
+                        self.query = 'upsert into %s(KEY, VALUE) VALUES ("1", {"a":"m", "b":1, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'select * from %s where a = "m"' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'upsert into %s(KEY, VALUE) VALUES ("1", {"a":"k", "b":2, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'upsert into %s(KEY, VALUE) VALUES ("1", {"a":"k", "b":1, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'select * from %s where a = "k"' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("3", {"a":"k", "b":2, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("4", {"a":"k", "b":1, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("5", {"a":"k", "b":2, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'select * from %s where b = 2' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'delete from %s where b = 2' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("5", {"a":"k", "b":1, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'insert into %s(KEY, VALUE) VALUES ("6", {"a":"k", "b":2, "c":"pq"})' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'select * from %s where a = "k"' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'delete from %s where b = 1' % (bucket.name)
+                        self.run_cbq_query()
+                        self.query = 'select * from %s where a = "k" and b = 1' % (bucket.name)
+                        self.run_cbq_query()
+                        self.sleep(5,"sleep for kv operations")
             except Exception, ex:
                 content = self.cluster.query_view(self.master, "ddl_%s" % view_name, view_name, {"stale" : "ok"},
                                                   bucket="default", retry_time=1)

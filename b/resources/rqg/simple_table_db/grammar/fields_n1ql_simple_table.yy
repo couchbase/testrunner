@@ -2,7 +2,7 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition  ;
 
 create_index:
