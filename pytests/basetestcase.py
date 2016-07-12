@@ -66,6 +66,7 @@ class BaseTestCase(unittest.TestCase):
         self.data_analyzer = DataAnalyzer()
         self.result_analyzer = DataAnalysisResultAnalyzer()
         self.set_testrunner_client()
+        self.change_bucket_properties=False
         try:
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)
@@ -79,6 +80,7 @@ class BaseTestCase(unittest.TestCase):
             # number of case that is performed from testrunner( increment each time)
             self.case_number = self.input.param("case_number", 0)
             self.default_bucket = self.input.param("default_bucket", True)
+            self.parallelism = self.input.param("parallelism",False)
             if self.default_bucket:
                 self.default_bucket_name = "default"
             self.standard_buckets = self.input.param("standard_buckets", 0)
@@ -185,6 +187,8 @@ class BaseTestCase(unittest.TestCase):
                 self.change_env_variables()
                 self.change_checkpoint_params()
                 self.log.info("done initializing cluster")
+            else:
+                self.quota = ""
             if self.input.param("log_info", None):
                 self.change_log_info()
             if self.input.param("log_location", None):
@@ -408,7 +412,7 @@ class BaseTestCase(unittest.TestCase):
         return quota
 
     def _bucket_creation(self):
-        if self.default_bucket:
+        if (self.default_bucket==True):
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
                                                enable_replica_index=self.enable_replica_index,
                                                eviction_policy=self.eviction_policy)
@@ -527,7 +531,10 @@ class BaseTestCase(unittest.TestCase):
         if bucket_size is None:
             bucket_size = self._get_bucket_size(self.quota, len(bucket_list))
         bucket_tasks = []
-        i = 0
+        if self.parallelism:
+            i = random.randint(1, 10000)
+        else:
+            i = 0
         for bucket_name in bucket_list:
             self.log.info(" Creating bucket {0}".format(bucket_name))
             i += 1

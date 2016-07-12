@@ -15,6 +15,7 @@ from mysql_client import MySQLClient
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class RQGTests(BaseTestCase):
@@ -26,6 +27,7 @@ class RQGTests(BaseTestCase):
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
         self.check_covering_index = self.input.param("check_covering_index",True)
+        self.skip_setup_cleanup = True
         self.remove_alias = self.input.param("remove_alias",True)
         self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
         self.number_of_buckets = self.input.param("number_of_buckets",5)
@@ -36,6 +38,7 @@ class RQGTests(BaseTestCase):
         self.failure_record_path= self.input.param("failure_record_path","/tmp")
         self.use_mysql= self.input.param("use_mysql",True)
         self.initial_loading_to_cb= self.input.param("initial_loading_to_cb",True)
+        self.change_bucket_properties = self.input.param("change_bucket_properties",False)
         self.database= self.input.param("database","flightstats")
         self.merge_operation= self.input.param("merge_operation",False)
         self.load_copy_table= self.input.param("load_copy_table",False)
@@ -73,6 +76,7 @@ class RQGTests(BaseTestCase):
         self.query_helper = QueryHelper()
         self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
         self._initialize_n1ql_helper()
+        self.rest = RestConnection(self.master)
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
         if not(self.use_rest):
@@ -278,6 +282,7 @@ class RQGTests(BaseTestCase):
         count = 1
         inserted_count = 0
         self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+        #self.use_secondary_index = True
         # Load All the templates
         self.test_file_path= self.unzip_template(self.test_file_path)
         with open(self.test_file_path) as f:
@@ -563,7 +568,10 @@ class RQGTests(BaseTestCase):
                 t.join()
 
     def _testrun_secondary_index_worker(self, table_name, table_map, list_info , start_test_case_number, result_queue, failure_record_queue = None):
-        map = {table_name:table_map[table_name]}
+        map = {self.database+"_"+table_name:table_map[self.database+"_"+table_name]}
+
+        for info in list_info:
+            info.replace("simple_table",self.database)
         list_info = self.client._convert_template_query_info(
                     table_map = map,
                     n1ql_queries = list_info,
@@ -591,6 +599,7 @@ class RQGTests(BaseTestCase):
             test_case_number = test_data.keys()[0]
             test_data = test_data[test_case_number]
             data_info = [test_data]
+
             if self.crud_type == "update":
                 data_info = self.client_map[table_name]._convert_update_template_query_info(
                             table_map = map,
@@ -612,6 +621,7 @@ class RQGTests(BaseTestCase):
                             table_map = map,
                             n1ql_queries = data_info)
             verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_name)
+           # data_info[0]['n1ql_query'] =  data_info[0]['n1ql_query'].replace("simple_table",self.database+"_"+"simple_table")
             self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue = failure_record_queue, table_name= table_name)
             self._populate_delta_buckets(table_name)
 
@@ -619,6 +629,10 @@ class RQGTests(BaseTestCase):
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
         n1ql_query = data["n1ql"]
+
+        if (n1ql_query.find("simple_table")>0):
+            n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+
         sql_query = data["sql"]
         indexes = data["indexes"]
         table_name = data["bucket"]
@@ -676,6 +690,7 @@ class RQGTests(BaseTestCase):
             client = self.client
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
+        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
         sql_query = test_data["sql_query"]
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
@@ -846,6 +861,9 @@ class RQGTests(BaseTestCase):
             client = None
         except Exception, ex:
             self.log.info(ex)
+            if ex.message.__contains__("SQL syntax") or ex.message.__contains__("ERROR"):
+                print "Error in sql syntax"
+        #print sql_result
         return sql_result
 
     def _run_no_change_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
@@ -896,8 +914,17 @@ class RQGTests(BaseTestCase):
 
             if(len(n1ql_result)!=len(sql_result)):
                 self.log.info("number of results returned from sql and n1ql are different")
-                if len(sql_result) == 0 or len(n1ql_result) == 1000:
-                        return {"success":True, "result": "Pass"}
+                # try:
+                #     raise ValueError('number of results returned from sql and n1ql are different')
+                # except ValueError:
+                #     import pdb;pdb.set_trace()
+                # try:
+                #     raise ValueError('number of results returned from sql and n1ql are different')
+                # except ValueError:
+                #     import pdb;pdb.set_trace()
+                #import pdb;pdb.set_trace()
+                #if len(sql_result) == 0 or len(n1ql_result) == 1000:
+                return {"success":True, "result": str("different results")}
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
@@ -1046,8 +1073,23 @@ class RQGTests(BaseTestCase):
             self._setup_and_load_buckets_from_files()
 
         self._initialize_n1ql_helper()
+        #if self.change_bucket_properties:
+                #Change Bucket Properties
+                # for bucket in self.buckets:
+                #     self.rest.change_bucket_props(bucket,
+                #         ramQuotaMB=100,
+                #         authType=None,
+                #         saslPassword=None,
+                #         replicaNumber=0,
+                #         proxyPort=None,
+                #         replicaIndex=None,
+                #         flushEnabled=False)
         #create copy of simple table if this is a merge operation
         self.sleep(10)
+        if self.change_bucket_properties:
+            shell = RemoteMachineShellConnection(self.master)
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_id,self.password,self.master,self.port))
+            self.sleep(10,"Updating maxBucket count to 15")
         self._build_indexes()
 
     def _build_indexes(self):
@@ -1063,10 +1105,10 @@ class RQGTests(BaseTestCase):
                 thread_list = []
                 if self.build_secondary_index_in_seq:
                     for table_name in self.sec_index_map.keys():
-                        self._gen_secondary_indexes_per_table(table_name, self.sec_index_map[table_name], 0)
+                        self._gen_secondary_indexes_per_table(self.database+"_"+table_name, self.sec_index_map[table_name], 0)
                 else:
                     for table_name in self.sec_index_map.keys():
-                        t = threading.Thread(target=self._gen_secondary_indexes_per_table, args = (table_name, self.sec_index_map[table_name]))
+                        t = threading.Thread(target=self._gen_secondary_indexes_per_table, args = (self.database+"_"+table_name, self.sec_index_map[table_name]))
                         t.daemon = True
                         t.start()
                         thread_list.append(t)
@@ -1227,16 +1269,17 @@ class RQGTests(BaseTestCase):
             return
         secondary_index_table_map = self._calculate_secondary_indexing_information(query_list)
         for table_name in secondary_index_table_map.keys():
-            self.log.info(" Building Secondary Indexes for Bucket {0}".format(table_name))
+            #table_name = self.database+"_" + table_name
+            self.log.info(" Building Secondary Indexes for Bucket {0}".format(self.database+"_" + table_name))
             for index_name in secondary_index_table_map[table_name].keys():
-                query = "Create Index {0} on {1}({2}) ".format(index_name, table_name,
+                query = "Create Index {0} on {1}({2}) ".format(index_name, self.database+"_" + table_name,
                     ",".join(secondary_index_table_map[table_name][index_name]))
                 if self.gen_gsi_indexes:
                     query += " using gsi"
                 self.log.info(" Running Query {0} ".format(query))
                 try:
                     actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
-                    check = self.n1ql_helper.is_index_online_and_in_list(table_name, index_name,
+                    check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_" + table_name, index_name,
                         server = self.n1ql_server, timeout = 240)
                 except Exception, ex:
                     self.log.info(ex)
@@ -1248,7 +1291,7 @@ class RQGTests(BaseTestCase):
         thread_list = []
         self.index_map = index_map
         for table_name in index_map.keys():
-            t = threading.Thread(target=self._gen_secondary_indexes_per_table, args = (table_name))
+            t = threading.Thread(target=self._gen_secondary_indexes_per_table, args = (self.database+"_"+table_name))
             t.daemon = True
             t.start()
             thread_list.append(t)
@@ -1362,6 +1405,7 @@ class RQGTests(BaseTestCase):
             query = "{0} WITH {1}".format(
                 batch_index_definitions[index_name]["definition"],
                 defer_mode)
+            query.replace("simple_table",self.database+"_"+"simple_table")
             self.log.info(" Running Query {0} ".format(query))
             try:
                 actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
@@ -1372,7 +1416,7 @@ class RQGTests(BaseTestCase):
         # Run Build Query
         if build_index_list != None and len(build_index_list) > 0:
             try:
-                build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
+                build_query = "BUILD INDEX on {0}({1}) USING GSI".format(self.database+"_"+table_name,",".join(build_index_list))
                 actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
                 self.log.info(actual_result)
             except Exception, ex:
@@ -1517,9 +1561,9 @@ class RQGTests(BaseTestCase):
         for file in onlyfiles:
             bucket_list.append(file.split(".")[0])
         # Remove any previous buckets
-        rest = RestConnection(self.master)
+        #rest = RestConnection(self.master)
         for bucket in self.buckets:
-            rest.delete_bucket(bucket.name)
+            self.rest.delete_bucket(bucket.name)
         self.buckets = []
         # Create New Buckets
         self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=None)
@@ -1542,27 +1586,50 @@ class RQGTests(BaseTestCase):
 
     def _setup_and_load_buckets(self):
         # Remove any previous buckets
-        rest = RestConnection(self.master)
-        for bucket in self.buckets:
-            rest.delete_bucket(bucket.name)
+        #rest = RestConnection(self.master)
+        if (self.skip_setup_cleanup):
+            for bucket in self.buckets:
+                self.rest.delete_bucket(bucket.name)
         self.buckets = []
         # Pull information about tables from mysql database and interpret them as no-sql dbs
         table_key_map = self.client._get_primary_key_map_for_tables()
         # Make a list of buckets that we want to create for querying
         bucket_list = table_key_map.keys()
+        print "database used is {0}".format(self.database)
+        new_bucket_list =[]
+        print "database used is {0}".format(self.database)
+        for bucket in bucket_list:
+            if (bucket.find("copy_simple_table")>0):
+                new_bucket_list.append("copy_"+self.database + "_" + bucket)
+            else:
+                new_bucket_list.append(self.database + "_" + bucket)
+
+
+        if self.change_bucket_properties:
+            bucket_size = 100
+        else:
+            bucket_size = None
         # Create New Buckets
-        self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=None)
+        self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
+        print "buckets created"
         # Wait till the buckets are up
         self.sleep(5)
+        self.buckets = self.rest.get_buckets()
+        self.newbuckets = []
+        for bucket in self.buckets:
+            if bucket.name in new_bucket_list:
+                self.newbuckets.append(bucket)
+
+        print "safe to start another job"
         self.record_db = {}
+        self.buckets = self.newbuckets
         # Read Data from mysql database and populate the couchbase server
         for bucket_name in bucket_list:
             query = "select * from {0}".format(bucket_name)
             columns, rows = self.client._execute_query(query = query)
             self.record_db[bucket_name] = self.client._gen_json_from_results_with_primary_key(columns, rows,
                 primary_key = table_key_map[bucket_name])
-            for bucket in self.buckets:
-                if bucket.name == bucket_name:
+            for bucket in self.newbuckets:
                     self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
     def _populate_delta_buckets(self, table_name = "simple_table"):
@@ -1572,10 +1639,13 @@ class RQGTests(BaseTestCase):
             client = self.client
         query = "delete from {0}".format(table_name)
         client._insert_execute_query(query = query)
+        table_name = self.database+"_"+table_name
+        query = "delete from {0}".format(table_name)
         self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose=True)
         insert_sql= "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from copy_simple_table b".format(table_name)
         try:
             self.log.info(insert_sql)
+            insert_sql.replace("simple_table",self.database+"_"+"simple_table")
             self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=True)
             insert_sql= "INSERT INTO {0} SELECT * FROM copy_simple_table".format(table_name)
             self.log.info(insert_sql)
