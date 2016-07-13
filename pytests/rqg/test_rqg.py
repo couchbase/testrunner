@@ -282,7 +282,6 @@ class RQGTests(BaseTestCase):
         count = 1
         inserted_count = 0
         self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
-        #self.use_secondary_index = True
         # Load All the templates
         self.test_file_path= self.unzip_template(self.test_file_path)
         with open(self.test_file_path) as f:
@@ -568,10 +567,11 @@ class RQGTests(BaseTestCase):
                 t.join()
 
     def _testrun_secondary_index_worker(self, table_name, table_map, list_info , start_test_case_number, result_queue, failure_record_queue = None):
-        map = {self.database+"_"+table_name:table_map[self.database+"_"+table_name]}
-
-        for info in list_info:
-            info.replace("simple_table",self.database)
+        # map = {self.database+"_"+table_name:table_map[self.database+"_"+table_name]}
+        #
+        # for info in list_info:
+        #     info.replace("simple_table",self.database)
+        map = {table_name:table_map[table_name]}
         list_info = self.client._convert_template_query_info(
                     table_map = map,
                     n1ql_queries = list_info,
@@ -599,7 +599,6 @@ class RQGTests(BaseTestCase):
             test_case_number = test_data.keys()[0]
             test_data = test_data[test_case_number]
             data_info = [test_data]
-
             if self.crud_type == "update":
                 data_info = self.client_map[table_name]._convert_update_template_query_info(
                             table_map = map,
@@ -621,7 +620,6 @@ class RQGTests(BaseTestCase):
                             table_map = map,
                             n1ql_queries = data_info)
             verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_name)
-           # data_info[0]['n1ql_query'] =  data_info[0]['n1ql_query'].replace("simple_table",self.database+"_"+"simple_table")
             self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue = failure_record_queue, table_name= table_name)
             self._populate_delta_buckets(table_name)
 
@@ -864,6 +862,7 @@ class RQGTests(BaseTestCase):
             if ex.message.__contains__("SQL syntax") or ex.message.__contains__("ERROR"):
                 print "Error in sql syntax"
         #print sql_result
+
         return sql_result
 
     def _run_no_change_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
@@ -914,17 +913,8 @@ class RQGTests(BaseTestCase):
 
             if(len(n1ql_result)!=len(sql_result)):
                 self.log.info("number of results returned from sql and n1ql are different")
-                # try:
-                #     raise ValueError('number of results returned from sql and n1ql are different')
-                # except ValueError:
-                #     import pdb;pdb.set_trace()
-                # try:
-                #     raise ValueError('number of results returned from sql and n1ql are different')
-                # except ValueError:
-                #     import pdb;pdb.set_trace()
-                #import pdb;pdb.set_trace()
-                #if len(sql_result) == 0 or len(n1ql_result) == 1000:
-                return {"success":True, "result": str("different results")}
+                if len(sql_result) == 0 or len(n1ql_result) == 1000:
+                        return {"success":True, "result": "Pass"}
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
@@ -1073,17 +1063,6 @@ class RQGTests(BaseTestCase):
             self._setup_and_load_buckets_from_files()
 
         self._initialize_n1ql_helper()
-        #if self.change_bucket_properties:
-                #Change Bucket Properties
-                # for bucket in self.buckets:
-                #     self.rest.change_bucket_props(bucket,
-                #         ramQuotaMB=100,
-                #         authType=None,
-                #         saslPassword=None,
-                #         replicaNumber=0,
-                #         proxyPort=None,
-                #         replicaIndex=None,
-                #         flushEnabled=False)
         #create copy of simple table if this is a merge operation
         self.sleep(10)
         if self.change_bucket_properties:
@@ -1561,7 +1540,7 @@ class RQGTests(BaseTestCase):
         for file in onlyfiles:
             bucket_list.append(file.split(".")[0])
         # Remove any previous buckets
-        #rest = RestConnection(self.master)
+        rest = RestConnection(self.master)
         for bucket in self.buckets:
             self.rest.delete_bucket(bucket.name)
         self.buckets = []
