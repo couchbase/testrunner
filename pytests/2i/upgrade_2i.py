@@ -88,6 +88,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  services=services_in)
         rebalance.result()
         self._run_tasks([kv_ops, index_task])
+        self.sleep(60)
         log.info("Upgraded to: {0}".format(node_version))
         if self.index_op == "drop" or self.all_index_nodes_lost:
             create_task = self.async_index_operations("create")
@@ -117,6 +118,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         log.info("===== Nodes Swapped with Upgraded versions =====")
         self.upgrade_servers = self.nodes_in_list
         self._run_tasks([kv_ops, index_task])
+        self.sleep(60)
         if self.index_op != "drop":
             self._verify_bucket_count_with_index_count()
             index_task = self.async_index_operations("query")
@@ -187,6 +189,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  index_nodes, [],
                                                  services=services_in)
         rebalance.result()
+        self.sleep(60)
         create_task = self.async_index_operations("create")
         self._run_tasks([create_task])
         self._verify_bucket_count_with_index_count()
