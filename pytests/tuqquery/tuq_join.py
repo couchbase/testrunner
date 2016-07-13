@@ -1,3 +1,4 @@
+import json
 import uuid
 import copy
 from tuqquery.tuq import QueryTests
@@ -640,8 +641,7 @@ class JoinTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
             self._delete_ids(actual_result)
-            print actual_result
-            import pdb;pdb.set_trace()
+            print json.JSONEncoder().encode(actual_result)
             actual_result = self.sort_nested_list(actual_result, key='task_name')
             actual_result = sorted(actual_result, key=lambda doc:
                                    self._get_for_sort(doc))
