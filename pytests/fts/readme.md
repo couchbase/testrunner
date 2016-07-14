@@ -1,7 +1,7 @@
 ##Full Text Search test framework overview
 - 2 steps in any complete FTS test
-    index creation - default or customized index
-    query phase (with result validation)
+   -index creation - default or customized index
+   -query phase (with result validation)
 - 70% of FTS tests use the random map and/or query generation code.
 - RQG is pluggable, currently works with 2 datasets - employee and wiki. More datasets can be supported by defining the "query-ables" for the same.
 - Smart query enabled querying only on indexed and one/two non-indexed fields. Smart querying is also explained further below.
@@ -12,7 +12,7 @@
 Employee dataset loader is here - https://github.com/couchbase/testrunner/blob/master/lib/couchbase_helper/documentgenerator.py#L221
 All fields for Employee dataset are randomly generated at runtime. RQG generates query predicates for emp dataset using the same logic.
 
-Wiki loader(only generates 30K unique docs(>2.5K)) is here - https://github.com/couchbase/testrunner/blob/master/lib/couchbase_helper/documentgenerator.py#L382. Wiki data files are uploaded to AWS. These files are automatically pulled by the doc-loader if found missing in the repo. For wiki dataset, RQG does not randomly generate search terms during runtime. There's a pre-saved file of query-ables obtained by scanning the docs, on which random queries are constructed.
+Wiki(in 5 languages) loader(only generates 30K unique docs(>2.5K)) is here - https://github.com/couchbase/testrunner/blob/master/lib/couchbase_helper/documentgenerator.py#L382. Wiki data files are uploaded to AWS. These files are automatically pulled by the doc-loader if found missing in the repo. For wiki dataset, RQG does not randomly generate search terms during runtime. There's a pre-saved file of query-ables obtained by scanning the docs, on which random queries are constructed.
 
 ##Random Query Generator(RQG) (code: cd random_query_generator)
 
@@ -89,7 +89,7 @@ If you are running testrunner for the first time and you are seeing error like "
         ip:172.23.107.235
 
 
-pls note, the [elastic] section is of no relevance if you are not verifying your results against an elastic search node. It can be skipped.
+pls note, the [elastic] section is of no relevance if you are not verifying your results against an elastic search node. It can be skipped. Make sure the first node in the cluster is pre-configured with the required services, say kv,fts or only kv as required by the test.
 
 For cluster-run, add in 127.0.0.1 and corresponding ports for Couchbase and FTS, for every instance. Your ini for cluster_run may want to look like -
 
@@ -151,4 +151,62 @@ To run randomly generated queries(eg. disjunction) with validation against ES -
  fdb_compact_interval = forestdb compaction interval in secs, defaults to None
  fdb_compact_threshold = foresdb compaction threshold in %, defaults to None
 
-More such params and default values can be found at https://github.com/couchbase/testrunner/blob/master/pytests/fts/fts_base.py#L1848-L1910 (see init_parameters()  if line numbers do not match)
+More such params and default values can be found [here.](https://github.com/couchbase/testrunner/blob/master/pytests/fts/fts_base.py#L2104). See init_parameters() if line number does not match.
+
+###Environment Variables
+
+CBFT_ENV_OPTIONS=bleveMaxResultWindow=10000000,forestdbCompactorSleepDuration=180,forestdbCompactionThreshold=10
+
+        bleveMaxResultWindow
+          The max number of query results to request from FTS. Default is 10000.
+          We do not expect to test > 10M in functional testing, so this has been set to 10M to request
+          all results from FTS so the ES vs FTS comparison of the entire result-set can be done.
+          This variable is passed at the time of installation using fts_query_limit=10000000
+
+        forestdbCompactorSleepDuration
+          Duration that the compaction daemon task periodically wakes up, in the unit of
+          second. In testrunner, this variable can be passed from the testcase itself after installation
+          using "fdb_compact_interval", in the unit of second.
+
+        forestdbCompactionThreshold (uint8)
+          Compaction threshold in the unit of percentage (%). Compaction will not be performed when this
+          value is set to zero or 100. In testrunner, this variable can also be passed from the testcase itself
+          after installation using "fdb_compact_threshold", in %.
+
+        A caveat on the forestdb settings-
+        Once set in a particular test,all subsequent tests will run with the same forestdb settings
+        unless set again using the same params. Also, for these settings to take effect, make sure forestdb is the
+        default index store, by passing kvstore=forestdb in your testcase.
+
+All environment variables only make sense to be set in a non cluster-run environment. In a cluster-run environment,
+make sure couchbase-server is launched like -
+
+        CBFT_ENV_OPTIONS=forestdbCompactorSleepDuration=120,forestdbNumCompactorThreads=8 \
+        /opt/couchbase/bin/couchbase-server
+
+###Choosing Storage engines
+        We have 2 options post 4.5.0 - forestdb and mossStore. In 4.5.0, the only supported engine was forestdb.
+        For spock builds, "mossStore" is currently the default engine. To toggle between storage engines in testcases,
+        use kvstore=forestdb/mossStore.
+
+        More on compaction of index files on these stores can be found [here](https://github.com/couchbase/cbft/blob/5357c43296c3d1241cc5e5cc9129fd9c381ede27/DESIGN-compaction.md)
+
+###Where to add new tests
+        In this directory, you will find 4 .py files.
+        1. fts_base.py - the base test class for FTS. You will find/add all basic methods required to frame the tests here.
+            There are 4 important, useful classes here -
+            a. CouchbaseCluster - deals with Cluster operations, keeps an account of nodes, hosts all
+               Couchbase cluster operational methods like data-load, rebalance, failover etc.
+            b. FTSIndex - contains methods to create, edit, delete indexes
+            c. NodeHelper - contains methods that perform node-level operations like login and start/stop couchabse,
+               kill processes, grep for something in fts logs etc.
+            c. FTSBaseTestClass - the main base class that is inherited by other test-case hosting classes like StableTopFTS or MovingTopFTS,
+               makes calls to all the above classes for setup, teardown, data-loading, index-creation, result validation etc.
+        2. es_base.py - for working with ElasticSearch, will help with index creation, deletion, running queries, bulk api for data
+           loading/updating/deletion
+        3. stable_topology_fts.py - contains testcases that deal with plain indexing and querying with no topology changes at the cluster-level.
+        4. moving_topology_fts.py - contains testcases that combine indexing/quering with special scenarios that involve cluster-ops like rebalance, failover,
+           swap-rebalance, node-crash, process termination, node-reboots on a cluster hosting nodes running one or more services.
+     As a general rule, add callable testcases to stable_topology_fts.py or moving_topology_fts.py depending on the nature of the test and
+     if adding a reusable piece of code, move it to an appropriate class under fts_base.py
+        
