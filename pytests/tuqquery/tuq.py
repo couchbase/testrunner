@@ -3615,7 +3615,11 @@ class QueryTests(BaseTestCase):
             curr_item = {}
             for key, value in item.iteritems():
                 if isinstance(value, list) or isinstance(value, set):
-                    if not isinstance(value, set) and key and isinstance(value[0], dict) and key in value[0]:
+                    print "value is %s" %value
+                    print isinstance(value, set)
+                    print isinstance(value[0], dict)
+                    print key in value[0]
+                    if not isinstance(value, set) and key and isinstance(value[0], dict) and key in value:
                         curr_item[key] = sorted(value, key=lambda doc: (doc['task_name']))
                     else:
                         curr_item[key] = sorted(value)
