@@ -1395,6 +1395,15 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexCountScan',
                     "IndexCountScan is not being used")
+                self.query = "explain select a.cnt from (select count(1) from default where _id is not null) as a"
+                actual_result2 = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result2)
+                self.assertTrue(
+                    plan['~children'][0]['#operator'] != 'IndexCountScan',
+                    "IndexCountScan should not be used in subquery")
+                self.query = "select a.cnt from (select count(1) from default where _id is not null) as a"
+                actual_result2 = self.run_cbq_query()
+
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     self.run_cbq_query()
@@ -1405,6 +1414,9 @@ class QueriesIndexTests(QueryTests):
                     self.query = "select count(1) from %s use index(`#primary`) WHERE _id like '%s'  " %(bucket.name,'query-test%')
                     result = self.run_cbq_query()
                     self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
+                    self.query = "select a.cnt from (select count(1) from %s where _id is not null) as a " %(bucket.name)
+                    result = self.run_cbq_query()
+                    self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
                     self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                     self.run_cbq_query()
 
