@@ -71,6 +71,7 @@ class QueryTests(BaseTestCase):
         self.encoded_prepare = self.input.param("encoded_prepare", False)
         self.isprepared = False
         self.server = self.master
+        self.ispokemon = self.input.param("pokemon",False)
         self.rest = RestConnection(self.server)
         #self.coverage = self.input.param("coverage",False)
         self.cover = self.input.param("cover", False)
@@ -98,12 +99,15 @@ class QueryTests(BaseTestCase):
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
             self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
-        self.log.info('Temp fix for MB-16888')
-        #if (self.coverage == False):
-        self.shell.execute_command("killall -9 cbq-engine")
-        self.shell.execute_command("killall -9 indexer")
-        self.sleep(10, 'wait for indexer')
-        self.log.info('-'*100)
+        if self.ispokemon:
+            self.set_indexer_pokemon_settings()
+        # self.log.info('Temp fix for MB-16888')
+        # #if (self.coverage == False):
+        # self.shell.execute_command("killall -9 cbq-engine")
+        # self.shell.execute_command("killall -9 indexer")
+        # self.sleep(10, 'wait for indexer')
+        # self.log.info('-'*100)
+
 
     def suite_setUp(self):
         try:
@@ -198,6 +202,26 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_result['results'], key=lambda doc:
                                      (doc['task1'], doc['task2']))
             self._verify_results(actual_result, expected_result)
+
+    def set_indexer_pokemon_settings(self):
+        projector_json = { "projector.dcp.numConnections": 1 }
+        moi_json = {"indexer.moi.useMemMgmt": True }
+        server = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(server)
+        status = rest.set_index_settings(projector_json)
+        self.log.info("{0} set".format(projector_json))
+        self.sleep(60)
+        servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        for server in servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.terminate_process(process_name="projector")
+            self.sleep(60)
+        self.sleep(60)
+        self.set_indexer_logLevel()
+        self.sleep(30)
+        status = rest.set_index_settings(moi_json)
+        self.log.info("{0} set".format(moi_json))
+        self.sleep(30)
 
     def test_all_negative(self):
         queries_errors = {'SELECT ALL * FROM %s' : ('syntax error', 3000)}
