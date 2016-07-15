@@ -226,6 +226,8 @@ class XDCRHelper():
             self.wait.until(lambda fn: self.controls.error_reference().get_text() != '',
                         "text didn't appear in %d sec" % (self.wait._timeout))
             raise Exception('Reference is not created: %s' % self.controls.error_reference().get_text())
+        else:
+            self.tc.log.info("Reference has been created")
 
     def _cluster_reference_pop_up_reaction(self):
         try:
@@ -276,11 +278,14 @@ class XDCRHelper():
         else:
             self.controls.create_replication_pop_up().cancel_btn.click()
         all_errors = self.controls.error_replica()
-        if all_errors:
-            for error in all_errors:
-                if error.is_present():
+        try:
+            if all_errors:
+                for error in all_errors:
                     if error.is_displayed():
-                        raise Exception('Reference is not created: %s' % error.get_text())
+                        raise Exception('Replication is not created: %s' % error.get_text())
+        except StaleElementReferenceException as e:
+            self.tc.log.info ("No error displayed while creating/cancelling a Replication")
+
         self.wait.until(lambda fn: self._cluster_replication_pop_up_reaction(),
                         "there is no reaction in %d sec" % (self.wait._timeout))
 
@@ -296,6 +301,8 @@ class XDCRHelper():
     def is_cluster_reference_created(self, name, ip):
         all_ref = self.controls._all_cluster_references()
         for reference in all_ref:
+            self.wait.until(lambda fn: reference.is_displayed(),
+                            "Reference not found")
             if reference.get_text().find(name) != -1 and reference.get_text().find(ip) != -1:
                 return True
         return False
@@ -303,6 +310,8 @@ class XDCRHelper():
     def is_replication_created(self, bucket_name, name_remote, bucket_name_remote):
         all_rep = self.controls._all_ongoing_replications()
         for rep in all_rep:
+            self.wait.until(lambda fn: rep.is_displayed(),
+                            "Replication not found")
             if rep.get_text().find(bucket_name) != -1 and rep.get_text().find(name_remote) != -1 and rep.get_text().find(bucket_name_remote) != -1:
                 return True
         return False

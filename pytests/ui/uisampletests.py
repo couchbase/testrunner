@@ -1196,6 +1196,9 @@ class ServerHelper():
         self.controls.add_server_dialog().index.click()
         self.controls.add_server_dialog().n1ql.click()
         self.controls.add_server_dialog().confirm_server_addition.click()
+        # On Windows, it might take some more time than the default timeout for the Popup to disappear causing the test
+        # to fail. Adding some sleep to give it some more time.
+        time.sleep(10)
         self.wait.until_not(lambda fn:
                             self.controls.add_server_dialog().confirm_server_addition.is_displayed(),
                             "Add server pop up is not closed in %d sec" % self.wait._timeout)
