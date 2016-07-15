@@ -898,6 +898,10 @@ class RQGTests(BaseTestCase):
         result_run = {}
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
+
+        for i,item in enumerate(hints):
+            if "simple_table" in item:
+                hints[i] = self.database+"_"+"simple_table"
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
