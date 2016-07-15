@@ -69,6 +69,7 @@ class RQGTests(BaseTestCase):
         self.build_index_batch_size= self.input.param("build_index_batch_size",1000)
         self.query_count= 0
         self.use_rest = self.input.param("use_rest",True)
+        self.ram_quota = self.input.param("ram_quota",512)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -77,6 +78,7 @@ class RQGTests(BaseTestCase):
         self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
         self._initialize_n1ql_helper()
         self.rest = RestConnection(self.master)
+        self.indexer_memQuota = self.input.param("indexer_memQuota",1024)
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
         if not(self.use_rest):
@@ -1069,6 +1071,13 @@ class RQGTests(BaseTestCase):
         self._initialize_n1ql_helper()
         #create copy of simple table if this is a merge operation
         self.sleep(10)
+        if self.gsi_type ==  "memory_optimized":
+            os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip,self.indexer_memQuota))
+            self.sleep(10)
+
+            # self.log.info("Increasing Indexer Memory Quota to {0}".format(self.indexer_memQuota))
+            # self.rest.set_indexer_memoryQuota(indexMemoryQuota=self.indexer_memQuota)
+            # self.sleep(120)
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
             shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_id,self.password,self.master,self.port))
@@ -1580,7 +1589,6 @@ class RQGTests(BaseTestCase):
         bucket_list = table_key_map.keys()
         print "database used is {0}".format(self.database)
         new_bucket_list =[]
-        print "database used is {0}".format(self.database)
         for bucket in bucket_list:
             if (bucket.find("copy_simple_table")>0):
                 new_bucket_list.append("copy_"+self.database + "_" + bucket)
@@ -1588,13 +1596,14 @@ class RQGTests(BaseTestCase):
                 new_bucket_list.append(self.database + "_" + bucket)
 
 
-        if self.change_bucket_properties:
+        if self.change_bucket_properties or self.gsi_type == "memory_optimized":
             bucket_size = 100
         else:
             bucket_size = None
         # Create New Buckets
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
         print "buckets created"
+
         # Wait till the buckets are up
         self.sleep(5)
         self.buckets = self.rest.get_buckets()
