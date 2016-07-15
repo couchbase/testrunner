@@ -99,15 +99,14 @@ class QueryTests(BaseTestCase):
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
             self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
+        self.log.info('Temp fix for MB-16888')
+        #if (self.coverage == False):
+        self.shell.execute_command("killall -9 cbq-engine")
+        self.shell.execute_command("killall -9 indexer")
+        self.sleep(10, 'wait for indexer')
+        self.log.info('-'*100)
         if self.ispokemon:
             self.set_indexer_pokemon_settings()
-        # self.log.info('Temp fix for MB-16888')
-        # #if (self.coverage == False):
-        # self.shell.execute_command("killall -9 cbq-engine")
-        # self.shell.execute_command("killall -9 indexer")
-        # self.sleep(10, 'wait for indexer')
-        # self.log.info('-'*100)
-
 
     def suite_setUp(self):
         try:
@@ -217,7 +216,13 @@ class QueryTests(BaseTestCase):
             remote.terminate_process(process_name="projector")
             self.sleep(60)
         self.sleep(60)
-        self.set_indexer_logLevel()
+        #self.set_indexer_logLevel()
+        self.loglevel="info"
+        self.log.info("Setting indexer log level to {0}".format(self.loglevel))
+        server = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(server)
+
+        status = rest.set_indexer_params("logLevel", self.loglevel)
         self.sleep(30)
         status = rest.set_index_settings(moi_json)
         self.log.info("{0} set".format(moi_json))
