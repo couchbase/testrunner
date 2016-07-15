@@ -2,30 +2,30 @@
 Base class for FTS/CBFT/Couchbase Full Text Search
 """
 
+import unittest
+import time
 import copy
+import logger
 import logging
 import re
-import time
-import unittest
 
-import logger
-from TestInput import TestInputSingleton
 from couchbase_helper.cluster import Cluster
-from couchbase_helper.documentgenerator import *
-from couchbase_helper.documentgenerator import JsonDocGenerator
-from couchbase_helper.stats_tools import StatsCommon
-from es_base import ElasticSearchBase
-from lib.membase.api.exception import FTSException
-from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, Bucket
-from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
+from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from scripts.collect_server_info import cbcollectRunner
 from testconstants import STANDARD_BUCKET_PORT
+from membase.helper.cluster_helper import ClusterOperationHelper
+from couchbase_helper.stats_tools import StatsCommon
+from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
+from TestInput import TestInputSingleton
+from scripts.collect_server_info import cbcollectRunner
+from couchbase_helper.documentgenerator import *
 
+from couchbase_helper.documentgenerator import JsonDocGenerator
+from lib.membase.api.exception import FTSException
+from es_base import ElasticSearchBase
 
 class RenameNodeException(FTSException):
 
@@ -105,9 +105,6 @@ class INDEX_DEFAULTS:
                     "default_field": "_all",
                     "byte_array_converter": "json",
                     "analysis": {}
-                  },
-                  "store": {
-                    "kvStoreName": "forestdb"
                   }
               }
 
@@ -282,6 +279,20 @@ class NodeHelper:
         """
         shell = RemoteMachineShellConnection(server)
         shell.stop_couchbase()
+        shell.disconnect()
+
+    @staticmethod
+    def set_cbft_env_fdb_options(server):
+        shell = RemoteMachineShellConnection(server)
+        shell.stop_couchbase()
+        cmd = "sed -i 's/^export CBFT_ENV_OPTIONS.*$/" \
+              "export CBFT_ENV_OPTIONS=bleveMaxResultWindow=10000000," \
+              "forestdbCompactorSleepDuration={0},forestdbCompactionThreshold={1}/g'\
+              /opt/couchbase/bin/couchbase-server".format(
+            int(TestInputSingleton.input.param("fdb_compact_interval", None)),
+            int(TestInputSingleton.input.param("fdb_compact_threshold", None)))
+        shell.execute_command(cmd)
+        shell.start_couchbase()
         shell.disconnect()
 
     @staticmethod
@@ -507,6 +518,7 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self.index_type = index_type
+        self.num_pindexes = 0
         self.index_definition = {
                           "type": "fulltext-index",
                           "name": "",
@@ -554,6 +566,10 @@ class FTSIndex:
 
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
+
+        if TestInputSingleton.input.param("kvstore", None):
+            self.index_definition['params']['store'] = {"kvStoreName":
+                        TestInputSingleton.input.param("kvstore", None)}
 
         self.moss_enabled = TestInputSingleton.input.param("moss", True)
         if not self.moss_enabled:
@@ -624,8 +640,12 @@ class FTSIndex:
             self.name,
             rest.ip))
         status = rest.delete_fts_index(self.name)
-        if status:
-            self.__log.info("{0} deleted".format(self.name))
+        if not self.__cluster.are_index_files_deleted_from_disk(self.name):
+            self.__log.error("Status: {0} but index file for {1} not yet "
+                             "deleted!".format(status, self.name))
+        else:
+            self.__log.info("Validated: all index files for {0} deleted from "
+                            "disk".format(self.name))
 
     def get_index_defn(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -673,8 +693,9 @@ class FTSIndex:
         matches = []
         doc_ids = []
         time_taken = 0
+        status = {}
         try:
-            hits, matches, time_taken =\
+            hits, matches, time_taken, status =\
                 self.__cluster.run_fts_query(self.name, query_dict)
         except ServerUnavailableException:
             # query time outs
@@ -692,7 +713,7 @@ class FTSIndex:
         if expected_hits and expected_hits == hits:
             self.__log.info("SUCCESS! Expected hits: %s, fts returned: %s"
                                % (expected_hits, hits))
-        return hits, doc_ids, time_taken
+        return hits, doc_ids, time_taken, status
 
 
 class CouchbaseCluster:
@@ -828,6 +849,28 @@ class CouchbaseCluster:
     def get_random_non_fts_node(self):
         return self.__non_fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
 
+    def are_index_files_deleted_from_disk(self, index_name):
+        nodes = self.get_fts_nodes()
+        for node in nodes:
+            data_dir = RestConnection(node).get_data_path()
+            shell = RemoteMachineShellConnection(node)
+            count = -1
+            retry = 0
+            while count != 0:
+                count, err = shell.execute_command(
+                    "ls {0}/@fts |grep {1}*.pindex | wc -l".
+                    format(data_dir, index_name))
+                count = int(count[0])
+                self.__log.info(count)
+                retry += 1
+                if retry > 5:
+                    files, err = shell.execute_command(
+                        "ls {0}/@fts |grep {1}*.pindex".
+                        format(data_dir, index_name))
+                    self.__log.info(files)
+                    return False
+        return True
+
     def get_mem_quota(self):
         return self.__mem_quota
 
@@ -887,7 +930,11 @@ class CouchbaseCluster:
 
             self.__nodes += nodes_to_add
         self.__separate_nodes_on_services()
-
+        if not self.is_cluster_run() and \
+            (TestInputSingleton.input.param("fdb_compact_interval", None) or \
+            TestInputSingleton.input.param("fdb_compact_threshold", None)):
+            for node in self.__fts_nodes:
+                NodeHelper.set_cbft_env_fdb_options(node)
 
     def cleanup_cluster(
             self,
@@ -1102,9 +1149,9 @@ class CouchbaseCluster:
         self.__log.info("Running query %s on node: %s:%s"
                         % (json.dumps(query_dict, ensure_ascii=False),
                            node.ip, node.fts_port))
-        total_hits, hit_list, time_taken = \
+        total_hits, hit_list, time_taken, status = \
             RestConnection(node).run_fts_query(index_name, query_dict)
-        return total_hits, hit_list, time_taken
+        return total_hits, hit_list, time_taken, status
 
     def get_buckets(self):
         return self.__buckets
@@ -2068,7 +2115,7 @@ class FTSBaseTest(unittest.TestCase):
         self._cluster_services = \
             self.construct_serv_list(self._input.param("cluster", "D,D+F,F"))
         self._num_replicas = self._input.param("replicas", 1)
-        self._create_default_bucket = self._input.param("default_bucket",True)
+        self._create_default_bucket = self._input.param("default_bucket", True)
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 512)
         self._poll_timeout = self._input.param("poll_timeout", 120)
@@ -2084,7 +2131,7 @@ class FTSBaseTest(unittest.TestCase):
         self._rebalance = self._input.param("rebalance", "")
         self._failover = self._input.param("failover", "")
         self._wait_timeout = self._input.param("timeout", 60)
-        self._disable_compaction = self._input.param("disable_compaction","")
+        self._disable_compaction = self._input.param("disable_compaction", "")
         self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._dgm_run = self._input.param("dgm_run", False)
         self._active_resident_ratio = \
@@ -2118,6 +2165,8 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.es = None
         self.create_gen = None
+        self.update_gen = None
+        self.delete_gen = None
 
         self.__fail_on_errors = self._input.param("fail-on-errors", True)
 
@@ -2225,7 +2274,6 @@ class FTSBaseTest(unittest.TestCase):
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
-
     def load_employee_dataset(self, num_items=None):
         """
             Loads the default JSON dataset
@@ -2299,32 +2347,73 @@ class FTSBaseTest(unittest.TestCase):
           the test.
           @param fields_to_update - list of fields to update in JSON
         """
-        tasks = []
+        load_tasks = []
         # UPDATES
         if self._update:
             self.log.info("Updating keys @ {0} with expiry={1}".
                           format(self._cb_cluster.get_name(), self._expires))
-            tasks.extend(self._cb_cluster.async_update_delete(
-                OPS.UPDATE,
-                fields_to_update=fields_to_update,
-                perc=self._perc_upd,
-                expiration=self._expires))
+            self.populate_update_gen(fields_to_update)
+            if self.compare_es:
+                gen = copy.deepcopy(self.update_gen)
+                if not self._expires:
+                    if isinstance(gen, list):
+                        for generator in gen:
+                            load_tasks.append(self.es.async_bulk_load_ES(
+                                index_name='es_index',
+                                gen=generator,
+                                op_type=OPS.UPDATE))
+                    else:
+                        load_tasks.append(self.es.async_bulk_load_ES(
+                            index_name='es_index',
+                            gen=gen,
+                            op_type=OPS.UPDATE))
+                else:
+                    # an expire on CB translates to delete on ES
+                    if isinstance(gen, list):
+                        for generator in gen:
+                            load_tasks.append(self.es.async_bulk_load_ES(
+                                index_name='es_index',
+                                gen=generator,
+                                op_type=OPS.DELETE))
+                    else:
+                        load_tasks.append(self.es.async_bulk_load_ES(
+                            index_name='es_index',
+                            gen=gen,
+                            op_type=OPS.DELETE))
 
-        [task.result() for task in tasks]
-        if tasks:
+            load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
+                kv_gen = self.update_gen,
+                ops=OPS.UPDATE,
+                exp=self._expires)
+
+
+        [task.result() for task in load_tasks]
+        if load_tasks:
             self.log.info("Batched updates loaded to cluster(s)")
 
-        tasks = []
+        load_tasks = []
         # DELETES
         if self._delete:
             self.log.info("Deleting keys @ {0}".format(self._cb_cluster.get_name()))
-            tasks.extend(
-                self._cb_cluster.async_update_delete(
-                    OPS.DELETE,
-                    perc=self._perc_del))
+            self.populate_delete_gen()
+            if self.compare_es:
+                del_gen = copy.deepcopy(self.delete_gen)
+                if isinstance(del_gen, list):
+                    for generator in del_gen:
+                        load_tasks.append(self.es.async_bulk_load_ES(
+                            index_name='es_index',
+                            gen=generator,
+                            op_type=OPS.DELETE))
+                else:
+                    load_tasks.append(self.es.async_bulk_load_ES(
+                        index_name='es_index',
+                        gen=del_gen,
+                        op_type=OPS.DELETE))
+            load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
+                self.delete_gen, OPS.DELETE)
 
-        [task.result() for task in tasks]
-        if tasks:
+        [task.result() for task in load_tasks]
+        if load_tasks:
             self.log.info("Batched deletes sent to cluster(s)")
 
         if self._wait_for_expiration and self._expires:
@@ -2388,7 +2477,7 @@ class FTSBaseTest(unittest.TestCase):
         Wait for index_count for any index to stabilize
         """
         index_doc_count = 0
-        retry = self._input.param("index_retry", 10)
+        retry = self._input.param("index_retry", 20)
         start_time = time.time()
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
@@ -2488,6 +2577,7 @@ class FTSBaseTest(unittest.TestCase):
                                                 total_pindexes,
                                                 exp_num_pindexes))
         self.log.info("Validated: Number of PIndexes = %s" % total_pindexes)
+        index.num_pindexes = total_pindexes
 
         # check 2 - each pindex servicing "partitions_per_pindex" vbs
         num_fts_nodes = len(self._cb_cluster.get_fts_nodes())
@@ -2574,8 +2664,6 @@ class FTSBaseTest(unittest.TestCase):
         bucket_password = ""
         if bucket.authType == "sasl":
             bucket_password = bucket.saslPassword
-        if self.index_kv_store:
-            index_params = {"store": {"kvStoreName": self.index_kv_store}}
         if not plan_params:
             plan_params = self.construct_plan_params()
         index = self._cb_cluster.create_fts_index(
@@ -2608,7 +2696,7 @@ class FTSBaseTest(unittest.TestCase):
             name = 'alias_%s' % int(time.time())
 
         if not alias_def:
-            alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
+            alias_def = {"targets": {}}
             for index in target_indexes:
                 alias_def['targets'][index.name] = {}
                 alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
@@ -2672,7 +2760,8 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_index_es(self, index_name="es_index"):
         self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
-        self.log.info("Created empty index %s on Elastic Search node"
+        self.log.info("Created empty index %s on Elastic Search node with "
+                      "custom standard analyzer(default)"
                       % index_name)
 
     def get_generator(self, dataset, num_items, start=0, encoding="utf-8",
@@ -2694,13 +2783,72 @@ class FTSBaseTest(unittest.TestCase):
 
     def populate_create_gen(self):
         if self.dataset == "emp":
-            self.create_gen = self.get_generator(self.dataset, num_items=self._num_items)
+            self.create_gen = self.get_generator(
+                self.dataset, num_items=self._num_items)
         elif self.dataset == "wiki":
-            self.create_gen = self.get_generator(self.dataset, num_items=self._num_items)
+            self.create_gen = self.get_generator(
+                self.dataset, num_items=self._num_items)
         elif self.dataset == "all":
             self.create_gen = []
-            self.create_gen.append(self.get_generator("emp", num_items=self._num_items/2))
-            self.create_gen.append(self.get_generator("wiki", num_items=self._num_items/2))
+            self.create_gen.append(self.get_generator(
+                "emp", num_items=self._num_items/2))
+            self.create_gen.append(self.get_generator(
+                "wiki", num_items=self._num_items/2))
+
+    def populate_update_gen(self, fields_to_update=None):
+        if self.dataset == "emp":
+            self.update_gen = copy.deepcopy(self.create_gen)
+            self.update_gen.start = 0
+            self.update_gen.end = int(self.create_gen.end *
+                                      (float)(self._perc_upd)/100)
+            self.update_gen.update(fields_to_update=fields_to_update)
+        elif self.dataset == "wiki":
+            self.update_gen = copy.deepcopy(self.create_gen)
+            self.update_gen.start = 0
+            self.update_gen.end = int(self.create_gen.end *
+                                      (float)(self._perc_upd)/100)
+        elif self.dataset == "all":
+            self.update_gen = []
+            self.update_gen = copy.deepcopy(self.create_gen)
+            for itr, _ in enumerate(self.update_gen):
+                self.update_gen[itr].start = 0
+                self.update_gen[itr].end = int(self.create_gen[itr].end *
+                                      (float)(self._perc_upd)/100)
+                if self.update_gen[itr].name == "emp":
+                    self.update_gen[itr].update(fields_to_update=fields_to_update)
+
+    def populate_delete_gen(self):
+        if self.dataset == "emp":
+            self.delete_gen = JsonDocGenerator(
+                                    self.create_gen.name,
+                                    op_type= OPS.DELETE,
+                                    encoding="utf-8",
+                                    start=int((self.create_gen.end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen.end)
+        elif self.dataset == "wiki":
+            self.delete_gen = WikiJSONGenerator(name="wiki",
+                                    encoding="utf-8",
+                                    start=int((self.create_gen.end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen.end,
+                                    op_type=OPS.DELETE)
+
+        elif self.dataset == "all":
+            self.delete_gen = []
+            self.delete_gen.append(JsonDocGenerator(
+                                    "emp",
+                                    op_type= OPS.DELETE,
+                                    encoding="utf-8",
+                                    start=int((self.create_gen[0].end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen[0].end))
+            self.delete_gen.append(WikiJSONGenerator(name="wiki",
+                                    encoding="utf-8",
+                                    start=int((self.create_gen[1].end)
+                                              * (float)(100 - self._perc_del) / 100),
+                                    end=self.create_gen[1].end,
+                                    op_type=OPS.DELETE))
 
     def load_data(self):
         """

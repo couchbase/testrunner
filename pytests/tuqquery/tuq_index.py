@@ -1,10 +1,12 @@
+import math
+import time
 import uuid
-
-from membase.api.rest_client import RestConnection
-from tuq import ExplainPlanHelper
 from tuq import QueryTests
+from tuq import ExplainPlanHelper
 from tuq_join import JoinTests
-
+from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
+from membase.api.exception import CBQError
 
 class QueriesViewsTests(QueryTests):
 
@@ -888,17 +890,32 @@ class QueriesViewsTests(QueryTests):
             if (query.find("CREATE INDEX") < 0):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
                         else plan["~children"][0]
+                print result
+                #import pdb;pdb.set_trace()
                 if not(result['scans'][0]['#operator']=='DistinctScan'):
                     self.assertTrue(result["#operator"] == 'IntersectScan',
                                     "Index should be intersect scan and is %s" % (plan))
+                    # actual_indexes = []
+                    # for scan in result['scans']:
+                    #     print scan
+                    #     if (scan['#operator'] == 'IndexScan'):
+                    #         actual_indexes.append([result['scans'][0]['index']])
+                    #
+                    #     elif (scan['#operator'] == 'DistinctScan'):
+                    #         actual_indexes.append([result['scans'][0]['scan']['index']])
+                    #     else:
+                    #          actual_indexes.append(scan['index'])
 
-                    actual_indexes = [scan['scans'][0]['index'] if 'scans' in scan else scan['index']
+
+                    actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
                             for scan in result['scans']]
+
+                    print actual_indexes
 
                     actual_indexes = [x.encode('UTF8') for x in actual_indexes]
 
-                    self.log.info('actual indexes {}'.format(actual_indexes))
-                    self.log.info('compared against {}'.format(indexes_names))
+                    self.log.info('actual indexes "{0}"'.format(actual_indexes))
+                    self.log.info('compared against "{0}"'.format(indexes_names))
                     self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
             else:
                 result = plan

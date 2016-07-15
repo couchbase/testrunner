@@ -1,31 +1,32 @@
-import Queue
-import gc
 import re
+import testconstants
+import gc
 import sys
 import traceback
-from pprint import pprint
+import Queue
 from threading import Thread
-
-import testconstants
 from basetestcase import BaseTestCase
-from builds.build_query import BuildQuery
+from mc_bin_client import MemcachedError
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
-from mc_bin_client import MemcachedError
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from scripts.install import InstallerJob
+from builds.build_query import BuildQuery
+from pprint import pprint
 from testconstants import CB_REPO
-from testconstants import CB_VERSION_NAME
-from testconstants import COUCHBASE_MP_VERSION
-from testconstants import COUCHBASE_VERSIONS
+from testconstants import MV_LATESTBUILD_REPO
+from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
-from testconstants import MV_LATESTBUILD_REPO
+from testconstants import COUCHBASE_VERSIONS
 from testconstants import SHERLOCK_VERSION
+from testconstants import CB_VERSION_NAME
+from testconstants import COUCHBASE_MP_VERSION
+from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class NewUpgradeBaseTest(BaseTestCase):
@@ -149,6 +150,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             success = True
             for server in servers:
                 success &= RemoteMachineShellConnection(server).is_couchbase_installed()
+                self.sleep(5, "sleep 5 seconds to let cb up completely")
                 if not success:
                     sys.exit("some nodes were not install successfully!")
         if self.rest is None:
@@ -165,6 +167,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.port and self.port != '8091':
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
+        self.sleep(7, "wait to make sure node is ready")
         if len(servers) > 1:
             self.cluster.rebalance([servers[0]], servers[1:], [],
                                    use_hostnames=self.use_hostnames)
@@ -510,29 +513,32 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.rest = RestConnection(self.master)
                     self.rest_helper = RestHelper(self.rest)
                 if self.rest._rebalance_progress_status() == 'running':
-                    self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
-                                  .format(self.input.param('initial_version', '')[:5], \
-                                   self.input.param('upgrade_version', '')[:5]))
+                    self.log.info("Start monitoring DCP upgrade from {0} to {1}"\
+                           .format(self.input.param('initial_version', '')[:5], \
+                                    self.input.param('upgrade_version', '')[:5]))
                     status = self.rest.monitorRebalance()
+                    if status:
+                        self.log.info("Done DCP rebalance upgrade!")
+                    else:
+                        self.fail("Failed DCP rebalance upgrade")
+                elif self.sleep(5) is None and any ("DCP upgrade completed successfully." \
+                                    in d.values() for d in self.rest.get_logs(10)):
+                    self.log.info("DCP upgrade is completed")
                 else:
                     self.fail("DCP reabalance upgrade is not running")
-
-                if status:
-                    self.log.info("Done DCP rebalance upgrade!")
-                else:
-                    self.fail("Failed DCP rebalance upgrade")
             else:
-                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3.x.x")
+                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3+")
         else:
             if self.master.ip != self.rest.ip:
                 self.rest = RestConnection(self.master)
                 self.rest_helper = RestHelper(self.rest)
             self.log.info("No need to do DCP rebalance upgrade")
 
-    def dcp_rebalance_in_offline_upgrade_from_version2_to_version3(self):
+    def dcp_rebalance_in_offline_upgrade_from_version2(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
            (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
-            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
+            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION) and \
+            self.input.param('num_stoped_nodes', self.nodes_init) >= self.nodes_init:
             otpNodes = []
             nodes = self.rest.node_statuses()
             for node in nodes:

@@ -10,6 +10,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH
+from testconstants import COUCHBASE_FROM_WATSON
 from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
@@ -24,6 +25,10 @@ class CreateBucketTests(BaseTestCase):
         self.password = 'password'
         self.server = self.master
         self.rest = RestConnection(self.server)
+        self.node_version = self.rest.get_nodes_version()
+        self.total_items_travel_sample =  31569
+        if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+            self.total_items_travel_sample = 31591
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -159,7 +164,6 @@ class CreateBucketTests(BaseTestCase):
 
     def test_travel_sample_bucket(self):
         sample = "travel-sample"
-        num_expected = self.input.param('num_items', 31569)
         """ reset node to set services correctly: index,kv,n1ql """
         self.rest.force_eject_node()
         status = False
@@ -173,6 +177,8 @@ class CreateBucketTests(BaseTestCase):
             if e:
                 print e
         if status:
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
             shell = RemoteMachineShellConnection(self.master)
             shell.execute_command("""curl -v -u Administrator:password \
                          -X POST http://{0}:8091/sampleBuckets/install \
@@ -189,11 +195,11 @@ class CreateBucketTests(BaseTestCase):
         while time.time() < end_time:
             self.sleep(10)
             num_actual = self.get_item_count(self.master,"travel-sample")
-            if num_actual == num_expected:
+            if int(num_actual) == self.total_items_travel_sample:
                 break
-        self.assertTrue(num_actual == num_expected,
+        self.assertTrue(int(num_actual) == self.total_items_travel_sample,
                         "Items number expected %s, actual %s" % (
-                                                    num_expected, num_actual))
+                                    self.total_items_travel_sample, num_actual))
 
         """ check all indexes are completed """
         index_name = []
@@ -226,17 +232,20 @@ class CreateBucketTests(BaseTestCase):
 
     def test_cli_travel_sample_bucket(self):
         sample = "travel-sample"
-        num_expected = self.input.param('num_items', 31569)
         """ couchbase-cli does not have option to reset the node yet
             use rest to reset node to set services correctly: index,kv,n1ql """
         self.rest.force_eject_node()
 
         shell = RemoteMachineShellConnection(self.master)
+        set_index_storage_type = ""
+        if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+            set_index_storage_type = " --index-storage-setting=memopt "
         options = '--cluster-init-username="Administrator" \
                         --cluster-init-password="password" \
                         --cluster-init-port=8091 \
                         --cluster-ramsize=300 \
-                        --services=data,index,query'
+                        --cluster-index-ramsize=300 \
+                        --services=data,index,query %s ' % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
         self.assertEqual(o[0], "SUCCESS: init/edit localhost")
 
@@ -256,11 +265,12 @@ class CreateBucketTests(BaseTestCase):
         while time.time() < end_time:
             self.sleep(10)
             num_actual = self.get_item_count(self.master,"travel-sample")
-            if num_actual == num_expected:
+            if int(num_actual) == self.total_items_travel_sample:
                 break
-        self.assertTrue(num_actual == num_expected,
+        self.assertTrue(int(num_actual) == self.total_items_travel_sample,
                         "Items number expected %s, actual %s" % (
-                                                    num_expected, num_actual))
+                                self.total_items_travel_sample, num_actual))
+        self.log.info("Total items %s " % num_actual)
 
         """ check all indexes are completed """
         index_name = []

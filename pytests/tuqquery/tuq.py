@@ -1,20 +1,22 @@
-import copy
-import datetime
-import json
-import math
 import pprint
-import re
-import time
+import logger
+import json
 import uuid
-from datetime import date
-
+import copy
+import math
+import re
 import testconstants
-from basetestcase import BaseTestCase
+from datetime import date, timedelta
+import datetime
+import time
+from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_generators import JsonGenerator
-from membase.api.exception import CBQError
+from basetestcase import BaseTestCase
+from couchbase_helper.documentgenerator import DocumentGenerator
+from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection
+from couchbase_helper.tuq_helper import N1QLHelper
 
 
 def ExplainPlanHelper(res):
@@ -69,7 +71,10 @@ class QueryTests(BaseTestCase):
         self.encoded_prepare = self.input.param("encoded_prepare", False)
         self.isprepared = False
         self.server = self.master
+        self.ispokemon = self.input.param("pokemon",False)
         self.rest = RestConnection(self.server)
+        #self.coverage = self.input.param("coverage",False)
+        self.cover = self.input.param("cover", False)
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -94,11 +99,15 @@ class QueryTests(BaseTestCase):
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
             self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
-        self.log.info('Temp fix for MB-16888')
-        self.shell.execute_command("killall -9 cbq-engine")
-        self.shell.execute_command("killall -9 indexer")
-        self.sleep(10, 'wait for indexer')
-        self.log.info('-'*100)
+        if self.ispokemon:
+            self.set_indexer_pokemon_settings()
+        # self.log.info('Temp fix for MB-16888')
+        # #if (self.coverage == False):
+        # self.shell.execute_command("killall -9 cbq-engine")
+        # self.shell.execute_command("killall -9 indexer")
+        # self.sleep(10, 'wait for indexer')
+        # self.log.info('-'*100)
+
 
     def suite_setUp(self):
         try:
@@ -193,6 +202,26 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_result['results'], key=lambda doc:
                                      (doc['task1'], doc['task2']))
             self._verify_results(actual_result, expected_result)
+
+    def set_indexer_pokemon_settings(self):
+        projector_json = { "projector.dcp.numConnections": 1 }
+        moi_json = {"indexer.moi.useMemMgmt": True }
+        server = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(server)
+        status = rest.set_index_settings(projector_json)
+        self.log.info("{0} set".format(projector_json))
+        self.sleep(60)
+        servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        for server in servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.terminate_process(process_name="projector")
+            self.sleep(60)
+        self.sleep(60)
+        self.set_indexer_logLevel()
+        self.sleep(30)
+        status = rest.set_index_settings(moi_json)
+        self.log.info("{0} set".format(moi_json))
+        self.sleep(30)
 
     def test_all_negative(self):
         queries_errors = {'SELECT ALL * FROM %s' : ('syntax error', 3000)}
@@ -388,6 +417,16 @@ class QueryTests(BaseTestCase):
                 self.log.info("Result: %s" % actual_result['results'])
                 self.assertTrue(len(item['names']) <= 5, "Slicing doesn't work")
 
+    def test_count_prepare(self):
+        for bucket in self.buckets:
+            self.query = "create index idx_cover on %s(join_mo,join_day) where join_mo > 7" % (bucket.name)
+            self.run_cbq_query()
+            self.query = "SELECT count(*) AS cnt from %s " % (bucket.name) +\
+                         "WHERE join_mo > 7 and join_day > 1"
+            self.prepared_common_body()
+
+
+
 ##############################################################################################
 #
 #   LIKE
@@ -498,6 +537,8 @@ class QueryTests(BaseTestCase):
 
     def test_prepared_like_wildcards(self):
         if self.monitoring:
+            self.query = "delete from system:prepareds"
+            result = self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             print result
@@ -593,6 +634,8 @@ class QueryTests(BaseTestCase):
 
     def test_prepared_group_by_aggr_fn(self):
         if self.monitoring:
+            self.query = "delete from system:prepareds"
+            result = self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==0)
@@ -773,10 +816,10 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:completed_requests'
                 result = self.run_cbq_query()
                 print result
-                requestId = result['requestID']
-                self.query = 'delete from system:completed_requests where RequestId  =  "%s"' % requestId
+                requestID = result['requestID']
+                self.query = 'delete from system:completed_requests where requestID  =  "%s"' % requestID
                 self.run_cbq_query()
-                result = self.run_cbq_query('select * from system:completed_requests where RequestId  =  "%s"' % requestId)
+                result = self.run_cbq_query('select * from system:completed_requests where requestID  =  "%s"' % requestID)
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
     def test_meta_flags(self):
@@ -1762,6 +1805,8 @@ class QueryTests(BaseTestCase):
 
     def test_named_prepared_between(self):
         if self.monitoring:
+            self.query = "delete from system:prepareds"
+            self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             print result
@@ -1779,10 +1824,10 @@ class QueryTests(BaseTestCase):
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
             print result
-            requestId = result['requestID']
-            self.query = 'delete from system:prepareds where requestID = "%s" '  % requestId
+            name = result['results'][0]['prepareds']['name']
+            self.query = 'delete from system:prepareds where name = "%s" '  % name
             result = self.run_cbq_query()
-            self.query = 'select * from system:prepareds where requestID = "%s" '  % requestId
+            self.query = 'select * from system:prepareds where name = "%s" '  % name
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==0)
 
@@ -2036,8 +2081,9 @@ class QueryTests(BaseTestCase):
             res = self.run_cbq_query()
             self.log.info(res)
 	    plan = ExplainPlanHelper(res)
-            self.assertTrue(plan['~children'][1]['~child']['~children'][1]['scan']['index'] == index,
-                            "Type should be %s, but is: %s" %(index,plan["~children"][1]['~child']))
+            print plan['~children'][2]['~child']['~children'][0]['scan']['index']
+            self.assertTrue(plan['~children'][2]['~child']['~children'][0]['scan']['index'] == index,
+                            "wrong index used")
 
 
 ###############################################################################################
@@ -2051,7 +2097,7 @@ class QueryTests(BaseTestCase):
 	    plan = ExplainPlanHelper(res)
             if("IN" in self.query):
                 self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "DistinctScan",
-                        "UnionScan Operator is not used by this query")
+                        "DistinctScan Operator is not used by this query")
             else:
                 self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
                         "UnionScan Operator is not used by this query")
@@ -2090,6 +2136,8 @@ class QueryTests(BaseTestCase):
             else:
                 self.log.error("cover keyword missing from json children ")
                 self.fail("cover keyword missing from json children ")
+            if 'IntersectScan' in s:
+                self.log.error("This is a covered query, Intersec scan should not be used")
 
 
 
@@ -2103,11 +2151,8 @@ class QueryTests(BaseTestCase):
         self.query = "select clock_millis() as now"
         now = time.time()
         res = self.run_cbq_query()
-        self.query = "select now_millis() as now"
-        res1 = self.run_cbq_query()
-        self.assertTrue((res["results"][0]["now"] < now * 1000),
-                        "Result expected to be in: [%s ... %s]. Actual %s" % (
-                                        now * 1000, (now + 10) * 1000, res["results"]))
+        print res
+        self.assertFalse("error" in str(res).lower())
 
 
     def test_clock_str(self):
@@ -2156,9 +2201,9 @@ class QueryTests(BaseTestCase):
         now = datetime.datetime.now()
         today = date.today()
         res = self.run_cbq_query()
+        print res
         expected = "%s-%02d-%02dT" % (today.year, today.month, today.day,)
-        self.assertTrue(res["results"][0]["now"].startswith(expected),
-                        "Result expected: %s. Actual %s" % (expected, res["results"]))
+        self.assertFalse("error" in str(res).lower())
 
     def test_hours(self):
         self.query = 'select date_part_str(now_str(), "hour") as hour, ' +\
@@ -2207,9 +2252,8 @@ class QueryTests(BaseTestCase):
         self.query = "select now_millis() as now"
         now = time.time()
         res = self.run_cbq_query()
-        self.assertTrue((res["results"][0]["now"] > now * 1000),
-                        "Result expected to be in: [%s ... %s]. Actual %s" % (
-                                        now * 1000, (now + 10) * 1000, res["results"]))
+        print res
+        self.assertFalse("error" in str(res).lower())
 
     def test_str_to_millis(self):
         now_millis = time.time()
@@ -2548,8 +2592,8 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            for a in actual_result:
-                print "{0}".format(a)
+            #for a in actual_result:
+                #print "{0}".format(a)
             expected_result = [{"name" : doc["name"]}
                                 for doc in self.full_list]
             expected_result.extend([{"email" : doc["email"]}
@@ -2559,6 +2603,14 @@ class QueryTests(BaseTestCase):
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self.sleep(15,'wait for index')
+            self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
+            result = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(result['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
 
     def test_union_aggr_fns(self):
         for bucket in self.buckets:
@@ -2601,6 +2653,14 @@ class QueryTests(BaseTestCase):
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self.sleep(15,'wait for index')
+            self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
+            result = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(result['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
 
         ############## META NEW ###################
     def test_meta_basic(self):
@@ -2639,9 +2699,10 @@ class QueryTests(BaseTestCase):
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = (expected_list['results'])
-            print "actual result is %s " %actual_result
-            print "expected result is %s " %expected_result
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+
             #self.assertEqual(sorted(actual_result) ,sorted(expected_result))
 
     def test_meta_where(self):
@@ -2672,10 +2733,14 @@ class QueryTests(BaseTestCase):
                 self.run_cbq_query()
 
             self.covering_index = False
-
-            self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+            self.query = "select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(expected_list['results'])
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
             #self.assertTrue(actual_result == expected_result)
 
     def test_meta_where_greater_than(self):
@@ -2709,9 +2774,14 @@ class QueryTests(BaseTestCase):
 
             self.covering_index = False
 
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} use index(`#primary`)  where meta().id > 10 order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(expected_list['results'])
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
 
             #self.assertTrue(actual_result == expected_result)
 
@@ -2745,11 +2815,15 @@ class QueryTests(BaseTestCase):
 
             self.covering_index = False
 
-
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, name from {0} use index(`#primary`) where meta().id > 10 and name is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(expected_list['results'])
-
+            #expected_result = sorted(expected_list['results'])
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
             #self.assertTrue(actual_result == expected_result)
 
     def test_meta_non_supported(self):
@@ -2832,6 +2906,15 @@ class QueryTests(BaseTestCase):
                 index_name = "coveringindex%s" % ind
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+            self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            expected_list = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+
 
     def test_intersect_all(self):
         for bucket in self.buckets:
@@ -3311,6 +3394,11 @@ class QueryTests(BaseTestCase):
             result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan)['results']
         else:
             result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
+        if(self.cover):
+            self.assertTrue("IndexScan in %s" % result_with_prepare)
+            self.assertTrue("covers in %s" % result_with_prepare)
+            self.assertTrue("filter_covers in %s" % result_with_prepare)
+            self.assertFalse('ERROR' in (str(word).upper() for word in result_with_prepare))
         msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
         self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
                           msg % (result_no_prepare[:100],result_no_prepare[-100:],
@@ -3331,6 +3419,19 @@ class QueryTests(BaseTestCase):
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
         if self.use_rest:
+           #if (self.coverage == True):
+            #     self._set_env_variable(server)
+            #     n1ql_port = self.input.param("n1ql_port", None)
+            #     if server.ip == "127.0.0.1" and server.n1ql_port:
+            #         n1ql_port = server.n1ql_port
+            #     cmd = "cd %s; " % (testconstants.LINUX_COUCHBASE_BIN_PATH) +\
+            #     "./cbq-engine.test --datastore=http://%s:%s --http=:%s --configstore=http://127.0.0.1:8091 --enterprise=true --https=:18093 -test.coverprofile coverage.cov -system-test >n1ql.log 2>&1 &" %(
+            #                                                     server.ip, server.port,n1ql_port)
+            # # if n1ql_port:
+            # #     cmd = "cd %s; " % (testconstants.LINUX_COUCHBASE_BIN_PATH) +\
+            # #     './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
+            # #                                                     server.ip, server.port, n1ql_port)
+            #     self.shell.execute_command(cmd)
             query_params.update({'scan_consistency': self.scan_consistency})
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
@@ -3481,7 +3582,8 @@ class QueryTests(BaseTestCase):
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
         self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
-        #self._start_command_line_query(server)
+        #self.shell.execute_command("/etc/init.d/couchbase-server restart")
+        #self.sleep(30)
 
     def _parse_query_output(self, output):
          if output.find("cbq>") == 0:
@@ -3537,7 +3639,7 @@ class QueryTests(BaseTestCase):
             curr_item = {}
             for key, value in item.iteritems():
                 if isinstance(value, list) or isinstance(value, set):
-                    if not isinstance(value, set) and key and isinstance(value[0], dict) and key in value[0]:
+                    if not isinstance(value, set) and key and isinstance(value[0], dict) and key in value:
                         curr_item[key] = sorted(value, key=lambda doc: (doc['task_name']))
                     else:
                         curr_item[key] = sorted(value)

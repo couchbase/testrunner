@@ -1,34 +1,37 @@
 import logging
-from threading import Thread
 
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition, SQLDefinitionGenerator
-from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import STANDARD_BUCKET_PORT
+from membase.api.rest_client import RestConnection
 
 log = logging.getLogger(__name__)
-
+QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
 class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def setUp(self):
+        self.all_index_nodes_lost = False
         super(UpgradeSecondaryIndex, self).setUp()
-        self.use_replica = False
+        self.initial_version = self.input.param('initial_version', '4.1.0-5005')
         self.upgrade_to = self.input.param("upgrade_to")
         self.use_replica = self.input.param("use_replica", False)
+        query_template = QUERY_TEMPLATE
+        query_template = query_template.format("job_title")
+        self.whereCondition= self.input.param("whereCondition"," job_title != \"Sales\" ")
+        query_template += " WHERE {0}".format(self.whereCondition)
         self.load_query_definitions = []
-        self.initial_index_number = self.input.param("initial_index_number", 10)
+        self.initial_index_number = self.input.param("initial_index_number", 2)
         for x in range(1,self.initial_index_number):
             index_name = "index_name_"+str(x)
-            query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_mo"], \
-                        query_template = "", groups = ["simple"])
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
+                                query_template=query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
-        self.initialize_multi_create_index(buckets = self.buckets,
+        self.multi_create_index(buckets = self.buckets,
                 query_definitions = self.load_query_definitions)
-        self.drop_indexes_in_between = self.input.param("drop_indexes_in_between", False)
 
     def tearDown(self):
+        self.upgrade_servers = self.servers
         super(UpgradeSecondaryIndex, self).tearDown()
 
     def test_offline_upgrade(self):
@@ -42,10 +45,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         """
 
         # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()  # Upgrade kv node
-        self._run_tasks([kv_ops, before_index_ops])
         for server in self.servers:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
@@ -54,342 +53,158 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
-        kv_ops = self._run_kvops_tasks()
-        self._run_tasks([kv_ops])
-        self._run_after_index_tasks()
+        kv_ops = self.kv_mutations()
+        for kv_op in kv_ops:
+            kv_op.result()
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
-
-    def test_online_kv_upgrade(self):
-        """
-        1) Perform Operations
-        2) Bring down kv node
-        4) Upgrade node
-        5) Perform Operations
-        6) Bring up kv node
-        8) Perform Operations
-
-        Configuration: kv, kv, index, n1ql
-        """
-        # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([kv_ops, before_index_ops])
-        kv_node = self.get_nodes_from_services_map(service_type="kv")
-        log.info("Upgrading {ip} to {ver}".format(ip=kv_node.ip, ver=self.upgrade_to))
-        upgrade_th = self._async_update(self.upgrade_to, [kv_node])
-        self.upgrade_servers = [kv_node]
-        kv_ops = self._run_kvops_tasks()
-        in_between_ops = self._run_in_between_tasks()
-        self._run_tasks([kv_ops, in_between_ops])
-        for th in upgrade_th:
-            th.join()
-        node_version = RestConnection(kv_node).get_nodes_versions()
-        log.info("Upgraded to: {ver}".format(ver=node_version))
-        kv_ops = self._run_kvops_tasks()
-        self._run_tasks([kv_ops])
-        self._run_after_index_tasks()
-
-    def test_online_kv_upgrade_with_rebalance(self):
-        """
-        1) Perform Operations
-        2) Bring down kv node
-        3) Rebalance Cluster
-        4) Upgrade node
-        5) Perform Operations
-        6) Bring up kv node
-        7) Rebalance
-        8) Perform Operations
-
-        Configuration: kv, kv, index, n1ql
-        """
-        # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([kv_ops, before_index_ops])
-        # Upgrade kv node
-        kv_node = self.get_nodes_from_services_map(service_type="kv")
-        # Rebalance Node Out
-        log.info("Rebalancing KV node {ip} out...".format(ip=kv_node.ip))
-        rebalance = self.cluster.async_rebalance(self.servers, [], [kv_node])
-        kv_ops = self._run_kvops_tasks()
-        in_between_ops = self._run_in_between_tasks()
-        self._run_tasks([kv_ops, in_between_ops])
+    def test_online_upgrade(self):
+        index_task = []
+        services_in = []
+        if self.index_op != "create":
+            create_task = self.async_index_operations("create")
+            self._run_tasks([create_task])
+        server_out = self.nodes_out_list
+        if not self.all_index_nodes_lost:
+            index_task = self.async_index_operations()
+        kv_ops = self.kv_mutations()
+        log.info("Upgrading servers to {0}...".format(self.upgrade_to))
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
         rebalance.result()
-        log.info("Upgrading {ip} to {ver}".format(ip=kv_node.ip, ver=self.upgrade_to))
-        upgrade_th = self._async_update(self.upgrade_to, [kv_node])
-        self.upgrade_servers = [kv_node]
-        log.info("IO During Upgrade...")
+        self.upgrade_servers = self.nodes_out_list
+        upgrade_th = self._async_update(self.upgrade_to, server_out)
         for th in upgrade_th:
             th.join()
-        node_version = RestConnection(kv_node).get_nodes_versions()
-        log.info("Upgraded to: {ver}".format(ver=node_version))
-        # Rebalance Node in
-        log.info("Rebalancing KV node {ip} in...".format(ip=kv_node.ip))
-        self.servers.remove(kv_node)
-        rebalance = self.cluster.async_rebalance(self.servers, [kv_node], [])
+        log.info("==== Upgrade Complete ====")
+        node_version = RestConnection(server_out[0]).get_nodes_versions()
+        for service in self.services_map.keys():
+            for node in self.nodes_out_list:
+                node = "{0}:{1}".format(node.ip, node.port)
+                if node in self.services_map[service]:
+                    services_in.append(service)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.nodes_out_list, [],
+                                                 services=services_in)
         rebalance.result()
-        self.servers.append(kv_node)
-        log.info("Post Upgrade IO...")
-        kv_ops = self._run_kvops_tasks()
-        self._run_tasks([kv_ops])
-        self._run_after_index_tasks()
+        self._run_tasks([kv_ops, index_task])
+        self.sleep(60)
+        log.info("Upgraded to: {0}".format(node_version))
+        if self.index_op == "drop" or self.all_index_nodes_lost:
+            create_task = self.async_index_operations("create")
+            self._run_tasks([create_task])
+        self._verify_bucket_count_with_index_count()
+        index_task = self.async_index_operations("query")
+        self._run_tasks([index_task])
 
-    def test_online_index_upgrade(self):
+    def test_online_upgrade_swap_rebalance(self):
         """
-        1) Perform Operations
-        2) Bring down index node
-        4) Upgrade node
-        5) Perform Operations
-        6) Bring up index node
-        8) Perform Operations
 
-        Configuration: kv, kv, index, n1ql
+        :return:
         """
-        # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([kv_ops, before_index_ops])
-        index_node = self.get_nodes_from_services_map(service_type="index")
-        log.info("Upgrading {ip} to {ver}".format(ip=index_node.ip, ver=self.upgrade_to))
-        upgrade_th = self._async_update(self.upgrade_to, [index_node])
-        self.upgrade_servers = [index_node]
-        kv_ops = self._run_kvops_tasks()
-        if self.use_replica:
-            in_between_ops = self._run_in_between_tasks()
-        self._run_tasks([kv_ops])
+        index_task = []
+        self._install(self.nodes_in_list,version=self.upgrade_to)
+        if self.index_op != "create":
+            create_task = self.async_index_operations("create")
+            self._run_tasks([create_task])
+        kv_ops = self.kv_mutations()
+        if not self.all_index_nodes_lost:
+            index_task = self.async_index_operations()
+        log.info("Swapping servers...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.nodes_in_list,
+                                                 self.nodes_out_list)
+        rebalance.result()
+        log.info("===== Nodes Swapped with Upgraded versions =====")
+        self.upgrade_servers = self.nodes_in_list
+        self._run_tasks([kv_ops, index_task])
+        self.sleep(60)
+        if self.index_op != "drop":
+            self._verify_bucket_count_with_index_count()
+            index_task = self.async_index_operations("query")
+            self._run_tasks([index_task])
+
+    def test_upgrade_with_memdb(self):
+        """
+        Keep N1ql node on one of the kv nodes
+        :return:
+        """
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        log.info("Upgrading all kv nodes...")
+        for node in kv_nodes:
+            log.info("Rebalancing kv node {0} out to upgrade...".format(node.ip))
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
+                                                 [node])
+            rebalance.result()
+            self.servers.remove(node)
+            upgrade_th = self._async_update(self.upgrade_to, [node])
+            for th in upgrade_th:
+                th.join()
+            log.info("Rebalancing kv node {0} in after upgrade...".format(node.ip))
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     [node], [],
+                                                     services=['kv'])
+            self.servers.insert(0, node)
+            rebalance.result()
+        log.info("===== KV Nodes Upgrade Complete =====")
+        log.info("Upgrading all query nodes...")
+        query_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        log.info("Rebalancing query nodes out to upgrade...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
+                                             query_nodes)
+        rebalance.result()
+        upgrade_th = self._async_update(self.upgrade_to, query_nodes)
         for th in upgrade_th:
             th.join()
-        node_version = RestConnection(index_node).get_nodes_versions()
-        log.info("Upgraded to: {ver}".format(ver=node_version))
-        kv_ops = self._run_kvops_tasks()
-        self._run_tasks([kv_ops])
-        self._run_after_index_tasks()
-
-
-    def test_online_n1ql_upgrade(self):
-        """
-        1) Perform Operations
-        2) Bring down n1ql node
-        4) Upgrade node
-        5) Perform Operations
-        6) Bring up n1ql node
-        8) Perform Operations
-
-        Configuration: kv, kv, index, n1ql
-        """
-        # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([kv_ops, before_index_ops])
-        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        log.info("Upgrading {ip} to {ver}".format(ip=n1ql_node.ip, ver=self.upgrade_to))
-        upgrade_th = self._async_update(self.upgrade_to, [n1ql_node])
-        self.upgrade_servers = [n1ql_node]
-        kv_ops = self._run_kvops_tasks()
-        self._run_tasks([kv_ops])
+        services_in = ["n1ql" for x in range(len(query_nodes))]
+        log.info("Rebalancing query nodes in after upgrade...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 query_nodes, [],
+                                                 services=services_in)
+        rebalance.result()
+        log.info("===== Query Nodes Upgrade Complete =====")
+        kv_ops = self.kv_mutations()
+        log.info("Upgrading all index nodes...")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        log.info("Rebalancing index nodes out to upgrade...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
+                                             index_nodes)
+        rebalance.result()
+        upgrade_th = self._async_update(self.upgrade_to, index_nodes)
+        rest = RestConnection(self.master)
+        log.info("Setting indexer storage mode to {0}...".format(self.gsi_type))
+        status = rest.set_indexer_storage_mode(storageMode=self.gsi_type)
+        if status:
+            log.info("====== Indexer Mode Set to {0}=====".format(self.gsi_type))
+        else:
+            self.info("====== Indexer Mode is not set to {0}=====".format(self.gsi_type))
+            raise
         for th in upgrade_th:
             th.join()
-        node_version = RestConnection(n1ql_node).get_nodes_versions()
-        log.info("Upgraded to: {ver}".format(ver=node_version))
-        kv_ops = self._run_kvops_tasks()
         self._run_tasks([kv_ops])
-        self._run_after_index_tasks()
+        log.info("===== Index Nodes Upgrade Complete =====")
+        services_in = ["index" for x in range(len(index_nodes))]
+        log.info("Rebalancing index nodes in after upgrade...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 index_nodes, [],
+                                                 services=services_in)
+        rebalance.result()
+        self.sleep(60)
+        create_task = self.async_index_operations("create")
+        self._run_tasks([create_task])
+        self._verify_bucket_count_with_index_count()
+        index_task = self.async_index_operations("query")
+        self._run_tasks([index_task])
 
-    def test_online_kv_n1ql_upgrade(self):
-        """
-        1) Perform Operations
-        2) Bring down n1ql node
-        4) Upgrade node
-        5) Perform Operations
-        6) Bring up n1ql node
-        8) Perform Operations
-
-        Configuration: kv:n1ql, kv, index, index
-        """
-        # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([kv_ops, before_index_ops])
-        kv_n1ql_nodes = []
-        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
-        n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
-        if kv_nodes and n1ql_nodes:
-            kv_n1ql_nodes = [x for x in kv_nodes if x in n1ql_nodes]
-        if kv_n1ql_nodes:
-            kv_n1ql_node = kv_n1ql_nodes[0]
-            log.info("Upgrading {ip} to {ver}".format(ip=kv_n1ql_node.ip, ver=self.upgrade_to))
-            upgrade_th = self._async_update(self.upgrade_to, [kv_n1ql_node])
-            self.upgrade_servers = [kv_n1ql_node]
-            kv_ops = self._run_kvops_tasks()
-            self._run_tasks([kv_ops])
-            for th in upgrade_th:
-                th.join()
-            node_version = RestConnection(kv_n1ql_node).get_nodes_versions()
-            log.info("Upgraded to: {ver}".format(ver=node_version))
-            kv_ops = self._run_kvops_tasks()
-            self._run_tasks([kv_ops])
-            self._run_after_index_tasks()
-        else:
-            log.info("Found no node with kv and n1ql service")
-
-    def test_online_kv_index_upgrade(self):
-        """
-        1) Perform Operations
-        2) Bring down n1ql node
-        4) Upgrade node
-        5) Perform Operations
-        6) Bring up n1ql node
-        8) Perform Operations
-
-        Configuration: kv, kv-index, index, n1ql
-        """
-        # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([kv_ops, before_index_ops])
-        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
-        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        kv_index_nodes = []
-        if kv_nodes and index_nodes:
-            kv_index_nodes = [x for x in kv_nodes if x in index_nodes]
-        if kv_index_nodes:
-            kv_index_node = kv_index_nodes[0]
-            log.info("Upgrading {ip} to {ver}".format(ip=kv_index_node.ip, ver=self.upgrade_to))
-            upgrade_th = self._async_update(self.upgrade_to, [kv_index_node])
-            self.upgrade_servers = [kv_index_node]
-            kv_ops = self._run_kvops_tasks()
-            self._run_tasks([kv_ops])
-            for th in upgrade_th:
-                th.join()
-            node_version = RestConnection(kv_index_node).get_nodes_versions()
-            log.info("Upgraded to: {ver}".format(ver=node_version))
-            kv_ops = self._run_kvops_tasks()
-            self._run_tasks([kv_ops])
-            self._run_after_index_tasks()
-        else:
-            log.info("Found no node with kv and index service")
-
-    def test_online_n1ql_index_upgrade(self):
-        """
-        1) Perform Operations
-        2) Bring down n1ql node
-        4) Upgrade node
-        5) Perform Operations
-        6) Bring up n1ql node
-        8) Perform Operations
-
-        Configuration: kv, kv, index-n1ql, index
-        """
-        # Perform pre_upgrade operations on cluster
-        self._run_initial_index_tasks()
-        kv_ops = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([kv_ops, before_index_ops])
-        n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
-        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        n1ql_index_nodes = []
-        if n1ql_nodes and index_nodes:
-            n1ql_index_nodes = [x for x in n1ql_nodes if x in index_nodes]
-        if n1ql_index_nodes:
-            n1ql_index_node = n1ql_index_node[]
-            log.info("Upgrading {ip} to {ver}".format(ip=n1ql_index_node.ip, ver=self.upgrade_to))
-            upgrade_th = self._async_update(self.upgrade_to, [n1ql_index_node])
-            self.upgrade_servers = [n1ql_index_node]
-            kv_ops = self._run_kvops_tasks()
-            self._run_tasks([kv_ops])
-            for th in upgrade_th:
-                th.join()
-            node_version = RestConnection(n1ql_index_node).get_nodes_versions()
-            log.info("Upgraded to: {ver}".format(ver=node_version))
-            kv_ops = self._run_kvops_tasks()
-            self._run_tasks([kv_ops])
-            self._run_after_index_tasks()
-        else:
-            log.info("Found no node with n1ql and index service")
-
-    def _run_initial_index_tasks(self):
-        self.log.info("<<<<< START INITIALIZATION PHASE >>>>>>")
-        self._calculate_scan_vector()
-        tasks = self.async_check_and_run_operations(buckets=self.buckets, initial=True,
-                                                    scan_consistency=self.scan_consistency, scan_vectors=self.scan_vectors)
-        self._run_tasks([tasks])
-        self.log.info("<<<<< END INITIALIZATION PHASE >>>>>>")
-
-
-    def _run_before_index_tasks(self):
-        if self.ops_map["before"]["create_index"]:
-            self.index_nodes_out = []
-        self._redefine_index_usage()
-        tasks = self.async_check_and_run_operations(buckets=self.buckets, before=True,
-                                                    scan_consistency=self.scan_consistency, scan_vectors=self.scan_vectors)
+    def kv_mutations(self, docs=None):
+        if not docs:
+            docs = self.docs_per_day
+        gens_load = self.generate_docs(docs)
+        tasks = self.async_load(generators_load=gens_load, batch_size=self.batch_size)
         return tasks
 
-
-    def _run_in_between_tasks(self):
-        tasks_ops = []
-        if self.ops_map["in_between"]["create_index"]:
-            self.index_nodes_out = []
-        self._redefine_index_usage()
-        tasks = self.async_check_and_run_operations(buckets=self.buckets, in_between=True,
-                                                    scan_consistency=self.scan_consistency, scan_vectors=self.scan_vectors)
-        tasks += self._drop_indexes_in_between()
-        return tasks
-
-
-    def _drop_indexes_in_between(self):
-        drop_tasks = []
-        if self.drop_indexes_in_between:
-            drop_tasks = self.async_multi_drop_index(buckets=self.buckets,
-                                                     query_definitions=self.load_query_definitions)
-        return drop_tasks
-
-
-    def _run_kvops_tasks(self):
-        tasks_ops = []
-        if self.doc_ops:
-            tasks_ops = self.async_run_doc_ops()
-        return tasks_ops
-
-
-    def _run_after_index_tasks(self):
-        tasks = self.async_check_and_run_operations(buckets=self.buckets, after=True,
-                                                    scan_consistency=self.scan_consistency, scan_vectors=self.scan_vectors)
-        self._run_tasks([tasks])
-
-    def _calculate_scan_vector(self):
-        self.scan_vectors = None
-        if self.scan_vectors != None:
-            self.scan_vectors = self.gen_scan_vector(use_percentage=self.scan_vector_per_values,
-                                                     use_random=self.random_scan_vector)
     def _run_tasks(self, tasks_list):
         for tasks in tasks_list:
-            for task in tasks:
-                task.result()
-
-    def _redefine_index_usage(self):
-        qdfs = []
-        self.index_lost_during_move_out = []
-        if not self.use_replica :
-            return
-        if self.use_replica_when_active_down and \
-            (self.ops_map["before"]["query_ops"] or self.ops_map["in_between"]["query_ops"]):
-            #and not self.all_index_nodes_lost:
-            for query_definition in self.query_definitions:
-                if query_definition.index_name in self.index_lost_during_move_out:
-                    query_definition.index_name = query_definition.index_name+"_replica"
-                qdfs.append(query_definition)
-            self.query_definitions = qdfs
-        elif self.ops_map["before"]["query_ops"] \
-         or self.ops_map["in_between"]["query_ops"]:
-         #or self.all_index_nodes_lost:
-            for query_definition in self.query_definitions:
-                if query_definition.index_name in self.index_lost_during_move_out:
-                    query_definition.index_name = "#primary"
-                qdfs.append(query_definition)
-            self.query_definitions = qdfs
+            if tasks:
+                for th in tasks:
+                    th.result()

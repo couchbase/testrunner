@@ -1,9 +1,16 @@
-import base64
+from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 import urllib
-
-from couchbase_helper.document import View
+import json
+import httplib2
+from tasks.future import Future
+from tasks.taskmanager import TaskManager
 from tasks.task import *
-
+import types
+from couchbase_helper.document import View
+import base64
+import time
+import logger
 log = logger.Logger.get_logger()
 
 class rbacPermissionList():
@@ -44,8 +51,6 @@ class rbacPermissionList():
         list_return = []
         return_list = []
         for per in permission:
-            #print "Value of per is ------"
-            #print per
             values = permission[per]
             temp = values.split(";")
             url = temp[0]
@@ -53,17 +58,13 @@ class rbacPermissionList():
             if len(temp) == 3:
                 params = temp[2]
                 params = params.replace("?",";")
-                #print params
                 json_acceptable_string = params.replace("'", "\"")
                 if capi:
                     params = json_acceptable_string
                     print params
                 else:
                     params = json.loads(json_acceptable_string)
-                    print params
-                    print type(params)
                     params = urllib.urlencode(params)
-                    print params
             else:
                 params = ""
             restClient = RestConnection(host)
@@ -76,7 +77,7 @@ class rbacPermissionList():
 
         for list in list_return:
             if int(list['result']) not in httpCode:
-                print "Matching not found"
+                print "Return HTTP Code does not match with expected -- {0} and actual - {1}".format(list['result'],httpCode)
                 return_list.append(list)
                 flag = 'False'
                 return_value = {
@@ -174,7 +175,6 @@ class rbacPermissionList():
         result = self._return_http_code(_cluster_settings_write,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
 
     def cluster_nodes_write(self,username,password,host,port=8091, servers=None,cluster=None,httpCode=None,user_role=None):
-        '''
         try:
             _cluster_nodes_write = {
                 "ejectNode":"/controller/ejectNode;POST",
@@ -263,8 +263,11 @@ class rbacPermissionList():
             cluster.rebalance(servers)
         except:
             log.info ("Issue with rebalance, going to next test case")
-
-        '''
+            cluster.rebalance(servers,[],servers[1:])
+            for server in servers:
+                rest = RestConnection(server)
+                rest.init_cluster(username='Administrator', password='password')
+                rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
 
     def cluster_bucket_all_create(self,username,password,host,port=8091, servers=None,cluster=None,httpCode=None,user_role=None):
         _cluster_bucket_all_create = {
@@ -578,30 +581,18 @@ class rbacPermissionList():
         result = self._return_http_code(_cluster_bucket_views_compact,username,password,host=host,port=8092, httpCode=httpCode, user_role=user_role)
 
 
-    # Needs to be tested -----#
     def cluster_bucket_views_write(self,username,password,host,port=8091, servers=None,cluster=None,httpCode=None,user_role=None):
         '''
         cluster.create_view(host,"Doc1",View('abcd', 'function (doc) { emit(doc.age, doc.first_name);}', None),'default',180,with_query=False)
         doc_id = "_design%2Fdev_Doc1"
 
-        _cluster_bucket_views_compact ={
-            "view_write":"pools/default/buckets/<bucket_name>/ddocs/<doc_id>/controller/setUpdateMinChanges;POST",
-        }
-
-        for perm in _cluster_bucket_views_compact:
-            temp = _cluster_bucket_views_compact[perm]
-            temp = temp.replace('<bucket_name>','default')
-            temp = temp.replace('<doc_id>',doc_id)
-            _cluster_bucket_views_compact[perm] = temp
-
         '''
 
-        _cluster_bucket_views_compact ={
-            #"view_write":"couchBase/default/_design/dev_1234;PUT;{'views':{'default':{'map':'function(doc){emit(doc.age, doc.first_name);}'}}}"
+        _cluster_bucket_views_write ={
             "view_write":"couchBase/default/_design/dev_1234;PUT;{'views':{'1234':{'map':'function(doc, meta){emit(meta.id,null)?}'}}}"
         }
 
-        result = self._return_http_code(_cluster_bucket_views_compact,username,password,host=host,port=8091, httpCode=httpCode, user_role=user_role,capi=True)
+        result = self._return_http_code(_cluster_bucket_views_write,username,password,host=host,port=8091, httpCode=httpCode, user_role=user_role,capi=True)
 
 
     def cluster_server_groups_read(self,username,password,host,port=8091, servers=None,cluster=None,httpCode=None,user_role=None):
@@ -845,12 +836,6 @@ class rbacPermissionList():
         rest_remote01.delete_bucket()
         rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
         rest_remote02 = RestConnection(remote_server02)
-
-        #Add remote cluster reference and replications
-        #remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
-        #print remote_id
-        #add_remote = {"remote_cluster_id":"pools/default/remoteClusters/" + str(remote_id['uuid']) + ";POST"}
-        #result = self._return_http_code(add_remote,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
 
         rest.remove_all_replications()
         rest.remove_all_remote_clusters()

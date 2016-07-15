@@ -51,8 +51,8 @@ class Getcoredumps(object):
                 core_files.extend(remote.file_starts_with("/opt/{0}/var/lib/{0}/".format(server_type), "core"))
                 print "core* files under /tmp/"
                 core_files.extend(remote.file_starts_with("/tmp/", "core"))
-                print "breakpad *dmp files under /opt/{0}/var/lib/{0}/crash/".format(server_type)
-                core_files.extend(remote.file_ends_with("/opt/{0}/var/lib/{0}/crash".format(server_type), ".dmp"))
+                print "breakpad *dmp files under /opt/{0}/var/lib/{0}/".format(server_type)
+                core_files.extend(remote.file_ends_with("/opt/{0}/var/lib/{0}/".format(server_type), ".dmp"))
                 if core_files:
                     print "found crashes on {0}: {1}".format(info.ip, core_files)
                 else:

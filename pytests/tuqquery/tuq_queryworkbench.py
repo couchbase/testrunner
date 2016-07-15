@@ -1,9 +1,9 @@
 import time
-
 from TestInput import TestInputSingleton
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
+from tuq import QueryTests
 
 
 class QueryWorkbenchTests(BaseTestCase):

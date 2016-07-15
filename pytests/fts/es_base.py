@@ -1,8 +1,7 @@
 import httplib2
-
-from tasks.task import *
+import json
 from tasks.taskmanager import TaskManager
-
+from tasks.task import *
 
 class BLEVE:
     STOPWORDS = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
@@ -30,6 +29,19 @@ class BLEVE:
                  'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most',
                  'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
                  'same', 'so', 'than', 'too', 'very']
+
+    STD_ANALYZER = {
+        "settings": {
+            "analysis": {
+                "analyzer": {
+                    "default": {
+                        "type":      "standard",
+                        "stopwords": STOPWORDS
+                    }
+                }
+            }
+        }
+    }
 
 class ElasticSearchBase(object):
 
@@ -137,34 +149,23 @@ class ElasticSearchBase(object):
         https://www.elastic.co/guide/en/elasticsearch/guide/current/
         configuring-analyzers.html
         """
-        analyzer_settings = {
-            "settings": {
-                "analysis": {
-                    "analyzer": {
-                        "default": {
-                            "type":      "standard",
-                            "stopwords": BLEVE.STOPWORDS
-                        }
-                    }
-                }
-            }
-        }
         try:
             self.delete_index(index_name)
             status, content, _ = self._http_request(
                 self.__connection_url + index_name,
-                'PUT', json.dumps(analyzer_settings))
+                'PUT', json.dumps(BLEVE.STD_ANALYZER))
             if status:
                 self.__indices.append(index_name)
         except Exception as e:
-            raise Exception("Could not create ES index : %s" % e)
+            raise Exception("Could not create index with ES std analyzer : %s"
+                            % e)
 
     def create_index_mapping(self, index_name, mapping):
         """
-        Updates a default index, with the given mapping
+        Creates a new default index, with the given mapping
         """
         self.delete_index(index_name)
-        map = {"mappings": mapping}
+        map = {"mappings": mapping, "settings": BLEVE.STD_ANALYZER['settings']}
         try:
             self.__log.info("Creating %s with mapping %s"
                             % (index_name, json.dumps(mapping, indent=3)))
@@ -187,19 +188,22 @@ class ElasticSearchBase(object):
         try:
             self.__log.info("Checking if ES alias '{0}' exists...".format(name))
             self.delete_index(name)
-            alias_info = {"actions": [{"add": {"indices": indexes, "alias": name}}]}
+            alias_info = {"actions": []}
+            for index in indexes:
+                alias_info['actions'].append({"add": {"index": index,
+                                                      "alias": name}})
             self.__log.info("Creating ES alias '{0}' on {1}...".format(
                 name,
                 indexes))
             status, content, _ = self._http_request(
-                self.__connection_url + name,
+                self.__connection_url + "_aliases",
                 'POST',
                 json.dumps(alias_info))
             if status:
                 self.__log.info("ES alias '{0}' created".format(name))
                 self.__indices.append(name)
-        except Exception as e:
-            raise Exception("Could not create ES alias : %s" % e)
+        except Exception as ex:
+            raise Exception("Could not create ES alias : %s" % ex)
 
     def async_load_ES(self, index_name, gen, op_type='create'):
         """

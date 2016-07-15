@@ -1,8 +1,10 @@
 import json
 import string
 import random
-from couchbase_helper.data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
 import gzip
+from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
+from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
+
 
 class KVGenerator(object):
     def __init__(self, name, start, end):
@@ -162,7 +164,7 @@ class BatchedDocumentGenerator(object):
     def __init__(self, document_generator, batch_size_int=100):
         self._doc_gen = document_generator
         self._batch_size = batch_size_int
-        if self._batch_size <= 0 :
+        if self._batch_size <= 0:
             raise ValueError("Invalid Batch size {0}".format(self._batch_size))
 
     def has_next(self):
@@ -299,9 +301,9 @@ class JsonDocGenerator(KVGenerator):
                         doc_dict['manages']['reports'].append(self.generate_name())
                 self.gen_docs[count-1] = doc_dict
         elif op_type == "delete":
-            # for deletes, just keep/return empty docs
+            # for deletes, just keep/return empty docs with just type field
             for count in xrange(self.start, self.end):
-                self.gen_docs[count] = {}
+                self.gen_docs[count] = {'type': 'emp'}
 
     def update(self, fields_to_update=None):
         """
@@ -370,12 +372,17 @@ class JsonDocGenerator(KVGenerator):
                          LAST_NAMES[random.randint(1, len(LAST_NAMES)-1)])
 
     def generate_lang_known(self):
-        return [LANGUAGES[i] for i in xrange(0, random.randint(1,
-                                                               len(LANGUAGES)-1))]
+        count = 0
+        lang = []
+        while count < 3:
+            lang.append(LANGUAGES[random.randint(0, len(LANGUAGES)-1)])
+            count += 1
+        return lang
 
 class WikiJSONGenerator(KVGenerator):
 
-    def __init__(self, name, lang='EN', encoding="utf-8", *args, **kwargs):
+    def __init__(self, name, lang='EN', encoding="utf-8", op_type="create",
+                 *args, **kwargs):
 
         """Wikipedia JSON document generator
 
@@ -442,27 +449,49 @@ class WikiJSONGenerator(KVGenerator):
         if 'end' in kwargs:
             self.end = int(kwargs['end'])
 
-        self.read_from_wiki_dump()
+        if op_type == "create":
+            self.read_from_wiki_dump()
+        elif op_type == "delete":
+            # for deletes, just keep/return empty docs with just type field
+            for count in xrange(self.start, self.end):
+                self.gen_docs[count] = {'type': 'wiki'}
 
     def read_from_wiki_dump(self):
         count = 0
         done = False
         while not done:
-            with gzip.open("lib/couchbase_helper/wiki/{0}wiki.txt.gz".
-                            format(self.lang.lower()), "r") as f:
-                for doc in f:
-                    self.gen_docs[count] = doc
-                    if count >= self.end:
-                        f.close()
-                        done = True
-                        break
-                    count += 1
-                f.close()
+            try:
+                with gzip.open("lib/couchbase_helper/wiki/{0}wiki.txt.gz".
+                                format(self.lang.lower()), "r") as f:
+                    for doc in f:
+                        self.gen_docs[count] = doc
+                        if count >= self.end:
+                            f.close()
+                            done = True
+                            break
+                        count += 1
+                    f.close()
+            except IOError:
+                lang = self.lang.lower()
+                wiki = eval("{0}WIKI".format(self.lang))
+                print ("Unable to find file lib/couchbase_helper/wiki/"
+                       "{0}wiki.txt.gz. Downloading from {1}...".
+                       format(lang, wiki))
+                import urllib
+                urllib.URLopener().retrieve(
+                    wiki,
+                    "lib/couchbase_helper/wiki/{0}wiki.txt.gz".format(lang))
+                print "Download complete!"
 
     def next(self):
         if self.itr >= self.end:
             raise StopIteration
-        doc = eval(self.gen_docs[self.itr])
+        doc = {}
+        try:
+            doc = eval(self.gen_docs[self.itr])
+        except TypeError:
+            # happens with 'delete' gen
+            pass
         doc['mutated'] = 0
         doc['type'] = 'wiki'
         self.itr += 1

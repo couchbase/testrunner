@@ -1,11 +1,13 @@
 import json
+
 from threading import Thread
 
+from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
-from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import CLI_COMMANDS
+from pprint import pprint
+from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -369,21 +371,28 @@ class CouchbaseCliTest(CliBaseTest):
         cli_command = "server-add"
         if int(nodes_add) < len(self.servers):
             for num in xrange(nodes_add):
-                self.log.info("add node {0} to cluster".format(self.servers[num + 1].ip))
-                options = "--server-add={0}:8091 --server-add-username=Administrator \
-                       --server-add-password=password".format(self.servers[num + 1].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                options=options, cluster_host="localhost", \
-                                user="Administrator", password="password")
-                if len(output) == 2:
-                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
-                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)])
-                else:
-                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
-                                              "Server {0}:8091 added".format(self.servers[num + 1].ip),
-                                              ""])
+                self.log.info("add node {0} to cluster"\
+                                             .format(self.servers[num + 1].ip))
+                options = "--server-add={0}:8091 \
+                           --server-add-username=Administrator \
+                           --server-add-password=password" \
+                            .format(self.servers[num + 1].ip)
+                output, error = \
+                      remote_client.execute_couchbase_cli(cli_command=cli_command,\
+                                       options=options, cluster_host="localhost", \
+                                         user="Administrator", password="password")
+                server_added = False
+                if len(output) >= 1:
+                    for x in output:
+                        if "Server %s:8091 added" % (self.servers[num + 1].ip) in x:
+                            server_added = True
+                            break
+                    if not server_added:
+                        raise Exception("failed to add server {0}"
+                                          .format(self.servers[num + 1].ip))
         else:
-             raise Exception("Node add should be smaller total number vms in ini file")
+             raise Exception("Node add should be smaller total number"
+                                                         " vms in ini file")
 
         cli_command = "rebalance"
         for num in xrange(nodes_rem):
@@ -437,11 +446,11 @@ class CouchbaseCliTest(CliBaseTest):
                 if len(output) == 3:
                     self.assertEqual(output, ["INFO: graceful failover", \
                                               "SUCCESS: failover ns_1@{0}" \
-                                              .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+                        .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
                 else:
                     self.assertEqual(output, ["INFO: graceful failover", \
                                               "SUCCESS: failover ns_1@{0}" \
-                                              .format(self.servers[nodes_add - nodes_rem - num].ip)])
+                            .format(self.servers[nodes_add - nodes_rem - num].ip)])
 
 
         cli_command = "server-readd"
@@ -806,8 +815,14 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                       options=options, cluster_host="localhost", user=None, password=None)
             self.sleep(7)  # time needed to reload couchbase
-            self.assertEqual(output, [u'ERROR: Both username and password are required.']
-                          or output == [u'The password must be at least six characters.'])
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                self.assertTrue(self._check_output(\
+                                "option cluster-ramsize is not specified", output) or \
+                                self._check_output("ERROR:", output))
+            else:
+                self.assertEqual(output,
+                            [u'ERROR: Both username and password are required.'] or \
+                        output == [u'The password must be at least six characters.'])
             remote_client.disconnect()
         finally:
             rest = RestConnection(server)
@@ -949,7 +964,10 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                               options=options, cluster_host="localhost",
                                               user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...',
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                self.assertTrue(self._check_output("ERROR:", output))
+            else:
+                self.assertEqual(output, ['Database data will be purged from disk ...',
                 'ERROR: unable to bucket-flush; please check if the bucket exists or not;'
                      ' (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
             cli_command = "bucket-edit"
@@ -1128,9 +1146,16 @@ class CouchbaseCliTest(CliBaseTest):
                         options=options, cluster_host="{0}:8091".format(self.servers[num].ip), \
                         user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'group2'" \
+                # This one is before Watson
+                #self.assertEqual(output[0], "SUCCESS: add server {0}:8091' to group 'group2'" \
+                #                                              .format(self.servers[num + 1].ip))
+                self.assertEqual(output[0], "Server {0}:8091 added to group group2" \
                                                               .format(self.servers[num + 1].ip))
-                self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'" \
+                """Server 172.23.105.114:8091 added to group group2"""
+                # This one is before Watson
+                #self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'" \
+                #                                              .format(self.servers[num + 2].ip))
+                self.assertEqual(output[1], "Server {0}:8091 added to group group2" \
                                                               .format(self.servers[num + 2].ip))
             # add single server to group
             for num in xrange(nodes_add):
@@ -1140,7 +1165,10 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'" \
+                # This one is before Watson
+                #self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'" \
+                #                                           .format(self.servers[num + 3].ip)])
+                self.assertEqual(output, ["Server {0}:8091 added to group group2" \
                                                            .format(self.servers[num + 3].ip)])
             # list servers in group
             for num in xrange(nodes_add):
@@ -1233,8 +1261,11 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                                                            .format(self.servers[num + 1].ip)])
+                # This one is before Watson
+                #self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                #                                            .format(self.servers[num + 1].ip)])
+                self.assertEqual(output[1], "Server {0}:8091 added to group Group 1" \
+                                                            .format(self.servers[num + 1].ip))
 
             # test rebalance command with add server and group manage option
             cli_command = "rebalance"
@@ -1245,10 +1276,13 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                # This one before watson
+                #self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                #                                               .format(self.servers[num + 2].ip))
+                self.assertEqual(output[1], "Server {0}:8091 added to group Group 1" \
                                                                .format(self.servers[num + 2].ip))
-                self.assertTrue("INFO: rebalancing" in output[1])
-                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
 
             for num in xrange(nodes_add):
                 options = "--server-remove={0}:8091 --server-add={1}:8091 \
@@ -1257,10 +1291,10 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                                                               .format(self.servers[num + 3].ip))
-                self.assertTrue("INFO: rebalancing" in output[1])
-                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+                # This one before watson
+                #self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                self.assertTrue(self._check_output("Server %s:8091 added" %self.servers[num + 3].ip, output))
+                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
 
 
         if self.os == "windows":
@@ -1284,8 +1318,9 @@ class CouchbaseCliTest(CliBaseTest):
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 self.assertEqual(output[4], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
                                                                .format(self.servers[num + 2].ip))
-                self.assertTrue("INFO: rebalancing" in output[0])
-                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+                # old before watson
+                #self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
 
             for num in xrange(nodes_add):
                 options = "--server-remove={0}:8091 --server-add={1}:8091 \
@@ -1297,6 +1332,16 @@ class CouchbaseCliTest(CliBaseTest):
                                                                .format(self.servers[num + 3].ip))
                 self.assertTrue("INFO: rebalancing" in output[1])
                 self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            for x in output:
+                if word_check in x:
+                    self.log.info("Found %s CLI output" % word_check)
+                    found = True
+        return found
+
 
 class XdcrCLITest(CliBaseTest):
     XDCR_SETUP_SUCCESS = {

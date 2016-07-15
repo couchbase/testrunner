@@ -8,30 +8,34 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0",
                       "2.1.1", "2.2.0", "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0",
                       "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3",
-                      "3.1.4", "3.1.5", "3.5.0", "4.0.0", "4.0.1", "4.1.0", "4.1.1",
-                      "4.5.0", "4.7.0"]
+                      "3.1.4", "3.1.5", "3.1.6", "3.5.0", "4.0.0", "4.0.1", "4.1.0",
+                      "4.1.1", "4.1.2", "4.5.0", "4.5.1", "4.7.0"]
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1",
-                            "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.5.0", "4.0.0",
-                            "4.0.1", "4.1.0", "4.1.1", "4.5.0", "4.7.0"]
+                            "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.5.0",
+                            "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
+                            "4.5.1", "4.7.0"]
 COUCHBASE_RELEASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0",
-                                    "3.1.1", "3.1.2", "3.1.3", "4.0.0", "4.1.0"]
-COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.5.0", "4.7.0"]
-COUCHBASE_FROM_WATSON = ["4.5.0", "4.7.0"]
+                                    "3.1.1", "3.1.2", "3.1.3", "3.1.5", "4.0.0",
+                                    "4.1.0", "4.1.1"]
+COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
+                            "4.5.1", "4.7.0"]
+COUCHBASE_FROM_WATSON = ["4.5.0", "4.5.1", "4.7.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
                                 "3.0.3-1716", "3.1.0", "3.1.0-1797", "3.1.1", "3.1.1-1807",
-                                "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823"]
+                                "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823", "3.1.5"]
 CE_EE_ON_SAME_FOLDER = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0",
                         "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1"]
-COUCHBASE_MP_VERSION = ["3.1.3", "3.1.4", "3.1.5"]
+COUCHBASE_MP_VERSION = ["3.1.3", "3.1.6"]
 COUCHBASE_VERSION_2 = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1",
                        "2.5.0", "2.5.1", "2.5.2"]
 COUCHBASE_VERSION_2_WITH_REL = ["2.5.0", "2.5.1"]
 COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
-                       "3.1.3", "3.1.4", "3.1.5", "3.5.0"]
+                       "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.5.0"]
 WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1","3.1.2",
-                    "3.1.3", "3.1.4", "3.1.5"]
-SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1", "4.1.1", "4.5.0", "4.5"]
-WATSON_VERSION = ["4.5.0"]
+                    "3.1.3", "3.1.4", "3.1.5", "3.1.6"]
+SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1", "4.1.1", "4.1.2",
+                    "4.5.0", "4.5"]
+WATSON_VERSION = ["4.5.0", "4.5.1"]
 CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson", "4.7":"spock"}
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
@@ -41,26 +45,46 @@ WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*"
                         "iexplore.*", "WerFault.*", "Firefox.*", "bash.exe",
                         "chrome.exe", "cbq-engine.exe"]
 LINUX_CB_PATH = "/opt/couchbase/"
-WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E5-2CA3-409C-B59B-6E0DC805BC3F",
-                   "171":"73C5B189-9720-4719-8577-04B72C9DC5A2", "1711":"73C5B189-9720-4719-8577-04B72C9DC5A2",
-                   "172":"374CF2EC-1FBE-4BF1-880B-B58A86522BC8", "180":"D21F6541-E7EA-4B0D-B20B-4DDBAF56882B",
-                   "181":"A68267DB-875D-43FA-B8AB-423039843F02", "200":"9E3DC4AA-46D9-4B30-9643-2A97169F02A7",
-                   "201":"4D3F9646-294F-4167-8240-768C5CE2157A", "202":"7EDC64EF-43AD-48BA-ADB3-3863627881B8",
-                   "210":"7EDC64EF-43AD-48BA-ADB3-3863627881B8", "211":"4D92395A-BB95-4E46-9D95-B7BFB97F7446",
-                   "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B", "221":"3A60B9BB-977B-0424-2955-75346C04C586",
-                   "250":"22EF5D40-7518-4248-B932-4536AAB7293E", "251":"AB8A4E81-D502-AE14-6979-68E4C4658CF7",
+WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F",
+                   "170":"AF3F80E5-2CA3-409C-B59B-6E0DC805BC3F",
+                   "171":"73C5B189-9720-4719-8577-04B72C9DC5A2",
+                   "1711":"73C5B189-9720-4719-8577-04B72C9DC5A2",
+                   "172":"374CF2EC-1FBE-4BF1-880B-B58A86522BC8",
+                   "180":"D21F6541-E7EA-4B0D-B20B-4DDBAF56882B",
+                   "181":"A68267DB-875D-43FA-B8AB-423039843F02",
+                   "200":"9E3DC4AA-46D9-4B30-9643-2A97169F02A7",
+                   "201":"4D3F9646-294F-4167-8240-768C5CE2157A",
+                   "202":"7EDC64EF-43AD-48BA-ADB3-3863627881B8",
+                   "210":"7EDC64EF-43AD-48BA-ADB3-3863627881B8",
+                   "211":"4D92395A-BB95-4E46-9D95-B7BFB97F7446",
+                   "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B",
+                   "221":"3A60B9BB-977B-0424-2955-75346C04C586",
+                   "250":"22EF5D40-7518-4248-B932-4536AAB7293E",
+                   "251":"AB8A4E81-D502-AE14-6979-68E4C4658CF7",
                    "252":"6E10D93C-76E0-DCA4-2111-73265D001F56",
-                   "300":"3D361F67-7170-4CB4-494C-3E4E887BC0B3", "301":"3D361F67-7170-4CB4-494C-3E4E887BC0B3",
-                   "302":"DD309984-2414-FDF4-11AA-85A733064291", "303":"0410F3F3-9F5F-5614-51EC-7DC9F7050055",
-                   "310":"5E5D7293-AC1D-3424-E583-0644411FDA20", "311":"41276A8D-2A65-88D4-BDCC-8C4FE109F4B8",
-                   "312":"F0794D16-BD9D-4638-9EEA-0E591F170BD7", "313":"71C57EAD-8903-0DA4-0919-25A0B17E20F0",
-                   "314":"040F761F-28D9-F0F4-99F1-9D572E6EB826", "315":"BC2C3394-12A0-A334-51F0-F1204EC43243",
-                   "350":"24D9F882-481C-2B04-0572-00B273CE17B3", "400":"24D9F882-481C-2B04-0572-00B273CE17B3",
-                   "401":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8", "410":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8",
+                   "300":"3D361F67-7170-4CB4-494C-3E4E887BC0B3",
+                   "301":"3D361F67-7170-4CB4-494C-3E4E887BC0B3",
+                   "302":"DD309984-2414-FDF4-11AA-85A733064291",
+                   "303":"0410F3F3-9F5F-5614-51EC-7DC9F7050055",
+                   "310":"5E5D7293-AC1D-3424-E583-0644411FDA20",
+                   "311":"41276A8D-2A65-88D4-BDCC-8C4FE109F4B8",
+                   "312":"F0794D16-BD9D-4638-9EEA-0E591F170BD7",
+                   "313":"71C57EAD-8903-0DA4-0919-25A0B17E20F0",
+                   "314":"040F761F-28D9-F0F4-99F1-9D572E6EB826",
+                   "315":"BC2C3394-12A0-A334-51F0-F1204EC43243",
+                   "316":"7E2E785B-3330-1334-01E8-F6E9C27F0B61",
+                   "350":"24D9F882-481C-2B04-0572-00B273CE17B3",
+                   "400":"24D9F882-481C-2B04-0572-00B273CE17B3",
+                   "401":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8",
+                   "410":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8",
                    "411":"8A2472CD-C408-66F4-B53F-6797FCBF7F4C",
-                   "450":"A4BB2687-E63E-F424-F9F3-18D739053798", "470":"5F8BB367-A796-1104-05DE-00BCD7A787A5"}
+                   "412":"37571560-C662-0F14-D59B-76867D360689",
+                   "450":"A4BB2687-E63E-F424-F9F3-18D739053798",
+                   "451":"B457D40B-E596-E1D4-417A-4DD6219B64B0",
+                   "470":"5F8BB367-A796-1104-05DE-00BCD7A787A5"}
 """ This "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B" is for build 2.2.0-821 and earlier
-    The new build register ID for 2.2.0-837 id is set in create_windows_capture_file in remote_util
+    The new build register ID for 2.2.0-837 id is set in create_windows_capture_file
+    in remote_util
     old "211":"7EDC64EF-43AD-48BA-ADB3-3863627881B8"
     old one at 2014.12.03 "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF"
     change one more time; current at 2015.11.10 "211":"4D92395A-BB95-4E46-9D95-B7BFB97F7446" """
@@ -82,7 +106,8 @@ WIN_COUCHBASE_SAMPLE_PATH = "/cygdrive/c/Program\ Files/Couchbase/Server/samples
 WIN_COUCHBASE_BIN_PATH_RAW = 'C:/Program\ Files/Couchbase/Server/bin/'
 WIN_TMP_PATH = '/cygdrive/c/tmp/'
 WIN_TMP_PATH_RAW = 'C:/tmp/'
-WIN_BACKUP_PATH = "cygdrive/c/tmp/"
+WIN_BACKUP_C_PATH = "c:/tmp/backup/"
+WIN_BACKUP_PATH = "/cygdrive/c/tmp/backup/"
 MAC_COUCHBASE_BIN_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/bin/"
 MAC_COUCHBASE_SAMPLE_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/samples/"
 MAC_CB_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/"

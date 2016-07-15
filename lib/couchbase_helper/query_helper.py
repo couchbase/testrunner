@@ -98,6 +98,9 @@ class QueryHelper(object):
                 if len(table_map_new) == 0:
                     table_map_new=outer_table_map
                 sql_template, new_table_map = self._convert_sql_template_to_value(sql_template, table_map_new)
+                #print "sql_template after convert to value is {0} ".format(sql_template)
+                #print "new_table_map   after convert to value is {0}".format(new_table_map)
+
                 n1ql_template = self._gen_sql_to_nql(sql_template)
                 table_name = random.choice(new_table_map.keys())
                 inner_table_alias = new_table_map[table_name]["alias_name"]
@@ -131,8 +134,19 @@ class QueryHelper(object):
                     outer_table_map ={}
                     outer_table_map.update(new_table_map)
                 if "AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON" in sql_template :
-                    value = " {0}.primary_key_id = {1}.primary_key_id   AND ".format(inner_table_alias, outer_table_alias)
+                    value = "  {0}.primary_key_id = {1}.primary_key_id   AND  ".format(inner_table_alias, outer_table_alias)
                     sql_template = sql_template.replace("AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON", value)
+                if "MYSQL_OPEN_PAR" in sql_template:
+                    sql_template = sql_template.replace("MYSQL_OPEN_PAR","(")
+                    n1ql_template = n1ql_template.replace("MYSQL_OPEN_PAR"," ")
+                    #print "sql_template is {0}".format(sql_template)
+                    #print "n1ql template is {0}".format(n1ql_template)
+                if "MYSQL_CLOSED_PAR" in sql_template:
+                    sql_template = sql_template.replace("MYSQL_CLOSED_PAR",")")
+                    n1ql_template = n1ql_template.replace("MYSQL_CLOSED_PAR"," ")
+                    #print "sql_template is {0}".format(sql_template)
+                    #print "n1ql template is {0}".format(n1ql_template)
+                    #print "sql template after replacing value {} ".format(sql_template)
                 if "OUTER_SUBQUERY_FIELDS" in sql_template:
                     sql_template = sql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
                     n1ql_template = n1ql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
@@ -198,11 +212,14 @@ class QueryHelper(object):
                     if (start_count-end_count) in end_map.keys():
                         new_n1ql= new_n1ql+end_map[start_count-end_count]
                     end_count+=1
+        if "MYSQL_CLOSED_PAR" in new_sql:
+                new_sql = new_sql.replace("MYSQL_CLOSED_PAR",")")
+                new_n1ql = new_n1ql.replace("MYSQL_CLOSED_PAR"," ")
+        #print "new sql is {0}".format(new_sql)
         for x in range(0,randint(0,5)):
             alias_name = "tb_"+self._random_char()
-            new_sql = "SELECT {0}.* FROM ({1}) {0}".format(alias_name,new_sql)
             new_n1ql = "SELECT {0}.* FROM ({1}) {0}".format(alias_name,new_n1ql)
-        new_sql = new_sql.replace("NOT_EQUALS"," != ")
+        new_sql = new_sql.replace("NOT_EQUALS"," NOT IN ")
         new_sql = new_sql.replace("EQUALS"," = ")
         new_n1ql = new_n1ql.replace("NOT_EQUALS"," NOT IN ")
         new_n1ql = new_n1ql.replace("EQUALS"," IN ")
@@ -445,7 +462,6 @@ class QueryHelper(object):
             new_sql += " WHERE "+ where_condition + " "
         if order_by:
             new_sql += " ORDER BY "+ order_by +" "
-        import pdb;pdb.set_trace()
         new_sql += " limit " + str(limit)+ " "
         return new_sql
 
@@ -462,6 +478,7 @@ class QueryHelper(object):
                 return hint
 
     def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key = ""):
+        print "generate json from results with primary key"
         primary_key_index = 0
         count = 0
         dict = {}
@@ -736,9 +753,14 @@ class QueryHelper(object):
         index_name_with_occur_fields_where = None
         index_name_with_expression = None
         index_name_fields_only = None
+        #print "in _convert_sql_template_to_value_for_secondary_indexes"
+        #import pdb;pdb.set_trace()
         sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
+        #print "calling sql to n1ql"
         n1ql = self._gen_sql_to_nql(sql)
+        #print n1ql
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type ="sql")
+        #sql = sql.replace("FOR t_2"," ")
         n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type ="n1ql")
         map = {
                 "n1ql":n1ql,
@@ -1424,19 +1446,27 @@ class QueryHelper(object):
                     new_sql += val+space
                 else:
                     new_sql += token+space
+        #print new_sql
         return new_sql
 
     def _gen_sql_to_nql(self, sql):
+        #print "in generation of sql to n1ql"
         check_keys=False
         check_first_paran = False
         space = " "
         new_sql = ""
         value = ""
+        #import pdb;pdb.set_trace()
         #print "Analyzing for : %s" % sql
         for token in sql.split(" "):
             if (not check_keys) and (token == "ON" or token == "USING"):
+                #print token
+                #import pdb;pdb.set_trace()
                 check_keys= True
-                new_sql += " ON KEYS "
+                if ("FOR" not in sql.split(" ")):
+                    new_sql += " ON KEYS "
+                else:
+                    new_sql += " ON KEY "
             elif not check_keys:
                 new_sql += token+space
             if check_keys:
@@ -1458,6 +1488,7 @@ class QueryHelper(object):
                     check_first_paran = False
                     value = ""
         new_sql = new_sql.replace("TRUNCATE","TRUNC")
+        #print new_sql
         return self._gen_sql_to_n1ql_braces(new_sql)
 
     def  _read_from_file(self, file_path):

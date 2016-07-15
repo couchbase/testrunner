@@ -1,25 +1,26 @@
-import ConfigParser
-import commands
-import datetime
-import os
+import logger
 import time
-import types
 import unittest
-from threading import Thread
-
+import os
+import urllib2
+import commands
+import types
+import datetime
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import Select
-
-import logger
-from TestInput import TestInputSingleton
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.common.exceptions import NoSuchElementException
+from threading import Thread
+import ConfigParser
+from TestInput import TestInputSingleton,TestInputParser, TestInputServer
+from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection
+
 
 """
 *** IMPORTANT! NEED TO READ BEFORE RUN UI TEST ***
@@ -235,10 +236,14 @@ class Control():
                                                                   .format(self.by))
 
     def type_native(self, text):
+        # In OS X, Ctrl-A doesn't work to select all, instead Command+A has to be used.
+        key = Keys.CONTROL
+        if self.selenium.desired_capabilities.get('platform').lower() == 'mac':
+            key = Keys.COMMAND
         ActionChains(self.selenium).click(self.web_element).perform()
-        ActionChains(self.selenium).key_down(Keys.CONTROL).perform()
+        ActionChains(self.selenium).key_down(key).perform()
         ActionChains(self.selenium).send_keys('a').perform()
-        ActionChains(self.selenium).key_up(Keys.CONTROL).perform()
+        ActionChains(self.selenium).key_up(key).perform()
         ActionChains(self.selenium).send_keys(Keys.DELETE).perform()
         ActionChains(self.selenium).send_keys(text).perform()
 
@@ -257,10 +262,11 @@ class Control():
         ActionChains(self.selenium).key_down(Keys.ENTER).perform()
         ActionChains(self.selenium).key_up(Keys.ENTER).perform()
 
-    def type(self, message):
+    def type(self, message, is_pwd=False):
         if message:
             self.highlightElement()
-            self.web_element.clear()
+            if not is_pwd:
+                self.web_element.clear()
             if type(message) == types.StringType and message.find('\\') > -1:
                 for symb in list(message):
                     if symb == '\\':
@@ -361,6 +367,7 @@ class BaseHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = BaseHelperControls(tc.driver)
+        self.wait = WebDriverWait(tc.driver, timeout=100)
 
     def login(self, user=None, password=None):
         self.tc.log.info("Try to login to Couchbase Server in browser")
@@ -368,13 +375,21 @@ class BaseHelper():
             user =  self.tc.input.membase_settings.rest_username
         if not password:
             password = self.tc.input.membase_settings.rest_password
+        self.wait.until(lambda fn: self.controls._user_field.is_displayed(),
+                        "Username field is not displayed in %d sec" % (self.wait._timeout))
         self.controls._user_field.type(user)
-        self.controls._user_password.type(password)
+        self.wait.until(lambda fn: self.controls._user_password.is_displayed(),
+                        "Password field is not displayed in %d sec" % (self.wait._timeout))
+        self.controls._user_password.type(password, is_pwd=True)
+        self.wait.until(lambda fn: self.controls._login_btn.is_displayed(),
+                        "Login Button is not displayed in %d sec" % (self.wait._timeout))
         self.controls._login_btn.click()
         self.tc.log.info("user %s is logged in" % user)
 
     def logout(self):
         self.tc.log.info("Try to logout")
+        self.wait.until(lambda fn: self.controls._logout_btn.is_displayed(),
+                        "Logout Button is not displayed in %d sec" % (self.wait._timeout))
         self.controls._logout_btn.click()
         time.sleep(3)
         self.tc.log.info("You are logged out")

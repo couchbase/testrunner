@@ -1,9 +1,19 @@
-import json
+import time
+import logger
 
 from basetestcase import BaseTestCase
+from memcacheConstants import ERR_NOT_FOUND
+from castest.cas_base import CasBaseTest
+from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
-from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import VBucketAwareMemcached
+
+from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+import json
+
+
+from remote.remote_util import RemoteMachineShellConnection
+
 
 """
 
@@ -33,6 +43,7 @@ class basic_ops(BaseTestCase):
     def do_basic_ops(self):
 
         KEY_NAME = 'key1'
+        KEY_NAME2 = 'key2'
         CAS = 1234
         self.log.info('Starting basic ops')
 
@@ -52,6 +63,7 @@ class basic_ops(BaseTestCase):
 
         rc = mcd.set(KEY_NAME, 0,0, json.dumps({'value':'value2'}))
         print 'set is', rc
+        cas = rc[1]
 
 
         # wait for it to persist
@@ -66,11 +78,13 @@ class basic_ops(BaseTestCase):
         except MemcachedError as exp:
             self.fail("Exception with evict meta - {0}".format(exp) )
 
+        CAS = 0xabcd
+        # key, value, exp, flags, seqno, remote_cas
 
         try:
-            #key, exp, flags, seqno, old_cas, new_cas,
-            rc = mcd.del_with_meta(KEY_NAME, 0, 0, 0, CAS, CAS+1)
-            print 'del with meta is', rc
+            #key, exp, flags, seqno, cas
+            rc = mcd.del_with_meta(KEY_NAME2, 0, 0, 2, CAS)
+
 
 
         except MemcachedError as exp:

@@ -1,11 +1,24 @@
 import json
+import time
+import unittest
 import urllib
+import testconstants
+from TestInput import TestInputSingleton
 
 from community.community_base import CommunityBaseTest
 from community.community_base import CommunityXDCRBaseTest
-from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import  MemcachedClientHelper
+from membase.api.rest_client import RestConnection, Bucket
+from membase.helper.rebalance_helper import RebalanceHelper
+from membase.api.exception import RebalanceFailedException
+from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
+from scripts.install import InstallerJob
+from testconstants import SHERLOCK_VERSION
 from testconstants import WATSON_VERSION
+
+
 
 
 class CommunityTests(CommunityBaseTest):
@@ -221,13 +234,13 @@ class CommunityTests(CommunityBaseTest):
 
         """ first full backup """
         shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m full"
-                .format(self.bin_path, self.master.ip, self.backup_location))
+                .format(self.bin_path, self.master.ip, self.backup_c_location))
         output, error = shell.execute_command("ls -lh {0}*/"
                                         .format(self.backup_location))
         shell.log_command_output(output, error)
         output, error = shell.execute_command("{0}cbtransfer {1}*/*-full/ stdout: \
                                                          | grep set | uniq | wc -l"
-                                      .format(self.bin_path, self.backup_location))
+                                    .format(self.bin_path, self.backup_c_location))
         shell.log_command_output(output, error)
         if int(output[0]) != 1000:
             self.fail("full backup did not work in CE. "
@@ -236,14 +249,14 @@ class CommunityTests(CommunityBaseTest):
                                             .format(self.bin_path, self.master.ip))
         """ do different backup mode """
         shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m {3}"
-                       .format(self.bin_path, self.master.ip, self.backup_location,
+                       .format(self.bin_path, self.master.ip, self.backup_c_location,
                                                                self.backup_option))
         output, error = shell.execute_command("ls -lh {0}"
                                                      .format(self.backup_location))
         shell.log_command_output(output, error)
         output, error = shell.execute_command("{0}cbtransfer {1}*/*-{2}/ stdout: \
                                                          | grep set | uniq | wc -l"
-                                       .format(self.bin_path, self.backup_location,
+                                       .format(self.bin_path, self.backup_c_location,
                                                                self.backup_option))
         shell.log_command_output(output, error)
         if int(output[0]) == 2000:
@@ -360,8 +373,13 @@ class CommunityTests(CommunityBaseTest):
             manual test:
             curl -H "Content-Type: application/json" -X POST
                  -d '{"statement":"infer `bucket_name`;"}'
-                       http://localhost:8093/query/service """
+                       http://localhost:8093/query/service
+            test params: new_services=kv-index-n1ql,default_bucket=False """
+        self.rest.force_eject_node()
+        self.sleep(7, "wait for node reset done")
+        self.rest.init_node()
         bucket = "default"
+        self.rest.create_bucket(bucket, ramQuotaMB=200)
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.urlencode({"statement":"infer `%s` ;" % bucket})
         try:
@@ -372,7 +390,7 @@ class CommunityTests(CommunityBaseTest):
                 print ex
         if json_parsed["status"] == "success":
             self.fail("CE should not allow to run INFER !")
-        elif "Not Implemented INFER" in json_parsed["errors"][0]["msg"]:
+        elif json_parsed["status"] == "fatal":
             self.log.info("INFER is enforced in CE! ")
 
     def check_auto_complete(self):

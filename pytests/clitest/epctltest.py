@@ -1,5 +1,6 @@
 from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
+from testconstants import COUCHBASE_FROM_WATSON
 
 class epctlTests(CliBaseTest):
 
@@ -11,6 +12,9 @@ class epctlTests(CliBaseTest):
         self.param_type = self.input.param("param_type", "set flush_param")
         self.param = self.input.param("param", "max_size")
         self.param_value = self.input.param("param_value", 1000000)
+        self.server = self.master
+        self.rest = RestConnection(self.server)
+        self.node_version = self.rest.get_nodes_version()
 
     def tearDown(self):
         super(epctlTests, self).tearDown()
@@ -20,20 +24,31 @@ class epctlTests(CliBaseTest):
         verify the result by checking the command output"""
 
         for bucket in self.buckets:
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                if self.param == "item_num_based_new_chk":
+                    self.param_value = "true"
+                """ from Watson, there is not tap_throttle_threshold param """
+                if self.param == "tap_throttle_threshold":
+                    self.param = "replication_throttle_threshold"
             if self.persistence == "start":
-                output, error = self.shell.execute_cbepctl(bucket, "stop", self.param_type,
-                                                          self.param, self.param_value)
+                output, error = self.shell.execute_cbepctl(bucket, "stop",
+                                                          self.param_type,
+                                                               self.param,
+                                                         self.param_value)
             output, error = self.shell.execute_cbepctl(bucket, self.persistence,
-                                                       self.param_type, self.param,
-                                                       self.param_value)
+                                                                self.param_type,
+                                                                     self.param,
+                                                               self.param_value)
             self.verify_results(output, error)
 
     def verify_results(self, output, error):
         if len(error) > 0 :
-            raise Exception("Command throw out error message. Please check the output of remote_util")
+            raise Exception("Command throw out error message. "
+                            "Please check the output of remote_util")
         if self.persistence != "":
             if output[0].find("Error") != -1:
-                raise Exception("Command throw out error message. Please check the output of remote_util")
+                raise Exception("Command throw out error message. "
+                                "Please check the output of remote_util")
             if self.persistence == "start":
                 if output[0].find("Persistence started") == -1:
                     raise Exception("Persistence start failed")
@@ -45,7 +60,9 @@ class epctlTests(CliBaseTest):
                     raise Exception("wait until queues are drained operation failed")
         else:
             if output[1].find("Error") != -1:
-                raise Exception("Command throw out error message. Please check the output of remote_util")
-            if output[1].find(self.param) == -1 or output[1].find(str(self.param_value)) == -1:
+                raise Exception("Command throw out error message. "
+                                "Please check the output of remote_util")
+            if output[1].find(self.param) == -1 or \
+               output[1].find(str(self.param_value)) == -1:
                 raise Exception("set %s failed" % (self.param))
 

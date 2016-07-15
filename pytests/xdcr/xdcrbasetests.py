@@ -1125,10 +1125,20 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def set_xdcr_param(self, param, value):
         self.log.info("Setting {0} to {1} ..".format(param, value))
-        RestConnection(self.src_master).set_internalSetting(param, value)
+        src_rest = RestConnection(self.src_master)
+        replications = src_rest.get_replications()
+        for repl in replications:
+            src_bucket = repl.get_src_bucket()
+            dst_bucket = repl.get_dest_bucket()
+            src_rest.set_xdcr_param(src_bucket.name, dst_bucket.name, param, value)
 
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-            RestConnection(self.dest_master).set_internalSetting(param, value)
+            dst_rest = RestConnection(self.dest_master)
+            replications = dst_rest.get_replications()
+            for repl in replications:
+                src_bucket = repl.get_src_bucket()
+                dst_bucket = repl.get_dest_bucket()
+                dst_rest.set_xdcr_param(src_bucket.name, dst_bucket.name, param, value)
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         self._link_clusters(src_master, dest_cluster_name, dest_master)

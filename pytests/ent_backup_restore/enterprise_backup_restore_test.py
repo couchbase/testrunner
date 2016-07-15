@@ -7,8 +7,8 @@ from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRe
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
-
-#from couchbase.bucket import Bucket
+from newupgradebasetest import NewUpgradeBaseTest
+from couchbase.bucket import Bucket
 from couchbase_helper.document import View
 from tasks.future import TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
@@ -43,7 +43,7 @@ INDEX_DEFINITION = {
                         }
 
 
-class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
+class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
 
@@ -1292,7 +1292,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Backup repository creation failed: Backup Set `backup` exists",
+        self.assertEqual(output[0], "Backup repository creation failed: Backup Repository `backup` exists",
                                     "Expected error message not thrown")
 
     def test_backup_cluster_restore_negative_args(self):
@@ -1398,7 +1398,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Backup Set `abc` not found" in output[-1], "Expected error message not thrown")
+        self.assertTrue("Backup Repository `abc` not found" in output[-1], "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --host abc --username {2} \
                               --password {3}".format(self.backupset.directory,
                                                      self.backupset.name,
@@ -1500,7 +1500,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Backup Set `abc` not found" in output[-1],
+        self.assertTrue("Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
         cmd = "compact --archive {0} --repo {1} --backup abc".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -1578,7 +1578,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: Backup Set `abc` not found" in output[-1],
+        self.assertTrue("Error merging data: Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start abc --end {2}".format(self.backupset.directory,
                                                                         self.backupset.name, self.backups[1])
@@ -1641,7 +1641,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Backup Set `abc` not found" in output[-1],
+        self.assertTrue("Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
 
     def test_backup_restore_with_views(self):
@@ -1993,98 +1993,5 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.log.info("Expected error thrown when file is corrupted")
         conn.execute_command("mv /tmp/entbackup/backup /tmp/entbackup/backup2")
         output, error = self.backup_restore()
-        self.assertTrue("Backup Set `backup` not found" in output[-1], "Expected error message not thrown")
+        self.assertTrue("Backup Repository `backup` not found" in output[-1], "Expected error message not thrown")
         self.log.info("Expected error message thrown")
-
-    def test_backup_restore_system_test(self):
-        def validate_backup_ouptput(output, error):
-            if error or "Backup successfully completed" not in output[-1]:
-                self.fail("Taking cluster backup failed. {0} {1}".format(output, error))
-        self.repeats = self.input.param("repeat", 1)
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        rest = RestConnection(self.backupset.cluster_host)
-        self._load_all_buckets(self.master, gen, "create", 0)
-        self.backup_create()
-        output, error = self.backup_cluster()
-        validate_backup_ouptput(output, error)
-        self.ops_type = self.input.param("ops-type", "update")
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        for rep in range(0, self.repeats):
-            # Rebalance in nodes and then backup_cluster
-            serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
-            serv_out = []
-            self.log.info("Rebalance in following node: {0}".format([a.ip for a in serv_in]))
-            load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
-            rebalance = self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
-            self.sleep(10)
-            output, error = self.backup_cluster()
-            validate_backup_ouptput(output, error)
-            for task in load_task:
-                task.result()
-            rebalance.result()
-            # Rebalance out nodes and then backup_cluster while rebalancing
-            self.log.info("Rebalance out following node: {0}".format([a.ip for a in serv_in]))
-            load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
-            rebalance = self.cluster.async_rebalance(self.cluster_to_backup, serv_out, serv_in)
-            self.sleep(10)
-            output, error = self.backup_cluster()
-            validate_backup_ouptput(output, error)
-            for task in load_task:
-                task.result()
-            rebalance.result()
-        for rep in range(0, self.repeats):
-            # Rebalance in nodes and then backup cluster
-            serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
-            serv_out = []
-            self.log.info("Rebalance in following node: {0}".format([a.ip for a in serv_in]))
-            load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
-            rebalance = self.cluster.rebalance(self.cluster_to_backup, serv_in, serv_out)
-            output, error = self.backup_cluster()
-            validate_backup_ouptput(output, error)
-            for task in load_task:
-                task.result()
-            # Rebalance out nodes and then backup cluster
-            self.log.info("Rebalance out following node: {0}".format([a.ip for a in serv_in]))
-            load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
-            rebalance = self.cluster.rebalance(self.cluster_to_backup, serv_out, serv_in)
-            output, error = self.backup_cluster()
-            validate_backup_ouptput(output, error)
-            for task in load_task:
-                task.result()
-        self.cluster.rebalance(self.cluster_to_backup, serv_in, serv_out)
-
-        # Backup with graceful failover with full recovery
-        nodes_all = rest.node_statuses()
-        failover_node = randrange(1, nodes_all.__len__())
-        self.log.info("Failover {} node".format(nodes_all[failover_node].id))
-        rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=True)
-        self.sleep(30)
-        output, error = self.backup_cluster()
-        validate_backup_ouptput(output, error)
-        rest.set_recovery_type(otpNode=nodes_all[failover_node].id, recoveryType='full')
-        rest.add_back_node(otpNode=nodes_all[failover_node].id)
-        self.cluster.rebalance(self.servers, [], [])
-
-        # Backup with graceful failover with delta recovery
-        nodes_all = rest.node_statuses()
-        failover_node = randrange(1, nodes_all.__len__())
-        self.log.info("Failover {} node".format(nodes_all[failover_node].id))
-        rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=True)
-        self.sleep(30)
-        output, error = self.backup_cluster()
-        validate_backup_ouptput(output, error)
-        rest.set_recovery_type(otpNode=nodes_all[failover_node].id, recoveryType='delta')
-        rest.add_back_node(otpNode=nodes_all[failover_node].id)
-        self.cluster.rebalance(self.servers, [], [])
-
-        # Backup with graceful failover with delta recovery
-        nodes_all = rest.node_statuses()
-        failover_node = randrange(1, nodes_all.__len__())
-        self.log.info("Failover {} node".format(nodes_all[failover_node].id))
-        rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=False)
-        self.sleep(30)
-        output, error = self.backup_cluster()
-        validate_backup_ouptput(output, error)
-        rest.set_recovery_type(otpNode=nodes_all[failover_node].id, recoveryType='full')
-        rest.add_back_node(otpNode=nodes_all[failover_node].id)
-        self.cluster.rebalance(self.servers, [], [])

@@ -15,11 +15,16 @@ class CliBaseTest(BaseTestCase):
         self.r = random.Random()
         self.vbucket_count = 1024
         self.shell = RemoteMachineShellConnection(self.master)
+        self.rest = RestConnection(self.master)
+        self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
         info = self.shell.extract_remote_info()
         type = info.type.lower()
         self.excluded_commands = self.input.param("excluded_commands", None)
         self.os = 'linux'
+        self.full_v = None
+        self.short_v = None
+        self.build_number = None
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         if type == 'windows':
             self.os = 'windows'
@@ -27,6 +32,7 @@ class CliBaseTest(BaseTestCase):
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
             self.cli_command_path = MAC_COUCHBASE_BIN_PATH
+        self.full_v, self.short_v, self.build_number = self.shell.get_cbversion(type)
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
         self.cli_command = self.input.param("cli_command", None)

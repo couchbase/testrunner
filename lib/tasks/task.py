@@ -1,34 +1,33 @@
-import copy
-import json
-import math
 import os
+import time
+import logger
 import random
-import re
 import socket
 import string
-import time
+import copy
+import json
+import re
+import math
+import crc32
 import traceback
+import testconstants
 from httplib import IncompleteRead
 from threading import Thread
-
-import crc32
-import logger
-import testconstants
-from TestInput import TestInputServer
-from couchbase_helper.document import DesignDocument
-from couchbase_helper.documentgenerator import BatchedDocumentGenerator
-from couchbase_helper.stats_tools import StatsCommon
-from mc_bin_client import MemcachedError
+from memcacheConstants import ERR_NOT_FOUND,NotFoundError
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
+from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
+from couchbase_helper.document import DesignDocument, View
+from mc_bin_client import MemcachedError
+from tasks.future import Future
+from couchbase_helper.stats_tools import StatsCommon
 from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
-from membase.helper.bucket_helper import BucketOperationHelper
-from memcacheConstants import ERR_NOT_FOUND,NotFoundError
-from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-from tasks.future import Future
+from couchbase_helper.documentgenerator import BatchedDocumentGenerator
+from TestInput import TestInputServer
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 try:
@@ -443,8 +442,8 @@ class RebalanceTask(Task):
                         ejectedNodes.append(node.id)
         if self.rest.is_cluster_mixed():
             # workaround MB-8094
-            self.log.warn("cluster is mixed. sleep for 10 seconds before rebalance")
-            time.sleep(10)
+            self.log.warn("cluster is mixed. sleep for 15 seconds before rebalance")
+            time.sleep(15)
 
         self.rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
         self.start_time = time.time()
@@ -486,14 +485,20 @@ class RebalanceTask(Task):
             self.log.error("Unexpected Exception Caught in {0} sec".
                           format(time.time() - self.start_time))
             self.set_exception(e)
+        retry_get_process_num = 25
+        if self.rest.is_cluster_mixed():
+            """ for mix cluster, rebalance takes longer """
+            self.log.info("rebalance in mix cluster")
+            retry_get_process_num = 40
         if progress != -1 and progress != 100:
-            if self.retry_get_progress < 20:
+            if self.retry_get_progress < retry_get_process_num:
                 task_manager.schedule(self, 10)
             else:
                 self.state = FINISHED
                 #self.set_result(False)
                 self.rest.print_UI_logs()
-                self.set_exception(RebalanceFailedException("seems like rebalance hangs. please check logs!"))
+                self.set_exception(RebalanceFailedException(\
+                                "seems like rebalance hangs. please check logs!"))
         else:
             success_cleaned = []
             for removed in self.to_remove:
@@ -505,7 +510,8 @@ class RebalanceTask(Task):
                 start = time.time()
                 while time.time() - start < 30:
                     try:
-                        if 'pools' in rest.get_pools_info() and (len(rest.get_pools_info()["pools"]) == 0):
+                        if 'pools' in rest.get_pools_info() and \
+                                      (len(rest.get_pools_info()["pools"]) == 0):
                             success_cleaned.append(removed)
                             break
                         else:
@@ -514,8 +520,8 @@ class RebalanceTask(Task):
                         self.log.error(e)
             result = True
             for node in set(self.to_remove) - set(success_cleaned):
-                self.log.error("node {0}:{1} was not cleaned after removing from cluster".format(
-                           node.ip, node.port))
+                self.log.error("node {0}:{1} was not cleaned after removing from cluster"\
+                                                              .format(node.ip, node.port))
                 result = False
 
             self.log.info("rebalancing was completed with progress: {0}% in {1} sec".
@@ -1033,8 +1039,9 @@ class ESBulkLoadGeneratorTask(Task):
         self.index_name = index_name
         self.generator = generator
         self.iterator = 0
+        self.op_type = op_type
         self.batch_size = batch
-        self.log.info("Starting to load data into Elastic Search ...")
+        self.log.info("Starting operation '%s' on Elastic Search ..." % op_type)
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1047,14 +1054,19 @@ class ESBulkLoadGeneratorTask(Task):
         batched = 0
         for key, doc in self.generator:
             doc = json.loads(doc)
-            es_doc = {"index": {
-                                "_index": self.index_name,
-                                "_type": doc['type'],
-                                "_id": key,
-                                }
-                     }
+            es_doc = {
+                self.op_type: {
+                    "_index": self.index_name,
+                    "_type": doc['type'],
+                    "_id": key,
+                }
+            }
             es_bulk_docs.append(json.dumps(es_doc))
-            es_bulk_docs.append(json.dumps(doc))
+            if self.op_type == "create":
+                es_bulk_docs.append(json.dumps(doc))
+            elif self.op_type == "update":
+                doc['mutated'] += 1
+                es_bulk_docs.append(json.dumps({"doc": doc}))
             batched += 1
             if batched == self.batch_size or not self.generator.has_next():
                 es_file = open(es_filename, "wb")
@@ -1092,22 +1104,42 @@ class ESRunQueryCompare(Task):
         self.set_result(self.result)
 
     def execute(self, task_manager):
+        self.es_compare = True
         try:
             self.log.info("---------------------------------------------------"
                           "--------------- Query # %s -----------------------"
                           "------------------------------------------"
                           % str(self.query_index+1))
             try:
-                fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
+                fts_hits, fts_doc_ids, fts_time, fts_status = \
+                    self.run_fts_query(self.fts_query)
+                self.log.info("Status: %s" %fts_status)
                 if fts_hits < 0:
                     self.passed = False
-                else:
-                    self.log.info("FTS hits for query: %s is %s (took %sms)" % \
-                              (json.dumps(self.fts_query, ensure_ascii=False),
-                               fts_hits,
-                               float(fts_time)/1000000))
+                elif 'errors' in fts_status.keys() and fts_status['errors']:
+                        if fts_status['successful'] == 0 and \
+                                (list(set(fts_status['errors'].values())) ==
+                                    [u'context deadline exceeded'] or
+                                list(set(fts_status['errors'].values())) ==
+                                    [u'TooManyClauses[maxClauseCount is set to 1024]']):
+                            # too many clauses in the query for fts to process
+                            self.log.info("FTS chose not to run this big query"
+                                          "...skipping ES validation")
+                            self.passed = True
+                            self.es_compare = False
+                        elif 0 < fts_status['successful'] < \
+                                self.fts_index.num_pindexes:
+                            # partial results
+                            self.log.info("FTS returned partial results..."
+                                          "skipping ES validation")
+                            self.passed = True
+                            self.es_compare = False
+                self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+                        (json.dumps(self.fts_query, ensure_ascii=False),
+                        fts_hits,
+                        float(fts_time)/1000000))
             except ServerUnavailableException:
-                self.log.error("ERROR: FTS Query timed out (timeout=60s)!")
+                self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
             if self.es and self.es_query['query']:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
@@ -1116,7 +1148,7 @@ class ESRunQueryCompare(Task):
                                self.es_index_name,
                                es_hits,
                                es_time))
-                if self.passed:
+                if self.passed and self.es_compare:
                     if int(es_hits) != int(fts_hits):
                         msg = "FAIL: FTS hits: %s, while ES hits: %s"\
                               % (fts_hits, es_hits)

@@ -228,7 +228,8 @@ class MySQLClient(object):
             for table_name in index_map.keys():
                 final_map[table_name] = {}
                 for index_name in index_map[table_name].keys():
-                    defintion  = "CREATE INDEX {0} ON {1}({2}) USING {3}".format(index_name,table_name, ",".join(index_map[table_name][index_name]),index_type)
+                    #import pdb;pdb.set_trace()
+                    defintion  = "CREATE INDEX {0} ON {1}({2}) USING {3}".format(index_name,self.database+"_"+table_name, ",".join(index_map[table_name][index_name]),index_type)
                     final_map[table_name][index_name] =\
                         {
                             "type":index_type,
@@ -451,6 +452,8 @@ class MySQLClient(object):
         # Make a list of buckets that we want to create for querying
         bucket_list = table_key_map.keys()
         # Read Data from mysql database and populate the couchbase server
+        print "in dump database, reading data from mysql database and populating couchbase server"
+        print "bucket_list is {0}".format(bucket_list)
         for bucket_name in bucket_list:
             query = "select * from {0}".format(bucket_name)
             columns, rows = self._execute_query(query = query)

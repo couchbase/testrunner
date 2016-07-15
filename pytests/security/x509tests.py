@@ -31,6 +31,8 @@ class x509tests(BaseTestCase):
 
     def tearDown(self):
         self._reset_original()
+        shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
+        shell.execute_command("rm " + x509main.CACERTFILEPATH)
         super(x509tests, self).tearDown()
 
 
@@ -133,6 +135,7 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
         x509main(servs_inout)._setup_node_certificates(reload_cert=False)
+        self.sleep(30)
         servs_inout = self.servers[1]
         rest.add_node('Administrator','password',servs_inout.ip)
         for server in self.servers[:2]:
@@ -179,9 +182,14 @@ class x509tests(BaseTestCase):
             rest.add_node('Administrator','password',servs_inout.ip)
         except Exception, ex:
             ex = str(ex)
-            expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file\"]"
-            #self.assertEqual(ex,expected_result)
+            #expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file\"]"
+            expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip
             self.assertTrue(expected_result in ex,"Incorrect Error message in exception")
+            expected_result  = "Error applying node certificate. Unable to read certificate chain file"
+            self.assertTrue(expected_result in ex,"Incorrect Error message in exception")
+            expected_result  = "The file does not exist."
+            self.assertTrue(expected_result in ex,"Incorrect Error message in exception")
+
 
     def test_add_node_with_cert(self):
         servs_inout = self.servers[1:4]

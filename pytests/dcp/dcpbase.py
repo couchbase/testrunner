@@ -114,7 +114,7 @@ class DCPBase(BaseTestCase):
 
         else:
             client_node = rest.get_nodes_self()
-            ip = client_node.ip
+            ip = client_node.hostname.split(':')[0]
             port = client_node.memcached
 
         if type_ == MCD:

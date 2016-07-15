@@ -1,12 +1,18 @@
+import paramiko
+import logger
 import json
+import uuid
+import math
+import re
 import time
-
 import testconstants
+import datetime
+import time
+from datetime import date
 from couchbase_helper.tuq_generators import TuqGenerators
-from membase.api.exception import CBQError
-from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-
+from membase.api.exception import CBQError, ReadDocumentException
+from membase.api.rest_client import RestConnection
 
 class N1QLHelper():
     def __init__(self, version = None, master = None, shell = None, use_rest = None, max_verify = 0, buckets = [],
@@ -457,7 +463,7 @@ class N1QLHelper():
                 try_count += 1
         return "ran query with success and validated results" , check
 
-    def is_index_online_and_in_list(self, bucket, index_name, server = None, timeout = 600.0):
+    def is_index_online_and_in_list(self, bucket, index_name, server=None, timeout=600.0):
         check = self._is_index_in_list(bucket, index_name, server = server)
         init_time = time.time()
         while not check:
@@ -466,6 +472,26 @@ class N1QLHelper():
             next_time = time.time()
             if check or (next_time - init_time > timeout):
                 return check
+        return check
+
+    def is_index_ready_and_in_list(self, bucket, index_name, server=None, timeout=600.0):
+        query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
+        if server == None:
+            server = self.master
+        init_time = time.time()
+        check = False
+        while not check:
+            res = self.run_cbq_query(query=query, server=server)
+            for item in res['results']:
+                if 'keyspace_id' not in item['indexes']:
+                    check = False
+                elif item['indexes']['keyspace_id'] == str(bucket) \
+                        and item['indexes']['name'] == index_name \
+                        and item['indexes']['state'] == "online":
+                    check = True
+            time.sleep(1)
+            next_time = time.time()
+            check = check or (next_time - init_time > timeout)
         return check
 
     def is_index_online_and_in_list_bulk(self, bucket, index_names = [], server = None, index_state = "online", timeout = 600.0):

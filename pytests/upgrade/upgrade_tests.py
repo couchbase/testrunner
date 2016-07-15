@@ -1,14 +1,27 @@
-import Queue
-import copy
-import threading
-
-from couchbase_helper.documentgenerator import BlobGenerator
-from couchbase_helper.tuq_helper import N1QLHelper
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest
-from remote.remote_util import RemoteMachineShellConnection
-
+import json
+import os
+import zipfile
+import pprint
+import Queue
+import json
+import logging
+import copy
+from membase.helper.cluster_helper import ClusterOperationHelper
+import mc_bin_client
+import threading
+from fts.fts_base import FTSIndex
+from memcached.helper.data_helper import  VBucketAwareMemcached
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from membase.api.rest_client import RestConnection, Bucket
+from couchbase_helper.tuq_helper import N1QLHelper
+from couchbase_helper.query_helper import QueryHelper
+from TestInput import TestInputSingleton
+from couchbase_helper.tuq_helper import N1QLHelper
+from couchbase_helper.query_helper import QueryHelper
+from membase.api.rest_client import RestConnection, RestHelper
+from couchbase_helper.documentgenerator import BlobGenerator
+from membase.helper.bucket_helper import BucketOperationHelper
 
 class UpgradeTests(NewUpgradeBaseTest):
 
@@ -124,6 +137,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                 raise Exception("*** Failed to {0} ***".format(self.failed_thread))
             """ Default set to always verify data """
             if self.after_events[0]:
+                self.log.info("*** Start after events ***")
                 for event in self.after_events[0].split("-"):
                     if "delete_buckets" in event:
                         self.log.info("After events has delete buckets event. "
@@ -377,6 +391,26 @@ class UpgradeTests(NewUpgradeBaseTest):
         if node_warmuped and queue is not None:
             queue.put(True)
 
+    def create_lww_bucket(self):
+        self.time_synchronization='enabledWithOutDrift'
+        bucket='default'
+        print 'time_sync {0}'.format(self.time_synchronization)
+
+        helper = RestHelper(self.rest)
+        if not helper.bucket_exists(bucket):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(
+                self.servers)
+            info = self.rest.get_nodes_self()
+            self.rest.create_bucket(bucket=bucket,
+                ramQuotaMB=512,authType='sasl',timeSynchronization=self.time_synchronization)
+            try:
+                ready = BucketOperationHelper.wait_for_memcached(self.master,
+                    bucket)
+                self.assertTrue(ready, '', msg = '[ERROR] Expect bucket creation to not work.')
+            finally:
+                self.log.info("Success, created lww bucket")
+
+
     def bucket_flush(self, queue=None):
         bucket_flushed = False
         try:
@@ -444,26 +478,34 @@ class UpgradeTests(NewUpgradeBaseTest):
     def rebalance_in(self, queue=None):
         rebalance_in = False
         service_in = copy.deepcopy(self.after_upgrade_services_in)
-        #self.nodes_in = self.input.param("nodes_in", 1)
-        free_nodes = self._get_free_nodes()
-        if not free_nodes:
+        if service_in is None:
+            service_in = ["kv"]
+        free_nodes = self._convert_server_map(self._get_free_nodes())
+        if not free_nodes.values():
             raise Exception("No free node available to rebalance in")
         try:
-            if self.after_upgrade_services_in and \
-                    len(self.after_upgrade_services_in) > 1:
-                service_in = [self.after_upgrade_services_in[0]]
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
-            self.log.info("<<<<<<<<=== rebalance_in node {0} with services {1}"\
-                                             .format(free_nodes[0], service_in))
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
-                                                                    [free_nodes[0]],\
-                                                           [], services = service_in)
+            if int(self.nodes_in) == 1:
+                if len(free_nodes.keys()) > 1:
+                    free_node_in = [free_nodes.values()[0]]
+                    if len(self.after_upgrade_services_in) > 1:
+                        service_in = [self.after_upgrade_services_in[0]]
+                else:
+                    free_node_in = free_nodes.values()
+                self.log.info("<<<=== rebalance_in node {0} with services {1}"\
+                                      .format(free_node_in, service_in[0]))
+                rebalance = \
+                       self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                                      free_node_in,
+                                                         [], services = service_in)
+
             rebalance.result()
+            self.in_servers_pool.update(free_nodes)
             rebalance_in = True
-            if "index" in service_in:
+            if any("index" in services for services in service_in):
                 self.log.info("Set storageMode to forestdb after add "
-                              "index node {0} to cluster".format(free_nodes[0]))
-                RestConnection(free_nodes[0]).set_indexer_storage_mode()
+                         "index node {0} to cluster".format(free_nodes.keys()))
+                RestConnection(free_nodes.values()[0]).set_indexer_storage_mode()
             if self.after_upgrade_services_in and \
                 len(self.after_upgrade_services_in) > 1:
                 self.log.info("remove service '{0}' from service list after "
@@ -712,7 +754,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
-                self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+                self.dcp_rebalance_in_offline_upgrade_from_version2()
             """ set install cb version to upgrade version after done upgrade """
             self.initial_version = self.upgrade_versions[0]
         except Exception, ex:
@@ -741,7 +783,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.log.info(node)
                 rest.add_back_node(node.id)
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                                             [], [])
             rebalance.result()
         except Exception, ex:
             raise
@@ -782,7 +825,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_after_ops_update(self):
         try:
             self.log.info("kv_after_ops_update")
-            self._load_all_buckets(self.master, self.after_gen_update, "update", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.after_gen_update, "update",
+                                          self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -790,10 +834,24 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_after_ops_delete(self):
         try:
             self.log.info("kv_after_ops_delete")
-            self._load_all_buckets(self.master, self.after_gen_delete, "delete", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.after_gen_delete, "delete",
+                                          self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
+
+    def doc_ops_initialize(self, queue=None):
+        try:
+            self.log.info("load doc to all buckets")
+            self._load_doc_data_all_buckets(data_op="create", batch_size=1000,
+                                                                gen_load=None)
+            self.log.info("done initialize load doc to all buckets")
+        except Exception, ex:
+            self.log.info(ex)
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
 
     def _convert_server_map(self, servers):
         map = {}
@@ -808,7 +866,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_ops_create(self):
         try:
             self.log.info("kv_ops_create")
-            self._load_all_buckets(self.master, self.gen_create, "create", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.gen_create, "create",
+                                    self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -816,7 +875,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_ops_update(self):
         try:
             self.log.info("kv_ops_update")
-            self._load_all_buckets(self.master, self.gen_update, "update", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.gen_update, "update",
+                                    self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -824,7 +884,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_ops_delete(self):
         try:
             self.log.info("kv_ops_delete")
-            self._load_all_buckets(self.master, self.gen_delete, "delete", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.gen_delete, "delete",
+                                    self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -837,13 +898,69 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def add_fts(self):
+
+    def create_fts_index(self, queue=None):
         try:
-            self.log.info("add full text search")
-            """add sub doc code here"""
+            self.log.info("Checking if index already exists ...")
+            name = "default"
+            """ test on one bucket """
+            for bucket in self.buckets:
+                name = bucket.name
+                break
+            SOURCE_CB_PARAMS = {
+                      "authUser": "default",
+                      "authPassword": "",
+                      "authSaslUser": "",
+                      "authSaslPassword": "",
+                      "clusterManagerBackoffFactor": 0,
+                      "clusterManagerSleepInitMS": 0,
+                      "clusterManagerSleepMaxMS": 20000,
+                      "dataManagerBackoffFactor": 0,
+                      "dataManagerSleepInitMS": 0,
+                      "dataManagerSleepMaxMS": 20000,
+                      "feedBufferSizeBytes": 0,
+                      "feedBufferAckThreshold": 0
+                       }
+            self.index_type = 'fulltext-index'
+            self.index_definition = {
+                          "type": "fulltext-index",
+                          "name": "",
+                          "uuid": "",
+                          "params": {},
+                          "sourceType": "couchbase",
+                          "sourceName": "",
+                          "sourceUUID": "",
+                          "sourceParams": SOURCE_CB_PARAMS,
+                          "planParams": {}
+                          }
+            self.name = self.index_definition['name'] = \
+                                self.index_definition['sourceName'] = name
+            fts_node = self.get_nodes_from_services_map("fts", \
+                                servers=self.get_nodes_in_cluster_after_upgrade())
+            if fts_node:
+                rest = RestConnection(fts_node)
+                status, _ = rest.get_fts_index_definition(self.name)
+                if status != 400:
+                    rest.delete_fts_index(self.name)
+                self.log.info("Creating {0} {1} on {2}".format(self.index_type,
+                                                           self.name, rest.ip))
+                rest.create_fts_index(self.name, self.index_definition)
+            else:
+                raise("No FTS node in cluster")
+            self.ops_dist_map = self.calculate_data_change_distribution(
+                create_per=self.create_ops_per , update_per=self.update_ops_per ,
+                delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
+                start=0, end=self.docs_per_day)
+            self.log.info(self.ops_dist_map)
+            self.dataset = "default"
+            self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
+            self.async_ops_all_buckets(self.docs_gen_map, batch_size=100)
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
 
     def cluster_stats(self, servers):
         self._wait_for_stats_all_buckets(servers)

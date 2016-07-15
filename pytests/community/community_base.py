@@ -1,12 +1,14 @@
+import testconstants
 from basetestcase import BaseTestCase
+from xdcr.xdcrbasetests import XDCRReplicationBaseTest
+from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import LINUX_BACKUP_PATH
+from testconstants import WIN_BACKUP_PATH, WIN_BACKUP_C_PATH
 from testconstants import LINUX_COUCHBASE_BIN_PATH
-from testconstants import WIN_BACKUP_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
-from xdcr.xdcrbasetests import XDCRReplicationBaseTest
 
 
 class CommunityBaseTest(BaseTestCase):
@@ -45,10 +47,12 @@ class CommunityBaseTest(BaseTestCase):
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
         self.backup_location = LINUX_BACKUP_PATH
+        self.backup_c_location = LINUX_BACKUP_PATH
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
         if type.lower() == 'windows':
             self.is_linux = False
             self.backup_location = WIN_BACKUP_PATH
+            self.backup_c_location = WIN_BACKUP_C_PATH
             self.bin_path = WIN_COUCHBASE_BIN_PATH
         else:
             self.is_linux = True

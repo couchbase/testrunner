@@ -1,13 +1,13 @@
 import os
 import shutil
-
 import testconstants
+
 from basetestcase import BaseTestCase
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
-from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection, RestHelper
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):

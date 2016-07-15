@@ -1,33 +1,36 @@
-import commands
+import logger
+import unittest
 import copy
 import datetime
-import json
-import logging
-import random
-import string
 import time
+import string
+import random
+import logging
+import json
+import commands
+import mc_bin_client
 import traceback
-import unittest
 
-import logger
-import testconstants
-from TestInput import TestInputSingleton
-from couchbase_helper.cluster import Cluster
-from couchbase_helper.data_analysis_helper import *
-from couchbase_helper.document import View
+from memcached.helper.data_helper import VBucketAwareMemcached
 from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.cluster import Cluster
+from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
-from membase.api.exception import ServerUnavailableException
-from membase.api.rest_client import Bucket
+from TestInput import TestInputSingleton
+from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import VBucketAwareMemcached
-from remote.remote_util import RemoteUtilHelper
-from testconstants import MAX_COMPACTION_THRESHOLD
-from testconstants import MIN_COMPACTION_THRESHOLD
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from membase.api.exception import ServerUnavailableException
+from couchbase_helper.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
+from testconstants import MIN_COMPACTION_THRESHOLD
+from testconstants import MAX_COMPACTION_THRESHOLD
+from membase.helper.cluster_helper import ClusterOperationHelper
+import testconstants
 
 
 class BaseTestCase(unittest.TestCase):
@@ -63,6 +66,7 @@ class BaseTestCase(unittest.TestCase):
         self.data_analyzer = DataAnalyzer()
         self.result_analyzer = DataAnalysisResultAnalyzer()
         self.set_testrunner_client()
+        self.change_bucket_properties=False
         try:
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)
@@ -76,6 +80,7 @@ class BaseTestCase(unittest.TestCase):
             # number of case that is performed from testrunner( increment each time)
             self.case_number = self.input.param("case_number", 0)
             self.default_bucket = self.input.param("default_bucket", True)
+            self.parallelism = self.input.param("parallelism",False)
             if self.default_bucket:
                 self.default_bucket_name = "default"
             self.standard_buckets = self.input.param("standard_buckets", 0)
@@ -182,6 +187,8 @@ class BaseTestCase(unittest.TestCase):
                 self.change_env_variables()
                 self.change_checkpoint_params()
                 self.log.info("done initializing cluster")
+            else:
+                self.quota = ""
             if self.input.param("log_info", None):
                 self.change_log_info()
             if self.input.param("log_location", None):
@@ -405,7 +412,7 @@ class BaseTestCase(unittest.TestCase):
         return quota
 
     def _bucket_creation(self):
-        if self.default_bucket:
+        if (self.default_bucket==True):
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
                                                enable_replica_index=self.enable_replica_index,
                                                eviction_policy=self.eviction_policy)
@@ -524,7 +531,10 @@ class BaseTestCase(unittest.TestCase):
         if bucket_size is None:
             bucket_size = self._get_bucket_size(self.quota, len(bucket_list))
         bucket_tasks = []
-        i = 0
+        if self.parallelism:
+            i = random.randint(1, 10000)
+        else:
+            i = 0
         for bucket_name in bucket_list:
             self.log.info(" Creating bucket {0}".format(bucket_name))
             i += 1
@@ -1328,27 +1338,6 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(logic, output)
         return bucketMap
 
-    def verify_index_stats(self, index_map, index_name, bucket_name, index_stat_values, check_keys=None):
-        self.assertTrue((bucket_name in index_map.keys()), "bucket name {0} not present in stats".format(bucket_name))
-        self.assertTrue((index_name in index_map[bucket_name].keys()),
-                        "index name {0} not present in set of indexes {1}".format(index_name,
-                                                                                  index_map[bucket_name].keys()))
-        for key in index_map[bucket_name][index_name].keys():
-            self.assertTrue((key in index_stat_values.keys()),
-                            "stats name {0} not present in stats, map {1}".format(key,
-                                                                                  index_map[bucket_name][index_name]))
-            if check_keys:
-                if key in check_keys:
-                    self.assertTrue(str(index_map[bucket_name][index_name][key]) == str(index_stat_values[key]),
-                                    " for key {0} : {1} != {2}".format(key,
-                                                                       index_map[bucket_name][index_name][key],
-                                                                       index_stat_values[key]))
-            else:
-                self.assertTrue(str(index_map[bucket_name][index_name][key]) == str(index_stat_values[key]),
-                                " for key {0} : {1} != {2}".format(key,
-                                                                   index_map[bucket_name][index_name][key],
-                                                                   index_stat_values[key]))
-
     def print_results_per_node(self, map):
         """ Method to print map results - Used only for debugging purpose """
         output = ""
@@ -1931,20 +1920,6 @@ class BaseTestCase(unittest.TestCase):
             else:
                 index_map = RestConnection(server).get_index_stats(index_map=index_map)
         return index_map
-
-    def get_index_settings(self):
-        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        index_settings_map = {}
-        for server in servers:
-            key = "{0}:{1}".format(server.ip, server.port)
-            index_settings_map[key] = RestConnection(server).get_index_settings()
-        return index_settings_map
-
-    def set_index_settings(self, settings):
-        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        index_settings_map = {}
-        for server in servers:
-            RestConnection(server).set_index_settings(settings)
 
     def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False, servers=None, master=None):
         if not servers:

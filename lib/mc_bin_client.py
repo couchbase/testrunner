@@ -5,19 +5,19 @@ Binary memcached test client.
 Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
-import exceptions
 import hmac
-import random
-import select
 import socket
+import select
+import random
 import struct
+import exceptions
 import zlib
 
-import memcacheConstants
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET, REQ_PKT_SD_EXTRAS, SUBDOC_FLAGS_MKDIR_P
-from memcacheConstants import SET_PKT_FMT, INCRDECR_RES_FMT, INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, META_CMD_FMT
-
+from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT, INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, META_CMD_FMT
+from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
+import memcacheConstants
 
 class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""
@@ -62,6 +62,7 @@ class MemcachedClient(object):
     def __del__(self):
         self.close()
 
+
     def _sendCmd(self, cmd, key, val, opaque, extraHeader='', cas=0, extended_meta_data='',extraHeaderLength=None):
         self._sendMsg(cmd, key, val, opaque, extraHeader=extraHeader, cas=cas,
                       vbucketId=self.vbucketId, extended_meta_data=extended_meta_data, extraHeaderLength=extraHeaderLength)
@@ -83,6 +84,8 @@ class MemcachedClient(object):
             self.s.send(msg + extraHeader + key + val + extended_meta_data)
         else:
             raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
+
+
 
 
     def _recvMsg(self):
@@ -134,6 +137,7 @@ class MemcachedClient(object):
         self._sendCmd(cmd, key, val, opaque, extraHeader, cas, extended_meta_data=extended_meta_data,
                       extraHeaderLength=extraHeaderLength)
         return self._handleSingleResponse(opaque)
+
 
     def _doSdCmd(self, cmd, key, path, val=None, expiry=0, opaque=0, cas=0, create=False):
         createFlag = 0
@@ -249,9 +253,22 @@ class MemcachedClient(object):
                                key, value, 0, exp, flags, seqno, remote_cas)
 
     def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
-                      adjusted_time=0, conflict_resolution_mode=0):
+                      adjusted_time=0, conflict_resolution_mode=0, skipCR=False):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
+
+        if skipCR:
+            return self._doCmd(memcacheConstants.CMD_SET_WITH_META,
+                key,
+                val,
+                struct.pack(memcacheConstants.SKIP_META_CMD_FMT,
+                    flags,
+                    exp,
+                    seqno,
+                    cas,
+                    memcacheConstants.CR
+                ))
+
 
         if add_extended_meta_data:
             extended_meta_data =  self.pack_the_extended_meta_data( adjusted_time, conflict_resolution_mode)
@@ -264,18 +281,15 @@ class MemcachedClient(object):
 
 
 
-    def del_with_meta(self, key, exp, flags, seqno, old_cas, new_cas, vbucket= -1,
+    def del_with_meta(self, key, exp, flags, seqno, cas, vbucket= -1,
                       add_extended_meta_data=False,
                       adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
-        if add_extended_meta_data:
-            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, 0, len(extended_meta_data)),
-                   extended_meta_data=extended_meta_data)
-        else:
-            extraHeader = struct.pack('I',1)
-            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '', extraHeader, old_cas,extraHeaderLength=28)
+
+        resp = self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, cas, 0) )
+        return resp
 
 
 

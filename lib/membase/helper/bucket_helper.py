@@ -1,23 +1,23 @@
-import Queue
 import copy
-import ctypes
-import socket
+import exceptions
 import time
 import uuid
 import zlib
-from collections import defaultdict
-from subprocess import call
-from threading import Thread
-
-import crc32
 import logger
 import mc_bin_client
-from couchbase_helper.stats_tools import StatsCommon
-from mc_bin_client import MemcachedClient
+import crc32
+import socket
+import ctypes
 from membase.api.rest_client import RestConnection, RestHelper
+import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from mc_bin_client import MemcachedClient
+from threading import Thread
+import Queue
+from collections import defaultdict
+from couchbase_helper.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
-
+from subprocess import call
 
 class BucketOperationHelper():
 
@@ -286,11 +286,24 @@ class BucketOperationHelper():
                         ex_msg = str(e)
                         if "Not my vbucket" in log_msg:
                             log_msg = log_msg[:log_msg.find("vBucketMap") + 12] + "..."
-                        if "Not my vbucket" in ex_msg:
+                        if e.status == memcacheConstants.ERR_NOT_MY_VBUCKET:
                             # May receive this while waiting for vbuckets, continue and retry...S
                             continue
                         log.error("%s: %s" % (log_msg, ex_msg))
                         continue
+                    except exceptions.EOFError:
+                        # The client was disconnected for some reason. This can
+                        # happen just after the bucket REST API is returned (before
+                        # the buckets are created in each of the memcached processes.)
+                        # See here for some details: http://review.couchbase.org/#/c/49781/
+                        # Longer term when we don't disconnect clients in this state we
+                        # should probably remove this code.
+                        log.error("got disconnected from the server, reconnecting")
+                        client.reconnect()
+                        client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                                               bucket_info.saslPassword.encode('ascii'))
+                        continue
+
                     if c.find("\x01") > 0 or c.find("\x02") > 0:
                         ready_vbuckets[i] = True
                     elif i in ready_vbuckets:

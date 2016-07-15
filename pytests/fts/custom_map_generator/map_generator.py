@@ -22,12 +22,12 @@ EMP_NESTED_FIELDS = {
 }
 
 WIKI_FIELDS = {
-    'text': ["title", "id", "type"],
+    'text': ["title", "type"],
     'number': ["mutated"],
     'object': ["revision", "text", "contributor"]
 }
 
-TOTAL_WIKI_FIELDS = 7
+TOTAL_WIKI_FIELDS = 6
 
 WIKI_NESTED_FIELDS = {
     'revision': {
@@ -37,7 +37,7 @@ WIKI_NESTED_FIELDS = {
         'text': ["#text"]
     },
     'contributor': {
-        'text': ["username", "id"]
+        'text': ["username"]
     }
 }
 
@@ -170,8 +170,10 @@ class CustomMapGenerator:
         Add 1 or 2 non-indexed fields(negative test for custom mapping)
         Query on non-indexed fields to see if 0 results are returned
         """
+        count = 0
         if self.num_field_maps < self.max_fields:
-            while(True):
+            while count < self.max_fields:
+                count += 1
                 field, field_type = self.get_random_field_name_and_type(
                     self.fields)
                 if field_type != 'object' and \
@@ -186,6 +188,9 @@ class CustomMapGenerator:
                           " list of queryable fields" % field
                     self.queryable_fields[field_type].append(field)
                     break
+            else:
+                print "Unable to add a non-indexed field after %s retries" \
+                      % self.max_fields
 
     def get_child_map(self, field):
         """
@@ -259,6 +264,8 @@ class CustomMapGenerator:
             es_field_map['analyzer'] = analyzer
             if analyzer == "en":
                 es_field_map['analyzer'] = "english"
+            if analyzer == "standard":
+                es_field_map['analyzer'] = "default"
 
         # add to list of queryable fields
         self.add_to_queryable_fields(field, field_type)

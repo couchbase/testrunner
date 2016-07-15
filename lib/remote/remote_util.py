@@ -1,35 +1,45 @@
-import logging
+from ast import literal_eval
 import os
 import re
-import stat
 import sys
-import time
 import urllib
 import uuid
+import time
+import logging
+import stat
+import unittest
+import TestInput
+from datetime import datetime
+import logger
 from subprocess import Popen, PIPE
 
-import TestInput
 import logger
-import testconstants
 from builds.build_query import BuildQuery
-from membase.api.rest_client import RestConnection, RestHelper
-from testconstants import CB_RELEASE_APT_GET_REPO
-from testconstants import CB_RELEASE_YUM_REPO
-from testconstants import COUCHBASE_FROM_VERSION_3
-from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
-from testconstants import COUCHBASE_RELEASE_VERSIONS_3
-from testconstants import COUCHBASE_VERSIONS
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import LINUX_DISTRIBUTION_NAME
+import testconstants
+from testconstants import WIN_REGISTER_ID
 from testconstants import MEMBASE_VERSIONS
+from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
-from testconstants import RPM_DIS_NAME
 from testconstants import SHERLOCK_BUILD_REPO
+from testconstants import COUCHBASE_VERSIONS
+from testconstants import WIN_CB_VERSION_3
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
+from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
+from testconstants import RPM_DIS_NAME
+from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
-from testconstants import WIN_PROCESSES_KILLED
-from testconstants import WIN_REGISTER_ID
+from testconstants import WIN_TMP_PATH
+from testconstants import CB_VERSION_NAME
+from testconstants import CB_REPO
+from testconstants import CB_RELEASE_APT_GET_REPO
+from testconstants import CB_RELEASE_YUM_REPO
+from membase.api.rest_client import RestConnection, RestHelper
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -290,7 +300,7 @@ class RemoteMachineShellConnection:
                    and sv in COUCHBASE_FROM_WATSON:
                     """from watson, systemd is used in centos 7 """
                     log.info("this node is centos 7.x")
-                    o, r = self.execute_command("service couchbase-server start")
+                    o, r = self.execute_command("service couchbase-server stop")
                     self.log_command_output(o, r)
                 else:
                     o, r = self.execute_command("/etc/init.d/couchbase-server stop"\
@@ -781,14 +791,25 @@ class RemoteMachineShellConnection:
 
     def delete_file(self, remotepath, filename):
         sftp = self._ssh_client.open_sftp()
+        delete_file = False
         try:
             filenames = sftp.listdir_attr(remotepath)
             for name in filenames:
                 if name.filename == filename:
                     log.info("File {0} will be deleted".format(filename))
                     sftp.remove(remotepath + filename)
-                    sftp.close()
-                    return True
+                    delete_file = True
+                    break
+            if delete_file:
+                """ verify file is deleted """
+                filenames = sftp.listdir_attr(remotepath)
+                for name in filenames:
+                    if name.filename == filename:
+                        log.error("fail to remove file %s " % filename)
+                        delete_file = False
+                        break
+            sftp.close()
+            return delete_file
         except IOError:
             return False
 
@@ -1105,6 +1126,51 @@ class RemoteMachineShellConnection:
         os.remove(local_file)
         os.remove(des_file)
 
+    def set_fts_query_limit_win(self, name, value):
+        bin_path = WIN_COUCHBASE_BIN_PATH
+        bin_path = bin_path.replace("\\", "")
+        src_file = bin_path + "service_register.bat"
+        des_file = "/tmp/service_register.bat_{0}".format(self.ip)
+        local_file = "/tmp/service_register.bat.tmp_{0}".format(self.ip)
+
+        self.copy_file_remote_to_local(src_file, des_file)
+        f1 = open(des_file, "r")
+        f2 = open(local_file, "w")
+        """ when install new cb server on windows, there is not
+            env CBFT_ENV_OPTIONS yet.  We need to insert this
+            env to service_register.bat right after  ERL_FULLSWEEP_AFTER 512
+            like -env ERL_FULLSWEEP_AFTER 512 -env CBFT_ENV_OPTIONS vbuckets
+            where vbucket is params passed to function when run install scripts """
+        for line in f1:
+            if "-env CBFT_ENV_OPTIONS " in line:
+                tmp1 = line.split("CBFT_ENV_OPTIONS")
+                tmp2 = tmp1[1].strip().split(" ")
+                log.info("set CBFT_ENV_OPTIONS of node {0} to {1}" \
+                                 .format(self.ip, value))
+                tmp2[0] = value
+                tmp1[1] = " ".join(tmp2)
+                line = "CBFT_ENV_OPTIONS ".join(tmp1)
+            elif "-env ERL_FULLSWEEP_AFTER 512" in line:
+                log.info("set CBFT_ENV_OPTIONS of node {0} to {1}" \
+                                 .format(self.ip, value))
+                line = line.replace("-env ERL_FULLSWEEP_AFTER 512", \
+                  "-env ERL_FULLSWEEP_AFTER 512 -env {0} {1}" \
+                                 .format(name, value))
+            f2.write(line)
+        f1.close()
+        f2.close()
+        self.copy_file_local_to_remote(local_file, src_file)
+
+        """ re-register new setup to cb server """
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_stop.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_unregister.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_register.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_start.bat")
+        self.sleep(10, "wait for cb server start completely after setting CBFT_ENV_OPTIONS")
+
+        """ remove temporary files on slave """
+        os.remove(local_file)
+        os.remove(des_file)
 
     def create_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
@@ -1236,6 +1302,9 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c "
                                        "schtasks /Query /FO LIST /TN upgrademe /V")
         self.log_command_output(output, error)
+        """ need to remove binary after done upgrade.  Since watson, current binary
+            could not reused to uninstall or install cb server """
+        self.delete_file(WIN_TMP_PATH, version[:10] + ".exe")
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
@@ -1271,12 +1340,18 @@ class RemoteMachineShellConnection:
             if not ended:
                 sys.exit("*****  Node %s failed to install  *****" % (self.ip))
             self.sleep(10, "wait for server to start up completely")
-            if vbuckets:
+            if vbuckets and int(vbuckets) != 1024:
                 self.set_vbuckets_win(vbuckets)
+            if fts_query_limit:
+                self.set_environment_variable(
+                    name="CBFT_ENV_OPTIONS",
+                    value="bleveMaxResultWindow={0},ftsMossDebug=1".format(int(fts_query_limit))
+                )
 
             output, error = self.execute_command("rm -f \
                        /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
             self.log_command_output(output, error)
+            self.delete_file(WIN_TMP_PATH, build.product_version[:10] + ".exe")
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
             # self.log_command_output(output, error)
         elif self.info.deliverable_type in ["rpm", "deb"]:
@@ -1342,7 +1417,7 @@ class RemoteMachineShellConnection:
             if fts_query_limit:
                 output, error = \
                     self.execute_command("sed -i 's/export PATH/export PATH\\n"
-                        "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1}/'\
+                        "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},ftsMossDebug=1,logStatsEvery=30,hideUI=false/'\
                     /opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit)))
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
@@ -1385,7 +1460,8 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error, track_words)
         return success
 
-    def install_server_win(self, build, version, startserver=True, vbuckets=None):
+    def install_server_win(self, build, version, startserver=True,
+                           vbuckets=None, fts_query_limit=None):
         remote_path = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1434,14 +1510,24 @@ class RemoteMachineShellConnection:
             success &= self.log_command_output(output, error, track_words)
             file_check = 'VERSION.txt'
             self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
-            ended = self.wait_till_process_ended(build.product_version[:10])
-            if not ended:
-                sys.exit("*****  Node %s failed to install  *****" % (self.ip))
-            self.sleep(10, "wait for server to start up completely")
+            if version[:3] != "2.5":
+                ended = self.wait_till_process_ended(build.product_version[:10])
+                if not ended:
+                    sys.exit("*****  Node %s failed to install  *****" % (self.ip))
+            if version[:3] == "2.5":
+                self.sleep(20, "wait for server to start up completely")
+            else:
+                self.sleep(10, "wait for server to start up completely")
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
-            if vbuckets:
+            if vbuckets and int(vbuckets) != 1024:
                 self.set_vbuckets_win(vbuckets)
+            if fts_query_limit:
+                self.set_fts_query_limit_win(
+                    name="CBFT_ENV_OPTIONS",
+                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
+                )
+
             if "4.0" in version[:5]:
                 """  remove folder if it exists in work around of bub MB-13046 """
                 self.execute_command("rm -rf \
@@ -1457,7 +1543,9 @@ class RemoteMachineShellConnection:
                              .format(capture_iss_file))
                     os.system("rm -f resources/windows/automation/{0}" \
                                                           .format(capture_iss_file))
+            self.delete_file(WIN_TMP_PATH, build.product_version[:10] + ".exe")
             return success
+
 
     def install_server_via_repo(self, deliverable_type, cb_edition, remote_client):
         success = True
@@ -1637,7 +1725,7 @@ class RemoteMachineShellConnection:
                                                  .format(process_name))
             self.log_command_output(output, error)
             if output and process_name in output[0]:
-                self.sleep(10, "wait for process ended!")
+                self.sleep(8, "wait for process ended!")
                 process_running = True
             else:
                 if process_running:
@@ -1656,7 +1744,9 @@ class RemoteMachineShellConnection:
         for process in list:
             type = info.distribution_type.lower()
             if type == "windows":
-                self.execute_command("taskkill /F /T /IM {0}".format(process))
+                # set debug=False if does not want to show log
+                self.execute_command("taskkill /F /T /IM {0}".format(process),
+                                                                  debug=False)
             elif type in LINUX_DISTRIBUTION_NAME:
                 self.terminate_process(info, process)
 
@@ -1670,7 +1760,7 @@ class RemoteMachineShellConnection:
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase", "/data/*"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
-                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr"]
+                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang"]
         version_file = "VERSION.txt"
         self.extract_remote_info()
         log.info(self.info.distribution_type)
@@ -1685,22 +1775,48 @@ class RemoteMachineShellConnection:
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
-            build_repo = MV_LATESTBUILD_REPO
+            if self.file_exists(version_path, version_file):
+                build_name, short_version, full_version = \
+                    self.find_build_version(version_path, version_file, product)
             capture_iss_file = ""
-
+            log.info("kill any in/uninstall process from version 3 in node %s"
+                                                                        % self.ip)
+            self.terminate_processes(self.info, \
+                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
-                log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
-                build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
+                cb_releases_version = ["2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
+                                       "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1",
+                                       "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
+                                       "3.1.3", "3.1.5"]
+                build_name, short_version, full_version = \
+                    self.find_build_version(version_path, version_file, product)
+                build_repo = MV_LATESTBUILD_REPO
+                if full_version[:5] not in COUCHBASE_VERSION_2 and \
+                   full_version[:5] not in COUCHBASE_VERSION_3:
+                    if full_version[:3] in CB_VERSION_NAME:
+                        build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
+                    else:
+                        sys.exit("version is not support yet")
+                log.info("VERSION file exists.  Start to uninstall {0} on {1} server"\
+                                                           .format(product, self.ip))
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"
-                log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
+                log.info('Check if {0} is in tmp directory on {1} server'\
+                                                       .format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-                if not exist:  # if not exist in tmp dir, start to download that version build
-                    if short_version in COUCHBASE_RELEASE_VERSIONS_3:
+                if not exist:  # if not exist in tmp dir, start to download that version
+                    if short_version[:5] in cb_releases_version:
+                        build = query.find_couchbase_release_build(product_name,
+                                                        self.info.deliverable_type,
+                                                       self.info.architecture_type,
+                                                                     short_version,
+                                                                  is_amazon=False,
+                                 os_version=self.info.distribution_version.lower())
+                    elif short_version in COUCHBASE_RELEASE_VERSIONS_3:
                         build = query.find_membase_release_build(product_name,
                                                    self.info.deliverable_type,
                                                   self.info.architecture_type,
@@ -1737,9 +1853,6 @@ class RemoteMachineShellConnection:
 
                 """ Remove this workaround when bug MB-14504 is fixed """
                 log.info("Kill any un/install process leftover in sherlock")
-                self.execute_command('taskkill /F /T /IM 4.0.0-*')
-                log.info("Kill any un/install process leftover in watson")
-                self.execute_command('taskkill /F /T /IM 4.0.1-*')
                 log.info("Kill any cbq-engine.exe in sherlock")
                 self.execute_command('taskkill /F /T /IM cbq-engine.exe')
                 log.info('sleep for 5 seconds before running task '
@@ -1762,15 +1875,16 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                ended = self.wait_till_process_ended(full_version[:10])
-                if not ended:
-                    sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
-                self.sleep(10, "next step is to install")
+                if full_version[:3] != "2.5":
+                    ended = self.wait_till_process_ended(full_version[:10])
+                    if not ended:
+                        sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
+                if full_version[:3] == "2.5":
+                    self.sleep(20, "next step is to install")
+                else:
+                    self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
-                output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}"\
-                                                              .format(build_name))
-                self.log_command_output(output, error)
-
+                self.delete_file(WIN_TMP_PATH, build_name)
                 """ the code below need to remove when bug MB-11328
                                                            is fixed in 3.0.1 """
                 output, error = self.kill_erlang(os="windows")
@@ -2110,7 +2224,6 @@ class RemoteMachineShellConnection:
         newdata = newdata.replace("pass",password)
         newdata = newdata.replace("bucket1",bucket1)
 
-        #import pdb;pdb.set_trace()
         newdata = newdata.replace("user1",bucket1)
         newdata = newdata.replace("pass1",password)
         newdata = newdata.replace("bucket2",bucket2)
@@ -2270,16 +2383,21 @@ class RemoteMachineShellConnection:
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
 
-    def terminate_process(self, info=None, process_name=''):
+    def terminate_process(self, info=None, process_name='',force=False):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM {0}*"\
                                                         .format(process_name))
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("kill "
-               "$(ps aux | grep '{0}' | awk '{{print $2}}') ".format(process_name))
-            self.log_command_output(o, r)
+            if (force == True):
+                o, r = self.execute_command("kill -9 "
+                   "$(ps aux | grep '{0}' |  awk '{{print $2}}') ".format(process_name))
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("kill "
+                    "$(ps aux | grep '{0}' |  awk '{{print $2}}') ".format(process_name))
+                self.log_command_output(o, r)
 
     def disconnect(self):
         self._ssh_client.close()
@@ -2850,7 +2968,7 @@ class RemoteMachineShellConnection:
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            backup_command = "%scbbackup.exe" % (WIN_COUCHBASE_BIN_PATH_RAW)
+            backup_command = "\"%scbbackup.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
             output, error = self.execute_command("taskkill /F /T /IM cbbackup.exe")
             self.log_command_output(output, error)
@@ -2882,7 +3000,7 @@ class RemoteMachineShellConnection:
         backup_file_location = backup_location
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            restore_command = "%scbrestore.exe" % (WIN_COUCHBASE_BIN_PATH_RAW)
+            restore_command = "\"%scbrestore.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
         if self.info.distribution_type.lower() == 'mac':
             restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
@@ -2955,7 +3073,7 @@ class RemoteMachineShellConnection:
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            transfer_command = "%scbtransfer.exe" % (WIN_COUCHBASE_BIN_PATH_RAW)
+            transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
         if self.info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 

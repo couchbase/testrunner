@@ -1,5 +1,6 @@
 from base_2i import BaseSecondaryIndexingTests
-from couchbase_helper.query_definitions import QueryDefinition
+from membase.api.rest_client import RestConnection
+from datetime import datetime
 
 class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
 
@@ -14,10 +15,11 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         Tests index stats when indexes are created and dropped
         """
         #Create Index
-        self.run_multi_operations(buckets = self.buckets, 
-            query_definitions = self.query_definitions, 
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
             create_index = True, drop_index = False)
         #Check Index Stats
+        self.sleep(30)
         index_map = self.get_index_stats()
         self.log.info(index_map)
         for query_definition in self.query_definitions:
@@ -27,23 +29,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
                 check_keys = ['items_count', 'total_scan_duration', 'num_docs_queued',
                  'num_requests', 'num_rows_returned', 'num_docs_queued',
                  'num_docs_pending','delete_bytes' ]
-                map = self._create_stats_map(items_count = 2016)
-                self.verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
-        #Drop Index
-        self.run_multi_operations(buckets = self.buckets, 
-            query_definitions = self.query_definitions, 
-            create_index = False, drop_index = True)
-        index_map = self.get_index_stats()
-        # Fix for CBQE-3071
-        #Only the indexes created by this test
-        #are being removed
-        for query_definition in self.query_definitions:
-            index_name = query_definition.index_name
-            for bucket in self.buckets:
-                self.assertNotIn(index_name, index_map[bucket.name].keys(), 
-                    "Index {ind} present in bucket {buc}".format(
-                        ind=index_name,
-                        buc=bucket.name))
+                map = self._create_stats_map(items_count=2016)
+                self._verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
 
     def test_get_index_settings(self):
         #Check Index Settings
@@ -64,6 +51,40 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
             val = map[node]
             for key in map1.keys():
                 self.assertTrue(key in val.keys(), "{0} not in {1} ".format(key, val))
+
+    def _verify_index_stats(self, index_map, index_name, bucket_name, index_stat_values, check_keys=None):
+        self.assertIn(bucket_name, index_map.keys(), "bucket name {0} not present in stats".format(bucket_name))
+        self.assertIn(index_name, index_map[bucket_name].keys(),
+                        "index name {0} not present in set of indexes {1}".format(index_name,
+                                                                                  index_map[bucket_name].keys()))
+        for key in index_stat_values.keys():
+            self.assertIn(key, index_map[bucket_name][index_name].keys(),
+                            "stats {0} not present in Index stats {1}".format(key,
+                                                                                  index_map[bucket_name][index_name]))
+            if check_keys:
+                if key in check_keys:
+                    self.assertEqual(str(index_map[bucket_name][index_name][key]), str(index_stat_values[key]),
+                                    " for key {0} : {1} != {2}".format(key,
+                                                                       index_map[bucket_name][index_name][key],
+                                                                       index_stat_values[key]))
+            else:
+                self.assertEqual(str(index_stat_values[key]), str(index_map[bucket_name][index_name][key]),
+                                " for key {0} : {1} != {2}".format(key,
+                                                                   index_map[bucket_name][index_name][key],
+                                                                   index_stat_values[key]))
+
+    def set_index_settings(self, settings):
+        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for server in servers:
+            RestConnection(server).set_index_settings(settings)
+
+    def get_index_settings(self):
+        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        index_settings_map = {}
+        for server in servers:
+            key = "{0}:{1}".format(server.ip, server.port)
+            index_settings_map[key] = RestConnection(server).get_index_settings()
+        return index_settings_map
 
     def _create_stats_map(self, items_count = 0, total_scan_duration = 0,
         delete_bytes = 0, scan_wait_duration = 0, insert_bytes = 0,

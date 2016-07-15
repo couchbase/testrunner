@@ -1,12 +1,12 @@
-import threading
 import time
+import threading
 
-from couchbase_helper.document import View
+from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
-from membase.helper.rebalance_helper import RebalanceHelper
-from rebalance.rebalance_base import RebalanceBaseTest
 from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.rebalance_helper import RebalanceHelper
+from couchbase_helper.document import View
 
 
 class RebalanceInOutTests(RebalanceBaseTest):

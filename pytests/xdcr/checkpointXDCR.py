@@ -20,8 +20,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.dest_master = self.dest_cluster.get_master_node()
         if not self._create_default_bucket:
             self.fail("Remove \'default_bucket=false\', these unit tests are designed to run on default bucket")
-        self.set_xdcr_topology()
-        self.setup_all_replications()
+        self.setup_xdcr()
         self.init()
 
     def tearDown(self):
@@ -113,8 +112,9 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         Main method that validates a checkpoint record """
     def get_and_validate_latest_checkpoint(self):
         rest_con = RestConnection(self.get_active_vb0_node(self.src_master))
+        repl = rest_con.get_replication_for_buckets('default', 'default')
         try:
-            checkpoint_record = rest_con.get_recent_xdcr_vb_ckpt('default')
+            checkpoint_record = rest_con.get_recent_xdcr_vb_ckpt(repl['id'])
             self.log.info("Checkpoint record : {0}".format(checkpoint_record))
             self.chkpt_records.append(checkpoint_record)
         except Exception as e:
@@ -385,11 +385,15 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         # find which node contains vb0, we will failover that node
         node = self.get_active_vb0_node(master)
         self.log.info("Node {0} contains active vb0".format(node))
-        if node == self.src_master:
-            self.src_cluster.failover_and_rebalance_master()
+        if node in self.src_nodes:
+            if node == self.src_master:
+                self.src_cluster.failover_and_rebalance_master()
+            else:
+                self.src_cluster.failover_and_rebalance_master(master=False)
             if node in self.src_nodes:
                 self.src_nodes.remove(node)
-            self.src_master = self.src_nodes[0]
+            if node == self.src_master:
+                self.src_master = self.src_nodes[0]
         else:
             self.dest_cluster.failover_and_rebalance_master()
             if node in self.dest_nodes:
@@ -410,7 +414,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         node = self.get_active_vb0_node(master)
         self.log.info("Crashing node {0} containing vb0 ...".format(node))
         shell = RemoteMachineShellConnection(node)
-        shell.terminate_process(process_name='memcached')
+        shell.terminate_process(process_name='memcached',force=True)
         shell.disconnect()
         # If we are killing dest node, try to mutate key at source to cause xdcr activity
         if master == self.dest_master:

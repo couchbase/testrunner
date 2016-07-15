@@ -2,15 +2,15 @@
 
 # TODO: add installer support for membasez
 
-import Queue
-import copy
 import getopt
+import copy
 import logging
 import os
-import socket
 import sys
-from datetime import datetime
 from threading import Thread
+from datetime import datetime
+import socket
+import Queue
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
@@ -22,9 +22,11 @@ from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
+from testconstants import SHERLOCK_BUILD_REPO
+from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 import TestInput
@@ -123,6 +125,7 @@ class Installer(object):
         remote_client.couchbase_uninstall()
         remote_client.disconnect()
 
+
     def build_url(self, params):
         _errors = []
         version = ''
@@ -219,7 +222,7 @@ class Installer(object):
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
                                     "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2",
-                                    "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3"]
+                                    "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.5"]
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = CB_REPO
@@ -425,8 +428,8 @@ class CouchbaseServerInstaller(Installer):
                     init_nodes = params["init_nodes"]
                 else:
                     init_nodes = "True"
-                if (isinstance(init_nodes, bool) and init_nodes) \
-                                                 or (init_nodes.lower() == "true"):
+                if (isinstance(init_nodes, bool) and init_nodes) or \
+                        (isinstance(init_nodes, str) and init_nodes.lower() == "true"):
                     if not server.services:
                         set_services = ["kv"]
                     elif server.services:
@@ -443,7 +446,9 @@ class CouchbaseServerInstaller(Installer):
                         if "index" in set_services and "fts" not in set_services:
                             log.info("quota for index service will be %s MB" \
                                                               % (INDEX_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA
+                            kv_quota = int(info.mcdMemoryReserved * 2/3) - INDEX_QUOTA
+                            log.info("set index quota to node %s " % server.ip)
+                            rest.set_indexer_memoryQuota(indexMemoryQuota=INDEX_QUOTA)
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM needs to be more than %s MB"
                                         " at node  %s"  % (MIN_KV_QUOTA, server.ip))
@@ -452,8 +457,12 @@ class CouchbaseServerInstaller(Installer):
                                                               % (INDEX_QUOTA))
                             log.info("quota for fts service will be %s MB" \
                                                                 % (FTS_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA \
+                            kv_quota = int(info.mcdMemoryReserved * 2/3)\
+                                                                 - INDEX_QUOTA \
                                                                  - FTS_QUOTA
+                            log.info("set both index and fts quota at node %s "\
+                                                                    % server.ip)
+                            rest.set_indexer_memoryQuota(indexMemoryQuota=INDEX_QUOTA)
                             rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM need to be more than %s MB"
@@ -461,7 +470,7 @@ class CouchbaseServerInstaller(Installer):
                         elif "fts" in set_services and "index" not in set_services:
                             log.info("quota for fts service will be %s MB" \
                                                                 % (FTS_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved) - FTS_QUOTA
+                            kv_quota = int(info.mcdMemoryReserved * 2/3) - FTS_QUOTA
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM need to be more than %s MB"
                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
@@ -583,7 +592,8 @@ class CouchbaseServerInstaller(Installer):
             if type == "windows":
                 remote_client.download_binary_in_win(build.url, params["version"])
                 success = remote_client.install_server_win(build, \
-                        params["version"].replace("-rel", ""), vbuckets=vbuckets)
+                        params["version"].replace("-rel", ""), vbuckets=vbuckets,
+                        fts_query_limit=fts_query_limit)
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:
@@ -626,7 +636,6 @@ class CouchbaseServerInstaller(Installer):
             if queue:
                 queue.put(success)
             return success
-
 
 class MongoInstaller(Installer):
     def get_server(self, params):
@@ -1009,7 +1018,7 @@ def main():
     #      like a validator, to check SSH, input params etc
     # check_build(input)
 
-    if "parallel" in input.test_params:
+    if "parallel" in input.test_params and input.test_params['parallel'].lower() != 'false':
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")
         success = InstallerJob().parallel_install(input.servers, input.test_params)

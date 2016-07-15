@@ -1,13 +1,13 @@
-import json
-import urllib
-
-from membase.api.rest_client import RestConnection
-from newupgradebasetest import NewUpgradeBaseTest
-from remote.remote_util import RemoteMachineShellConnection
-from security.auditmain import audit
 from security.ldaptest import ldaptest
+from membase.api.rest_client import RestConnection
+import urllib
 from security.rbacmain import rbacmain
-
+import json
+from remote.remote_util import RemoteMachineShellConnection
+from newupgradebasetest import NewUpgradeBaseTest
+from security.auditmain import audit
+import commands
+import socket
 
 class ServerInfo():
     def __init__(self,
@@ -53,6 +53,7 @@ class rbacTest(ldaptest):
         self._createLDAPUser(self.ldap_users)
         self.ldap_server = ServerInfo(self.ldapHost, self.ldapPort, 'root', 'couchbase')
         rbacmain()._delete_user_from_roles(self.master)
+        self.ipAddress = self.getLocalIPAddress()
 
 
     def tearDown(self):
@@ -68,8 +69,6 @@ class rbacTest(ldaptest):
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
         '''
-
-
 
     def test_compare_orig_roles(self):
         status, content, header = rbacmain(self.master)._retrive_all_user_role(self.user_id)
@@ -119,11 +118,7 @@ class rbacTest(ldaptest):
         payload = "name=" + self.user_id + "&roles=" + self.user_role
         status, content, header =  rbacmain(self.master)._set_user_roles(user_name=self.user_id,payload=payload)
         self.assertFalse(status,"Incorrect status for incorrect role name")
-        self.log.info("value is {0}".format(msg))
-        self.log.info("value is {0}".format(content))
-        self.log.info("typeof content {0}".format(type(content)))
-        self.log.info("typeof content {0}".format(len(content)))
-        if msg == content:
+        if msg != content:
             self.assertFalse(True,"Message shown is incorrect")
 
     def test_role_assign_incorrect_bucket_name(self):
@@ -131,11 +126,7 @@ class rbacTest(ldaptest):
         payload = "name=" + self.user_id + "&roles=" + self.user_role
         status, content, header =  rbacmain(self.master)._set_user_roles(user_name=self.user_id,payload=payload)
         self.assertFalse(status,"Incorrect status for incorrect role name")
-        self.log.info("value is {0}".format(msg))
-        self.log.info("value is {0}".format(content))
-        self.log.info("typeof content {0}".format(type(content)))
-        self.log.info("typeof content {0}".format(len(content)))
-        if msg == content:
+        if msg != content:
             self.assertFalse(True,"Message shown is incorrect")
 
     '''

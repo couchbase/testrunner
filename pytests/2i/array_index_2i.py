@@ -1,12 +1,8 @@
-import json
 import logging
 import random
 from couchbase.bucket import Bucket
 
-from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from couchbase_helper.query_definitions import QueryDefinition
-from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from base_2i import BaseSecondaryIndexingTests
 
@@ -16,7 +12,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
     def setUp(self):
         super(SecondaryIndexArrayIndexTests, self).setUp()
         self.doc_ops = self.input.param("doc_ops", True)
-        self.index_field = self.input.param("index_field", "countries")
+        self.index_field = self.input.param("index_field", "join_yr")
         self.restServer = self.get_nodes_from_services_map(service_type="index")
         self.rest = RestConnection(self.restServer)
 
@@ -36,7 +32,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         self.rest.drop_index_with_rest(id)
 
     def test_create_query_drop_composite_index(self):
-        secExpr = ["ALL DISTINCT {0}".format(self.index_field), "codes", "name"]
+        secExpr = ["ALL DISTINCT {0}".format(self.index_field), "email", "hobbies"]
         for i in range(10):
             random.shuffle(secExpr)
             index_name = "index_name_{0}".format(i)
@@ -56,7 +52,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         log.info("Creating index index_name_1 on {0}...".format(self.buckets[0]))
         id = self._create_rest_array_index("index_name_1", self.buckets[0], secExpr)
         self.assertIsNotNone(id, "Array Index is not created.")
-        log.info("Array Index index_name_1 on field Countries is created.")
+        log.info("Array Index index_name_1 on field {0} is created.".format(self.index_field))
         body = {"equal": "[\"Netherlands\"]"}
         content = self.rest.lookup_gsi_index_with_rest(id, body)
         self.assertIsNotNone(content, "Lookup not performed")
@@ -65,7 +61,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         secExpr = ["ALL DISTINCT {0}".format(self.index_field)]
         id = self._create_rest_array_index("index_name_1", self.buckets[0], secExpr)
         self.assertIsNotNone(id, "Array Index is not created.")
-        log.info("Array Index index_name_1 on field Countries is created.")
+        log.info("Array Index index_name_1 on field {0} is created.".format(self.index_field))
         log.info("Performing Full Table Scan...")
         body = {'stale': 'ok'}
         content = self.rest.full_table_scan_gsi_index_with_rest(id, body)
@@ -80,7 +76,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         secExpr = ["ALL DISTINCT {0}".format(self.index_field)]
         id = self._create_rest_array_index("index_name_1", self.buckets[0], secExpr)
         self.assertIsNotNone(id, "Array Index is not created.")
-        log.info("Array Index index_name_1 on field Countries is created.")
+        log.info("Array Index index_name_1 on field {0} is created.".format(self.index_field))
         log.info("Performing Full Table Scan...")
         body = {'stale': 'ok'}
         content = self.rest.full_table_scan_gsi_index_with_rest(id, body)
@@ -95,7 +91,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         log.info("Creating index index_name_1 on {0}...".format(self.buckets[0]))
         id = self._create_rest_array_index("index_name_1", self.buckets[0], secExpr)
         self.assertIsNotNone(id, "Array Index is not created.")
-        log.info("Array Index index_name_1 on field Countries is created.")
+        log.info("Array Index index_name_1 on field {0} is created.".format(self.index_field))
         body = {'stale': 'ok'}
         content = self.rest.full_table_scan_gsi_index_with_rest(id, body)
         self.assertIsNotNone(content, "Table Scan not performed")
@@ -113,7 +109,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         log.info("Creating index index_name_1 on {0}...".format(self.buckets[0]))
         id = self._create_rest_array_index("index_name_1", self.buckets[0], secExpr)
         self.assertIsNotNone(id, "Array Index is not created.")
-        log.info("Array Index index_name_1 on field Countries is created.")
+        log.info("Array Index index_name_1 on field {0} is created.".format(self.index_field))
         body = {'stale': 'ok'}
         content = self.rest.full_table_scan_gsi_index_with_rest(id, body)
         self.assertIsNotNone(content, "Table Scan not performed")
@@ -175,14 +171,14 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
 
     def _change_field(self, bucket_name):
         count = 0
-        for key, doc in self._get_documets(bucket_name, self.index_field):
+        for doc in self.full_docs_list:
             if self.index_field in doc.keys():
                 if isinstance(doc[self.index_field], list):
                     doc[self.index_field] = "{0}".format(self.index_field) + str(count)
                 else:
                     doc[self.index_field] = ["{0}".format(self.index_field) + str(count)]
                 count += 1
-                self._update_document(bucket_name, key, doc)
+                self._update_document(bucket_name, doc["_id"], doc)
 
     def _update_document(self, bucket_name, key, document):
         bucket = Bucket('couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name))
@@ -193,8 +189,6 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         if not bucket:
             log.info("Bucket connection is not established.")
         log.info("Updating {0} in all documents in bucket {1}...".format(field, bucket_name))
-        for i in range(self.docs_per_day):
-            for j in range(self.docs_per_day):
-                key = "array_dataset-" + str(i) + "-" + str(j)
-                document = bucket.get(key=key).value
-                yield key, document
+        query = "SELECT * FROM {0}".format(bucket_name)
+        for row in bucket.n1ql_query(query):
+            yield row[bucket.bucket]['_id'], bucket.get(key=row[bucket.bucket]['_id']).value

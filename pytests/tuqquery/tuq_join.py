@@ -1,3 +1,4 @@
+import json
 import uuid
 import copy
 from tuqquery.tuq import QueryTests
@@ -30,8 +31,8 @@ class JoinTests(QueryTests):
 
     def test_simple_join_keys(self):
         for bucket in self.buckets:
-            self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
-            "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
+            self.query = "SELECT employee.name, employee.tasks_ids, new_project.project " +\
+            "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids"
             time.sleep(30)
             actual_result = self.run_cbq_query()
@@ -39,17 +40,17 @@ class JoinTests(QueryTests):
             full_list = self._generate_full_joined_docs_list(join_type=self.type_join)
             expected_result = [doc for doc in full_list if not doc]
             expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                     "new_project" : doc['project']}
+                                     "project" : doc['project']}
                                     for doc in full_list if doc and 'project' in doc])
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
-                                    for doc in full_list if doc and not 'project' in doc])
+            #expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
+                                    #for doc in full_list if doc and not 'project' in doc])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_simple_join_keys(self):
         for bucket in self.buckets:
-            self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
-            "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
+            self.query = "SELECT employee.name, employee.tasks_ids, new_project.project " +\
+            "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids"
             self.prepared_common_body()
 
@@ -87,22 +88,24 @@ class JoinTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_bidirectional_join(self):
-            self.query = "create index idxbidirec on %s(tasks_ids)" %self.buckets[1].name ;
+            self.query = "create index idxbidirec on %s(join_day)" %self.buckets[1].name ;
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = "explain SELECT employee.name, employee.tasks_ids " +\
+            self.query = "explain SELECT employee.name, employee.join_day " +\
             "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[1].name) +\
-            "ON KEY new_project.tasks_ids FOR employee where new_project.tasks_ids is not null"
+            "ON KEY new_project.join_day FOR employee where new_project.join_day is not null"
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.test_explain_particular_index("idxbidirec")
-            self.query = "SELECT employee.name, employee.tasks_ids " +\
+            self.query = "SELECT employee.name, employee.join_day " +\
             "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[1].name)  +\
-            "ON KEY new_project.tasks_ids FOR employee where new_project.tasks_ids is not null"
+            "ON KEY new_project.join_day FOR employee where new_project.join_day is not null"
             actual_result = self.run_cbq_query()
+            print actual_result
             self.assertTrue(actual_result['metrics']['resultCount'] == 0, 'Query was not run successfully')
             self.query = "drop index %s.idxbidirec" %self.buckets[1].name;
             actual_result = self.run_cbq_query()
+
 
 
     def test_where_join_keys_covering(self):
@@ -120,6 +123,7 @@ class JoinTests(QueryTests):
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
+          try:
             self.query = "EXPLAIN SELECT employee.name, employee.tasks_ids, employee.job_title new_project " +\
                          "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
                          "ON KEYS employee.tasks_ids WHERE employee.name == 'employee-9'"
@@ -136,10 +140,24 @@ class JoinTests(QueryTests):
             for doc in expected_result if doc and 'name' in doc and\
                                           doc['name'] == 'employee-9']
             expected_result = sorted(expected_result)[0:10]
+            self.query = "create primary index on %s" %bucket.name
+            self.run_cbq_query()
+            self.query = "SELECT employee.name , employee.tasks_ids " +\
+                         "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
+                         "ON KEYS employee.tasks_ids WHERE employee.name == 'employee-9' limit 10"
+            result = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(result['results']))
+          finally:
+            self.query = "drop primary index on %s" %bucket.name
+            self.run_cbq_query()
             #self.assertTrue(expected_result == actual_result)
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+
+
+
+
 
     def test_where_join_keys_not_equal(self):
         for bucket in self.buckets:
@@ -252,6 +270,17 @@ class JoinTests(QueryTests):
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self.sleep(15,'wait for index')
+            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.job_title new_project " +\
+                         "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
+                         "ON KEYS employee.tasks_ids WHERE employee.join_day <= 2  order by employee.join_day limit 10"
+            result = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(result['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+
 
     def test_join_unnest_alias(self):
         for bucket in self.buckets:
@@ -295,6 +324,7 @@ class JoinTests(QueryTests):
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
+          try:
             self.query = "EXPLAIN SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
@@ -307,10 +337,19 @@ class JoinTests(QueryTests):
             if self.type_join.upper() == JOIN_LEFT:
                 expected_result.extend([{}] * self.gens_tasks[-1].end)
             expected_result = sorted(expected_result)
-            #self._verify_results(actual_result, expected_result)
-        for index_name in created_indexes:
-            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+            self.query = "create primary index on %s" % bucket.name
             self.run_cbq_query()
+            self.query = "SELECT emp.name, task FROM %s emp use index (`#primary`) %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
+            result = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(result['results']))
+            #self._verify_results(actual_result, expected_result)
+          finally:
+            self.query= "drop primary index on %s" % bucket.name
+            self.run_cbq_query()
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                self.run_cbq_query()
+
 
     def test_prepared_unnest(self):
         for bucket in self.buckets:
@@ -602,6 +641,8 @@ class JoinTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
             self._delete_ids(actual_result)
+            print json.JSONEncoder().encode(actual_result)
+
             actual_result = self.sort_nested_list(actual_result, key='task_name')
             actual_result = sorted(actual_result, key=lambda doc:
                                    self._get_for_sort(doc))
@@ -858,3 +899,15 @@ class JoinTests(QueryTests):
         else:
             raise Exception("Unknown type of join")
         return nested_list
+
+
+    def test_dual(self):
+        self.query = "select 1"
+        actual_result = self.run_cbq_query()
+        actual_result = sorted(actual_result)
+        print actual_result
+        self.query = "select 1 from system:dual"
+        expected_result = self.run_cbq_query()
+        expected_result = sorted(expected_result)
+        print expected_result
+        self._verify_results(actual_result, expected_result)

@@ -1,11 +1,10 @@
 import copy
 import logging
-
-from base_2i import BaseSecondaryIndexingTests
-from couchbase_helper.query_definitions import QueryDefinition
-from membase.api.rest_client import RestConnection
-from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
+from couchbase_helper.query_definitions import QueryDefinition
+from membase.helper.cluster_helper import ClusterOperationHelper
+from base_2i import BaseSecondaryIndexingTests
 
 log = logging.getLogger(__name__)
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
@@ -27,7 +26,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.load_query_definitions.append(query_definition)
         find_index_lost_list = self._find_list_of_indexes_lost()
         self._create_replica_index_when_indexer_is_down(find_index_lost_list)
-        self.initialize_multi_create_index(buckets = self.buckets,
+        self.multi_create_index(buckets = self.buckets,
                     query_definitions = self.load_query_definitions)
         self.drop_indexes_in_between = self.input.param("drop_indexes_in_between", False)
         if len(self.index_nodes_out) == len(self.services_map["index"]):
@@ -82,10 +81,11 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
-            self.sleep(1)
+            self.sleep(10)
             in_between_index_ops = self._run_in_between_tasks()
             rebalance.result()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self.sleep(120)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
@@ -154,7 +154,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.stop_server()
-            self.sleep(2)
+            self.sleep(20)
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.start_server()
@@ -191,7 +191,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(self.master)
             recoveryType = self.input.param("recoveryType", "full")
             servr_out = self.nodes_out_list
-            nodes_all = rest.node_statuses()
             self._run_initial_index_tasks()
             failover_task =self.cluster.async_failover([self.master],
                     failover_nodes = servr_out, graceful=self.graceful)
@@ -263,6 +262,56 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.multi_query_using_index(buckets=self.buckets,
                 query_definitions=self.load_query_definitions)
 
+    def test_failover_indexer_restart(self):
+        """
+        CBQE-3153
+        Indexer add back scenarios
+        :return:
+        """
+        index_dist_factor = 1
+        #Create Indexes
+        index_servers = self.get_nodes_from_services_map(service_type="index",
+            get_all_nodes=True)
+        num_indexes=len(index_servers)*index_dist_factor
+        self.query_definitions = []
+        for ctr in range(num_indexes):
+            index_name = "test_restart_index_{0}".format(ctr)
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["join_yr"],
+                    query_template="SELECT * from %s USE INDEX ({0}) WHERE join_yr == 2010 ".format(index_name), groups=[])
+            self.query_definitions.append(query_definition)
+        node_count = 0
+        for query_definition in self.query_definitions:
+            for bucket in self.buckets:
+                deploy_node_info = ["{0}:{1}".format(index_servers[node_count].ip,
+                    index_servers[node_count].port)]
+                self.log.info("Creating {0} index on bucket {1} on node {2}...".format(
+                    query_definition.index_name, bucket.name, deploy_node_info[0]
+                ))
+                self.create_index(bucket.name, query_definition,
+                    deploy_node_info=deploy_node_info)
+                node_count += 1
+        self.sleep(30)
+        kvOps_tasks = self._run_kvops_tasks()
+        remote = RemoteMachineShellConnection(index_servers[0])
+        remote.stop_server()
+        self.sleep(20)
+        for bucket in self.buckets:
+            for query in self.query_definitions:
+                try:
+                    self.query_using_index(bucket=bucket, query_definition=query,
+                                       expected_result=None, scan_consistency=None,
+                                       scan_vector=None, verify_results=True)
+                except Exception, ex:
+                    msg = "queryport.indexNotFound"
+                    if msg in str(ex):
+                        continue
+                    else:
+                        self.log.info(str(ex))
+                        break
+        remote.start_server()
+        self.sleep(20)
+        self._run_tasks([kvOps_tasks])
+
     def test_autofailover(self):
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
@@ -291,22 +340,24 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_network_partitioning(self):
         self._run_initial_index_tasks()
+        self.sleep(10)
         try:
             kvOps_tasks = self._run_kvops_tasks()
             before_index_ops = self._run_before_index_tasks()
             self._run_tasks([before_index_ops])
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
+                self.sleep(10)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, in_between_index_ops])
-            if not self.all_index_nodes_lost:
-                self._run_after_index_tasks()
         except Exception, ex:
+            self.log.info(str(ex))
             raise
         finally:
             for node in self.nodes_out_list:
                 self.stop_firewall_on_node(node)
-            self.sleep(1)
+                self.sleep(10)
+            self._run_after_index_tasks()
 
     def test_couchbase_bucket_compaction(self):
         self._run_initial_index_tasks()
@@ -345,8 +396,14 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         #Flush the bucket
         for bucket in self.buckets:
             log.info("Flushing bucket {0}...".format(bucket.name))
-            RestConnection(self.master).flush_bucket(bucket.name)
-        self.sleep(10)
+            rest = RestConnection(self.master)
+            rest.flush_bucket(bucket.name)
+            count = 0
+            while rest.get_bucket_status(bucket.name) != "healthy" and count < 10:
+                log.info("Bucket Status is {0}. Sleeping...".format(rest.get_bucket_status(bucket.name)))
+                count += 1
+                self.sleep(10)
+            log.info("Bucket {0} is {0}".format(rest.get_bucket_status(bucket.name)))
         in_between_index_ops = self._run_in_between_tasks()
         self._run_tasks([kvOps_tasks, in_between_index_ops])
         self._run_after_index_tasks()
@@ -381,7 +438,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
     def _create_replica_index_when_indexer_is_down(self, index_lost_during_move_out):
         memory = []
         static_node_list = self._find_nodes_not_moved_out()
-        tasks = []
         if self.use_replica_when_active_down and self.ops_map["before"]["query_ops"] or \
         self.use_replica_when_active_down and self.ops_map["in_between"]["query_ops"] or \
         self.use_replica_when_active_down and self.ops_map["after"]["query_ops"]:
@@ -484,3 +540,4 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for tasks in tasks_list:
             for task in tasks:
                 task.result()
+

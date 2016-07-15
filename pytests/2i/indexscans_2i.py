@@ -14,6 +14,9 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexingScanTests, self).tearDown()
 
+    def test_dummy(self):
+        pass
+
     def test_create_query_explain_drop_index(self):
         self.use_primary_index= self.input.param("use_primary_index",False)
         self.indexes= self.input.param("indexes","").split(":")
@@ -51,15 +54,9 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
             raise
         finally:
-            tasks = self.async_run_multi_operations(
-                buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                drop_index = self.run_drop_index)
+            tasks = self.async_run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                                    drop_index=self.run_drop_index)
             self._run_tasks(tasks)
-
-    def test_multi_create_query_explain_drop_index_with_mutations(self):
-        self.doc_ops=True
-        self.test_multi_create_query_explain_drop_index()
 
     def test_multi_create_query_explain_drop_index_with_concurrent_mutations(self):
         try:
@@ -72,10 +69,10 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
             raise
         finally:
-            tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = self.run_drop_index,
-                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            tasks = self.async_run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                                    create_index=False, drop_index=self.run_drop_index,
+                                                    query_with_explain=False, query=False,
+                                                    scan_consistency=self.scan_consistency)
             self._run_tasks(tasks)
 
     def test_concurrent_mutations_index_create_query_drop(self):
@@ -150,6 +147,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             query_definition.index_name = "#primary"
             qdfs.append(query_definition)
         self.query_definitions = qdfs
+        self.sleep(15)
         try:
             self._verify_primary_index_count()
             self.run_doc_ops()
@@ -373,3 +371,47 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         query = query.replace("GREATER_THAN_EQUALS",">=")
         return query
 
+    def _create_index_in_async(self, query_definitions = None, buckets = None, index_nodes = None):
+        refer_index = []
+        if buckets == None:
+            buckets = self.buckets
+        if query_definitions == None:
+            query_definitions = self.query_definitions
+        if not self.run_async:
+            self.run_multi_operations(buckets=buckets, query_definitions=query_definitions, create_index=True)
+            return
+        if index_nodes == None:
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        x =  len(query_definitions) - 1
+        while x > -1:
+            tasks = []
+            build_index_map = {}
+            for bucket in buckets:
+                build_index_map[bucket.name] = []
+            for server in index_nodes:
+                for bucket in buckets:
+                    if (x > -1):
+                        key = "{0}:{1}".format(bucket.name, query_definitions[x].index_name)
+                        if (key not in refer_index):
+                            refer_index.append(key)
+                            refer_index.append(query_definitions[x].index_name)
+                            deploy_node_info = None
+                            if self.use_gsi_for_secondary:
+                                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                            build_index_map[bucket.name].append(query_definitions[x].index_name)
+                            tasks.append(self.async_create_index(bucket.name, query_definitions[x],
+                                                                 deploy_node_info=deploy_node_info))
+                x -= 1
+            for task in tasks:
+                task.result()
+            if self.defer_build:
+                for bucket_name in build_index_map.keys():
+                    if len(build_index_map[bucket_name]) > 0:
+                        build_index_task = self.async_build_index(bucket_name, build_index_map[bucket_name])
+                        build_index_task.result()
+                monitor_index_tasks = []
+                for bucket_name in build_index_map.keys():
+                    for index_name in build_index_map[bucket_name]:
+                        monitor_index_tasks.append(self.async_monitor_index(bucket_name, index_name))
+                for task in monitor_index_tasks:
+                    task.result()

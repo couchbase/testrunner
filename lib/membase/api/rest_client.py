@@ -1,17 +1,19 @@
 import base64
 import json
+import urllib
+import httplib2
 import socket
 import time
-import urllib
+import logger
 import uuid
 from copy import deepcopy
 from threading import Thread
+from TestInput import TestInputSingleton
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
+from testconstants import COUCHBASE_FROM_VERSION_4
 
 import httplib2
 import logger
-from TestInput import TestInputSingleton
-from testconstants import COUCHBASE_FROM_VERSION_4
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -20,7 +22,8 @@ except ImportError:
 
 from memcached.helper.kvstore import KVStore
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
-from membase.api.exception import BucketCreationException, ServerSelfJoinException, RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
+from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
+    RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
     BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed, BucketCompactionException
 log = logger.Logger.get_logger()
@@ -40,12 +43,15 @@ class RestHelper(object):
                     return True
                 else:
                     if status is not None:
-                        log.warn("server {0}:{1} status is {2}".format(self.rest.ip, self.rest.port, status.status))
+                        log.warn("server {0}:{1} status is {2}"\
+                            .format(self.rest.ip, self.rest.port, status.status))
                     else:
-                        log.warn("server {0}:{1} status is down".format(self.rest.ip, self.rest.port))
+                        log.warn("server {0}:{1} status is down"\
+                                           .format(self.rest.ip, self.rest.port))
             except ServerUnavailableException:
-                log.error("server {0}:{1} is unavailable".format(self.rest.ip, self.rest.port))
-            time.sleep(1)
+                log.error("server {0}:{1} is unavailable"\
+                                           .format(self.rest.ip, self.rest.port))
+            time.sleep(2)
         msg = 'unable to connect to the node {0} even after waiting {1} seconds'
         log.error(msg.format(self.rest.ip, timeout_in_seconds))
         return False
@@ -73,7 +79,7 @@ class RestHelper(object):
                     retry = 0
                     previous_progress = progress
             # sleep for 2 seconds
-            time.sleep(2)
+            time.sleep(3)
         if progress <= 0:
             log.error("rebalance progress code : {0}".format(progress))
 
@@ -284,7 +290,9 @@ class RestConnection(object):
                 self.services = serverInfo.services
         self.input = TestInputSingleton.input
         if self.input is not None:
-            self.services_node_init = self.input.param("services_init", None)
+            """ from watson, services param order and format:
+                new_services=fts-kv-index-n1ql """
+            self.services_node_init = self.input.param("new_services", None)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
@@ -298,11 +306,14 @@ class RestConnection(object):
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
             if not success and type(http_res) == unicode and\
-               (http_res.find('Node is unknown to this cluster') > -1 or http_res.find('Unexpected server error, request logged') > -1):
-                log.error("Error {0} was gotten, 5 seconds sleep before retry".format(http_res))
+               (http_res.find('Node is unknown to this cluster') > -1 or \
+                http_res.find('Unexpected server error, request logged') > -1):
+                log.error("Error {0} was gotten, 5 seconds sleep before retry"\
+                                                             .format(http_res))
                 time.sleep(5)
                 if iteration == 2:
-                    log.error("node {0}:{1} is in a broken state!".format(self.ip, self.port))
+                    log.error("node {0}:{1} is in a broken state!"\
+                                        .format(self.ip, self.port))
                     raise ServerUnavailableException(self.ip)
                 continue
             else:
@@ -794,7 +805,7 @@ class RestConnection(object):
         elif self.services_node_init is None and self.services != "":
             self.node_services = self.services.split(",")
         elif self.services_node_init is not None:
-            self.node_services = self.services_node_init.split(",")
+            self.node_services = self.services_node_init.split("-")
         kv_quota = 0
         while kv_quota == 0:
             time.sleep(1)
@@ -1611,6 +1622,20 @@ class RestConnection(object):
                     raise Exception("Duplicate entry in the stats command {0}".format(stat_name))
         return stats
 
+    def get_bucket_status(self, bucket):
+        if not bucket:
+            log.error("Bucket Name not Specified")
+            return None
+        api = self.baseUrl + 'pools/default/buckets'
+        status, content, header = self._http_request(api)
+        if status:
+            json_parsed = json.loads(content)
+            for item in json_parsed:
+                if item["name"] == bucket:
+                    return item["nodes"][0]["status"]
+            log.error("Bucket {} doesn't exist".format(bucket))
+            return None
+
     def fetch_bucket_stats(self, bucket='default', zoom='minute'):
         """Return deserialized buckets stats.
         Keyword argument:
@@ -1741,6 +1766,21 @@ class RestConnection(object):
                         stats[stat_name] = samples[stat_name][last_sample]
         return stats
 
+
+    def get_bucket_status(self, bucket):
+        if not bucket:
+            log.error("Bucket Name not Specified")
+            return None
+        api = self.baseUrl + 'pools/default/buckets'
+        status, content, header = self._http_request(api)
+        if status:
+            json_parsed = json.loads(content)
+            for item in json_parsed:
+                if item["name"] == bucket:
+                    return item["nodes"][0]["status"]
+            log.error("Bucket {0} doesn't exist".format(bucket))
+            return None
+
     def get_bucket_stats_json(self, bucket='default'):
         stats = {}
         api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
@@ -1758,6 +1798,14 @@ class RestConnection(object):
         if not status:
             raise GetBucketInfoFailed(bucket, content)
         return json.loads(content)
+
+    def is_lww_enabled(self, bucket='default'):
+        bucket_info = self.get_bucket_json(bucket=bucket)
+        try:
+            if bucket_info['timeSynchronization'] == 'enabledWithoutDrift':
+                return True
+        except KeyError:
+            return False
 
     def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
@@ -1804,47 +1852,56 @@ class RestConnection(object):
                       replica_index=1,
                       threadsNumber=3,
                       flushEnabled=1,
-                      evictionPolicy='valueOnly'):
+                      evictionPolicy='valueOnly',
+                      lww=False,
+                      drift=False):
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
 
         # this only works for default bucket ?
         if bucket == 'default':
-            params = urllib.urlencode({'name': bucket,
-                                       'authType': 'sasl',
-                                       'saslPassword': saslPassword,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': proxyPort,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                        'evictionPolicy': evictionPolicy})
+            init_params = {'name': bucket,
+                           'authType': 'sasl',
+                           'saslPassword': saslPassword,
+                           'ramQuotaMB': ramQuotaMB,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': proxyPort,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
+
         elif authType == 'none':
-            params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': proxyPort,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy})
+            init_params = {'name': bucket,
+                           'ramQuotaMB': ramQuotaMB,
+                           'authType': authType,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': proxyPort,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
         elif authType == 'sasl':
-            params = urllib.urlencode({'name': bucket,
-                                       'ramQuotaMB': ramQuotaMB,
-                                       'authType': authType,
-                                       'saslPassword': saslPassword,
-                                       'replicaNumber': replicaNumber,
-                                       'proxyPort': self.get_nodes_self().moxi,
-                                       'bucketType': bucketType,
-                                       'replicaIndex': replica_index,
-                                       'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled,
-                                       'evictionPolicy': evictionPolicy})
+            init_params = {'name': bucket,
+                           'ramQuotaMB': ramQuotaMB,
+                           'authType': authType,
+                           'saslPassword': saslPassword,
+                           'replicaNumber': replicaNumber,
+                           'proxyPort': self.get_nodes_self().moxi,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
+        if lww:
+            if drift:
+                init_params['timeSynchronization'] = 'enabledWithDrift'
+            else:
+                init_params['timeSynchronization'] = 'enabledWithoutDrift'
+        params = urllib.urlencode(init_params)
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
 
@@ -1877,7 +1934,8 @@ class RestConnection(object):
                       replicaNumber=None,
                       proxyPort=None,
                       replicaIndex=None,
-                      flushEnabled=None):
+                      flushEnabled=None,
+                      timeSynchronization=None):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
@@ -1899,10 +1957,17 @@ class RestConnection(object):
             params_dict["replicaIndex"] = replicaIndex
         if flushEnabled:
             params_dict["flushEnabled"] = flushEnabled
+        if timeSynchronization:
+            params_dict["timeSynchronization"] = timeSynchronization
+
         params = urllib.urlencode(params_dict)
 
         log.info("%s with param: %s" % (api, params))
         status, content, header = self._http_request(api, 'POST', params)
+        if timeSynchronization:
+            if status:
+                raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket))
+            return status, content
         if not status:
             raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket))
         log.info("bucket %s updated" % bucket)
@@ -2129,18 +2194,17 @@ class RestConnection(object):
     def is_replication_paused(self, src_bucket_name, dest_bucket_name):
         return self.get_xdcr_param(src_bucket_name, dest_bucket_name, 'pauseRequested')
 
-    def get_recent_xdcr_vb_ckpt(self, src_bucket_name):
+    def get_recent_xdcr_vb_ckpt(self, repl_id):
         command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
         status, content = self.diag_eval(command)
         if not status:
             raise Exception("Unable to get recent XDCR checkpoint information")
-        json_parsed = json.loads(content)
+        repl_ckpt_list = json.loads(content)
         # a single decoding will only return checkpoint record as string
         # convert string to dict using json
-        chkpt_doc_string = json_parsed.values()[0].replace('"', '\"')
+        chkpt_doc_string = repl_ckpt_list['/ckpt/%s/0' % repl_id].replace('"', '\"')
         chkpt_dict = json.loads(chkpt_doc_string)
-        chkpt_dict = chkpt_dict['checkpoints'][0]
-        return chkpt_dict
+        return chkpt_dict['checkpoints'][0]
 
     """ Start of FTS rest apis"""
 
@@ -2293,8 +2357,8 @@ class RestConnection(object):
 
         if status:
             content = json.loads(content)
-            log.info("Status: %s" %content['status'])
-            return content['total_hits'], content['hits'], content['took']
+            return content['total_hits'], content['hits'], content['took'], \
+                   content['status']
 
 
     """ End of FTS rest APIs """
@@ -2420,6 +2484,28 @@ class RestConnection(object):
 
         params = urllib.urlencode(params)
         log.info("'%s' bucket's settings will be changed with parameters: %s" % (bucket, params))
+        return self._http_request(api, "POST", params)
+
+    def set_indexer_compaction(self, mode="circular", indexDayOfWeek=None, indexFromHour=0,
+                                indexFromMinute=0, abortOutside=False,
+                                indexToHour=0, indexToMinute=0, fragmentation=30):
+        """Reset compaction values to default, try with old fields (dp4 build)
+        and then try with newer fields"""
+        params = {}
+        api = self.baseUrl + "controller/setAutoCompaction"
+        params["indexCompactionMode"] = mode
+        params["indexCircularCompaction[interval][fromHour]"] = indexFromHour
+        params["indexCircularCompaction[interval][fromMinute]"] = indexFromMinute
+        params["indexCircularCompaction[interval][toHour]"] = indexToHour
+        params["indexCircularCompaction[interval][toMinute]"] = indexToMinute
+        if indexDayOfWeek:
+            params["indexCircularCompaction[daysOfWeek]"] = indexDayOfWeek
+        params["indexCircularCompaction[interval][abortOutside]"] = str(abortOutside).lower()
+        params["parallelDBAndViewCompaction"] = "false"
+        if mode == "full":
+            params["indexFragmentationThreshold[percentage]"] = fragmentation
+        log.info("Indexer Compaction Settings: %s" % (params))
+        params = urllib.urlencode(params)
         return self._http_request(api, "POST", params)
 
     def set_global_loglevel(self, loglevel='error'):
