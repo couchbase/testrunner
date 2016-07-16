@@ -134,22 +134,23 @@ Also it might be worth doing an enterprise build (BUILD_ENTERPRISE=1 make) to be
 ./testrunner -i <your.ini> -c conf/fts/py-xxx.conf
 
 #####To run a particular test,
-./testrunner -i <your.ini> -t  fts.stable_topology_fts.StableTopFTS.create_simple_default_index,items=10,cluster=D,F -p
-To run randomly generated queries(eg. disjunction) with validation against ES -
+./testrunner -i <your.ini> -t  fts.stable_topology_fts.StableTopFTS.create_simple_default_index,items=10,cluster=D,F
+
+#####To run randomly generated queries(eg. disjunction) with validation against ES -
 ./testrunner -i cbft.ini -t fts.stable_topology_fts.StableTopFTS.test_query_type,items=1000,num_queries=13,query_types=disjunction,cluster=D,F,F,D+F,skip-cleanup=True,compare_es=True,kvstore=boltdb
 
 #####Important params to pass
- cluster = specifies number of nodes in the cluster with specific services. Eg., D, F means 1 data and 1 fts node. D,F,F,D+F means 4 node cluster with 1 kv+fts node, default: D, F, F
- kvstore = boltdb/rocksdb/forestdb. default:forestdb.
- items = no of keys to load, default: 1000
- compare_es = True/False. Default: False, compare results with elastic search. Needs a valid ES instance running, specified in .ini file.
- skip-cleanup = True/False. Default: False, to indicate bucket deletion and declustering of nodes post test run
- update/delete = True/False, Default: False, indicates if the test has update/delete phase
- expires = ttl for keys in secs, Default: 0
- index_replicas = number of index replicas, default:None (product default)
- max_partitions_pindex =max partitions per pindex, default:None (product default)
- fdb_compact_interval = forestdb compaction interval in secs, defaults to None
- fdb_compact_threshold = foresdb compaction threshold in %, defaults to None
+     - cluster = specifies number of nodes in the cluster with specific services. Eg., D, F means 1 data and 1 fts node. D,F,F,D+F means 4 node cluster with 1 kv+fts node, default: D, F, F
+     - kvstore = boltdb/rocksdb/forestdb. default:forestdb.
+     - items = no of keys to load, default: 1000
+     - compare_es = True/False. Default: False, compare results with elastic search. Needs a valid ES instance running, specified in .ini file.
+     - skip-cleanup = True/False. Default: False, to indicate bucket deletion and declustering of nodes post test run
+     - update/delete = True/False, Default: False, indicates if the test has update/delete phase
+     - expires = ttl for keys in secs, Default: 0
+     - index_replicas = number of index replicas, default:None (product default)
+     - max_partitions_pindex =max partitions per pindex, default:None (product default)
+     - fdb_compact_interval = forestdb compaction interval in secs, defaults to None
+     - fdb_compact_threshold = foresdb compaction threshold in %, defaults to None
 
 More such params and default values can be found [here.](https://github.com/couchbase/testrunner/blob/master/pytests/fts/fts_base.py#L2104). See init_parameters() if line number does not match.
 
@@ -174,7 +175,7 @@ CBFT_ENV_OPTIONS=bleveMaxResultWindow=10000000,forestdbCompactorSleepDuration=18
           after installation using "fdb_compact_threshold", in %.
 
 A caveat on the forestdb settings-
-Once set in a particular test,all subsequent tests will run with the same forestdb settings
+Once set in a particular test,all subsequent tests that use kvstore=forestdb will run with the same forestdb settings
 unless set again using the same params. Also, for these settings to take effect, make sure forestdb is the
 default index store, by passing kvstore=forestdb in your testcase.
 
@@ -193,19 +194,19 @@ More on compaction of index files on these stores can be found [here](https://gi
 
 ###Where to add new tests
 In this directory, you will find 4 .py files.
-1. fts_base.py - the base test class for FTS. You will find/add all basic methods required to frame the tests here.
-    There are 4 important, useful classes here -
-    a. CouchbaseCluster - deals with Cluster operations, keeps an account of nodes, hosts all
-       Couchbase cluster operational methods like data-load, rebalance, failover etc.
-    b. FTSIndex - contains methods to create, edit, delete indexes
-    c. NodeHelper - contains methods that perform node-level operations like login and start/stop couchabse,
-       kill processes, grep for something in fts logs etc.
-    c. FTSBaseTestClass - the main base class that is inherited by other test-case hosting classes like StableTopFTS or MovingTopFTS,
-       makes calls to all the above classes for setup, teardown, data-loading, index-creation, result validation etc.
-2. es_base.py - for working with ElasticSearch, will help with index creation, deletion, running queries, bulk api for data
-   loading/updating/deletion
-3. stable_topology_fts.py - contains testcases that deal with plain indexing and querying with no topology changes at the cluster-level.
-4. moving_topology_fts.py - contains testcases that combine indexing/quering with special scenarios that involve cluster-ops like rebalance, failover,
-   swap-rebalance, node-crash, process termination, node-reboots on a cluster hosting nodes running one or more services.
+    1. fts_base.py - the base test class for FTS. You will find/add all basic methods required to frame the tests here.
+        There are 4 important, useful classes here -
+        a. CouchbaseCluster - deals with Cluster operations, keeps an account of nodes, hosts all
+           Couchbase cluster operational methods like data-load, rebalance, failover etc.
+        b. FTSIndex - contains methods to create, edit, delete indexes
+        c. NodeHelper - contains methods that perform node-level operations like login and start/stop couchabse,
+           kill processes, grep for something in fts logs etc.
+        d. FTSBaseTestClass - the main base class that is inherited by other test-case hosting classes like StableTopFTS or MovingTopFTS,
+           makes calls to all the above classes for setup, teardown, data-loading, index-creation, result validation etc.
+    2. es_base.py - for working with ElasticSearch, will help with index creation, deletion, running queries, bulk api for data
+       loading/updating/deletion
+    3. stable_topology_fts.py - contains testcases that deal with plain indexing and querying with no topology changes at the cluster-level.
+    4. moving_topology_fts.py - contains testcases that combine indexing/quering with special scenarios that involve cluster-ops like rebalance, failover,
+       swap-rebalance, node-crash, process termination, node-reboots on a cluster hosting nodes running one or more services.
 As a general rule, add callable testcases to stable_topology_fts.py or moving_topology_fts.py depending on the nature of the test and
 if adding a reusable piece of code, move it to an appropriate class under fts_base.py

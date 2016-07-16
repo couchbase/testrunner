@@ -571,6 +571,16 @@ class FTSIndex:
             self.index_definition['params']['store'] = {"kvStoreName":
                         TestInputSingleton.input.param("kvstore", None)}
 
+        if TestInputSingleton.input.param("moss_compact_threshold", None):
+            self.index_definition['params']['store'] = \
+                {"mossStoreOptions": {
+                    "CompactionPercentage": int(TestInputSingleton.input.param(
+                        "moss_compact_threshold",
+                         None))
+                }
+            }
+
+
         self.moss_enabled = TestInputSingleton.input.param("moss", True)
         if not self.moss_enabled:
             if 'store' not in self.index_definition['params'].keys():
