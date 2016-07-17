@@ -219,16 +219,13 @@ class AdvancedQueryTests(QueryTests):
                 #wrong url not including http
                 queries = ['\connect localhost3458097;','create primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
-                print o
                 self.assertTrue("Unabletoconnectto" in o)
                 queries = ['\disconnect','drop primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
-                print o
                 self.assertTrue("Toomanyinputargumentstocommand" in o)
                 queries = ['\disconnect','create primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 self.assertTrue("Toomanyinputargumentstocommand" in o)
-                print o
                 queries = ['\connect http://localhost:8091;','create primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o

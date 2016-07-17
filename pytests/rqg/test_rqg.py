@@ -1072,6 +1072,7 @@ class RQGTests(BaseTestCase):
         #create copy of simple table if this is a merge operation
         self.sleep(10)
         if self.gsi_type ==  "memory_optimized":
+            print "changing memory settings"
             os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip,self.indexer_memQuota))
             self.sleep(10)
 
