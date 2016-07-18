@@ -69,6 +69,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
+            self.sleep(60)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
@@ -85,7 +86,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             in_between_index_ops = self._run_in_between_tasks()
             rebalance.result()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self.sleep(120)
+            self.sleep(60)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
@@ -101,12 +102,14 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout / 3)
             self.assertTrue(stopped, msg="unable to stop rebalance")
             rebalance.result()
+            self.sleep(60)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
             in_between_index_ops = self._run_in_between_tasks()
             rebalance.result()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self.sleep(60)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
@@ -182,6 +185,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                    [], servr_out)
             rebalance.result()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self.sleep(60)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
@@ -215,6 +219,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             in_between_index_ops = self._run_in_between_tasks()
             rebalance.result()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self.sleep(60)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
@@ -257,7 +262,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         log.info("Running KV mutations...")
         kvOps_tasks = self.kv_mutations()
         self._run_tasks([[rebalance], kvOps_tasks])
-        self.sleep(10)
+        self.sleep(60)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                 query_definitions=self.load_query_definitions)
@@ -329,6 +334,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             in_between_index_ops = self._run_in_between_tasks()
             rebalance.result()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self.sleep(60)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
