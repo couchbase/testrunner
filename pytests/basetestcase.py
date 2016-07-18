@@ -2261,3 +2261,11 @@ class BaseTestCase(unittest.TestCase):
         status, ipAddress = commands.getstatusoutput(
             "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
+
+
+    # get the dot version e.g. x.y
+    def _get_version(self):
+        rest = RestConnection(self.master)
+        version = rest.get_nodes_self().version
+        return float(version[:3])
+
