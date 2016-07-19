@@ -696,8 +696,8 @@ class RQGTests(BaseTestCase):
             client = self.client
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
-        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-        print n1ql_query
+        #n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+        #print n1ql_query
         sql_query = test_data["sql_query"]
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
@@ -928,7 +928,7 @@ class RQGTests(BaseTestCase):
                 self.log.info("number of results returned from sql and n1ql are different")
                 if (len(sql_result) == 0 and len(n1ql_result) ==1) or (len(n1ql_result) == 0 and len(sql_result) == 1):
                         return {"success":True, "result": "Pass"}
-                return {"success":True, "result": str("different results")}
+                return {"success":False, "result": str("different results")}
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
@@ -940,8 +940,9 @@ class RQGTests(BaseTestCase):
 
     def _run_queries_and_verify_crud(self, n1ql_query = None, sql_query = None, expected_result = None, table_name = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
-        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+
+        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         result_run = {}
         if table_name != None:
             client = self.client_map[table_name]
@@ -1638,6 +1639,7 @@ class RQGTests(BaseTestCase):
             self.record_db[bucket_name] = self.client._gen_json_from_results_with_primary_key(columns, rows,
                 primary_key = table_key_map[bucket_name])
             for bucket in self.newbuckets:
+                if bucket.name == self.database+"_"+bucket_name:
                     self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
     def _populate_delta_buckets(self, table_name = "simple_table"):
