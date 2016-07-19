@@ -91,6 +91,49 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         except Exception, ex:
             raise
 
+    def test_rebalance_in_out_multi_nodes(self):
+        """
+        MB-16220
+        1. Create cluster + Indexes
+        2. Run Queries
+        3. Rebalance out DAta and Rebalance In Data node.
+        4. Rebalance out Index and Rebalance in Index Node.
+        """
+        try:
+            extra_nodes = self.servers[self.nodes_init:]
+            self.assertGreaterEqual(len(extra_nodes), 2, "Sufficient nodes not available for rebalance")
+            self.nodes_out = 1
+            self.nodes_in_list = [extra_nodes[0]]
+            self.nodes_out_dist = "kv:1"
+            self.services_in = ["kv"]
+            self.targetMaster = False
+            self.generate_map_nodes_out_dist()
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
+            self._run_tasks([before_index_ops])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                    self.nodes_in_list,
+                                   self.nodes_out_list, services=self.services_in)
+            in_between_index_ops = self._run_in_between_tasks()
+            rebalance.result()
+            self.sleep(60)
+            self.nodes_out_dist = "index:1"
+            self.services_in = ["index"]
+            self.nodes_in_list = [extra_nodes[1]]
+            self.generate_map_nodes_out_dist()
+            self._run_initial_index_tasks()
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                    self.nodes_in_list,
+                                   self.nodes_out_list, services = self.services_in)
+            rebalance.result()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self.sleep(60)
+            self._run_after_index_tasks()
+        except Exception, ex:
+            self.log.info(str(ex))
+            raise
+
     def test_rebalance_with_stop_start(self):
         try:
             self._run_initial_index_tasks()
