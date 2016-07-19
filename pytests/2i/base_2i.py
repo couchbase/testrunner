@@ -352,34 +352,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                      self.sync_query_using_index(bucket.name,query_definition, None,
                         scan_consistency = scan_consistency, scan_vector = scan_vector)
 
-    def check_and_run_operations(self, buckets = [], initial = False, before = False, after = False, in_between = False):
-        #self.verify_query_result = True
-        #self.verify_explain_result = True
-        if initial:
-            self._set_query_explain_flags("initial")
-            self._run_operations(buckets = buckets, create_index = self.ops_map["initial"]["create_index"],
-                drop_index = self.ops_map["initial"]["drop_index"],
-                queries = self.ops_map["initial"]["query_ops"],
-                queries_with_explain = self.ops_map["initial"]["query_explain_ops"])
-        if before:
-            self._set_query_explain_flags("before")
-            self._run_operations(buckets = buckets, create_index = self.ops_map["before"]["create_index"],
-                drop_index = self.ops_map["before"]["drop_index"],
-                queries = self.ops_map["before"]["query_ops"],
-                queries_with_explain = self.ops_map["before"]["query_explain_ops"])
-        if in_between:
-            self._set_query_explain_flags("in_between")
-            self._run_operations(buckets = buckets, create_index = self.ops_map["in_between"]["create_index"],
-                drop_index = self.ops_map["in_between"]["drop_index"],
-                queries = self.ops_map["in_between"]["query_ops"],
-                queries_with_explain = self.ops_map["before"]["query_explain_ops"])
-        if after:
-            self._set_query_explain_flags("after")
-            self._run_operations(buckets = buckets, create_index = self.ops_map["after"]["create_index"],
-                drop_index = self.ops_map["after"]["drop_index"],
-                queries = self.ops_map["after"]["query_ops"],
-                queries_with_explain = self.ops_map["before"]["query_explain_ops"])
-
     def async_check_and_run_operations(self, buckets = [],
      initial = False, before = False, after = False, in_between = False,
      scan_consistency = None, scan_vectors = None):
@@ -387,38 +359,38 @@ class BaseSecondaryIndexingTests(QueryTests):
         #self.verify_explain_result = True
         if initial:
             self._set_query_explain_flags("initial")
-            return self._async_run_operations(buckets = buckets,
+            return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["initial"]["create_index"],
                 drop_index = self.ops_map["initial"]["drop_index"],
-                queries = self.ops_map["initial"]["query_ops"],
-                queries_with_explain = self.ops_map["initial"]["query_explain_ops"],
+                query = self.ops_map["initial"]["query_ops"],
+                query_with_explain = self.ops_map["initial"]["query_explain_ops"],
                 scan_consistency = scan_consistency,
                 scan_vectors = scan_vectors)
         if before:
             self._set_query_explain_flags("before")
-            return self._async_run_operations(buckets = buckets,
+            return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["before"]["create_index"] ,
                 drop_index = self.ops_map["before"]["drop_index"],
-                queries = self.ops_map["before"]["query_ops"],
-                queries_with_explain = self.ops_map["before"]["query_explain_ops"],
+                query = self.ops_map["before"]["query_ops"],
+                query_with_explain = self.ops_map["before"]["query_explain_ops"],
                 scan_consistency = scan_consistency,
                 scan_vectors = scan_vectors)
         if in_between:
             self._set_query_explain_flags("in_between")
-            return self._async_run_operations(buckets = buckets,
+            return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["in_between"]["create_index"],
                 drop_index = self.ops_map["in_between"]["drop_index"],
-                queries = self.ops_map["in_between"]["query_ops"],
-                queries_with_explain = self.ops_map["in_between"]["query_explain_ops"],
+                query = self.ops_map["in_between"]["query_ops"],
+                query_with_explain = self.ops_map["in_between"]["query_explain_ops"],
                 scan_consistency = scan_consistency,
                 scan_vectors = scan_vectors)
         if after:
             self._set_query_explain_flags("after")
-            return self._async_run_operations(buckets = buckets,
+            return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["after"]["create_index"],
                 drop_index = self.ops_map["after"]["drop_index"],
-                queries = self.ops_map["after"]["query_ops"],
-                queries_with_explain = self.ops_map["after"]["query_explain_ops"],
+                query = self.ops_map["after"]["query_ops"],
+                query_with_explain = self.ops_map["after"]["query_explain_ops"],
                 scan_consistency = "request_plus",
                 scan_vectors = scan_vectors)
 
@@ -441,10 +413,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             if drop_index and not self.skip_cleanup:
                 self.multi_drop_index(buckets,query_definitions)
 
-    def async_run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
-        create_index = False, drop_index = False, query_with_explain = False, query = False,
-         scan_consistency = None, scan_vectors = None):
+    def async_run_multi_operations(self, buckets=None, query_definitions=None, expected_results=None,
+                                   create_index=False, drop_index=False, query_with_explain=False, query=False,
+                                   scan_consistency=None, scan_vectors=None):
         tasks = []
+        if not query_definitions:
+            query_definitions = self.query_definitions
         try:
             if create_index:
                 tasks += self.async_multi_create_index(buckets, query_definitions)
@@ -459,26 +433,6 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(ex)
             raise
         return tasks
-
-    def _run_operations(self, buckets = [], create_index = False, queries = False, queries_explain= False, drop_index = False):
-        self.run_multi_operations(buckets, query_definitions = self.query_definitions,
-            create_index = create_index, drop_index = drop_index,
-            query_with_explain = queries_explain, query = queries)
-
-    def _async_run_operations(self, buckets = [], create_index = False,
-     queries_with_explain = False, queries = False, drop_index = False,
-     scan_consistency = None, scan_vectors = None):
-        return self.async_run_multi_operations(buckets, query_definitions = self.query_definitions,
-            create_index = create_index, drop_index = drop_index,
-            query_with_explain = queries_with_explain, query = queries,
-            scan_consistency = scan_consistency, scan_vectors = scan_vectors)
-
-    def run_operations(self, bucket, query_definition, expected_results,
-        create_index = False, drop_index = False, query_with_explain = False, query = False):
-        self.run_multi_operations(buckets = [bucket], query_definitions = [query_definition],
-            expected_results = {"0": expected_results},
-            create_index = create_index, drop_index = drop_index,
-            query_with_explain = query_with_explain, query = query)
 
     def gen_scan_vector(self, use_percentage = 1.0, use_random = False):
         servers = self.get_kv_nodes(servers= self.servers[:self.nodes_init])
@@ -613,6 +567,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             query_definitions = self.query_definitions
         if not buckets:
             buckets = self.buckets
+        count = 0
         while not self._verify_items_count() and count < 15:
             self.log.info("All Items Yet to be Indexed...")
             self.sleep(5)
