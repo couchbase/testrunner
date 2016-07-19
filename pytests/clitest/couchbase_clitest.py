@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 from threading import Thread
@@ -702,183 +703,85 @@ class CouchbaseCliTest(CliBaseTest):
             rest.init_cluster()
 
     def testClusterInit(self):
-        cluster_init_username = \
-                           self.input.param("cluster_init_username", "Administrator")
-        cluster_init_password = self.input.param("cluster_init_password", "password")
-        cluster_init_port = self.input.param("cluster_init_port", 8091)
-        cluster_init_ramsize = self.input.param("cluster_init_ramsize", 300)
-        command_init = self.input.param("command_init", "cluster-init")
-        param_prefix = self.input.param("param_prefix", "--cluster-init")
-        server = self.servers[-1]
-        remote_client = RemoteMachineShellConnection(server)
-        rest = RestConnection(server)
-        rest.force_eject_node()
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        data_ramsize = self.input.param("data-ramsize", None)
+        index_ramsize = self.input.param("index-ramsize", None)
+        fts_ramsize = self.input.param("fts-ramsize", None)
+        name = self.input.param("name", None)
+        index_storage_mode = self.input.param("index-storage-mode", None)
+        port = self.input.param("port", None)
+        services = self.input.param("services", None)
+        initialized = self.input.param("initialized", False)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
 
-        try:
-            cli_command = command_init
-            options = "--cluster-init-username={0} {1}-password={2} {3}-port={4} \
-                                                                 {5}-ramsize={6}"\
-                .format(cluster_init_username, param_prefix, cluster_init_password,
-                 param_prefix, cluster_init_port, param_prefix, cluster_init_ramsize)
-            output, error = \
-                       remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                                                   options=options,
-                                                          cluster_host="localhost",
-                                                              user="Administrator",
-                                                               password="password")
-            self.assertTrue(self._check_output("SUCCESS", output))
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
 
-            if cli_command == "cluster-init":
-                """ from watson, change port need to use cluster-edit """
-                if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
-                    cli_command = "cluster-edit"
-                options = "{0}-username={1} {2}-password={3} {4}-port={5} \
-                                                          {6}-ramsize={7}"\
-                    .format(param_prefix, cluster_init_username + "1", param_prefix,
-                                          cluster_init_password + "1", param_prefix,
-                                                  str(cluster_init_port)[:-1] + "9",
-                                                 param_prefix, cluster_init_ramsize)
-            elif cli_command == "cluster-edit":
-                options = "{0}-username={1} {2}-password={3} {4}-port={5}"\
-                    .format(param_prefix, cluster_init_username + "1", param_prefix,
-                                                        cluster_init_password + "1",
-                                                                       param_prefix,
-                                                  str(cluster_init_port)[:-1] + "9")
-
-            output, error = \
-                        remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                                                    options=options,
-                                                           cluster_host="localhost",
-                                                         user=cluster_init_username,
-                                                     password=cluster_init_password)
-            self.sleep(7)  # time needed to reload couchbase
-            """ work around bug MB-10927 and remove these codes when it is fixed.
-                Rerun with new credential setup.  If no error throw out,
-                rewrite the output
-            """
-            if "Connection refused" in output[0]:
-                output_tm, error_tm = \
-                     remote_client.execute_couchbase_cli(cli_command="server-info",
-                                                          cluster_host="localhost",
-                                    cluster_port=str(cluster_init_port)[:-1] + "9",
-                                                  user=cluster_init_username + "1",
-                                              password=cluster_init_password + "1")
-                if "availableStorage" in output_tm[1]:
-                    output[0] = "SUCCESS: init localhost"
-            self.assertTrue(self._check_output("SUCCESS", output))
-            server.rest_username = cluster_init_username + "1"
-            server.rest_password = cluster_init_password + "1"
-            server.port = str(cluster_init_port)[:-1] + "9"
-
-
-            cli_command = "server-list"
-            output, error = \
-                      remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                                         cluster_host="localhost",
-                                   cluster_port=str(cluster_init_port)[:-1] + "9",
-                                                 user=cluster_init_username + "1",
-                                             password=cluster_init_password + "1")
-            self.assertTrue("{0} healthy active"\
-                          .format(str(cluster_init_port)[:-1] + "9") in output[0])
-            print "There is a bug in exe server-info.  \
-                   Will fix this issue after the fix in MB-19885"
-            server_info = \
-                   self._get_cluster_info(remote_client,
-                               cluster_port=server.port,
-                              user=server.rest_username,
-                          password=server.rest_password)
-            result = server_info["otpNode"] + " " + server_info["hostname"] + \
-                " " + server_info["status"] + " " + server_info["clusterMembership"]
-            self.assertTrue("{0} healthy active"\
-                               .format(str(cluster_init_port)[:-1] + "9") in result)
-
-            cli_command = command_init
-            if cli_command == "cluster-init":
-                options = "{0}-username={1} {2}-password={3} {4}-port={5} {6}-ramsize={7}".\
-                    format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port, param_prefix, cluster_init_ramsize)
-            elif cli_command == "cluster-edit":
-                options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
-                    format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
-            self.sleep(7)  # time needed to reload couchbase
-            """ work around bug MB-10927 and remove these codes when it is fixed.  Rerun with new credential setup.
-                If no error throw out, rewrite the output """
-            if "Connection refused" in output[0]:
-                output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
-                if "availableStorage" in output_tm[1]:
-                    output[0] = "SUCCESS: init localhost"
-            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
-
-            server.rest_username = cluster_init_username
-            server.rest_password = cluster_init_password
-            server.port = cluster_init_port
-            remote_client = RemoteMachineShellConnection(server)
-            cli_command = "server-list"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
-            self.assertTrue("{0} healthy active".format(str(cluster_init_port)) in output[0])
-            server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-            result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-            self.assertTrue("{0} healthy active".format(str(cluster_init_port)) in result)
-            remote_client.disconnect()
-        finally:
-            try:
-                server.rest_username = cluster_init_username
-                server.rest_password = cluster_init_password
-                server.port = cluster_init_port
-                rest = RestConnection(server)
-                rest.force_eject_node()
-                rest.init_cluster()
-            except Exception:
-                server.rest_username = cluster_init_username + "1"
-                server.rest_password = cluster_init_password + "1"
-                server.port = str(cluster_init_port)[:-1] + "9"
-                rest = RestConnection(server)
-                rest.force_eject_node()
-                rest.init_cluster()
-                # It will go to tearDown function after this finally block
-                server.rest_username = cluster_init_username
-                server.rest_password = cluster_init_password
-                server.port = cluster_init_port
-
-    def testClusterInitNegative(self):
-        cluster_init_username = self.input.param("cluster_init_username", None)
-        cluster_init_password = self.input.param("cluster_init_password", None)
-        cluster_init_port = self.input.param("cluster_init_port", None)
-        cluster_init_ramsize = self.input.param("cluster_init_ramsize", None)
-        command_init = self.input.param("command_init", "cluster-init")
-        server = self.servers[-1]
-        remote_client = RemoteMachineShellConnection(server)
-        rest = RestConnection(server)
-        rest.force_eject_node()
-
-        try:
-            cli_command = command_init
-            options = ""
-            if  cluster_init_username is not None:
-                options += "--cluster-init-username={0} ".format(cluster_init_username)
-            if cluster_init_password is not None:
-                options += "--cluster-init-password={0} ".format(cluster_init_password)
-            if cluster_init_port is not None:
-                options += "--cluster-init-port={0} ".format(cluster_init_port)
-            if cluster_init_ramsize is None:
-                options += "--cluster-init-ramsize={0} ".format(cluster_init_ramsize)
-
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                      options=options, cluster_host="localhost", user=None, password=None)
-            self.sleep(7)  # time needed to reload couchbase
-            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-                self.assertTrue(self._check_output(\
-                                "option cluster-ramsize is not specified", output) or \
-                                self._check_output("ERROR:", output))
-            else:
-                self.assertEqual(output,
-                            [u'ERROR: Both username and password are required.'] or \
-                        output == [u'The password must be at least six characters.'])
-            remote_client.disconnect()
-        finally:
+        if not initialized:
             rest = RestConnection(server)
             rest.force_eject_node()
-            rest.init_cluster()
+
+        options = ""
+        if username:
+            options += " --cluster-username " + str(username)
+            server.rest_username = username
+        if password:
+            options += " --cluster-password " + str(password)
+            server.rest_password = password
+        if data_ramsize:
+            options += " --cluster-ramsize " + str(data_ramsize)
+        if index_ramsize:
+            options += " --cluster-index-ramsize " + str(index_ramsize)
+        if fts_ramsize:
+            options += " --cluster-fts-ramsize " + str(fts_ramsize)
+        if name:
+            options += " --cluster-name " + str(name)
+            # strip quotes if the cluster name contains spaces
+            if (name[0] == name[-1]) and name.startswith(("'", '"')):
+                name = name[1:-1]
+        if index_storage_mode:
+            options += " --index-storage-setting " + str(index_storage_mode)
+        elif services and "index" in services:
+            index_storage_mode = "forestdb"
+        if port:
+            options += " --cluster-port " + str(port)
+        if services:
+            options += " --services " + str(services)
+        else:
+            services = "data"
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("cluster-init", hostname, options)
+
+        if not expect_error:
+            # Update the cluster manager port if it was specified to be changed
+            if port:
+                server.port = port
+
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Cluster initialized"),
+                            "Expected command to succeed")
+            self.assertTrue(self.isClusterInitialized(server), "Cluster was not initialized")
+            self.assertTrue(self.verifyServices(server, services), "Services do not match")
+            self.assertTrue(self.verifyNotificationsEnabled(server), "Notification not enabled")
+            self.assertTrue(self.verifyClusterName(server, name), "Cluster name does not match")
+
+            if "index" in services:
+                self.assertTrue(self.verifyIndexStorageMode(server, index_storage_mode),
+                                "Index storage mode not properly set")
+
+            self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize, fts_ramsize),
+                            "Ram quotas not set properly")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg), "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server), "Cluster was initialized, but error was received")
+
+        # Reset the cluster (This is important for when we change the port number)
+        rest = RestConnection(server)
+        rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
 
     def testBucketCreation(self):
         bucket_name = self.input.param("bucket", "default")

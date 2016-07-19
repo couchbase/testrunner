@@ -1557,9 +1557,12 @@ class RestConnection(object):
             parsed = json_parsed
         return parsed
 
-    def get_pools_default(self, timeout=30):
+    def get_pools_default(self, query='', timeout=30):
         parsed = {}
         api = self.baseUrl + 'pools/default'
+        if query:
+            api += "?" + query
+
         status, content, header = self._http_request(api, timeout=timeout)
         json_parsed = json.loads(content)
         if status:

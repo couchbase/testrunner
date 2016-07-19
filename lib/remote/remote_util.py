@@ -3239,6 +3239,23 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+    def couchbase_cli(self, subcommand, cluster_host, options):
+        cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if self.info.distribution_type.lower() == 'mac':
+            cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
+        # now we can run command in format where all parameters are optional
+        # {PATH}/couchbase-cli [SUBCOMMAND] [OPTIONS]
+        cluster_param = " --cluster={0}".format(cluster_host)
+        command = cb_client + " " + subcommand + " " + cluster_param + " " + options
+
+        output, error = self.execute_command(command, use_channel=True)
+        self.log_command_output(output, error)
+        return output, error
+
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='', cluster_port=None, user='Administrator', password='password'):
         cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
