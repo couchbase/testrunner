@@ -1,6 +1,7 @@
 import logging
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
+from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -24,6 +25,20 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 task.result()
         else:
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = True)
+
+    def test_create_index_on_empty_bucket(self):
+        """
+        Fix for MB-15329
+        Create indexes on empty buckets
+        :return:
+        """
+        rest = RestConnection(self.master)
+        for bucket in self.buckets:
+            log.info("Flushing bucket {0}...".format(bucket.name))
+            rest.flush_bucket(bucket)
+        self.sleep(30)
+        self.multi_create_index(buckets=self.buckets,query_definitions=self.query_definitions)
+        self._verify_bucket_count_with_index_count()
 
     def test_deployment_plan_with_defer_build_plan_create_drop_index(self):
         self.run_async = True
