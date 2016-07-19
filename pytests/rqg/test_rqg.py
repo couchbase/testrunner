@@ -574,10 +574,16 @@ class RQGTests(BaseTestCase):
         # for info in list_info:
         #     info.replace("simple_table",self.database)
         map = {table_name:table_map[table_name]}
+
         list_info = self.client._convert_template_query_info(
                     table_map = map,
                     n1ql_queries = list_info,
                     define_gsi_index = self.use_secondary_index)
+
+        for info in list_info:
+            info["n1ql"] = info['n1ql'].replace("simple_table",self.database+"_"+"simple_table")
+
+        print list_info
         if self.use_secondary_index:
                 self._generate_secondary_indexes_in_batches(list_info)
         thread_list = []
@@ -691,6 +697,7 @@ class RQGTests(BaseTestCase):
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
         n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+        print n1ql_query
         sql_query = test_data["sql_query"]
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
@@ -919,8 +926,9 @@ class RQGTests(BaseTestCase):
 
             if(len(n1ql_result)!=len(sql_result)):
                 self.log.info("number of results returned from sql and n1ql are different")
-                if len(sql_result) == 0 or len(n1ql_result) == 1000:
+                if (len(sql_result) == 0 and len(n1ql_result) ==1) or (len(n1ql_result) == 0 and len(sql_result) == 1):
                         return {"success":True, "result": "Pass"}
+                return {"success":True, "result": str("different results")}
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
@@ -933,6 +941,7 @@ class RQGTests(BaseTestCase):
     def _run_queries_and_verify_crud(self, n1ql_query = None, sql_query = None, expected_result = None, table_name = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
         result_run = {}
         if table_name != None:
             client = self.client_map[table_name]
@@ -940,6 +949,9 @@ class RQGTests(BaseTestCase):
             client = self.client
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
+        for i,item in enumerate(hints):
+            if "simple_table" in item:
+                hints[i] = self.database+"_"+"simple_table"
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
@@ -1072,7 +1084,6 @@ class RQGTests(BaseTestCase):
         #create copy of simple table if this is a merge operation
         self.sleep(10)
         if self.gsi_type ==  "memory_optimized":
-            print "changing memory settings"
             os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip,self.indexer_memQuota))
             self.sleep(10)
 
@@ -1392,15 +1403,19 @@ class RQGTests(BaseTestCase):
         build_index_list = []
         for info in batches:
             table_name = info["bucket"]
+            print info
+            n1ql = info["n1ql"]
+            print "n1ql query is {0}".format(n1ql)
             batch_index_definitions.update(info["indexes"])
         for index_name in batch_index_definitions.keys():
             fail_index_name = index_name
             query = "{0} WITH {1}".format(
                 batch_index_definitions[index_name]["definition"],
                 defer_mode)
-            query.replace("simple_table",self.database+"_"+"simple_table")
+            query = query.replace("ON simple_table","ON "+self.database+"_"+"simple_table")
             self.log.info(" Running Query {0} ".format(query))
             try:
+                print index_name
                 actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
                 build_index_list.append(index_name)
             except Exception, ex:
@@ -1632,16 +1647,13 @@ class RQGTests(BaseTestCase):
             client = self.client
         query = "delete from {0}".format(table_name)
         client._insert_execute_query(query = query)
-        table_name = self.database+"_"+table_name
-        query = "delete from {0}".format(table_name)
+        query = "delete from {0}".format(self.database+"_"+table_name)
         self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose=True)
-        insert_sql= "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from copy_simple_table b".format(table_name)
+        insert_sql= "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from {1} b".format(self.database+"_"+table_name,self.database+"_"+"copy_simple_table")
         try:
-            self.log.info(insert_sql)
-            insert_sql.replace("simple_table",self.database+"_"+"simple_table")
+            self.log.info("n1ql query is {0}".format(insert_sql))
             self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=True)
             insert_sql= "INSERT INTO {0} SELECT * FROM copy_simple_table".format(table_name)
-            self.log.info(insert_sql)
             client._insert_execute_query(insert_sql)
         except Exception, ex:
             self.log.info(ex)

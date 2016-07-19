@@ -116,7 +116,7 @@ class N1QLHelper():
         if actual_result != expected_result:
             raise Exception(msg)
 
-    def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["primary_key_ids"]):
+    def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:

@@ -105,8 +105,8 @@ class QueryTests(BaseTestCase):
         self.shell.execute_command("killall -9 indexer")
         self.sleep(10, 'wait for indexer')
         self.log.info('-'*100)
-        if self.ispokemon:
-            self.set_indexer_pokemon_settings()
+        #if self.ispokemon:
+            #self.set_indexer_pokemon_settings()
 
     def suite_setUp(self):
         try:

@@ -382,7 +382,7 @@ class MySQLClient(object):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
-            query_input_list.append(helper._update_sql_template_to_values(sql =n1ql_query, table_map = table_map))
+            query_input_list.append(helper._update_sql_template_to_values(sql =n1ql_query, table_map = table_map))#,database=self.database))
         return query_input_list
 
     def _convert_update_template_query_info_with_merge(self, source_table = "copy_simple_table", target_table = "simple_table" ,n1ql_queries = [], table_map= {}):
@@ -392,6 +392,7 @@ class MySQLClient(object):
             query_input_list.append(helper._update_sql_template_to_values_with_merge(
                 source_table=source_table,target_table=target_table,
                 sql =n1ql_query, table_map = table_map))
+                #sql =n1ql_query, table_map = table_map,database = self.database))
         return query_input_list
 
     def _convert_delete_template_query_info_with_merge(self, source_table = "copy_simple_table", target_table = "simple_table" ,n1ql_queries = [], table_map= {}):
@@ -400,14 +401,14 @@ class MySQLClient(object):
         for n1ql_query in n1ql_queries:
             query_input_list.append(helper._delete_sql_template_to_values_with_merge(
                 source_table=source_table,target_table=target_table,
-                sql =n1ql_query, table_map = table_map))
+                sql =n1ql_query, table_map = table_map))#,database = self.database)
         return query_input_list
 
     def _convert_delete_template_query_info(self, n1ql_queries = [], table_map= {}):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
-            query_input_list.append(helper._delete_sql_template_to_values(sql =n1ql_query, table_map = table_map))
+            query_input_list.append(helper._delete_sql_template_to_values(sql =n1ql_query, table_map = table_map))#, database = self.database))
         return query_input_list
 
     def  _read_from_file(self, file_path):
