@@ -783,6 +783,49 @@ class CouchbaseCliTest(CliBaseTest):
         rest = RestConnection(server)
         rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
 
+    def testSettingNotification(self):
+        enable = self.input.param("enable", None)
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        initialized = self.input.param("initialized", False)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[-1])
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        if not initialized:
+            rest = RestConnection(server)
+            rest.force_eject_node()
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+            server.rest_username = username
+        if password is not None:
+            options += " -p " + str(password)
+            server.rest_password = password
+        if enable is not None:
+            options += " --enable-notification " + str(enable)
+
+        initialy_enabled = self.verifyNotificationsEnabled(server)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("setting-notification", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Notification settings updated"),
+                            "Expected command to succeed")
+            if enable == 1:
+                self.assertTrue(self.verifyNotificationsEnabled(server), "Notification not enabled")
+            else:
+                self.assertTrue(not self.verifyNotificationsEnabled(server), "Notification are enabled")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg), "Expected error message not found")
+            self.assertTrue(self.verifyNotificationsEnabled(server) == initialy_enabled, "Notifications changed after error")
+
+
     def testBucketCreation(self):
         bucket_name = self.input.param("bucket", "default")
         bucket_type = self.input.param("bucket_type", "couchbase")
