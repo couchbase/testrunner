@@ -1,7 +1,9 @@
 import logging
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
+from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
+
 
 log = logging.getLogger(__name__)
 class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
@@ -114,7 +116,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 task.result()
         except Exception, ex:
             msg =  "Index test_deployment_plan_defer_build_same_name_index already exist"
-            self.assertTrue(msg in str(ex),ex)
+            self.assertTrue(msg in str(ex), ex)
 
     def test_failure_concurrent_create_index(self):
         try:
@@ -358,6 +360,27 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
             msg = "GSI index {0} not found".format(self.query_definitions[0].index_name)
             self.assertTrue(msg in str(ex), ex)
+
+    def test_delete_bucket_while_index_build(self):
+        create_index_task = []
+        index_list = []
+        self.defer_build=True
+        for bucket in self.buckets:
+            for query_definition in self.query_definitions:
+                create_index_task.append(self.async_create_index(bucket.name, query_definition))
+                index_list.append(query_definition.index_name)
+        for task in create_index_task:
+            task.result()
+        try:
+            for bucket in self.buckets:
+                build_task = self.async_build_index(bucket, index_list)
+                log.info("Deleting bucket {0}".format(bucket.name))
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master, bucket=bucket.name)
+                build_task.result()
+        except Exception as ex:
+            msg = "Keyspace not found keyspace"
+            self.assertIn(msg, str(ex), str(ex))
+            log.info("Error while building index Expected...")
 
     def test_ambiguity_in_gsi_indexes_due_to_node_down(self):
         servr_out = self.get_nodes_from_services_map(service_type = "index")
