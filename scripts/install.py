@@ -122,7 +122,9 @@ class Installer(object):
     def uninstall(self, params):
         remote_client = RemoteMachineShellConnection(params["server"])
         #remote_client.membase_uninstall()
-        remote_client.couchbase_uninstall()
+
+        self.nsis = 'nsis' in params and params['nsis'].lower() == 'true'
+        remote_client.couchbase_uninstall(windows_nsis=self.nsis)
         remote_client.disconnect()
 
 
@@ -400,6 +402,9 @@ class CouchbaseServerInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
+        log.info('*****CouchbaseServerInstaller initialize the application ****')
+
+
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
@@ -541,6 +546,10 @@ class CouchbaseServerInstaller(Installer):
             sys.exit("unable to initialize couchbase node")
 
     def install(self, params, queue=None):
+
+        log.info('********CouchbaseServerInstaller:install')
+
+        self.nsis = 'nsis' in params and params['nsis'].lower() == 'true'
         start_server = True
         try:
             if "linux_repo" not in params:
@@ -590,10 +599,11 @@ class CouchbaseServerInstaller(Installer):
 
         if not linux_repo:
             if type == "windows":
-                remote_client.download_binary_in_win(build.url, params["version"])
+                log.info('***** Download Windows binary*****')
+                remote_client.download_binary_in_win(build.url, params["version"],nsis_install=self.nsis)
                 success = remote_client.install_server_win(build, \
                         params["version"].replace("-rel", ""), vbuckets=vbuckets,
-                        fts_query_limit=fts_query_limit)
+                        fts_query_limit=fts_query_limit,windows_nsis=self.nsis )
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:
@@ -889,6 +899,8 @@ class InstallerJob(object):
     def sequential_install(self, servers, params):
         installers = []
 
+
+
         for server in servers:
             _params = copy.deepcopy(params)
             _params["server"] = server
@@ -902,8 +914,8 @@ class InstallerJob(object):
                     for server in servers:
                         success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
                     if not success:
-                        print "thread {0} finished. Server:{1}.Couchbase is still" + \
-                              " installed after uninstall".format(t.name, server)
+                        print "Server:{0}.Couchbase is still" + \
+                              " installed after uninstall".format(server)
                         return success
                 print "uninstall succeeded"
             except Exception as ex:
@@ -997,6 +1009,7 @@ params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
 def main():
+    log.info('*****Starting the complete install process ****')
     log_install_failed = "some nodes were not install successfully!"
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
@@ -1021,8 +1034,10 @@ def main():
     if "parallel" in input.test_params and input.test_params['parallel'].lower() != 'false':
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")
+        log.info('Doing  parallel install****')
         success = InstallerJob().parallel_install(input.servers, input.test_params)
     else:
+        log.info('Doing  serial install****')
         success = InstallerJob().sequential_install(input.servers, input.test_params)
     if not success:
         sys.exit(log_install_failed)

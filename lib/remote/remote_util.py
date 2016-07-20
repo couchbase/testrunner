@@ -465,6 +465,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
+                log.info("{0} **** The version file {1} {2}  exists".format(self.ip, testconstants.WIN_CB_PATH,testconstants.VERSION_FILE ))
                 # print running process on windows
                 RemoteMachineHelper(self).is_process_running('memcached')
                 RemoteMachineHelper(self).is_process_running('erl')
@@ -477,6 +478,7 @@ class RemoteMachineShellConnection:
                     return True
         elif self.info.type.lower() == "linux":
             if self.file_exists(testconstants.LINUX_CB_PATH, testconstants.VERSION_FILE):
+                log.info("{0} **** The version file {1} {2}  exists".format(self.ip, testconstants.LINUX_CB_PATH,testconstants.VERSION_FILE ))
                 return True
         return False
 
@@ -813,14 +815,20 @@ class RemoteMachineShellConnection:
         except IOError:
             return False
 
-    def download_binary_in_win(self, url, version):
+    def download_binary_in_win(self, url, version, nsis_install=False):
         self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
         self.terminate_processes(self.info, \
                                  [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
         self.disable_firewall()
         version = version.replace("-rel", "")
         exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
-        if not exist:
+        log.info('**** about to do the wget ****')
+        if nsis_install:
+            output, error = self.execute_command(
+                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
+                                            " {0} -O {1}';ls -lh;".format(url, url.split('/')[-1]))
+            self.log_command_output(output, error)
+        elif not exist:
             output, error = self.execute_command(
                  "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
                                             " {0} -O {1}.exe';ls -lh;".format(url, version))
@@ -1309,6 +1317,8 @@ class RemoteMachineShellConnection:
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
                        fts_query_limit=None):
+
+        log.info('*****install server ***')
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1323,6 +1333,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
+            log.info('***** Doing the windows install')
             self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
             self.terminate_processes(self.info, \
                                      [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
@@ -1461,7 +1472,15 @@ class RemoteMachineShellConnection:
         return success
 
     def install_server_win(self, build, version, startserver=True,
-                           vbuckets=None, fts_query_limit=None):
+                           vbuckets=None, fts_query_limit=None,windows_nsis=False):
+
+
+        log.info('******start install_server_win')
+
+        if windows_nsis:
+            output, error = self.execute_command("cmd /c 'c:\\tmp\\{0}' /S".format( build.url.split('/')[-1]))
+            self.log_command_output(output, error)
+            return len(error) == 0
         remote_path = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1534,7 +1553,7 @@ class RemoteMachineShellConnection:
                 /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
                 """ end remove code for bug MB-13046 """
             if capture_iss_file:
-                    log.info("Delete {0} in windows automation directory" \
+                    log.info("****Delete {0} in windows automation directory" \
                                                           .format(capture_iss_file))
                     output, error = self.execute_command("rm -f \
                                /cygdrive/c/automation/{0}".format(capture_iss_file))
@@ -1544,6 +1563,7 @@ class RemoteMachineShellConnection:
                     os.system("rm -f resources/windows/automation/{0}" \
                                                           .format(capture_iss_file))
             self.delete_file(WIN_TMP_PATH, build.product_version[:10] + ".exe")
+            log.info('***** done install_server_win *****')
             return success
 
 
@@ -1748,14 +1768,15 @@ class RemoteMachineShellConnection:
                 self.execute_command("taskkill /F /T /IM {0}".format(process),
                                                                   debug=False)
             elif type in LINUX_DISTRIBUTION_NAME:
-                self.terminate_process(info, process)
+                self.terminate_process(info, process, force=True)
 
     def remove_folders(self, list):
         for folder in list:
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
 
-    def couchbase_uninstall(self):
+    def couchbase_uninstall(self,windows_nsis=False):
+        log.info('{0} *****In couchbase uninstall****'.format( self.ip))
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase", "/data/*"]
@@ -1766,7 +1787,14 @@ class RemoteMachineShellConnection:
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         fv, sv, bn = self.get_cbversion(type)
-        if type == 'windows':
+        if windows_nsis:
+            log.info('{0} ***** NSIS Uninstall'.format( self.ip))
+
+            # only one command?
+            output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
+            self.log_command_output(output, error)
+            log.info('{0} ***** NSIS Uninstall - complete'.format(self.ip))
+        elif type == 'windows':
             product = "cb"
             query = BuildQuery()
             os_type = "exe"
@@ -1799,7 +1827,7 @@ class RemoteMachineShellConnection:
                         build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
                     else:
                         sys.exit("version is not support yet")
-                log.info("VERSION file exists.  Start to uninstall {0} on {1} server"\
+                log.info("*****VERSION file exists.  Start to uninstall {0} on {1} server"\
                                                            .format(product, self.ip))
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
@@ -1912,7 +1940,7 @@ class RemoteMachineShellConnection:
                     os.system("rm -f resources/windows/automation/{0}" \
                                                           .format(capture_iss_file))
             else:
-                log.info("No couchbase server on {0} server. Free to install" \
+                log.info("*****No couchbase server on {0} server. Free to install" \
                                                                  .format(self.ip))
         elif type in LINUX_DISTRIBUTION_NAME:
             # uninstallation command is different
@@ -1951,6 +1979,9 @@ class RemoteMachineShellConnection:
             self.terminate_processes(self.info, terminate_process_list)
             self.remove_folders(linux_folders)
             self.kill_memcached()
+
+            output, error = self.execute_command("ipcrm")
+            self.log_command_output(output, error)
         elif self.info.distribution_type.lower() == 'mac':
             self.stop_server(os='mac')
             """ close Safari browser before uninstall """
@@ -1962,6 +1993,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
 
     def couchbase_win_uninstall(self, product, version, os_name, query):
+        log.info('*****couchbase_win_uninstall****')
         builds, changes = query.get_all_builds(version=version)
         version_file = 'VERSION.txt'
         bat_file = "uninstall.bat"
