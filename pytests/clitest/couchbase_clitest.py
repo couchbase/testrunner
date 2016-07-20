@@ -701,7 +701,8 @@ class CouchbaseCliTest(CliBaseTest):
             rest.init_cluster()
 
     def testClusterInit(self):
-        cluster_init_username = self.input.param("cluster_init_username", "Administrator")
+        cluster_init_username = \
+                           self.input.param("cluster_init_username", "Administrator")
         cluster_init_password = self.input.param("cluster_init_password", "password")
         cluster_init_port = self.input.param("cluster_init_port", 8091)
         cluster_init_ramsize = self.input.param("cluster_init_ramsize", 300)
@@ -714,38 +715,81 @@ class CouchbaseCliTest(CliBaseTest):
 
         try:
             cli_command = command_init
-            options = "--cluster-init-username={0} {1}-password={2} {3}-port={4} {5}-ramsize={6}".\
-                format(cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port, param_prefix, cluster_init_ramsize)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
+            options = "--cluster-init-username={0} {1}-password={2} {3}-port={4} \
+                                                                 {5}-ramsize={6}"\
+                .format(cluster_init_username, param_prefix, cluster_init_password,
+                 param_prefix, cluster_init_port, param_prefix, cluster_init_ramsize)
+            output, error = \
+                       remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                                                   options=options,
+                                                          cluster_host="localhost",
+                                                              user="Administrator",
+                                                               password="password")
+            self.assertTrue(self._check_output("SUCCESS", output))
 
             if cli_command == "cluster-init":
-                options = "{0}-username={1} {2}-password={3} {4}-port={5} {6}-ramsize={7}".\
-                    format(param_prefix, cluster_init_username + "1", param_prefix, cluster_init_password + "1", param_prefix, str(cluster_init_port)[:-1] + "9", param_prefix, cluster_init_ramsize)
+                """ from watson, change port need to use cluster-edit """
+                if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+                    cli_command = "cluster-edit"
+                options = "{0}-username={1} {2}-password={3} {4}-port={5} \
+                                                          {6}-ramsize={7}"\
+                    .format(param_prefix, cluster_init_username + "1", param_prefix,
+                                          cluster_init_password + "1", param_prefix,
+                                                  str(cluster_init_port)[:-1] + "9",
+                                                 param_prefix, cluster_init_ramsize)
             elif cli_command == "cluster-edit":
-                options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
-                    format(param_prefix, cluster_init_username + "1", param_prefix, cluster_init_password + "1", param_prefix, str(cluster_init_port)[:-1] + "9")
+                options = "{0}-username={1} {2}-password={3} {4}-port={5}"\
+                    .format(param_prefix, cluster_init_username + "1", param_prefix,
+                                                        cluster_init_password + "1",
+                                                                       param_prefix,
+                                                  str(cluster_init_port)[:-1] + "9")
 
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
+            output, error = \
+                        remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                                                    options=options,
+                                                           cluster_host="localhost",
+                                                         user=cluster_init_username,
+                                                     password=cluster_init_password)
             self.sleep(7)  # time needed to reload couchbase
-            """ work around bug MB-10927 and remove these codes when it is fixed.  Rerun with new credential setup.
-                If no error throw out, rewrite the output """
+            """ work around bug MB-10927 and remove these codes when it is fixed.
+                Rerun with new credential setup.  If no error throw out,
+                rewrite the output
+            """
             if "Connection refused" in output[0]:
-                output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
+                output_tm, error_tm = \
+                     remote_client.execute_couchbase_cli(cli_command="server-info",
+                                                          cluster_host="localhost",
+                                    cluster_port=str(cluster_init_port)[:-1] + "9",
+                                                  user=cluster_init_username + "1",
+                                              password=cluster_init_password + "1")
                 if "availableStorage" in output_tm[1]:
                     output[0] = "SUCCESS: init localhost"
-            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
+            self.assertTrue(self._check_output("SUCCESS", output))
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
             server.port = str(cluster_init_port)[:-1] + "9"
 
 
             cli_command = "server-list"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
-            self.assertTrue("{0} healthy active".format(str(cluster_init_port)[:-1] + "9") in output[0])
-            server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-            result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-            self.assertTrue("{0} healthy active".format(str(cluster_init_port)[:-1] + "9") in result)
+            output, error = \
+                      remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                                         cluster_host="localhost",
+                                   cluster_port=str(cluster_init_port)[:-1] + "9",
+                                                 user=cluster_init_username + "1",
+                                             password=cluster_init_password + "1")
+            self.assertTrue("{0} healthy active"\
+                          .format(str(cluster_init_port)[:-1] + "9") in output[0])
+            print "There is a bug in exe server-info.  \
+                   Will fix this issue after the fix in MB-19885"
+            server_info = \
+                   self._get_cluster_info(remote_client,
+                               cluster_port=server.port,
+                              user=server.rest_username,
+                          password=server.rest_password)
+            result = server_info["otpNode"] + " " + server_info["hostname"] + \
+                " " + server_info["status"] + " " + server_info["clusterMembership"]
+            self.assertTrue("{0} healthy active"\
+                               .format(str(cluster_init_port)[:-1] + "9") in result)
 
             cli_command = command_init
             if cli_command == "cluster-init":
