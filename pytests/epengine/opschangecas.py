@@ -389,6 +389,7 @@ class OpsChangeCasTests(BucketConfig):
 
         self.log.info(' Starting test-deleteMeta')
         self._load_ops(ops='set', mutations=20)
+        time.sleep(60)
         self._check_cas(check_conflict_resolution=True)
 
         k=0
