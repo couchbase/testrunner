@@ -1,7 +1,7 @@
 import json
 from clitest.cli_base import CliBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 
 
 class cbstatsTests(CliBaseTest):
@@ -46,18 +46,28 @@ class cbstatsTests(CliBaseTest):
                     else:
                         self._verify_direct_client_stats(bucket, self.command, output)
         else:
-            mc_conn = MemcachedClientHelper.direct_client(self.master, self.buckets[0].name, self.timeout)
-            bucket_info = RestConnection(self.master).get_bucket(self.buckets[0])
-            keys_map = {}
-            for i in range(self.num_items):
-                vb_id = i - len(bucket_info.vbuckets) * int(i / len(bucket_info.vbuckets))
-                mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
-                keys_map["test_docs-%s" % i] = vb_id
-            for key, vb_id in keys_map.iteritems():
-                output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key, vb_id)
-                self.verify_results(output, error)
-
-
+            for bucket in self.buckets:
+                self.log.info("test on bucket %s " % (bucket.name))
+                bucketmap_ready = \
+                  RestHelper(RestConnection(self.master)).vbucket_map_ready(bucket.name)
+                if bucketmap_ready:
+                    mc_conn = MemcachedClientHelper.direct_client(self.master,
+                                                                  bucket.name,
+                                                                  self.timeout)
+                    bucket_info = RestConnection(self.master).get_bucket(bucket)
+                else:
+                    self.fail("bucket map is not ready")
+                keys_map = {}
+                for i in range(self.num_items):
+                    vb_id = i - len(bucket_info.vbuckets) * \
+                                              int(i / len(bucket_info.vbuckets))
+                    mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps(\
+                                '{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
+                    keys_map["test_docs-%s" % i] = vb_id
+                for key, vb_id in keys_map.iteritems():
+                    output, error = self.shell.execute_cbstats(bucket, self.command,
+                                                                         key, vb_id)
+                    self.verify_results(output, error)
 
     def verify_results(self, output, error):
         if len(error) > 0 and '\n'.join(error).find("DeprecationWarning") == -1:
