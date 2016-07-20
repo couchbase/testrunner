@@ -315,7 +315,9 @@ class CouchbaseCliTest(CliBaseTest):
         shell = RemoteMachineShellConnection(self.master)
         if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
             self.log.info("skip moxi because it is removed in spock ")
-            CLI_COMMANDS.remove("moxi")
+            for x in CLI_COMMANDS:
+                if x == "moxi":
+                    CLI_COMMANDS.remove("moxi")
         for cli in CLI_COMMANDS:
             """ excluded_commands should separate by ';' """
             if self.excluded_commands is not None:
