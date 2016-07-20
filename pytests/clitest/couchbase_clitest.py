@@ -1042,7 +1042,7 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertEqual(output, ['Database data will be purged from disk ...',
                                    'ERROR: unable to bucket-flush; please check if the '
                                               'bucket exists or not; (400) Bad Request',
-                                         "{u'_': u'Flush is disabled for the bucket'}"])
+                                         '{"_":"Flush is disabled for the bucket"}'])
 
         cli_command = "bucket-delete"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
