@@ -818,7 +818,13 @@ class OpsChangeCasTests(BucketConfig):
 
         vbucket_ids = self.client._get_vBucket_ids(all_keys)
 
-        i=0
+        print 'bucket_ids'
+        for v in vbucket_ids:
+            print v
+
+        print 'done'
+
+        i=1111
         if i not in vbucket_ids and i <= 1023:
             vb_non_existing=i
         elif i>1023:
@@ -826,9 +832,11 @@ class OpsChangeCasTests(BucketConfig):
         else:
             self.log.info('ERROR generating empty vbucket id')
 
+        vb_non_existing=vbucket_ids.pop()
+        print 'nominated i is {0}'.format(i)
         mc_active = self.client.memcached(all_keys[0]) #Taking a temp connection to the mc.
         max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(vb_non_existing) + ':max_cas'] )
-        self.assertTrue( max_cas == 0, msg='[ERROR] Max cas is non-zero')
+        self.assertTrue( max_cas != 0, msg='[ERROR] Max cas is non-zero')
 
 
     ''' Test addMeta on cas and max cas values for keys
