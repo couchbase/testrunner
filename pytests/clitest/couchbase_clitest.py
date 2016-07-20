@@ -7,7 +7,8 @@ from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from pprint import pprint
-from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON
+from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
+                          COUCHBASE_FROM_SPOCK
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -312,6 +313,9 @@ class CouchbaseCliTest(CliBaseTest):
     def testHelp(self):
         command_with_error = {}
         shell = RemoteMachineShellConnection(self.master)
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+            self.log.info("skip moxi because it is removed in spock ")
+            CLI_COMMANDS.remove("moxi")
         for cli in CLI_COMMANDS:
             """ excluded_commands should separate by ';' """
             if self.excluded_commands is not None:
