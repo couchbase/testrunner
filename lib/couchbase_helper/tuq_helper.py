@@ -16,7 +16,7 @@ from membase.api.rest_client import RestConnection
 
 class N1QLHelper():
     def __init__(self, version = None, master = None, shell = None, use_rest = None, max_verify = 0, buckets = [],
-        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None):
+        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None,database = None):
         self.version = version
         self.shell = shell
         self.max_verify = max_verify
@@ -28,6 +28,7 @@ class N1QLHelper():
         self.use_rest = True
         self.full_docs_list = full_docs_list
         self.master = master
+        self.database = database
         if self.full_docs_list and len(self.full_docs_list) > 0:
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
 
@@ -147,7 +148,7 @@ class N1QLHelper():
             new_data.append(sorted(data))
         return new_data
 
-    def _verify_results_crud_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+    def _verify_results_crud_rqg(self, n1ql_result = [], sql_result = [], hints = ["primary_key_id"]):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -167,8 +168,8 @@ class N1QLHelper():
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
                                             len(actual_result), len(expected_result), extra_msg))
-        msg = "The number of rows match but the results mismatch, please check"
         if not self._result_comparison_analysis(actual_result,expected_result) :
+            msg = "The number of rows match but the results mismatch, please check"
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception(msg+"\n "+extra_msg)
 

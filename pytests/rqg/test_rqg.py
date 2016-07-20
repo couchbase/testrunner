@@ -696,8 +696,8 @@ class RQGTests(BaseTestCase):
             client = self.client
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
-        #n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-        #print n1ql_query
+        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+        test_data["n1ql_query"] = n1ql_query
         sql_query = test_data["sql_query"]
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
@@ -910,7 +910,7 @@ class RQGTests(BaseTestCase):
 
         for i,item in enumerate(hints):
             if "simple_table" in item:
-                hints[i] = self.database+"_"+"simple_table"
+                hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
@@ -940,9 +940,8 @@ class RQGTests(BaseTestCase):
 
     def _run_queries_and_verify_crud(self, n1ql_query = None, sql_query = None, expected_result = None, table_name = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
-        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
         result_run = {}
         if table_name != None:
             client = self.client_map[table_name]
@@ -952,7 +951,7 @@ class RQGTests(BaseTestCase):
         hints = self.query_helper._find_hints(sql_query)
         for i,item in enumerate(hints):
             if "simple_table" in item:
-                hints[i] = self.database+"_"+"simple_table"
+                hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
@@ -1180,7 +1179,7 @@ class RQGTests(BaseTestCase):
             use_rest = True, max_verify = self.max_verify,
             buckets = self.buckets, item_flag = None,
             n1ql_port = self.n1ql_server.n1ql_port, full_docs_list = [],
-            log = self.log, input = self.input, master = self.master)
+            log = self.log, input = self.input, master = self.master,database = self.database)
 
     def _initialize_mysql_client(self):
         if self.reset_database:
@@ -1284,7 +1283,8 @@ class RQGTests(BaseTestCase):
                 self.log.info(" Running Query {0} ".format(query))
                 try:
                     actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
-                    check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_" + table_name, index_name,
+                    table_name = self.database+"_" + table_name
+                    check = self.n1ql_helper.is_index_online_and_in_list(table_name, index_name,
                         server = self.n1ql_server, timeout = 240)
                 except Exception, ex:
                     self.log.info(ex)
@@ -1404,9 +1404,7 @@ class RQGTests(BaseTestCase):
         build_index_list = []
         for info in batches:
             table_name = info["bucket"]
-            print info
             n1ql = info["n1ql"]
-            print "n1ql query is {0}".format(n1ql)
             batch_index_definitions.update(info["indexes"])
         for index_name in batch_index_definitions.keys():
             fail_index_name = index_name
@@ -1454,6 +1452,7 @@ class RQGTests(BaseTestCase):
     def _drop_secondary_indexes_in_batches(self, batches):
         for info in batches:
             table_name = info["bucket"]
+            table_name =self.database+"_"+table_name
             for index_name in info["indexes"].keys():
                 query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, info["indexes"][index_name]["type"])
                 try:
@@ -1463,6 +1462,7 @@ class RQGTests(BaseTestCase):
                     self.log.info(ex)
 
     def _drop_secondary_indexes_with_index_map(self, index_map = {}, table_name = "simple_table"):
+        table_name = self.database + "_" +"simple_table"
         self.log.info(" Dropping Secondary Indexes for Bucket {0}".format(table_name))
         for index_name in index_map.keys():
             query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, index_map[index_name]["type"])
