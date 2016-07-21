@@ -8,6 +8,7 @@ from uibasetest import *
 from uisampletests import Bucket, NavigationHelper, BucketHelper
 from selenium.common.exceptions import StaleElementReferenceException
 from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 
 class XDCRTests(BaseUITestCase):
@@ -15,6 +16,18 @@ class XDCRTests(BaseUITestCase):
         super(XDCRTests, self).setUp()
         self.bucket = Bucket()
         self._initialize_nodes()
+        self.master = self.servers[0]
+        for server in self.servers:
+            rest=RestConnection(server)
+            cluster_status = rest.cluster_status()
+            self.log.info("Initial status of {0} cluster is {1}".format(server.ip,
+                                                                        cluster_status['nodes'][0]['status']))
+            while cluster_status['nodes'][0]['status'] == 'warmup':
+                self.log.info("Waiting for cluster to become healthy")
+                self.sleep(5)
+                cluster_status = rest.cluster_status()
+            self.log.info("current status of {0}  is {1}".format(server.ip,
+                                                                 cluster_status['nodes'][0]['status']))
         # Delete all buckets before creating new buckets
         self.log.info("Deleting all existing buckets")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
@@ -37,12 +50,10 @@ class XDCRTests(BaseUITestCase):
 
     def _deinitialize_api(self):
         for server in self.servers:
-            try:
-                rest = RestConnection(server)
-                rest.force_eject_node()
-                time.sleep(10)
-            except BaseException, e:
-                self.fail(e)
+            rest = RestConnection(server)
+            rest.remove_all_replications()
+            rest.remove_all_remote_clusters()
+        ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
 
     def _initialize_nodes(self):
         for server in self.servers:

@@ -442,6 +442,7 @@ class  RebalanceProgressTests(BaseUITestCase):
 class  GracefullFailoverTests(BaseUITestCase):
     def setUp(self):
         super(GracefullFailoverTests, self).setUp()
+        self.master=self.servers[0]
         try:
             self.nodes_init = self.input.param("nodes_init", 2)
             self.rebalance = self.input.param("rebalance", False)
@@ -476,13 +477,7 @@ class  GracefullFailoverTests(BaseUITestCase):
                 self.cluster.shutdown()
 
     def _deinitialize_api(self):
-        for server in self.servers:
-            try:
-                rest = RestConnection(server)
-                rest.force_eject_node()
-                time.sleep(10)
-            except BaseException, e:
-                self.fail(e)
+        ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
 
     def _initialize_nodes(self):
         for server in self.servers:
@@ -1393,7 +1388,12 @@ class ServerHelper():
             self.tc.log.info("Failover cancelled")
 
     def is_error_present_failover(self):
-        return self.controls.failover_warning().is_displayed()
+        try:
+            return self.controls.failover_warning().is_displayed()
+        except StaleElementReferenceException as ex:
+            self.tc.log.info("Fail Over Warning: At least two servers with the data service are required to provide "\
+                             "replication! - is not displayed")
+            return False
 
     def get_error_failover(self):
         return self.controls.failover_warning().get_text()
