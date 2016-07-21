@@ -1389,7 +1389,7 @@ class CouchbaseCliTest(CliBaseTest):
         if len(output) >=1 :
             for x in output:
                 if word_check in x:
-                    self.log.info("Found %s CLI output" % word_check)
+                    self.log.info("Found \"%s\" in CLI output" % word_check)
                     found = True
         return found
 
@@ -1505,7 +1505,8 @@ class XdcrCLITest(CliBaseTest):
 
             for element in output:
                 self.log.info("element {0}".format(element))
-                if "ERROR: unable to set up xdcr remote site remote (400) Bad Request" in element:
+                if "ERROR: unable to set up xdcr remote site remote (400) Bad Request"\
+                                                                            in element:
                     self.log.info("match {0}".format(element))
                     return True
                 elif "Error: hostname (ip) is missing" in element:
@@ -1517,25 +1518,40 @@ class XdcrCLITest(CliBaseTest):
         if xdcr_cluster_name:
             options = options.replace("--create ", "--edit ")
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"].replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
+                                     .replace("CLUSTERNAME", (xdcr_cluster_name, "")\
+                                            [xdcr_cluster_name is None]), output[0])
         if not xdcr_cluster_name:
-            # MB-8573 couchbase-cli: quotes are not supported when try to remove remote xdcr cluster that has white spaces in the name
+            """ MB-8573 couchbase-cli: quotes are not supported when try to remove
+                remote xdcr cluster that has white spaces in the name
+            """
             options = "--delete --xdcr-cluster-name=\'{0}\'".format("remote cluster")
         else:
             options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
         output, _ = self.__execute_cli(cli_command=cli_command, options=options)
         if error_expected_in_command != "delete":
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"].replace("CLUSTERNAME", (xdcr_cluster_name, "remote cluster")[xdcr_cluster_name is None]), output[0])
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
+                        .replace("CLUSTERNAME", (xdcr_cluster_name, "remote cluster")\
+                                             [xdcr_cluster_name is None]), output[0])
         else:
             xdcr_cluster_name = "unknown"
             options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
             output_error = self.input.param("output_error", "[]")
             if output_error.find("CLUSTERNAME") != -1:
-                output_error = output_error.replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None])
+                output_error = output_error.replace("CLUSTERNAME", \
+                                   (xdcr_cluster_name, "")[xdcr_cluster_name is None])
             if output_error.find("HOSTNAME") != -1:
-                output_error = output_error.replace("HOSTNAME", (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
-            self.assertEqual(output, eval(output_error))
+                output_error = output_error.replace("HOSTNAME", \
+                          (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
+            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                expect_error = ("['ERROR: unable to delete xdcr remote site localhost "
+                                  "(404) Object Not Found', 'unknown remote cluster']")
+                if output_error == expect_error:
+                    output_error = "ERROR: unable to delete xdcr remote site"
+                self.assertTrue(self._check_output(output_error, output))
+            else:
+                self.assertEqual(output, eval(output_error))
             return
 
     def testXdcrReplication(self):
@@ -1665,6 +1681,6 @@ class XdcrCLITest(CliBaseTest):
         if len(output) >=1 :
             for x in output:
                 if word_check in x:
-                    self.log.info("Found %s CLI output" % word_check)
+                    self.log.info("Found \"%s\" in CLI output" % word_check)
                     found = True
         return found
