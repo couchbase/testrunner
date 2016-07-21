@@ -1621,21 +1621,43 @@ class XdcrCLITest(CliBaseTest):
 
     def testSSLManage(self):
         '''ssl-manage OPTIONS:
-        --retrieve-cert=CERTIFICATE            retrieve cluster certificate AND save to a pem file
-        --regenerate-cert=CERTIFICATE          regenerate cluster certificate AND save to a pem file'''
-        xdcr_cert = self.input.param("xdcr-certificate", None)
-        xdcr_cert = "/tmp/" + xdcr_cert
+        --retrieve-cert=CERTIFICATE    retrieve cluster certificate AND save to a pem file
+        --regenerate-cert=CERTIFICATE  regenerate cluster certificate AND save to a pem file'''
+        if self.input.param("xdcr-certificate", None) is not None:
+            xdcr_cert = self.input.param("xdcr-certificate", None)
+        else:
+            self.fail("need params xdcr-certificate to run")
         cli_command = "ssl-manage"
-        options = "--retrieve-cert={0}".format(xdcr_cert)
-        output, error = self.__execute_cli(cli_command=cli_command, options=options)
+        cert_info = "--retrieve-cert"
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+            cert_info = "--cluster-cert-info"
+            output, error = self.__execute_cli(cli_command=cli_command,
+                                                           options=cert_info)
+            cert_file = open("cert.pem", "w")
+            """ cert must be in format PEM-encoded x509.  Need to add newline
+                at the end of each line. """
+            for item in output:
+                cert_file.write("%s\n" % item)
+            cert_file.close()
+            self.shell.copy_file_local_to_remote(xdcr_cert,
+                                            self.root_path + xdcr_cert)
+            os.system("rm -f %s " % xdcr_cert)
+        else:
+            options = "{0}={1}".format(cert_info, xdcr_cert)
+            output, error = self.__execute_cli(cli_command=cli_command, options=options)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
-        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"].replace("PATH", xdcr_cert), output[0])
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                self.assertTrue(self._check_output("-----END CERTIFICATE-----", output))
+        else:
+           self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"]\
+                                          .replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 
         options = "--regenerate-cert={0}".format(xdcr_cert)
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
-        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"].replace("PATH", xdcr_cert), output[0])
+        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"]\
+                                        .replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 
     def _check_output(self, word_check, output):
