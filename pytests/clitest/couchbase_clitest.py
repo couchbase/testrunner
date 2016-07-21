@@ -825,6 +825,111 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg), "Expected error message not found")
             self.assertTrue(self.verifyNotificationsEnabled(server) == initialy_enabled, "Notifications changed after error")
 
+    def testSettingCluster(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        new_username = self.input.param("new-username", None)
+        new_password = self.input.param("new-password", None)
+        data_ramsize = self.input.param("data-ramsize", None)
+        index_ramsize = self.input.param("index-ramsize", None)
+        fts_ramsize = self.input.param("fts-ramsize", None)
+        name = self.input.param("name", None)
+        port = self.input.param("port", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_data_memory = 256
+        init_index_memory = 256
+        init_fts_memory = 256
+        init_name = "testrunner"
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            self.assertTrue(rest.init_cluster_memoryQuota(init_username, init_password, init_data_memory),
+                            "Setting data service RAM quota failed during test setup")
+            self.assertTrue(rest.set_indexer_memoryQuota(init_username, init_password, init_index_memory),
+                            "Setting index service RAM quota failed during test setup")
+            self.assertTrue(rest.set_fts_memoryQuota(init_username, init_password, init_fts_memory),
+                            "Setting full-text service RAM quota failed during test setup")
+            self.assertTrue(rest.set_cluster_name(init_name), "Setting cluster name failed during test setup")
+
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if new_username is not None:
+            options += " --cluster-username " + str(new_username)
+            if not expect_error:
+                server.rest_username = new_username
+        if new_password is not None:
+            options += " --cluster-password " + str(new_password)
+            if not expect_error:
+                server.rest_password = new_password
+        if data_ramsize:
+            options += " --cluster-ramsize " + str(data_ramsize)
+        if index_ramsize:
+            options += " --cluster-index-ramsize " + str(index_ramsize)
+        if fts_ramsize:
+            options += " --cluster-fts-ramsize " + str(fts_ramsize)
+        if name:
+            options += " --cluster-name " + str(name)
+            # strip quotes if the cluster name contains spaces
+            if (name[0] == name[-1]) and name.startswith(("'", '"')):
+                name = name[1:-1]
+        if port:
+            options += " --cluster-port " + str(port)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("setting-cluster", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            # Update the cluster manager port if it was specified to be changed
+            if port:
+                server.port = port
+            if data_ramsize is None:
+                data_ramsize = init_data_memory
+            if index_ramsize is None:
+                index_ramsize = init_index_memory
+            if fts_ramsize is None:
+                fts_ramsize = init_fts_memory
+            if name is None:
+                name = init_name
+
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Cluster settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize, fts_ramsize),
+                            "Ram quotas not set properly")
+            self.assertTrue(self.verifyClusterName(server, name), "Cluster name does not match")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg), "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server), "Cluster was initialized, but error was received")
+
+        # Reset the cluster (This is important for when we change the port number)
+        rest = RestConnection(server)
+        self.assertTrue(rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+                   "Cluster was not re-initialized at the end of the test")
 
     def testBucketCreation(self):
         bucket_name = self.input.param("bucket", "default")
