@@ -1,8 +1,8 @@
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from testconstants import LINUX_COUCHBASE_BIN_PATH
-from testconstants import WIN_COUCHBASE_BIN_PATH
+from testconstants import LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 import random
 import zlib
@@ -26,8 +26,10 @@ class CliBaseTest(BaseTestCase):
         self.short_v = None
         self.build_number = None
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
+        self.root_path = LINUX_ROOT_PATH
         if type == 'windows':
             self.os = 'windows'
+            self.root_path = WIN_ROOT_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'

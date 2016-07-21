@@ -1,5 +1,5 @@
 import json
-
+import os
 from threading import Thread
 
 from membase.api.rest_client import RestConnection
@@ -8,7 +8,8 @@ from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK
+                          COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
+                          WIN_COUCHBASE_BIN_PATH
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -1442,7 +1443,8 @@ class XdcrCLITest(CliBaseTest):
 
         cli_command = "xdcr-setup"
         options = "--create"
-        options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
+        options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name),\
+                                                "")[xdcr_cluster_name is None]
         if xdcr_hostname is not None:
             options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
         options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
@@ -1454,24 +1456,52 @@ class XdcrCLITest(CliBaseTest):
                 cluster_host = "localhost"
             else:
                 cluster_host = self.servers[xdcr_hostname].ip
-            output, _ = self.__execute_cli(cli_command="ssl-manage", options="--retrieve-cert={0}".format(xdcr_cert), cluster_host=cluster_host)
-            options += (" --xdcr-certificate={0}".format(xdcr_cert), "")[xdcr_cert is None]
-            self.assertNotEqual(output[-1].find("SUCCESS"), -1, "ssl-manage CLI failed to retrieve certificate")
+            cert_info = "--retrieve-cert"
+            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                cert_info = "--cluster-cert-info"
+                output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0} "\
+                                         .format(cert_info), cluster_host=cluster_host)
+                cert_file = open("cert.pem", "w")
+                """ cert must be in format PEM-encoded x509.  Need to add newline
+                    at the end of each line. """
+                for item in output:
+                    cert_file.write("%s\n" % item)
+                cert_file.close()
+                self.shell.copy_file_local_to_remote("cert.pem",
+                                                self.root_path + "cert.pem")
+                os.system("rm -f cert.pem")
+            else:
+                output, _ = self.__execute_cli(cli_command="ssl-manage", options="{0}={1}"\
+                              .format(cert_info, xdcr_cert), cluster_host=cluster_host)
+            options += (" --xdcr-certificate={0}".format(xdcr_cert),\
+                                               "")[xdcr_cert is None]
+            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                self.assertTrue(self._check_output("-----END CERTIFICATE-----",
+                                                                       output))
+            else:
+                self.assertNotEqual(output[-1].find("SUCCESS"), -1,\
+                     "ssl-manage CLI failed to retrieve certificate")
 
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options
 
     def testXDCRSetup(self):
         error_expected_in_command = self.input.param("error-expected", None)
-        output, _, xdcr_cluster_name, xdcr_hostname, cli_command, options = self.__xdcr_setup_create()
+        output, _, xdcr_cluster_name, xdcr_hostname, cli_command, options = \
+                                                         self.__xdcr_setup_create()
         if error_expected_in_command != "create":
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME",\
+                              (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
         else:
             output_error = self.input.param("output_error", "[]")
             if output_error.find("CLUSTERNAME") != -1:
-                output_error = output_error.replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None])
+                output_error = output_error.replace("CLUSTERNAME",\
+                                               (xdcr_cluster_name,\
+                                               "")[xdcr_cluster_name is None])
             if output_error.find("HOSTNAME") != -1:
-                output_error = output_error.replace("HOSTNAME", (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
+                output_error = output_error.replace("HOSTNAME",\
+                               (self.servers[xdcr_hostname].ip,\
+                                     "")[xdcr_hostname is None])
 
             for element in output:
                 self.log.info("element {0}".format(element))
@@ -1607,3 +1637,12 @@ class XdcrCLITest(CliBaseTest):
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
         self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"].replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            for x in output:
+                if word_check in x:
+                    self.log.info("Found %s CLI output" % word_check)
+                    found = True
+        return found
