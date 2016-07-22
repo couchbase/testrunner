@@ -646,7 +646,7 @@ class OpsChangeCasTests(BucketConfig):
     def test_rebalance_revid_conflict_resolution(self):
 
         self.log.info(' Starting test_rebalance_revid_conflict_resolution ..')
-        #self._load_ops(ops='set', mutations=20)
+        self._load_ops(ops='set', mutations=20)
         key = 'key1'
 
         rest = RestConnection(self.master)
@@ -716,7 +716,7 @@ class OpsChangeCasTests(BucketConfig):
     def test_failover_revid_conflict_resolution(self):
 
         self.log.info(' Starting test_rebalance_revid_conflict_resolution ..')
-        #self._load_ops(ops='set', mutations=20)
+        self._load_ops(ops='set', mutations=20)
         key = 'key1'
 
         rest = RestConnection(self.master)
