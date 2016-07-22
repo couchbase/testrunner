@@ -1791,7 +1791,18 @@ class RemoteMachineShellConnection:
             log.info('{0} ***** NSIS Uninstall'.format( self.ip))
 
             # only one command?
-            output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
+            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
+
+            # from Hari
+            f1 = open('/tmp/u.bat', 'w')
+            f1.write('"c:\\Program Files\\Couchbase\\Server\\uninstall.exe" /S')
+            f1.close()
+            self.copy_file_local_to_remote('/tmp/u.bat', '/cygdrive/c/automation/u.bat')
+
+            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
+            output, error = self.execute_command("chmod +x /cygdrive/c/automation/u.bat; /cygdrive/c/automation/u.bat")
+            self.sleep(10, 'waiting 10 seconds to complete the uninstallation')
+
             self.log_command_output(output, error)
             log.info('{0} ***** NSIS Uninstall - complete'.format(self.ip))
         elif type == 'windows':
