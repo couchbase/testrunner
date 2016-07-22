@@ -43,7 +43,9 @@ class RQGTests(BaseTestCase):
         self.merge_operation= self.input.param("merge_operation",False)
         self.load_copy_table= self.input.param("load_copy_table",False)
         self.user_id= self.input.param("user_id","root")
+        self.user_cluster = self.input.param("user_cluster","Administrator")
         self.password= self.input.param("password","")
+        self.password_cluster = self.input.param("password_cluster","password")
         self.generate_input_only = self.input.param("generate_input_only",False)
         self.using_gsi= self.input.param("using_gsi",True)
         self.reset_database = self.input.param("reset_database",True)
@@ -617,13 +619,13 @@ class RQGTests(BaseTestCase):
                             n1ql_queries = data_info)
             elif self.crud_type == "merge_update":
                 data_info = self.client_map[table_name]._convert_update_template_query_info_with_merge(
-                            source_table = "copy_simple_table",
+                            source_table = self.database+"_"+"copy_simple_table",
                             target_table = table_name,
                             table_map = map,
                             n1ql_queries = data_info)
             elif self.crud_type == "merge_delete":
                 data_info = self.client_map[table_name]._convert_delete_template_query_info_with_merge(
-                            source_table = "copy_simple_table",
+                            source_table = self.database+"_"+"copy_simple_table",
                             target_table = table_name,
                             table_map = map,
                             n1ql_queries = data_info)
@@ -636,7 +638,7 @@ class RQGTests(BaseTestCase):
         data = test_data
         n1ql_query = data["n1ql"]
 
-        if (n1ql_query.find("simple_table")>0):
+        if (n1ql_query.find("simple_table")>0) and ((self.database+"_"+"simple_table") not in n1ql_query):
             n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
 
         sql_query = data["sql"]
@@ -696,7 +698,18 @@ class RQGTests(BaseTestCase):
             client = self.client
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
-        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+        if (n1ql_query.find("copy_simple_table")>0):
+             n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+             print ("n1ql query before copy replace {0}").format(n1ql_query)
+             n1ql_query = n1ql_query.replace("copy_"+self.database+"_"+"simple_table","copy_simple_table")
+             print ("n1ql query after copy replace {0}").format(n1ql_query)
+             n1ql_query = n1ql_query.replace("ON KEY copy_simple_table","ON KEY "+ self.database+"_"+"copy_simple_table")
+             print ("n1ql query after on key replace {0}").format(n1ql_query)
+        else :
+            print ("n1ql query before simple replace {0}").format(n1ql_query)
+            n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+            print ("n1ql query after simple replace {0}").format(n1ql_query)
+
         test_data["n1ql_query"] = n1ql_query
         sql_query = test_data["sql_query"]
         result_run["n1ql_query"] = n1ql_query
@@ -1092,7 +1105,7 @@ class RQGTests(BaseTestCase):
             # self.sleep(120)
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
-            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_id,self.password,self.master,self.port))
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
             self.sleep(10,"Updating maxBucket count to 15")
         self._build_indexes()
 
@@ -1434,6 +1447,8 @@ class RQGTests(BaseTestCase):
             try:
                 for info in batches:
                     table_name = info["bucket"]
+                    print "tablename before async_monitor_index is {0}".format(table_name)
+                    table_name = self.database+"_"+table_name
                     for index_name in info["indexes"]:
                         if index_name in build_index_list:
                             tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
@@ -1600,6 +1615,16 @@ class RQGTests(BaseTestCase):
             for bucket in self.buckets:
                 self.rest.delete_bucket(bucket.name)
         self.buckets = []
+        if self.change_bucket_properties or self.gsi_type == "memory_optimized":
+            bucket_size = 100
+        else:
+            bucket_size = None
+
+        if self.change_bucket_properties:
+            shell = RemoteMachineShellConnection(self.master)
+            print "master is {0}".format(self.master)
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
+            self.sleep(10,"Updating maxBucket count to 15")
         # Pull information about tables from mysql database and interpret them as no-sql dbs
         table_key_map = self.client._get_primary_key_map_for_tables()
         # Make a list of buckets that we want to create for querying
@@ -1608,15 +1633,11 @@ class RQGTests(BaseTestCase):
         new_bucket_list =[]
         for bucket in bucket_list:
             if (bucket.find("copy_simple_table")>0):
-                new_bucket_list.append("copy_"+self.database + "_" + bucket)
+                new_bucket_list.append(self.database+"_"+"copy_simple_table")
             else:
                 new_bucket_list.append(self.database + "_" + bucket)
 
 
-        if self.change_bucket_properties or self.gsi_type == "memory_optimized":
-            bucket_size = 100
-        else:
-            bucket_size = None
         # Create New Buckets
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
         print "buckets created"

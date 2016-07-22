@@ -408,7 +408,6 @@ class N1QLHelper():
     def create_primary_index(self, using_gsi = True, server = None):
         if server == None:
             server = self.master
-        print "number of buckets {0}".format(len(self.buckets))
         for bucket in self.buckets:
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             if using_gsi:
@@ -417,7 +416,6 @@ class N1QLHelper():
                 #     self.query += " WITH {'index_type': 'memdb'}"
             if not using_gsi:
                 self.query += " USING VIEW "
-            self.log.info(self.query)
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if not check:
