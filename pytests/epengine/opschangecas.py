@@ -41,7 +41,7 @@ class OpsChangeCasTests(BucketConfig):
             vbucket_id = client._get_vBucket_id(KEY_NAME)
             #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = client.memcached(KEY_NAME)
-            mc_master = client.memcached_for_vbucket( vbucket_id )
+            mc_master = client.memcached_for_vbucket(vbucket_id )
             mc_replica = client.memcached_for_replica_vbucket(vbucket_id)
 
             cas_active = mc_active.getMeta(KEY_NAME)[4]
@@ -646,23 +646,13 @@ class OpsChangeCasTests(BucketConfig):
     def test_rebalance_revid_conflict_resolution(self):
 
         self.log.info(' Starting test_rebalance_revid_conflict_resolution ..')
-        self._load_ops(ops='set', mutations=20)
+        #self._load_ops(ops='set', mutations=20)
+        key = 'key1'
 
         rest = RestConnection(self.master)
         client = VBucketAwareMemcached(rest, self.bucket)
 
-        k=0
-
-        key = "{0}{1}".format(self.prefix, k)
-
-        vbucket_id = self.client._get_vBucket_id(key)
-        mc_active = self.client.memcached(key)
-        mc_master = self.client.memcached_for_vbucket( vbucket_id )
-        mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
-
-
-        # set a key
-        value = 'value0'
+        value = 'value'
         client.memcached(key).set(key, 0, 0,json.dumps({'value':value}))
         vbucket_id = client._get_vBucket_id(key)
         #print 'vbucket_id is {0}'.format(vbucket_id)
