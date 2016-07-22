@@ -198,6 +198,7 @@ class OpsChangeCasTests(BucketConfig):
         # reboot nodes
         self._reboot_server()
 
+        time.sleep(60)
         # verify the CAS is good
         client = VBucketAwareMemcached(rest, self.bucket)
         mc_active = client.memcached(KEY_NAME)
@@ -834,9 +835,10 @@ class OpsChangeCasTests(BucketConfig):
             self.log.info('ERROR generating empty vbucket id')
 
         vb_non_existing=vbucket_ids.pop()
-        print 'nominated i is {0}'.format(i)
+        print 'nominated vb_nonexisting is {0}'.format(vb_non_existing)
         mc_active = self.client.memcached(all_keys[0]) #Taking a temp connection to the mc.
-        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(vb_non_existing) + ':max_cas'] )
+        #max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(vb_non_existing) + ':max_cas'] )
+        max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(all_keys[0])) + ':max_cas'] )
         self.assertTrue( max_cas != 0, msg='[ERROR] Max cas is non-zero')
 
 
