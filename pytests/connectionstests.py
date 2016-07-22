@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from scripts.memcachetest_runner import MemcachetestRunner
+from testconstants import COUCHBASE_FROM_SPOCK
 
 class ConnectionTests(BaseTestCase):
 
@@ -95,7 +96,11 @@ class ConnectionTests(BaseTestCase):
 
     """ this test need to install autoconf and automake on master vm """
     def multiple_connections_using_memcachetest (self):
-
+        """ server side moxi is removed in spock as in MB-16661 """
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+            self.log.info("From spock, server side moxi is removed."
+                          " More information could be found in MB-16661 ")
+            return
         shell = RemoteMachineShellConnection(self.master)
         os_type = shell.extract_remote_info()
         if os_type.type != 'Linux':
