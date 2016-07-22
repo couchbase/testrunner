@@ -39,7 +39,8 @@ class CCCP(BaseTestCase):
     def test_get_config_rest(self):
         tasks = self.run_ops()
         for task in tasks:
-            task.result()
+            if not task:
+                self.fail("failed to failover")
         for bucket in self.buckets:
             config = RestConnection(self.master).get_bucket_CCCP(bucket)
             self.verify_config(config, bucket)
