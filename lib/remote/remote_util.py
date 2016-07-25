@@ -1801,7 +1801,7 @@ class RemoteMachineShellConnection:
 
             #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
             output, error = self.execute_command("chmod +x /cygdrive/c/automation/u.bat; /cygdrive/c/automation/u.bat")
-            self.sleep(10, 'waiting 10 seconds to complete the uninstallation')
+            self.sleep(30, 'waiting 30 seconds to complete the uninstallation')
 
             self.log_command_output(output, error)
             log.info('{0} ***** NSIS Uninstall - complete'.format(self.ip))
