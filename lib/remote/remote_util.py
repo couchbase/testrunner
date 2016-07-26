@@ -3228,16 +3228,11 @@ class RemoteMachineShellConnection:
         if command != "key" and command != "raw":
             if bucket.saslPassword == None:
                 bucket.saslPassword = ''
-            command = "%s %s:11210 %s -b %s -p \"%s\" " % (cbstat_command, self.ip,
-                                                           command, bucket.name,
-                                                           bucket.saslPassword)
+            command = "%s %s:11210 %s -b %s -p \"%s\" " % (cbstat_command, self.ip, command,
+                                                                bucket.name, bucket.saslPassword)
         else:
-            if bucket.saslPassword == None:
-                bucket.saslPassword = ''
-            command = "%s %s:11210 %s -b %s -p %s %s %s " % (cbstat_command, self.ip,
-                                                            command, bucket.name,
-                                                            bucket.saslPassword,
-                                                            keyname, vbid)
+            command = "%s %s:11210 %s %s %s " % (cbstat_command, self.ip, command,
+                                                                keyname, vbid)
 
 
         output, error = self.execute_command(command)
