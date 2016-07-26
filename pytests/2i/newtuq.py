@@ -231,3 +231,19 @@ class QueryTests(BaseTestCase):
             shell.disconnect()
             if count > 0:
                 self.log.info("===== PANIC OBSERVED IN INDEXER LOGS ON SERVER {0}=====".format(server.ip))
+        projectors = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        if not projectors:
+            return None
+        for server in projectors:
+            shell = RemoteMachineShellConnection(server)
+            _, dir = RestConnection(server).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+            projector_log = str(dir) + '/projector.log*'
+            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                        format(panic_str, projector_log))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            shell.disconnect()
+            if count > 0:
+                self.log.info("===== PANIC OBSERVED IN PROJECTOR LOGS ON SERVER {0}=====".format(server.ip))
