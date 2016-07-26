@@ -1494,7 +1494,7 @@ class Lww(XDCRNewBaseTest):
             for node in server_nodes:
                 if node.ip == self._input.servers[1].ip:
                     src_conn.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
-                    src_conn.add_back_node(otpNode=self.node.id)
+                    src_conn.add_back_node(otpNode=node.id)
             rebalance = self.c1_cluster.async_rebalance(self.c1_cluster.get_nodes(), [], [])
             rebalance.result()
 
