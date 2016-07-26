@@ -210,6 +210,71 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verifyBucketSettings(self, server, bucket_name, bucket_password, bucket_type, memory_quota, eviction_policy,
+                             replica_count, enable_index_replica, priority, enable_flush):
+        rest = RestConnection(server)
+        result = rest.get_bucket_json(bucket_name)
+        if bucket_password is not None and bucket_password != result["saslPassword"]:
+            log.info("Bucket password does not match (%s vs %s)", bucket_password, result["saslPassword"])
+            return False
+
+        if bucket_type == "couchbase":
+            bucket_type = "membase"
+
+        if bucket_type is not None and bucket_type != result["bucketType"]:
+            log.info("Memory quota does not match (%s vs %s)", bucket_type, result["bucketType"])
+            return False
+
+        quota = result["quota"]["rawRAM"] / 1024 / 1024
+        if memory_quota is not None and memory_quota != quota:
+            log.info("Bucket quota does not match (%s vs %s)", memory_quota, quota)
+            return False
+
+        if eviction_policy is not None and eviction_policy != result["evictionPolicy"]:
+            log.info("Eviction policy does not match (%s vs %s)", eviction_policy, result["evictionPolicy"])
+            return False
+
+        if replica_count is not None and replica_count != result["replicaNumber"]:
+            log.info("Replica count does not match (%s vs %s)", replica_count, result["replicaNumber"])
+            return False
+
+        if enable_index_replica == 1:
+            enable_index_replica = True
+        elif enable_index_replica == 0:
+            enable_index_replica = False
+
+        if enable_index_replica is not None and enable_index_replica != result["replicaIndex"]:
+            log.info("Replica index enabled does not match (%s vs %s)", enable_index_replica, result["replicaIndex"])
+            return False
+
+        if priority == "high":
+            priority = 8
+        elif priority == "low":
+            priority = 3
+
+        if priority is not None and priority != result["threadsNumber"]:
+            log.info("Bucket priority does not match (%s vs %s)", priority, result["threadsNumber"])
+            return False
+
+        if enable_flush is not None:
+            if enable_flush == 1 and "flush" not in result["controllers"]:
+                log.info("Bucket flush is not enabled, but it should be")
+                return False
+            elif enable_flush == 0 and "flush" in result["controllers"]:
+                log.info("Bucket flush is not enabled, but it should be")
+                return False
+
+        return True
+
+    def verifyContainsBucket(self, server, name):
+        rest = RestConnection(server)
+        buckets = rest.get_buckets()
+
+        for bucket in buckets:
+            if bucket.name == name:
+                return True
+        return False
+
     def verifyClusterName(self, server, name):
         rest = RestConnection(server)
         settings = rest.get_pools_default("waitChange=0")
@@ -241,7 +306,6 @@ class CliBaseTest(BaseTestCase):
             return True
 
         return False
-
 
     def verifyNotificationsEnabled(self, server):
         rest = RestConnection(server)
