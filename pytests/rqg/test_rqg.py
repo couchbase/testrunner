@@ -16,6 +16,7 @@ from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from remote.remote_util import RemoteMachineShellConnection
+from lib.membase.helper.bucket_helper import BucketOperationHelper
 
 
 class RQGTests(BaseTestCase):
@@ -72,6 +73,8 @@ class RQGTests(BaseTestCase):
         self.query_count= 0
         self.use_rest = self.input.param("use_rest",True)
         self.ram_quota = self.input.param("ram_quota",512)
+        self.drop_index = self.input.param("drop_index",False)
+        self.drop_bucket = self.input.param("drop_bucket",False)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -340,6 +343,30 @@ class RQGTests(BaseTestCase):
                 self._drop_secondary_indexes_in_batches(list)
         for t in thread_list:
             t.join()
+
+        if self.drop_index == True:
+            query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
+            actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+            #print actual_result['results']
+            index_names = []
+            keyspaces = []
+            for indexes in actual_result['results']:
+                index_names.append(indexes['indexes']['name'])
+                keyspaces.append(indexes['indexes']['keyspace_id'])
+            i=0
+            for name in index_names:
+                keyspace = keyspaces[i]
+                if (name =='#primary'):
+                    query = 'drop primary index on {0}'.format(keyspace)
+                else:
+                    query = 'drop index {0}.{1}'.format(keyspace,name)
+                #import pdb;pdb.set_trace()
+                i+=1
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+        if self.drop_bucket == True:
+            #import pdb;pdb.set_trace()
+            for bucket in self.buckets:
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -1105,7 +1132,7 @@ class RQGTests(BaseTestCase):
             # self.sleep(120)
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
-            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
             self.sleep(10,"Updating maxBucket count to 15")
         self._build_indexes()
 
