@@ -38,7 +38,6 @@ class Upgrade_EpTests(UpgradeTests):
         #super(Upgrade_EpTests, self).tearDown()
         self.testcase = '2'
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
-            print 'In new tearDown'
             BucketOperationHelper.delete_all_buckets_or_assert(
                 self.servers, self.testcase)
             ClusterOperationHelper.cleanup_cluster(self.servers)
