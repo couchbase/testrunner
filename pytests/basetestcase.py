@@ -269,7 +269,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             if not self.skip_init_check_cbserver:
                 self._log_start(self)
-            self.sleep(10)
+                self.sleep(10)
         except Exception, e:
             traceback.print_exc()
             self.cluster.shutdown(force=True)
