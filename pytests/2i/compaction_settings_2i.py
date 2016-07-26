@@ -274,9 +274,12 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
 
     def change_system_date(self, servers, date):
         for server in servers:
+            log.info("Changing system time on {0}".format(server.ip))
             remote = RemoteMachineShellConnection(server)
+            remote.stop_couchbase()
             cmd = "date -s '{0}'".format(date)
-            remote.execute_command(cmd)
+            success, error = remote.execute_command(cmd)
+            remote.start_couchbase()
         self.change_indexer_time = True
 
     def check_compaction_number(self, initial_map, final_map, buckets=None):
