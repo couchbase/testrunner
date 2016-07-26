@@ -38,9 +38,9 @@ class XDCRTests(BaseUITestCase):
             RestConnection(self.servers[0]).create_bucket(bucket='default', ramQuotaMB=500)
         if dest_bucket:
             RestConnection(self.servers[1]).create_bucket(bucket='default', ramQuotaMB=500)
-        self.driver.refresh()
         helper = BaseHelper(self)
         helper.login()
+
 
     def tearDown(self):
         super(XDCRTests, self).tearDown()
@@ -49,10 +49,13 @@ class XDCRTests(BaseUITestCase):
             self._initialize_nodes()
 
     def _deinitialize_api(self):
+        self.log.info("Cleaning up replications and remote clusters")
         for server in self.servers:
             rest = RestConnection(server)
             rest.remove_all_replications()
             rest.remove_all_remote_clusters()
+        self.log.info("Sleeping for 30 seconds after cleaning up replications and remote clusters")
+        time.sleep(30)
         ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
 
     def _initialize_nodes(self):
