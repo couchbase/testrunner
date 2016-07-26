@@ -9,12 +9,14 @@ from testconstants import STANDARD_BUCKET_PORT
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.exceptions import NotFoundError
 from couchbase.bucket import Bucket
+from couchbase_helper.cluster import Cluster
 
 
 class Lww(XDCRNewBaseTest):
 
     def setUp(self):
         super(Lww, self).setUp()
+        self.cluster = Cluster()
         self.c1_cluster = self.get_cb_cluster_by_name('C1')
         self.c2_cluster = self.get_cb_cluster_by_name('C2')
 
@@ -1489,13 +1491,16 @@ class Lww(XDCRNewBaseTest):
         task = self.c1_cluster.async_failover(graceful=graceful)
         task.result()
 
+        self.sleep(30)
+
         if self.recoveryType:
             server_nodes = src_conn.node_statuses()
             for node in server_nodes:
                 if node.ip == self._input.servers[1].ip:
                     src_conn.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
+                    self.sleep(30)
                     src_conn.add_back_node(otpNode=node.id)
-            rebalance = self.c1_cluster.async_rebalance(self.c1_cluster.get_nodes(), [], [])
+            rebalance = self.cluster.async_rebalance(self.c1_cluster.get_nodes(), [], [])
             rebalance.result()
 
         self.verify_results()
