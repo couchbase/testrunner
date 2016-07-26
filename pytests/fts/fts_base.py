@@ -103,7 +103,6 @@ class INDEX_DEFAULTS:
                     "default_analyzer": "standard",
                     "default_datetime_parser": "dateTimeOptional",
                     "default_field": "_all",
-                    "byte_array_converter": "json",
                     "analysis": {}
                   }
               }
