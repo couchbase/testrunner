@@ -16,7 +16,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
 from testconstants import SHERLOCK_VERSION
-from testconstants import WATSON_VERSION
+from testconstants import COUCHBASE_FROM_WATSON
 
 
 
@@ -124,7 +124,7 @@ class CommunityTests(CommunityBaseTest):
                                                            .format(self.services))
             else:
                 self.fail("Failed to set kv, index and query services on CE")
-        elif self.version in WATSON_VERSION:
+        elif self.version in COUCHBASE_FROM_WATSON:
             if self.services == "fts,index,kv":
                 if status:
                     self.fail("CE does not support fts, index and kv on same node")
@@ -166,10 +166,10 @@ class CommunityTests(CommunityBaseTest):
             if e:
                 print e
         if not status:
-            if self.version not in WATSON_VERSION and \
+            if self.version not in COUCHBASE_FROM_WATSON and \
                          self.start_node_services not in sherlock_services_in_ce:
                 self.log.info("initial services setting enforced in Sherlock CE")
-            elif self.version in WATSON_VERSION and \
+            elif self.version in COUCHBASE_FROM_WATSON and \
                          self.start_node_services not in watson_services_in_ce:
                 self.log.info("initial services setting enforced in Watson CE")
 
@@ -197,7 +197,7 @@ class CommunityTests(CommunityBaseTest):
                         .format(map[self.master.ip], self.start_node_services, \
                          map[self.servers[1].ip], self.add_node_services))
             else:
-                if self.version not in WATSON_VERSION:
+                if self.version not in COUCHBASE_FROM_WATSON:
                     if self.start_node_services in ["kv", "index,kv,n1ql"] and \
                           self.add_node_services not in ["kv", "index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
@@ -205,7 +205,7 @@ class CommunityTests(CommunityBaseTest):
                         self.log.info("services are enforced in CE")
                     else:
                         self.fail("maybe bug in add node")
-                elif self.version in WATSON_VERSION:
+                elif self.version in COUCHBASE_FROM_WATSON:
                     if self.start_node_services in ["kv", "index,kv,n1ql",
                          "index,kv,n1ql,fts"] and self.add_node_services not in \
                                     ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]:
