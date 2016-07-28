@@ -1235,8 +1235,13 @@ class Lww(XDCRNewBaseTest):
 
         self.verify_results(skip_verify_data=['lww','nolww'])
 
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn.stop_couchbase()
+
         self._enable_ntp_and_sync()
         self._disable_ntp()
+
+        conn.start_couchbase()
 
     def test_seq_upd_on_bi_with_src_clock_faster(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -1298,8 +1303,13 @@ class Lww(XDCRNewBaseTest):
 
         self.verify_results(skip_verify_data=['lww','nolww'])
 
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn.stop_couchbase()
+
         self._enable_ntp_and_sync()
         self._disable_ntp()
+
+        conn.start_couchbase()
 
     def test_seq_add_del_on_bi_with_target_clock_faster(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -1354,8 +1364,13 @@ class Lww(XDCRNewBaseTest):
         # TODO - figure out how to verify results in this case
         # self.verify_results(skip_verify_data=['lww'])
 
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn.stop_couchbase()
+
         self._enable_ntp_and_sync()
         self._disable_ntp()
+
+        conn.start_couchbase()
 
     def test_seq_del_add_on_bi_with_target_clock_faster(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -1401,8 +1416,13 @@ class Lww(XDCRNewBaseTest):
 
         self.verify_results(skip_verify_data=['lww'])
 
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn.stop_couchbase()
+
         self._enable_ntp_and_sync()
         self._disable_ntp()
+
+        conn.start_couchbase()
 
     def test_lww_with_bucket_recreate(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
