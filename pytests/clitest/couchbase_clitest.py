@@ -1107,6 +1107,63 @@ class CouchbaseCliTest(CliBaseTest):
             rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
             "Cluster was not re-initialized at the end of the test")
 
+    def testBucketDelete(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_bucket_type = self.input.param("init-bucket-type", None)
+
+        server = copy.deepcopy(self.servers[-1])
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if init_bucket_type == "couchbase":
+            init_bucket_type = "membase"
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            if init_bucket_type != None:
+                self.assertTrue(rest.create_bucket(bucket_name, 256, "sasl", "", 1, 0, init_bucket_type, 0, 3,
+                                                   0, "valueOnly"),
+                                "Bucket not created during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-delete", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket deleted"),
+                            "Expected command to succeed")
+            self.assertTrue(not self.verifyContainsBucket(server, bucket_name), "Bucket was not deleted")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized and init_bucket_type is not None:
+                self.assertTrue(self.verifyContainsBucket(server, bucket_name), "Bucket should not have been deleted")
+
     def testIndexerSettings(self):
         cli_command = "setting-index"
         rest = RestConnection(self.master)
