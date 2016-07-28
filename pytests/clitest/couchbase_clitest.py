@@ -1025,6 +1025,88 @@ class CouchbaseCliTest(CliBaseTest):
         self.assertTrue(rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
                         "Cluster was not re-initialized at the end of the test")
 
+    def testBucketEdit(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        bucket_password = self.input.param("bucket-password", None)
+        memory_quota = self.input.param("memory-quota", None)
+        eviction_policy = self.input.param("eviction-policy", None)
+        replica_count = self.input.param("replica-count", None)
+        priority = self.input.param("priority", None)
+        enable_flush = self.input.param("enable-flush", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_bucket_type = self.input.param("init-bucket-type")
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if init_bucket_type == "couchbase":
+            init_bucket_type = "membase"
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            self.assertTrue(rest.create_bucket(bucket_name, 256, "sasl", "", 1, 0, init_bucket_type, 0, 3, 0, "valueOnly"),
+                            "Bucket not created during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+        if bucket_password is not None:
+            options += " --bucket-password " + bucket_password
+        if memory_quota is not None:
+            options += " --bucket-ramsize " + str(memory_quota)
+        if eviction_policy is not None:
+            options += " --bucket-eviction-policy " + eviction_policy
+        if replica_count is not None:
+            options += " --bucket-replica " + str(replica_count)
+        if priority is not None:
+            options += " --bucket-priority " + priority
+        if enable_flush is not None:
+            options += " --enable-flush " + str(enable_flush)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-edit", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket edited"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_password, None, memory_quota,
+                                                      eviction_policy, replica_count, None, priority, enable_flush),
+                            "Bucket settings not set properly")
+        else:
+            # List buckets
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+
+        # Reset the cluster (This is important for when we change the port number or username/password)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
+
     def testIndexerSettings(self):
         cli_command = "setting-index"
         rest = RestConnection(self.master)
@@ -1038,118 +1120,6 @@ class CouchbaseCliTest(CliBaseTest):
                                           options=options, cluster_host="localhost", \
                                             user="Administrator", password="password")
         self.assertEqual(output, ['SUCCESS: set index settings'])
-        remote_client.disconnect()
-
-    def testBucketModification(self):
-        cli_command = "bucket-edit"
-        bucket_password = self.input.param("bucket_password", None)
-        bucket_port = self.input.param("bucket_port", 11211)
-        enable_flush = self.input.param("enable_flush", None)
-        self.testBucketCreation()
-        bucket_port_new = self.input.param("bucket_port_new", None)
-        bucket_password_new = self.input.param("bucket_password_new", None)
-        bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
-        enable_flush_new = self.input.param("enable_flush_new", None)
-        enable_index_replica_new = self.input.param("enable_index_replica_new", None)
-        bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
-        bucket = self.input.param("bucket", "default")
-        rest = RestConnection(self.master)
-        remote_client = RemoteMachineShellConnection(self.master)
-
-        options = "--bucket={0}".format(bucket)
-        options += (" --enable-flush={0}".format(enable_flush_new), \
-                                        "")[enable_flush_new is None]
-        options += (" --enable-index-replica={0}".format(enable_index_replica_new), \
-                                                "")[enable_index_replica_new is None]
-        options += (" --bucket-port={0}".format(bucket_port_new), \
-                                               "")[bucket_port_new is None]
-        options += (" --bucket-password={0}".format(bucket_password_new), \
-                                           "")[bucket_password_new is None]
-        options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), \
-                                            "")[bucket_ramsize_new is None]
-
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                          options=options, cluster_host="localhost", \
-                                            user="Administrator", password="password")
-        self.assertEqual(output, ['SUCCESS: bucket-edit'])
-
-        if bucket_password_new is not None:
-            bucket_password_new = bucket_password
-        if bucket_port_new is not None:
-            bucket_port = bucket_port_new
-        if bucket_ramsize_new is not None:
-            bucket_ramsize = bucket_ramsize_new
-
-        buckets = rest.get_buckets()
-        result = True
-        if len(buckets) != 1:
-            self.log.error("Expected to ge only 1 bucket")
-            result = False
-        bucket = buckets[0]
-        if not (bucket_port == bucket.nodes[0].moxi or bucket_port == bucket.port):
-            self.log.error("Bucket port is not correct")
-            result = False
-        if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
-            self.log.error("Bucket password is not correct")
-            result = False
-        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), \
-                                                  int(int(buckets[0].stats.ram) * 1.05)):
-            self.log.error("Bucket RAM size is not correct")
-            result = False
-
-        if not result:
-            self.fail("Bucket was created with incorrect properties")
-
-        options = ""
-        cli_command = "bucket-flush"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                           options=options, cluster_host="localhost",
-                                             user="Administrator", password="password")
-        self.assertEqual(output, ['Running this command will totally PURGE database'
-                     ' data from disk. Do you really want to do it? (Yes/No)TIMED OUT:'
-            ' command: bucket-flush: localhost:8091, most likely bucket is not flushed'])
-        if not enable_flush:
-            cli_command = "bucket-flush --force"
-            options = "--bucket={0}".format(bucket)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-                self.assertTrue(self._check_output("ERROR:", output))
-            else:
-                self.assertEqual(output, ['Database data will be purged from disk ...',
-                'ERROR: unable to bucket-flush; please check if the bucket exists or not;'
-                     ' (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
-            cli_command = "bucket-edit"
-            options = "--bucket={0} --enable-flush=1 --bucket-ramsize=500".format(bucket)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            self.assertEqual(output, ['SUCCESS: bucket-edit'])
-
-        cli_command = "bucket-flush --force"
-        options = "--bucket={0}".format(bucket)
-        if enable_flush_new is None:
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...',
-                                                               'SUCCESS: bucket-flush'])
-        elif int(enable_flush_new) == 0:
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...',
-                                   'ERROR: unable to bucket-flush; please check if the '
-                                              'bucket exists or not; (400) Bad Request',
-                                         '{"_":"Flush is disabled for the bucket"}'])
-
-        cli_command = "bucket-delete"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                          options=options, cluster_host="localhost",
-                                          user="Administrator", password="password")
-        self.assertEqual(output, ['SUCCESS: bucket-delete'])
-
         remote_client.disconnect()
 
     # MB-8566
