@@ -3058,6 +3058,33 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_raw_order(self):
+        for bucket in self.buckets:
+            self.query = "select raw name from {0} order by name {1}".format(bucket.name,"desc")
+            actual_list = self.run_cbq_query()
+            actual_result = actual_list['results']
+            expected_result = [ doc["name"]
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result,reverse=True)
+           # expected_result = sorted(expected_result,reverse=True)
+            self.assertEqual(actual_result, expected_result)
+            self.query = "select raw name from {0} order by name {1}".format(bucket.name,"asc")
+            actual_list = self.run_cbq_query()
+            actual_result = actual_list['results']
+            expected_result = [doc["name"] for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name,"asc")
+            actual_list = self.run_cbq_query()
+            actual_result = actual_list['results']
+            expected_result = sorted(actual_result)
+            self.assertEqual(actual_result,expected_result)
+            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name,"desc")
+            actual_list = self.run_cbq_query()
+            actual_result = actual_list['results']
+            expected_result = sorted(actual_result,reverse=True)
+            self.assertEqual(actual_result,expected_result)
+
 ##############################################################################################
 #
 #  Number fns
