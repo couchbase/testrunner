@@ -30,6 +30,34 @@ class QueriesIndexTests(QueryTests):
     def suite_tearDown(self):
         super(QueriesIndexTests, self).suite_tearDown()
 
+    def test_limit_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s ( department,_id )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "Explain select * from %s use index(%s) where "  %(bucket.name,idx)+\
+                             "department = 'Manager' and _id LIKE 'query-test%' limit 10"
+                actual_result = self.run_cbq_query()
+                print actual_result
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan["~children"][0]["~children"][0]["limit"] == "10")
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+
+
     def test_suffix(self):
         for bucket in self.buckets:
             created_indexes = []
