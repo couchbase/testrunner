@@ -49,20 +49,38 @@ FULL_FIELD_NAMES = {
     'username': 'revision_contributor_username'
 }
 
+CUSTOM_ANALYZER_TEMPLATE = {
+    "analyzers": {}
+}
+
 ANALYZERS = ["standard", "simple", "keyword", "en"]
 
 LANG_ANALYZERS = ["ar", "cjk", "fr", "fa", "hi", "it", "pt", "en", "web"]
+
+CHAR_FILTERS = ["html"]
+
+TOKENIZERS = ["letter","single","unicode","web","whitespace"]
+
+TOKEN_FILTERS = ["apostrophe","elision_fr","to_lower"]
 
 class CustomMapGenerator:
     """
     # Generates an FTS and equivalent ES custom map for emp/wiki datasets
     """
-    def __init__(self, seed=0, dataset="emp"):
+    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0):
         random.seed(seed)
         self.fts_map = {"types": {}}
         self.es_map = {}
         self.num_field_maps = random.randint(1, 10)
         self.queryable_fields = {}
+        self.num_custom_analyzers = num_custom_analyzers
+        # Holds the list of custom analyzers created by
+        # build_custom_analyzer method
+        self.custom_analyzers=[]
+
+        for n in range(0,self.num_custom_analyzers,1):
+            self.custom_analyzers.append("customAnalyzer"+str(n+1))
+
         if dataset == "emp":
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
@@ -241,7 +259,10 @@ class CustomMapGenerator:
         fts_field_map['name'] = field
         fts_field_map['store'] = False
         fts_field_map['type'] = field_type
-        analyzer = self.get_random_value(ANALYZERS)
+        if self.num_custom_analyzers:
+            analyzer = self.get_random_value(self.custom_analyzers)
+        else:
+            analyzer = self.get_random_value(ANALYZERS)
         if field_type == "text":
             fts_field_map['analyzer'] = analyzer
         else:
@@ -261,6 +282,7 @@ class CustomMapGenerator:
         if field_type == "text":
             es_field_map['type'] = "string"
             es_field_map['term_vector'] = "yes"
+
             es_field_map['analyzer'] = analyzer
             if analyzer == "en":
                 es_field_map['analyzer'] = "english"
@@ -281,6 +303,25 @@ class CustomMapGenerator:
         if nested_field in self.nested_fields.iterkeys():
             return self.get_random_field_name_and_type(
                 self.nested_fields[nested_field])
+
+    def build_custom_analyzer(self):
+        analyzer_map = {}
+        for custom_analyzer in self.custom_analyzers:
+            char_filter = self.get_random_value(CHAR_FILTERS)
+            tokenizer = self.get_random_value(TOKENIZERS)
+            token_filter = self.get_random_value(TOKEN_FILTERS)
+            analyzer_map[custom_analyzer] = {}
+            analyzer_map[custom_analyzer]["char_filters"] = []
+            analyzer_map[custom_analyzer]["token_filters"] = []
+            analyzer_map[custom_analyzer]["tokenizer"] = ""
+            analyzer_map[custom_analyzer]["char_filters"].append(char_filter)
+            analyzer_map[custom_analyzer]["tokenizer"] = tokenizer
+            analyzer_map[custom_analyzer]["token_filters"].append(token_filter)
+            analyzer_map[custom_analyzer]["type"] = "custom"
+
+        analyzer = CUSTOM_ANALYZER_TEMPLATE
+        analyzer["analyzers"]=analyzer_map
+        return analyzer
 
 if __name__ == "__main__":
     import json

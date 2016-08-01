@@ -545,6 +545,7 @@ class FTSIndex:
 
         # Support for custom map
         self.custom_map = TestInputSingleton.input.param("custom_map", False)
+        self.num_custom_analyzers = TestInputSingleton.input.param("num_custom_analyzers", 0)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
         if self.custom_map:
             self.generate_new_custom_map(seed=self.cm_id)
@@ -588,12 +589,17 @@ class FTSIndex:
 
     def generate_new_custom_map(self, seed):
         from custom_map_generator.map_generator import CustomMapGenerator
-        cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset)
+        cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset, num_custom_analyzers=self.num_custom_analyzers)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
         print self.smart_query_fields
         self.index_definition['params'] = self.build_custom_index_params(
                 fts_map)
+        if self.num_custom_analyzers > 0:
+            custom_analyzer_def = cm_gen.build_custom_analyzer()
+            self.index_definition["params"]["mapping"]["analysis"] = custom_analyzer_def
+            self.index_definition['params']['mapping']['default_analyzer'] = \
+                cm_gen.get_random_value(custom_analyzer_def["analyzers"].keys())
         self.__log.info(json.dumps(self.index_definition["params"],
                                        indent=3))
 
@@ -1975,6 +1981,7 @@ class FTSBaseTest(unittest.TestCase):
         self.__init_logger()
         self.__cluster_op = Cluster()
         self.__init_parameters()
+        self.num_custom_analyzers = self._input.param("num_custom_analyzers", 0)
 
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="
@@ -2749,9 +2756,12 @@ class FTSBaseTest(unittest.TestCase):
     def teardown_es(self):
         self.es.delete_indices()
 
-    def create_es_index_mapping(self, mapping):
-        self.es.create_index_mapping(index_name="es_index",
-                                     mapping=mapping)
+    def create_es_index_mapping(self, es_mapping, fts_mapping):
+        if not (self.num_custom_analyzers > 0):
+            self.es.create_index_mapping(index_name="es_index",
+                                     mapping=es_mapping,fts_mapping=None)
+        else:
+            self.es.create_index_mapping(index_name="es_index",es_mapping=es_mapping,fts_mapping=fts_mapping)
 
     def load_data_es_from_generator(self, generator,
                                     index_name="es_index"):
