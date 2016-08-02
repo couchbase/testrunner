@@ -124,7 +124,7 @@ class CommunityTests(CommunityBaseTest):
                                                            .format(self.services))
             else:
                 self.fail("Failed to set kv, index and query services on CE")
-        elif self.version in COUCHBASE_FROM_WATSON:
+        elif self.version[:5] in COUCHBASE_FROM_WATSON:
             if self.services == "fts,index,kv":
                 if status:
                     self.fail("CE does not support fts, index and kv on same node")
