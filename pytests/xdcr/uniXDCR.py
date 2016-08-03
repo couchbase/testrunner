@@ -639,3 +639,92 @@ class unidirectional(XDCRNewBaseTest):
             self.fail("No attempts were made to repair connections on %s before"
                       " restarting pipeline" % self.src_cluster.get_nodes())
         self.verify_results()
+
+    def test_verify_mb19802_1(self):
+        load_tasks = self.setup_xdcr_async_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+
+        conn = RemoteMachineShellConnection(self.dest_cluster.get_master_node())
+        conn.stop_couchbase()
+
+        for task in load_tasks:
+            task.result()
+
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                            node,
+                            "batchGetMeta timed out",
+                            goxdcr_log)
+            self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
+            self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
+
+        conn.start_couchbase()
+        self.verify_results()
+
+    def test_verify_mb19802_2(self):
+        load_tasks = self.setup_xdcr_async_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+
+        self.dest_cluster.failover_and_rebalance_master()
+
+        for task in load_tasks:
+            task.result()
+
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                            node,
+                            "batchGetMeta timed out",
+                            goxdcr_log)
+            self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
+            self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
+
+        self.verify_results()
+
+    def test_verify_mb19697(self):
+        self.setup_xdcr_and_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+
+        self.src_cluster.pause_all_replications()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=100000)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        self.src_cluster.resume_all_replications()
+        self._wait_for_replication_to_catchup()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=100000)
+        load_tasks = self.src_cluster.async_load_all_buckets_from_generator(gen)
+
+        self.src_cluster.rebalance_out()
+
+        for task in load_tasks:
+            task.result()
+
+        self._wait_for_replication_to_catchup()
+
+        self.src_cluster.rebalance_in()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=100000)
+        load_tasks = self.src_cluster.async_load_all_buckets_from_generator(gen)
+
+        self.src_cluster.failover_and_rebalance_master()
+
+        for task in load_tasks:
+            task.result()
+
+        self._wait_for_replication_to_catchup()
+
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                            node,
+                            "counter .+ goes backward, maybe due to the pipeline is restarted",
+                            goxdcr_log)
+            self.assertEqual(count, 0, "counter goes backward, maybe due to the pipeline is restarted "
+                                        "error message found in " + str(node.ip))
+            self.log.info("counter goes backward, maybe due to the pipeline is restarted "
+                                        "error message not found in " + str(node.ip))
+
+        self.verify_results()
