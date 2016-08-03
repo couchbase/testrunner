@@ -113,22 +113,19 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         # kill mc n times
         # crash mcd on all nodes
         for i in node_range:
-            assert self.kill_memcached(i)
-            pollers[i].setMcEventFlag(True)
 
-        # expect n restart messages
-        for i in node_range:
+            # kill
+            p = pollers[i]
+            p.setMcEventFlag(True)
+            assert self.kill_memcached(i)
+
             # get restart msg
-	    msg = pollers[i].getEventQItem()
+	    msg = p.getEventQItem()
 	    assert msg
 
-        for p in pollers:
+            # get dump item
             dmp_path = p.getDumpQItem()
-            if dmp_path is None:
-                continue
-            crashes += 1
-
-        assert crashes == len(self.servers)
+            assert dmp_path and os.access(dmp_path, os.R_OK)
 
     def verify_crash_during_rebalance(self):
 
@@ -201,6 +198,8 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         nodeA = self.servers[0]
         logp = NSLogPoller(0)
         logp.start()
+        running = True
+        threads = []
 
         # inline doc loader
         def loader():
@@ -214,17 +213,23 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         for  i in range(10):
             t = threading.Thread(target=loader)
             t.start()
+            threads.append(t)
 
         assert self.kill_memcached(0)
         dmp_path = logp.getDumpQItem()
 
         assert os.access(dmp_path, os.R_OK)
 
+        running = False
+        [t.join() for t in threads]
+
     def kill_during_compaction(self):
 
         nodeA = self.servers[0]
         logp = NSLogPoller(0)
         logp.start()
+        running = True
+        threads = []
 
         def loader():
             while running:
@@ -241,6 +246,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         for  i in range(10):
             t = threading.Thread(target=loader)
             t.start()
+            threads.append(t)
 
         # watch for compaction start
         logp.setCompactEventFlag(True)
@@ -255,6 +261,10 @@ class BreakpadVerifyDumpTests(BreakpadBase):
 
         # kill mc
         assert self.kill_memcached(0)
+
+        # stop data loading
+        running = False
+        [t.join() for t in threads]
 
         # get dmp_path from log poller
         dmp_path = logp.getDumpQItem()
