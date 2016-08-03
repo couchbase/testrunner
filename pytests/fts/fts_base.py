@@ -2759,9 +2759,10 @@ class FTSBaseTest(unittest.TestCase):
     def create_es_index_mapping(self, es_mapping, fts_mapping):
         if not (self.num_custom_analyzers > 0):
             self.es.create_index_mapping(index_name="es_index",
-                                     mapping=es_mapping,fts_mapping=None)
+                                    es_mapping=es_mapping,fts_mapping=None)
         else:
-            self.es.create_index_mapping(index_name="es_index",es_mapping=es_mapping,fts_mapping=fts_mapping)
+            self.es.create_index_mapping(index_name="es_index",
+                                    es_mapping=es_mapping,fts_mapping=fts_mapping)
 
     def load_data_es_from_generator(self, generator,
                                     index_name="es_index"):
