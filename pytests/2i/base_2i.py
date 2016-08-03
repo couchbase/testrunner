@@ -48,7 +48,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
             self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
         self.ops_map = self._create_operation_map()
-        self.log.info(self.ops_map)
+        #self.log.info(self.ops_map)
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
         self.memory_create_list = []
@@ -359,6 +359,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         #self.verify_explain_result = True
         if initial:
             self._set_query_explain_flags("initial")
+            self.log.info(self.ops_map["initial"])
             return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["initial"]["create_index"],
                 drop_index = self.ops_map["initial"]["drop_index"],
@@ -368,6 +369,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_vectors = scan_vectors)
         if before:
             self._set_query_explain_flags("before")
+            self.log.info(self.ops_map["before"])
             return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["before"]["create_index"] ,
                 drop_index = self.ops_map["before"]["drop_index"],
@@ -377,6 +379,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_vectors = scan_vectors)
         if in_between:
             self._set_query_explain_flags("in_between")
+            self.log.info(self.ops_map["initial"])
             return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["in_between"]["create_index"],
                 drop_index = self.ops_map["in_between"]["drop_index"],
@@ -386,6 +389,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_vectors = scan_vectors)
         if after:
             self._set_query_explain_flags("after")
+            self.log.info(self.ops_map["initial"])
             return self.async_run_multi_operations(buckets = buckets,
                 create_index = self.ops_map["after"]["create_index"],
                 drop_index = self.ops_map["after"]["drop_index"],
