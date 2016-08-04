@@ -67,7 +67,7 @@ class BLEVE:
             "web":"uax_url_email",
             "whitespace":"whitespace",
             "unicode":"standard",
-            "single":"standard"
+            "single":"keyword"
         }
     }
 
