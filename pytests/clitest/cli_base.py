@@ -7,6 +7,7 @@ from testconstants import MAC_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH
 import logger
 import random
+import time
 import zlib
 
 log = logger.Logger.get_logger()
@@ -312,4 +313,15 @@ class CliBaseTest(BaseTestCase):
         enabled = rest.get_notifications()
         if enabled:
             return True
+        return False
+
+    def waitForItemCount(self, server, bucket_name, count, timeout=30):
+        rest = RestConnection(server)
+        for sec in range(timeout):
+            items = int(rest.get_bucket_json(bucket_name)["basicStats"]["itemCount"])
+            if items != count:
+                time.sleep(1)
+            else:
+                return True
+        log.info("Waiting for item count to be %d timed out", count)
         return False

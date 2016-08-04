@@ -4,6 +4,7 @@ import os
 from threading import Thread
 
 from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
@@ -1231,6 +1232,84 @@ class CouchbaseCliTest(CliBaseTest):
                             "Expected error message not found")
             if initialized and init_bucket_type is not None:
                 self.assertTrue(self.verifyContainsBucket(server, bucket_name), "Bucket should not have been deleted")
+
+    def testBucketFlush(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        force = self.input.param("force", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_bucket_type = self.input.param("init-bucket-type", None)
+        init_enable_flush = int(self.input.param("init-enable-flush", 0))
+        insert_keys = 12
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if init_bucket_type == "couchbase":
+            init_bucket_type = "membase"
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            if init_bucket_type is not None:
+                self.assertTrue(rest.create_bucket(bucket_name, 256, "sasl", "", 1, 0, init_bucket_type, 0, 3,
+                                                   init_enable_flush, "valueOnly"),
+                                "Bucket not created during test setup")
+                MemcachedClientHelper.load_bucket_and_return_the_keys([server], name=bucket_name, number_of_threads=1,
+                                                                      write_only=True, number_of_items=insert_keys,
+                                                                      moxi=False)
+                inserted = int(rest.get_bucket_json(bucket_name)["basicStats"]["itemCount"])
+                self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys))
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+        if force:
+            options += " --force"
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-flush", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket flushed"),
+                            "Expected command to succeed")
+            self.assertTrue(self.waitForItemCount(server, bucket_name, 0),
+                            "Expected 0 keys to be in bucket after the flush")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized and init_bucket_type is not None:
+                self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys),
+                                "Expected keys to exist after the flush failed")
+
+        # Reset the cluster (This is important for when we change the port number or username/password)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
 
     def testIndexerSettings(self):
         cli_command = "setting-index"
