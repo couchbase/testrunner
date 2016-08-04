@@ -16,7 +16,7 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-from couchbase_helper.tuq_helper import N1QLHelper
+from sdk_client import SDKClient
 
 
 def ExplainPlanHelper(res):
@@ -837,19 +837,27 @@ class QueryTests(BaseTestCase):
 
     def test_meta_cas(self):
         for bucket in self.buckets:
-            self.query = 'SELECT META(%s).cas as cas, META(%s).id as id FROM %s'  % (bucket.name, bucket.name, bucket.name)
+            self.query = 'SELECT META(%s).cas as cas, META(%s).id as id FROM %s order by cas limit 10'  % (bucket.name, bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             keys = [doc['id'] for doc in actual_result['results']]
             actual_result = [{"cas": int(doc['cas'])} for doc in actual_result['results']]
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['cas']))
-            client = MemcachedClientHelper.direct_client(self.master, bucket.name)
+            #actual_result = sorted(actual_result,
+                                  # key=lambda doc: (doc['cas']))
+            #client = MemcachedClientHelper.direct_client(self.master, bucket.name)
+            #import pdb;pdb.set_trace()
+            scheme = "couchbase"
+            host=self.master.ip
+            if self.master.ip == "127.0.0.1":
+                scheme = "http"
+                host="{0}:{1}".format(self.master.ip,self.master.port)
+            client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
             expected_result = []
             for key in keys:
-                a, cas, b = client.get(key.encode('utf-8'))
-                expected_result.append({"cas" : cas})
-            expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
-            #self._verify_results(actual_result, expected_result)
+                a, cas, b = client.get(key)
+                expected_result.append({"cas" : int(cas)})
+            #import pdb;pdb.set_trace()
+            expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))[0:10]
+            self._verify_results(actual_result, expected_result)
 
     def test_meta_negative(self):
         queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}

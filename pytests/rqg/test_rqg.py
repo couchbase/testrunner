@@ -362,7 +362,8 @@ class RQGTests(BaseTestCase):
                     query = 'drop index {0}.{1}'.format(keyspace,name)
                 #import pdb;pdb.set_trace()
                 i+=1
-                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                #import pdb;pdb.set_trace()
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'})
         if self.drop_bucket == True:
             #import pdb;pdb.set_trace()
             for bucket in self.buckets:
@@ -440,6 +441,31 @@ class RQGTests(BaseTestCase):
             # Drop all the secondary Indexes
         for t in thread_list:
             t.join()
+
+        if self.drop_index == True:
+            query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
+            actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+            #print actual_result['results']
+            index_names = []
+            keyspaces = []
+            for indexes in actual_result['results']:
+                index_names.append(indexes['indexes']['name'])
+                keyspaces.append(indexes['indexes']['keyspace_id'])
+            i=0
+            for name in index_names:
+                keyspace = keyspaces[i]
+                if (name =='#primary'):
+                    query = 'drop primary index on {0}'.format(keyspace)
+                else:
+                    query = 'drop index {0}.{1}'.format(keyspace,name)
+                #import pdb;pdb.set_trace()
+                i+=1
+                #import pdb;pdb.set_trace()
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'})
+        if self.drop_bucket == True:
+            #import pdb;pdb.set_trace()
+            for bucket in self.buckets:
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -1474,7 +1500,6 @@ class RQGTests(BaseTestCase):
             try:
                 for info in batches:
                     table_name = info["bucket"]
-                    print "tablename before async_monitor_index is {0}".format(table_name)
                     table_name = self.database+"_"+table_name
                     for index_name in info["indexes"]:
                         if index_name in build_index_list:
@@ -1497,8 +1522,9 @@ class RQGTests(BaseTestCase):
             table_name =self.database+"_"+table_name
             for index_name in info["indexes"].keys():
                 query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, info["indexes"][index_name]["type"])
+                #import pdb;pdb.set_trace()
                 try:
-                    self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                    self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'},timeout = '600s')
                     self.sleep(10,"Sleep to make sure index dropped properly")
                 except Exception, ex:
                     self.log.info(ex)
@@ -1508,8 +1534,9 @@ class RQGTests(BaseTestCase):
         self.log.info(" Dropping Secondary Indexes for Bucket {0}".format(table_name))
         for index_name in index_map.keys():
             query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, index_map[index_name]["type"])
+            #import pdb;pdb.set_trace()
             try:
-                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'},timeout = '600s')
 
             except Exception, ex:
                 self.log.info(ex)
@@ -1650,8 +1677,8 @@ class RQGTests(BaseTestCase):
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
             print "master is {0}".format(self.master)
-            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
-            self.sleep(10,"Updating maxBucket count to 15")
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
+            self.sleep(10,"Updating maxBucket count to 25")
         # Pull information about tables from mysql database and interpret them as no-sql dbs
         table_key_map = self.client._get_primary_key_map_for_tables()
         # Make a list of buckets that we want to create for querying
