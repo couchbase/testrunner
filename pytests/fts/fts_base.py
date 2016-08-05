@@ -571,6 +571,11 @@ class FTSIndex:
             self.index_definition['params']['store'] = {"kvStoreName":
                         TestInputSingleton.input.param("kvstore", None)}
 
+        if TestInputSingleton.input.param("memory_only", None):
+            self.index_definition['params']['store'] = \
+                {"kvStoreName": "moss",
+                 "mossLowerLevelStoreName": ""}
+
         if TestInputSingleton.input.param("moss_compact_threshold", None):
             self.index_definition['params']['store'] = \
                 {"mossStoreOptions": {
