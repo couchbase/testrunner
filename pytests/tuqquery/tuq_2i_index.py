@@ -149,6 +149,11 @@ class QueriesIndexTests(QueryTests):
                 plan4 = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0]=="null")
 
+                self.query = 'explain select join_day from %s where join_day in  [] and join_day is not null '  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan7 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan7['~children'][0]['spans'][0]['Range']['High'][0]=="null")
+                
                 self.query = 'explain select join_day from %s where join_day in  [$1,$2,$3] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan5 = ExplainPlanHelper(actual_result)
