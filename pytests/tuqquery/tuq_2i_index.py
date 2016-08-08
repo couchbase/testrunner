@@ -83,15 +83,88 @@ class QueriesIndexTests(QueryTests):
                 self.query = "Explain select * from %s use index(%s) where "  %(bucket.name,idx)+\
                              "department = 'Manager' and _id LIKE 'query-test%' limit 10"
                 actual_result = self.run_cbq_query()
-                print actual_result
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan["~children"][0]["~children"][0]["limit"] == "10")
+
+                idx2 = "idx2"
+                self.query = "CREATE INDEX %s ON %s ( _id  )" %(idx2,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                self.query = "Explain  select * from {0} b1 nest {0} b2 on keys b1._id where b1._id like 'query-testemployee%' limit 5 ".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan1 = ExplainPlanHelper(actual_result)
+                self.assertFalse("limit" in plan1["~children"][0]["~children"][0])
+                self.query = "Explain  select * from {0} b1 nest {0} b2 on key b2._id FOR b1 where b1._id like 'query-testemployee%'  limit 5 ".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan2 = ExplainPlanHelper(actual_result)
+                self.assertFalse("limit" in plan2["~children"][0]["~children"][0])
+                self.query = "Explain  select * from {0} b1 left nest {0} b2 on keys b1._id where b1._id like 'query-testemployee%' limit 10 ".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan3 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan3["~children"][0]["~children"][0]["limit"] == "10")
+                self.query = "Explain  select * from {0} b1 left nest {0} b2 on key b2._id FOR b1 where b1._id like 'query-testemployee%'  limit 10 ".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan4 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan4["~children"][0]["~children"][0]["limit"] == "10")
+
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+
+    def test_in_spans(self):
+         for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s ( join_day )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.query = 'explain select join_day from %s where join_day in ["5", $1] '  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan1 = ExplainPlanHelper(actual_result)
+                self.assertTrue(len(plan1['~children'][0]['scan']['spans'])==2)
+                self.query = 'explain select join_day from %s where join_day in [$1] '  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan2 = ExplainPlanHelper(actual_result)
+
+                self.assertTrue(len(plan2['~children'][0]['spans'])==1)
+
+                self.query = 'explain select join_day from %s where join_day in  $1 '  %(bucket.name)
+                actual_result = self.run_cbq_query()
+
+                plan3 = ExplainPlanHelper(actual_result)
+                self.assertTrue(len(plan3['~children'][0]['spans'])==1)
+                self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0]=="null")
+                self.query = 'explain select join_day from %s where join_day in  [] '  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan4 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0]=="null")
+
+                self.query = 'explain select join_day from %s where join_day in  [$1,$2,$3] '  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan5 = ExplainPlanHelper(actual_result)
+                self.assertTrue(len(plan5['~children'][0]['scan']['spans'])==3)
+
+                self.query = 'explain select join_day from %s where join_day in  [$1,$2,$3] limit 5 '  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan6 = ExplainPlanHelper(actual_result)
+                self.assertTrue(len(plan6['~children'][0]['~children'][0]['scan']['spans'])==3)
+                self.assertTrue(plan6["~children"][0]["~children"][0]['scan']['limit'] == "5")
+
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
 
 
@@ -1549,11 +1622,15 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select distinct raw join_day from %s WHERE name like '%s' order by join_day limit 10 " %(bucket.name,'employee%')
 
                 actual_result = self.run_cbq_query()
-                expected_result = [doc['join_day'] for doc in self.full_list
-                                if doc['name'].startswith('employee')]
-                expected_result = (expected_result)[:10]
-                self.assertEqual(actual_result['results'],expected_result)
+                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
+                self.sleep(15,'wait for index')
+                self.query = "select distinct raw join_day from %s use index(`#primary`) WHERE name like '%s' order by join_day limit 10 " %(bucket.name,'employee%')
 
+                expected_result = self.run_cbq_query()
+                self.assertEqual(actual_result['results'],expected_result)
+                self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
