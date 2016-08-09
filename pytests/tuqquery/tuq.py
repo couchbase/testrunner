@@ -712,11 +712,6 @@ class QueryTests(BaseTestCase):
             self.assertTrue(actual_result['results'] == expected_result)
 
 
-    def array_intersect(self):
-        for bucket in self.buckets:
-            self.query = 'select ARRAY_INTERSECT(["apple","orange","grapes","bananas"], ["apple","orange"],' \
-                         ' ["apple","grapes"])' ;
-
 
 ##############################################################################################
 #
