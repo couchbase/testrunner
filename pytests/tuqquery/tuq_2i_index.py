@@ -116,6 +116,11 @@ class QueriesIndexTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_array_intersect(self):
+        for bucket in self.buckets:
+            self.query = 'select ARRAY_INTERSECT(join_yr,[2011,2012,2016,"test"], [2011,2016], [2012,2016]) as test from {0}'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['metrics']['resultCount'] == 1680)
 
     def test_in_spans(self):
          for bucket in self.buckets:
