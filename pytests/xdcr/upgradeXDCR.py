@@ -240,14 +240,23 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
             for node in self.src_cluster.get_nodes():
-                count = NodeHelper.check_goxdcr_log(
+                count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                self.assertEqual(count, 0, "Failed to repair connections to target cluster "
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
                                         "error message found in " + str(node.ip))
-                self.log.info("Failed to repair connections to target cluster "
-                                        "error message not found in " + str(node.ip))
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))
 
     def is_goxdcr_migration_successful(self, server):
         count = NodeHelper.check_goxdcr_log(server,
@@ -371,14 +380,23 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
             for node in self.src_cluster.get_nodes():
-                count = NodeHelper.check_goxdcr_log(
+                count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                self.assertEqual(count, 0, "Failed to repair connections to target cluster "
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
                                         "error message found in " + str(node.ip))
-                self.log.info("Failed to repair connections to target cluster "
-                                        "error message not found in " + str(node.ip))
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))
 
     def incremental_offline_upgrade(self):
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
@@ -424,18 +442,23 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.verify_results()
         self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
         if float(self.initial_version[:2]) == 3.1 and float(self.upgrade_versions[0][:2]) == 4.1:
-            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
-                     + '/goxdcr.log*'
-            for node in self.src_cluster.get_nodes():
-                count = NodeHelper.check_goxdcr_log(
+           count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                self.assertEqual(count, 0, "Failed to repair connections to target cluster "
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
                                         "error message found in " + str(node.ip))
-                self.log.info("Failed to repair connections to target cluster "
-                                        "error message not found in " + str(node.ip))
-
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))
     def _operations(self):
         # TODO: there are not tests with views
         if self.ddocs_num_src:
@@ -613,11 +636,20 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
             for node in self.src_cluster.get_nodes():
-                count = NodeHelper.check_goxdcr_log(
+                count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                self.assertEqual(count, 0, "Failed to repair connections to target cluster "
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
                                         "error message found in " + str(node.ip))
-                self.log.info("Failed to repair connections to target cluster "
-                                        "error message not found in " + str(node.ip))
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))
