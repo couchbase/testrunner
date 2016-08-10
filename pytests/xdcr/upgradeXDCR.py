@@ -442,7 +442,10 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.verify_results()
         self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
         if float(self.initial_version[:2]) == 3.1 and float(self.upgrade_versions[0][:2]) == 4.1:
-           count1 =  NodeHelper.check_goxdcr_log(
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+            for node in self.src_cluster.get_nodes():
+                count1 =  NodeHelper.check_goxdcr_log(
                             node,
                             "Received error response from memcached in target cluster",
                             goxdcr_log)
