@@ -784,6 +784,69 @@ class CouchbaseCliTest(CliBaseTest):
         rest = RestConnection(server)
         rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
 
+    def testSettingAudit(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        enabled = self.input.param("enabled", None)
+        log_path = self.input.param("log-path", None)
+        rotate_interval = self.input.param("rotate-interval", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        init_username = server.rest_username
+        init_password = server.rest_password
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if log_path is not None and log_path == "valid":
+                log_path = self.log_path
+
+        if initialized:
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if enabled is not None:
+            options += " --audit-enabled " + str(enabled)
+        if log_path is not None:
+            options += " --audit-log-path " + str(log_path)
+        if rotate_interval is not None:
+            options += " --audit-log-rotate-interval " + str(rotate_interval)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("setting-audit", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Audit settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyAuditSettings(server, enabled, log_path, rotate_interval),
+                            "Audit settings were not set properly")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server),
+                                "Cluster was initialized, but error was received")
+
+        # Reset the cluster (This is important for when we change the port number)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
+
     def testSettingAutoFailover(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)

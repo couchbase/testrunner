@@ -5,7 +5,8 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH,\
-                          WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH
+                          WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
+                          WIN_COUCHBASE_LOGS_PATH
 import logger
 import random
 import time
@@ -38,6 +39,7 @@ class CliBaseTest(BaseTestCase):
         self.backup_path = LINUX_BACKUP_PATH
         self.cmd_ext = ""
         self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
+        self.log_path = LINUX_COUCHBASE_LOGS_PATH
         if type == 'windows':
             self.os = 'windows'
             self.cmd_ext = ".exe"
@@ -47,6 +49,7 @@ class CliBaseTest(BaseTestCase):
             self.backup_path = WIN_BACKUP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
             self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH
+            self.log_path = WIN_COUCHBASE_LOGS_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
             self.cli_command_path = MAC_COUCHBASE_BIN_PATH
@@ -335,6 +338,23 @@ class CliBaseTest(BaseTestCase):
             return False
         if timeout and str(settings.timeout) != str(timeout):
             log.info("Timeout does not match (%s vs. %s)", str(timeout), str(settings.timeout))
+            return False
+
+        return True
+
+    def verifyAuditSettings(self, server, enabled, log_path, rotate_interval):
+        rest = RestConnection(server)
+        settings = rest.getAuditSettings()
+
+        if enabled and not ((str(enabled) == "1" and settings["auditdEnabled"]) or (str(enabled) == "0" and not settings["auditdEnabled"])):
+            log.info("Enabled does not match (%s vs. %s)", str(enabled), str(settings["auditdEnabled"]))
+            return False
+        if log_path and str(str(settings["logPath"])) != str(log_path):
+            log.info("Log path does not match (%s vs. %s)", str(log_path), str(settings["logPath"]))
+            return False
+
+        if rotate_interval and str(str(settings["rotateInterval"])) != str(rotate_interval):
+            log.info("Rotate interval does not match (%s vs. %s)", str(rotate_interval), str(settings["rotateInterval"]))
             return False
 
         return True
