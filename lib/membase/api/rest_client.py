@@ -2555,6 +2555,13 @@ class RestConnection(object):
         log.info('Indexer {0} set to {1}'.format(parameter, val))
         return status
 
+    def get_global_index_settings(self):
+        api = self.baseUrl + "settings/indexes"
+        status, content, header = self._http_request(api)
+        if status:
+            return json.loads(content)
+        return None
+
     def set_couchdb_option(self, section, option, value):
         """Dynamic settings changes"""
 

@@ -146,38 +146,6 @@ class CliBaseTest(BaseTestCase):
         log.info("Services on %s not found, the server may not exist", hostname)
         return False
 
-
-    def verifyIndexStorageMode(self, server, storage_mode):
-        """Verifies that the index storage mode was set properly
-
-            Options:
-            server - A TestInputServer object of the server to connect to
-            storage_mode - A string containing the expected storage mode
-
-            Returns a boolean corresponding to whether or not the expected index storage mode was set.
-            """
-        # TODO - The ports for services should be inferred by the rest client
-        server.index_port = 9102
-        rest = RestConnection(server)
-        settings = rest.get_index_settings()
-
-        if storage_mode == "default":
-            storage_mode = "forestdb"
-        elif storage_mode == "memopt":
-            storage_mode = "memory_optimized"
-
-        if "indexer.settings.storage_mode" in settings:
-            if settings["indexer.settings.storage_mode"] == storage_mode:
-                return True
-            else:
-                log.info("Index storage mode does not match expected (`%s` vs `%s`)",
-                         settings["indexer.settings.storage_mode"], storage_mode)
-        else:
-            log.info("Index storage mode not found in settings")
-
-        return False
-
-
     def verifyRamQuotas(self, server, data, index, fts):
         """Verifies that the RAM quotas for each service are set properly
 
@@ -323,6 +291,40 @@ class CliBaseTest(BaseTestCase):
         if enabled:
             return True
         return False
+
+    def verifyIndexSettings(self, server, max_rollbacks, stable_snap_interval, mem_snap_interval,
+                                                     storage_mode, threads, log_level):
+        rest = RestConnection(server)
+        settings = rest.get_global_index_settings()
+
+        if storage_mode == "default":
+            storage_mode = "forestdb"
+        elif storage_mode == "memopt":
+            storage_mode = "memory_optimized"
+
+        if max_rollbacks and str(settings["maxRollbackPoints"]) != str(max_rollbacks):
+            log.info("Max rollbacks does not match (%s vs. %s)", str(settings["maxRollbackPoints"]), str(max_rollbacks))
+            return False
+        if stable_snap_interval and str(settings["stableSnapshotInterval"]) != str(stable_snap_interval):
+            log.info("Stable snapshot interval does not match (%s vs. %s)", str(settings["stableSnapshotInterval"]),
+                     str(stable_snap_interval))
+            return False
+        if mem_snap_interval and str(settings["memorySnapshotInterval"]) != str(mem_snap_interval):
+            log.info("Memory snapshot interval does not match (%s vs. %s)", str(settings["memorySnapshotInterval"]),
+                     str(mem_snap_interval))
+            return False
+        if storage_mode and str(settings["storageMode"]) != str(storage_mode):
+            log.info("Storage mode does not match (%s vs. %s)", str(settings["storageMode"]), str(storage_mode))
+            return False
+        if threads and str(settings["indexerThreads"]) != str(threads):
+            log.info("Threads does not match (%s vs. %s)", str(settings["indexerThreads"]), str(threads))
+            return False
+        if log_level and str(settings["logLevel"]) != str(log_level):
+            log.info("Log level does not match (%s vs. %s)", str(settings["logLevel"]), str(log_level))
+            return False
+
+        return True
+
 
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)

@@ -770,7 +770,7 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue(self.verifyClusterName(server, name), "Cluster name does not match")
 
             if "index" in services:
-                self.assertTrue(self.verifyIndexStorageMode(server, index_storage_mode),
+                self.assertTrue(self.verifyIndexSettings(server, None, None, None, index_storage_mode, None, None),
                                 "Index storage mode not properly set")
 
             self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize, fts_ramsize),
@@ -939,6 +939,76 @@ class CouchbaseCliTest(CliBaseTest):
         rest = RestConnection(server)
         self.assertTrue(rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
                    "Cluster was not re-initialized at the end of the test")
+
+    def testSettingIndex(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        max_rollbacks = self.input.param("max-rollback-points", None)
+        stable_snap_interval = self.input.param("stable-snapshot-interval", None)
+        mem_snap_interval = self.input.param("memory-snapshot-interval", None)
+        storage_mode = self.input.param("storage-mode", None)
+        threads = self.input.param("threads", None)
+        log_level = self.input.param("log-level", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        init_username = server.rest_username
+        init_password = server.rest_password
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if max_rollbacks is not None:
+            options += " --index-max-rollback-points " + str(max_rollbacks)
+        if stable_snap_interval is not None:
+            options += " --index-stable-snapshot-interval " + str(stable_snap_interval)
+        if mem_snap_interval:
+            options += " --index-memory-snapshot-interval " + str(mem_snap_interval)
+        if storage_mode:
+            options += " --index-storage-setting " + str(storage_mode)
+        if threads:
+            options += " --index-threads " + str(threads)
+        if log_level:
+            options += " --index-log-level " + str(log_level)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("setting-index", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Indexer settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyIndexSettings(server, max_rollbacks, stable_snap_interval, mem_snap_interval,
+                                                     storage_mode, threads, log_level),
+                            "Index settings were not set properly")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server),
+                                "Cluster was initialized, but error was received")
+
+        # Reset the cluster (This is important for when we change the port number)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
 
     def testBucketCompact(self):
         username = self.input.param("username", None)
@@ -1310,21 +1380,6 @@ class CouchbaseCliTest(CliBaseTest):
         self.assertTrue(
             rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
             "Cluster was not re-initialized at the end of the test")
-
-    def testIndexerSettings(self):
-        cli_command = "setting-index"
-        rest = RestConnection(self.master)
-        remote_client = RemoteMachineShellConnection(self.master)
-
-        options = (" --index-threads=3")
-        options += (" --index-max-rollback-points=6")
-        options += (" --index-stable-snapshot-interval=4900")
-        options += (" --index-memory-snapshot-interval=220")
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                          options=options, cluster_host="localhost", \
-                                            user="Administrator", password="password")
-        self.assertEqual(output, ['SUCCESS: set index settings'])
-        remote_client.disconnect()
 
     # MB-8566
     def testSettingCompacttion(self):
