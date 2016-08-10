@@ -116,10 +116,10 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         #Trust Me this works
         dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)/60),
-                                              indexFromMinute=(date.minute+2)%60,
-                                              indexToHour=date.hour+((date.minute+3)/60),
-                                              indexToMinute=(date.minute+3)%60,
+                                              indexFromHour=date.hour+((date.minute+1)/60),
+                                              indexFromMinute=(date.minute+1)%60,
+                                              indexToHour=date.hour+((date.minute+2)/60),
+                                              indexToMinute=(date.minute+2)%60,
                                               abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.sleep(180)
