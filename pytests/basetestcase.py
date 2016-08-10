@@ -136,15 +136,15 @@ class BaseTestCase(unittest.TestCase):
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
-            self.cb_version = None
-            if RestHelper(RestConnection(self.master)).is_ns_server_running():
-                """ since every new couchbase version, there will be new features
-                    that test code will not work on previous release.  So we need
-                    to get couchbase version to filter out those tests. """
-                self.cb_version = RestConnection(self.master).get_nodes_version()
-            else:
-                self.log.info("couchbase server does not run yet")
             if not self.skip_init_check_cbserver:
+                self.cb_version = None
+                if RestHelper(RestConnection(self.master)).is_ns_server_running():
+                    """ since every new couchbase version, there will be new features
+                        that test code will not work on previous release.  So we need
+                        to get couchbase version to filter out those tests. """
+                    self.cb_version = RestConnection(self.master).get_nodes_version()
+                else:
+                    self.log.info("couchbase server does not run yet")
                 self.protocol = self.get_protocol_type()
             self.services_map = None
             if self.sasl_bucket_priority != None:
