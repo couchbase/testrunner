@@ -784,6 +784,63 @@ class CouchbaseCliTest(CliBaseTest):
         rest = RestConnection(server)
         rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
 
+    def testRebalanceStop(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_start_rebalance = self.input.param("init-rebalance", False)
+
+        initial_server = self.servers[0]
+        add_server = self.servers[1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        init_username = server.rest_username
+        init_password = server.rest_password
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            if init_start_rebalance:
+                self.assertTrue(rest.rebalance(otpNodes=["%s:%s" % (add_server.ip, add_server.port)]),
+                                "Rebalance failed to start")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("rebalance-stop", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Rebalance stopped"),
+                            "Expected command to succeed")
+            if init_start_rebalance:
+                self.assertTrue(rest.isRebalanced(), "Rebalance does not appear to be stopped")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server),
+                                "Cluster was initialized, but error was received")
+
+        # Reset the cluster (This is important for when we change the port number)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
+
     def testSettingAudit(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
