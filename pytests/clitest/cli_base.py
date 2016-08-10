@@ -325,6 +325,18 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verifyAutofailoverSettings(self, server, enabled, timeout):
+        rest = RestConnection(server)
+        settings = rest.get_autofailover_settings()
+
+        if enabled and not ((str(enabled) == "1" and settings.enabled) or (str(enabled) == "0" and not settings.enabled)):
+            log.info("Enabled does not match (%s vs. %s)", str(enabled), str(settings.enabled))
+            return False
+        if timeout and str(settings.timeout) != str(timeout):
+            log.info("Timeout does not match (%s vs. %s)", str(timeout), str(settings.timeout))
+            return False
+
+        return True
 
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)
