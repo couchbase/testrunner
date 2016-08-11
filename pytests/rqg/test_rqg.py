@@ -753,15 +753,15 @@ class RQGTests(BaseTestCase):
         n1ql_query = test_data["n1ql_query"]
         if (n1ql_query.find("copy_simple_table")>0):
              n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-             print ("n1ql query before copy replace {0}").format(n1ql_query)
+             #print ("n1ql query before copy replace {0}").format(n1ql_query)
              n1ql_query = n1ql_query.replace("copy_"+self.database+"_"+"simple_table","copy_simple_table")
-             print ("n1ql query after copy replace {0}").format(n1ql_query)
+             #print ("n1ql query after copy replace {0}").format(n1ql_query)
              n1ql_query = n1ql_query.replace("ON KEY copy_simple_table","ON KEY "+ self.database+"_"+"copy_simple_table")
-             print ("n1ql query after on key replace {0}").format(n1ql_query)
+             #print ("n1ql query after on key replace {0}").format(n1ql_query)
         else :
-            print ("n1ql query before simple replace {0}").format(n1ql_query)
+            #print ("n1ql query before simple replace {0}").format(n1ql_query)
             n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-            print ("n1ql query after simple replace {0}").format(n1ql_query)
+            #print ("n1ql query after simple replace {0}").format(n1ql_query)
 
         test_data["n1ql_query"] = n1ql_query
         sql_query = test_data["sql_query"]
@@ -998,6 +998,7 @@ class RQGTests(BaseTestCase):
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
+                import pdb;pdb.set_trace()
                 self.log.info(ex)
                 return {"success":False, "result": str(ex)}
             return {"success":True, "result": "Pass"}
@@ -1676,7 +1677,7 @@ class RQGTests(BaseTestCase):
 
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
-            print "master is {0}".format(self.master)
+            #print "master is {0}".format(self.master)
             shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
             self.sleep(10,"Updating maxBucket count to 25")
         # Pull information about tables from mysql database and interpret them as no-sql dbs
