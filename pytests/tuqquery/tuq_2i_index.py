@@ -116,6 +116,51 @@ class QueriesIndexTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_ifmissing_ifnull(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = 'CREATE INDEX {0} ON {1}( IFMISSING( IsSpecial, null ), join_day,name )'.format(idx,bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                import pdb;pdb.set_trace()
+                self.query = 'insert into {0}(KEY, VALUE) VALUES ("k01", {"IsSpecial":null, "b":2, "c":"pq"})'.format(bucket.name)
+                self.run_cbq_query()
+                self.query = 'EXPLAIN SELECT name from {0} where IFMISSING(IsSpecial,null) = TRUE and join_day> 1'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                print actual_result
+                import pdb;pdb.set_trace()
+                plan1 = ExplainPlanHelper(actual_result)
+                print plan1
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+    def test_subdoc_field(self):
+            for bucket in self.buckets:
+                created_indexes = []
+                try:
+                    idx = "idx"
+                    self.query = 'CREATE INDEX idx on {0}(tasks_points.task1)'.format(bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self._wait_for_index_online(bucket, idx)
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append(idx)
+                    self.query = 'select tasks_points.task1 from {0} where tasks_points.task1 = 1'.format(bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self.assertTrue(actual_result['metrics']['resultCount']==2016)
+                finally:
+                    for idx in created_indexes:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                        actual_result = self.run_cbq_query()
+                        self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
     def test_array_intersect(self):
         for bucket in self.buckets:
             self.query = 'select ARRAY_INTERSECT(join_yr,[2011,2012,2016,"test"], [2011,2016], [2012,2016]) as test from {0}'.format(bucket.name)
