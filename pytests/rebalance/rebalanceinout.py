@@ -106,16 +106,12 @@ class RebalanceInOutTests(RebalanceBaseTest):
         if success_failed_over:
             self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType=recovery_type)
         self.sleep(30)
-        self.shuffle_nodes_between_zones_and_rebalance(servs_out)
-        self._verify_stats_all_buckets(result_nodes, timeout=120)
-        self.verify_cluster_stats(result_nodes, check_ep_items_remaining=True)
-        self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
-        self.sleep(30)
-        self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets,
-                                              path=None)
-        self.verify_unacked_bytes_all_buckets()
-        nodes = self.get_nodes_in_cluster(self.master)
-        self.vb_distribution_analysis(servers=nodes, std=1.0, total_vbuckets=self.total_vbuckets)
+        try:
+            self.shuffle_nodes_between_zones_and_rebalance(servs_out)
+        except Exception, e:
+            if "deltaRecoveryNotPossible" not in e:
+                self.fail("Rebalance did not fail. Rebalance has to fail since no delta recovery should be possible"
+                          " while adding nodes too")
 
     def test_rebalance_in_out_with_failover(self):
         """
