@@ -50,7 +50,55 @@ FULL_FIELD_NAMES = {
 }
 
 CUSTOM_ANALYZER_TEMPLATE = {
-    "analyzers": {}
+    "analyzers": {},
+    "token_filters": {
+        "back_edge_ngram": {
+            "back":True,
+            "max": 5,
+            "min": 3,
+            "type": "edge_ngram"
+        },
+        "dict_compound_en": {
+            "dict_token_map": "stop_en",
+            "type": "dict_compound"
+        },
+        "dict_compound_fr": {
+            "dict_token_map": "articles_fr",
+            "type": "dict_compound"
+        },
+        "front_edge_ngram": {
+            "back":False,
+            "max": 5,
+            "min": 3,
+            "type": "edge_ngram"
+        },
+        "keyword_marker_en": {
+            "keywords_token_map": "stop_en",
+            "type": "keyword_marker"
+        },
+        "length": {
+            "max": 5,
+            "min": 3,
+            "type": "length"
+        },
+        "ngram": {
+            "max": 5,
+            "min": 3,
+            "type": "ngram"
+        },
+        "shingle": {
+            "filler": "",
+            "max": 5,
+            "min": 2,
+            "output_original": "false",
+            "separator": "",
+            "type": "shingle"
+        },
+        "truncate": {
+            "length": 10,
+            "type": "truncate_token"
+        }
+    }
 }
 
 ANALYZERS = ["standard", "simple", "keyword", "en"]
@@ -61,13 +109,15 @@ CHAR_FILTERS = ["html"]
 
 TOKENIZERS = ["letter","single","unicode","web","whitespace"]
 
-TOKEN_FILTERS = ["apostrophe","elision_fr","to_lower"]
+TOKEN_FILTERS = ["apostrophe","elision_fr","to_lower","ngram",
+                 "front_edge_ngram","back_edge_ngram","shingle",
+                 "truncate","stemmer_porter","length"]
 
 class CustomMapGenerator:
     """
     # Generates an FTS and equivalent ES custom map for emp/wiki datasets
     """
-    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0):
+    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False):
         random.seed(seed)
         self.fts_map = {"types": {}}
         self.es_map = {}
@@ -77,6 +127,7 @@ class CustomMapGenerator:
         # Holds the list of custom analyzers created by
         # build_custom_analyzer method
         self.custom_analyzers=[]
+        self.multiple_filters = multiple_filters
 
         for n in range(0,self.num_custom_analyzers,1):
             self.custom_analyzers.append("customAnalyzer"+str(n+1))
@@ -306,17 +357,31 @@ class CustomMapGenerator:
 
     def build_custom_analyzer(self):
         analyzer_map = {}
+        if self.multiple_filters:
+            num_token_filters = random.randint(1,min(3,len(TOKEN_FILTERS)))
+            num_char_filters = random.randint(1, min(3,len(CHAR_FILTERS)))
+        else:
+            num_token_filters = 1
+            num_char_filters = 1
+
         for custom_analyzer in self.custom_analyzers:
-            char_filter = self.get_random_value(CHAR_FILTERS)
-            tokenizer = self.get_random_value(TOKENIZERS)
-            token_filter = self.get_random_value(TOKEN_FILTERS)
             analyzer_map[custom_analyzer] = {}
             analyzer_map[custom_analyzer]["char_filters"] = []
             analyzer_map[custom_analyzer]["token_filters"] = []
             analyzer_map[custom_analyzer]["tokenizer"] = ""
-            analyzer_map[custom_analyzer]["char_filters"].append(char_filter)
+
+            for num in range(0,num_char_filters, 1):
+                char_filter = self.get_random_value(CHAR_FILTERS)
+                if not analyzer_map[custom_analyzer]["char_filters"].count(char_filter):
+                    analyzer_map[custom_analyzer]["char_filters"].append(char_filter)
+
+            tokenizer = self.get_random_value(TOKENIZERS)
             analyzer_map[custom_analyzer]["tokenizer"] = tokenizer
-            analyzer_map[custom_analyzer]["token_filters"].append(token_filter)
+
+            for num in range(0, num_token_filters, 1):
+                token_filter = self.get_random_value(TOKEN_FILTERS)
+                if not analyzer_map[custom_analyzer]["token_filters"].count(token_filter):
+                    analyzer_map[custom_analyzer]["token_filters"].append(token_filter)
             analyzer_map[custom_analyzer]["type"] = "custom"
 
         analyzer = CUSTOM_ANALYZER_TEMPLATE

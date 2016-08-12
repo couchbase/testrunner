@@ -47,6 +47,48 @@ class BLEVE:
         "settings": {
             "analysis": {
                 "analyzer": {
+                },
+                "filter": {
+                    "back_edge_ngram": {
+                        "type":"edgeNGram",
+                        "min_gram":3,
+                        "max_gram":5,
+                        "side":"back"
+                    },
+                    "front_edge_ngram": {
+                        "type": "edgeNGram",
+                        "min_gram": 3,
+                        "max_gram": 5,
+                        "side": "front"
+                    },
+                    "ngram": {
+                        "type": "nGram",
+                        "min_gram": 3,
+                        "max_gram": 5,
+                        "side": "front"
+                    },
+                    "keyword_marker_en": {
+                        "type":"keyword_marker",
+                        "keywords":STOPWORDS
+                    },
+                    "length": {
+                        "type":"length",
+                        "min":3,
+                        "max":5
+                    },
+                    "shingle": {
+                        "type":"shingle",
+                        "max_shingle_size":5,
+                        "min_shingle_size":2,
+                        "output_unigrams":"false",
+                        "output_unigrams_if_no_shingles":"false",
+                        "token_separator":"",
+                        "filler_token":""
+                    },
+                    "truncate": {
+                        "length": 10,
+                        "type": "truncate"
+                    }
                 }
             }
         }
@@ -60,7 +102,15 @@ class BLEVE:
         "token_filters": {
             "apostrophe":"apostrophe",
             "elision_fr":"elision",
-            "to_lower":"lowercase"
+            "to_lower":"lowercase",
+            "ngram":"ngram",
+            "back_edge_ngram":"back_edge_ngram",
+            "front_edge_ngram": "front_edge_ngram",
+            "length":"length",
+            "shingle":"shingle",
+            "stemmer_porter":"porter_stem",
+            "truncate":"truncate",
+            "keyword_marker_en":"keyword_marker_en"
         },
         "tokenizers": {
             "letter":"letter",
