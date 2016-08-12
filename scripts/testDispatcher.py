@@ -20,7 +20,7 @@ from couchbase.n1ql import N1QLQuery
 
 # need a timeout param
 
-POLL_INTERVAL = 120
+POLL_INTERVAL = 60
 SERVER_MANAGER = '172.23.105.177:8081'
 TEST_SUITE_DB = '172.23.105.177'
 
@@ -157,7 +157,10 @@ def main():
     # Docker goes somewhere else
     launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
     if options.test:
-        launchStringBase = launchStringBase + '-test'
+        if options.serverType.lower() == 'docker':
+            launchStringBase = launchStringBase + '-docker-test'
+        else:
+            launchStringBase = launchStringBase + '-test'
     elif options.serverType.lower() == 'docker':
         launchStringBase = launchStringBase + '-docker'
 
@@ -254,7 +257,7 @@ def main():
                             url = url + '&servers=' + urllib.quote(json.dumps(r2).replace(' ',''))
 
 
-                        print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
+                        print time.asctime( time.localtime(time.time()) ), '\n\nlaunching ', url
 
 
                         if options.noLaunch:
@@ -272,7 +275,7 @@ def main():
 
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-                        time.sleep(60)     # don't do too much at once
+                        time.sleep(15)     # don't do too much at once
                 else:
                     print 'not enough VMs at this time'
                     time.sleep(POLL_INTERVAL)
