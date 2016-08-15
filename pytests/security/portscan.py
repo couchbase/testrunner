@@ -19,7 +19,9 @@ import commands
 import urllib2
 import stat
 import os
-
+import traceback
+import time
+from subprocess import Popen, PIPE
 
 """
    Do the standard port check - heartbleed etc
@@ -76,18 +78,19 @@ class portscan(BaseTestCase):
  TLS 1.1    not offered
  TLS 1.2    offered (OK)
     """
-    def checkTLS1_1_blocking(self):
-        self.get_the_testssl_script(self.TEST_SSL_FILENAME)
-        command = "ns_config:set(ssl_minimum_protocol, 'tlsv1.2')"
-        self.log.info("posting: %s" % command)
-        rest = RestConnection(self.master)
-        res = rest.diag_eval(command)
+
+    def check_all_servers( self, rest):
+
         for s in self.servers:
             for i in self.ports_to_check:
                 self.log.info('{0} Testing port {1}'.format(s,i))
                 cmd  = self.TEST_SSL_FILENAME + ' -p --color 0 {0}:{1}'.format( s.ip, i)
+                self.log.info('The command is {0}'.format( cmd ) )
                 res = os.popen(cmd).read().split('\n')
-                print 'the result is', res
+                res1 = ''.join( res )
+
+                self.assertFalse( 'error' in res1.lower(), msg=res )
+                self.assertTrue( 'tls' in res1.lower(), msg=res )
                 for r in res:
                     if 'TLS 1.1' in r:
                         self.assertTrue( 'not offered' in r,
@@ -97,6 +100,33 @@ class portscan(BaseTestCase):
                                         msg='TLS 1 is incorrect enabled on port {0}'.format(i))
 
 
+
+    def checkTLS1_1_blocking(self):
+        self.get_the_testssl_script(self.TEST_SSL_FILENAME)
+        command = "ns_config:set(ssl_minimum_protocol, 'tlsv1.2')"
+        self.log.info("posting: %s" % command)
+        rest = RestConnection(self.master)
+        res = rest.diag_eval(command)
+
+
+        # do the initial check
+        self.check_all_servers( rest )
+
+
+        # restart the server
+        try:
+            for server in self.servers:
+                shell = RemoteMachineShellConnection(server)
+                shell.stop_couchbase()
+                time.sleep(10) # Avoid using sleep like this on further calls
+                shell.start_couchbase()
+                shell.disconnect()
+        except Exception as e:
+            self.log.error(traceback.format_exc())
+
+        # and check again
+        time.sleep(30)
+        self.check_all_servers( rest )
 
     def checkPortSecurity(self):
 
