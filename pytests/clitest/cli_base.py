@@ -4,6 +4,7 @@ from membase.api.rest_client import RestConnection
 from testconstants import LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
+from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH
 import logger
 import random
 import zlib
@@ -30,10 +31,14 @@ class CliBaseTest(BaseTestCase):
         self.build_number = None
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         self.root_path = LINUX_ROOT_PATH
+        self.tmp_path = "/tmp/"
+        self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
         if type == 'windows':
             self.os = 'windows'
             self.root_path = WIN_ROOT_PATH
+            self.tmp_path = WIN_TMP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
+            self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
             self.cli_command_path = MAC_COUCHBASE_BIN_PATH
