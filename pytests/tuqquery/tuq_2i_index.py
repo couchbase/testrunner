@@ -1,3 +1,4 @@
+import json
 import math
 import re
 import uuid
@@ -121,20 +122,99 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             try:
                 idx = "idx"
-                self.query = 'CREATE INDEX {0} ON {1}( IFMISSING( IsSpecial, null ), join_day,name )'.format(idx,bucket.name)
+                idx2 = "idx2"
+                idx3 = "idx3"
+                idx4 = "idx4"
+                idx5 = "idx5"
+
+                self.query = 'CREATE INDEX {0} ON {1}( IFMISSING( IsSpecial,b, name ), join_day,name )'.format(idx,bucket.name)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
-                import pdb;pdb.set_trace()
-                self.query = 'insert into {0}(KEY, VALUE) VALUES ("k01", {"IsSpecial":null, "b":2, "c":"pq"})'.format(bucket.name)
+
+                self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, "k01", {"x": 10, "b":True, "c":"pq"})
                 self.run_cbq_query()
-                self.query = 'EXPLAIN SELECT name from {0} where IFMISSING(IsSpecial,null) = TRUE and join_day> 1'.format(bucket.name)
+                self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, "k02", {"IsSpecial": True, "b":True, "c":"pq"})
+                self.run_cbq_query()
+                self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, "k03", {"IsSpecial": False, "b":True, "c":"pq"})
+                self.run_cbq_query()
+                self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, "k04", {"IsSpecial":json.JSONEncoder().encode(None), "b":2, "c":"pq"})
+                self.run_cbq_query()
+                self.query = 'SELECT meta().id, IFMISSING(IsSpecial,b,name) from %s limit 5'%(bucket.name)
                 actual_result = self.run_cbq_query()
-                print actual_result
-                import pdb;pdb.set_trace()
+                expected_result = [{u'id': u'k01', u'$1': True}, {u'id': u'k02', u'$1': True}, {u'id': u'k03', u'$1': False}, {u'id': u'k04', u'$1': u'null'}, {u'id': u'query-testemployee10153.1877827-0', u'$1': u'employee-9'}]
+                self.assertTrue(actual_result['results']==expected_result)
+                self.query = 'EXPLAIN SELECT name from {0} where IFMISSING(IsSpecial,b,name) = TRUE and join_day> 1'.format(bucket.name)
+                actual_result = self.run_cbq_query()
                 plan1 = ExplainPlanHelper(actual_result)
-                print plan1
+                self.assertTrue(plan1['~children'][0]['index']==idx)
+
+                self.query = 'CREATE INDEX {0} ON {1}( IFNULL( IsSpecial,b, name ), join_day,name )'.format(idx2,bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+
+                self.query = 'SELECT meta().id, IFNULL(IsSpecial,b,2,3) from {0} limit 5'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{u'id': u'k01'}, {u'id': u'k02', u'$1': True}, {u'id': u'k03', u'$1': False}, {u'id': u'k04', u'$1': u'null'}, {u'id': u'query-testemployee10153.1877827-0'}]
+                self.assertTrue(actual_result['results']==expected_result)
+
+                self.query = 'EXPLAIN SELECT name from {0} where IFNULL(IsSpecial,b,name) = null and join_day> 1'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan2 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan2['~children'][0]['index']==idx2)
+
+                self.query = 'CREATE INDEX {0} ON {1}( MISSINGIF( IsSpecial,b ), join_day,name )'.format(idx3,bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx3)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx3)
+
+                self.query = 'SELECT meta().id, MISSINGIF(IsSpecial,b) from {0} limit 5'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{u'id': u'k01'}, {u'id': u'k02'}, {u'id': u'k03', u'$1': False}, {u'id': u'k04', u'$1': u'null'}, {u'id': u'query-testemployee10153.1877827-0'}]
+                self.assertTrue(actual_result['results']==expected_result)
+
+                self.query = 'EXPLAIN SELECT name from {0} where MISSINGIF(IsSpecial,b) = TRUE and join_day> 1'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan2 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan2['~children'][0]['index']==idx3)
+
+
+                self.query = 'CREATE INDEX {0} ON {1}( NULLIF( IsSpecial,b ), join_day,name )'.format(idx4,bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx4)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx4)
+
+                self.query = 'SELECT meta().id, NULLIF(IsSpecial,b) from {0} limit 5'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{u'id': u'k01'}, {u'id': u'k02', u'$1': None}, {u'id': u'k03', u'$1': False}, {u'id': u'k04', u'$1': u'null'}, {u'id': u'query-testemployee10153.1877827-0'}]
+                self.assertTrue(actual_result['results']==expected_result)
+
+                self.query = 'EXPLAIN SELECT name from {0} where NULLIF(IsSpecial,b) IS null and join_day> 1'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan2 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan2['~children'][0]['index']==idx4)
+
+                self.query = 'CREATE INDEX {0} ON {1}( IFMISSINGORNULL( IsSpecial,b,name,2,3 ), join_day,name )'.format(idx5,bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx5)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx5)
+
+                self.query = 'SELECT meta().id, IFMISSINGORNULL(IsSpecial,b,name,2,3) from {0} limit 5'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{u'id': u'k01', u'$1': True}, {u'id': u'k02', u'$1': True}, {u'id': u'k03', u'$1': False}, {u'id': u'k04', u'$1': u'null'}, {u'id': u'query-testemployee10153.1877827-0', u'$1': u'employee-9'}]
+                self.assertTrue(actual_result['results']==expected_result)
+
+                self.query = 'EXPLAIN SELECT name from {0} where IFMISSINGORNULL(IsSpecial,b,name,2,3) IS NULL and join_day> 1'.format(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan2 = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan2['~children'][0]['index']==idx5)
+
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -1683,7 +1763,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select distinct raw join_day from %s use index(`#primary`) WHERE name like '%s' order by join_day limit 10 " %(bucket.name,'employee%')
 
                 expected_result = self.run_cbq_query()
-                self.assertEqual(actual_result['results'],expected_result)
+                self.assertEqual(actual_result['results'],expected_result['results'])
                 self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                 self.run_cbq_query()
             finally:
@@ -4263,6 +4343,7 @@ class QueriesIndexTests(QueryTests):
                     created_indexes.append(index_name)
                     self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task ON KEYS ['key1']" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
+                    #import pdb;pdb.set_trace()
 		    plan = ExplainPlanHelper(res)
                     self.assertTrue(plan["~children"][0]["index"] == "#primary",
                                     "Index should be %s, but is: %s" % (index_name, plan))
