@@ -275,7 +275,7 @@ def main():
 
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-                        time.sleep(15)     # don't do too much at once
+                        time.sleep(30)     # don't do too much at once
                 else:
                     print 'not enough VMs at this time'
                     time.sleep(POLL_INTERVAL)
