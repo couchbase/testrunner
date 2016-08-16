@@ -127,6 +127,9 @@ class QueriesIndexTests(QueryTests):
                 idx4 = "idx4"
                 idx5 = "idx5"
 
+                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
+                self.sleep(15,'wait for index')
                 self.query = 'CREATE INDEX {0} ON {1}( IFMISSING( IsSpecial,b, name ), join_day,name )'.format(idx,bucket.name)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
@@ -216,10 +219,27 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(plan2['~children'][0]['index']==idx5)
 
             finally:
+                self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_dynamic_names(self):
+        for bucket in self.buckets:
+            self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
+            actual_result = self.run_cbq_query()
+            expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
+            self.assertTrue(actual_result['results']==expected_result)
+            self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0}'.format(bucket.name)
+            self.run_cbq_query()
+            self.query = 'select * from {0}'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            number_of_docs= self.docs_per_day*2016
+            self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
+
+
 
 
     def test_subdoc_field(self):
@@ -227,7 +247,7 @@ class QueriesIndexTests(QueryTests):
                 created_indexes = []
                 try:
                     idx = "idx"
-                    self.query = 'CREATE INDEX idx on {0}(tasks_points.task1)'.format(bucket.name)
+                    self.query = 'CREATE INDEX idx on {0}(tasks_points.task1) using {1}'.format(bucket.name,self.gsi_type)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, idx)
                     self._verify_results(actual_result['results'], [])

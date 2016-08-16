@@ -101,8 +101,9 @@ class QueryTests(BaseTestCase):
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
         #if (self.coverage == False):
-        self.shell.execute_command("killall -9 cbq-engine")
-        self.shell.execute_command("killall -9 indexer")
+        if self.cluster_ops:
+            self.shell.execute_command("killall -9 cbq-engine")
+            self.shell.execute_command("killall -9 indexer")
         self.sleep(10, 'wait for indexer')
         self.log.info('-'*100)
         #if self.ispokemon:
