@@ -11,12 +11,12 @@ from backuptests import BackupHelper
 
 class QueriesOpsTests(QueryTests):
     def setUp(self):
+        self.cluster_ops=True
         super(QueriesOpsTests, self).setUp()
         self.query_params = {'scan_consistency' : 'statement_plus'}
         if self.nodes_init > 1 and not self._testMethodName == 'suite_setUp':
             self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
         self.indx_type = self.input.param("indx_type", 'GSI')
-        self.cluster_ops=True
 
     def suite_setUp(self):
         super(QueriesOpsTests, self).suite_setUp()

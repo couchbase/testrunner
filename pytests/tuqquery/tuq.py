@@ -69,6 +69,7 @@ class QueryTests(BaseTestCase):
         self.named_prepare = self.input.param("named_prepare", None)
         self.monitoring = self.input.param("monitoring", False)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
+        self.cluster_ops = self.input.param("cluster_ops",False)
         self.isprepared = False
         self.server = self.master
         self.ispokemon = self.input.param("pokemon",False)
@@ -101,7 +102,7 @@ class QueryTests(BaseTestCase):
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
         #if (self.coverage == False):
-        if self.cluster_ops:
+        if (self.cluster_ops == False):
             self.shell.execute_command("killall -9 cbq-engine")
             self.shell.execute_command("killall -9 indexer")
         self.sleep(10, 'wait for indexer')
