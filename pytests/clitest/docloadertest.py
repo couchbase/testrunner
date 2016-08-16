@@ -97,6 +97,7 @@ class docloaderTests(CliBaseTest):
                 self.log.info("travel-sample bucket is created and complete indexing")
                 self.log.info("index list in travel-sample bucket: {0}"
                                            .format(index_name))
+            self.shell.execute_command("rm -rf %stravel-sample* " % self.tmp_path)
             self.shell.disconnect()
 
     def verify_results(self, file):
