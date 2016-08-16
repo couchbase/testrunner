@@ -826,6 +826,12 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue(self.verifyNotificationsEnabled(server) == initialy_enabled, "Notifications changed after error")
 
     def testSettingCluster(self):
+        self.clusterSettings("setting-cluster")
+
+    def testClusterEdit(self):
+        self.clusterSettings("cluster-edit")
+
+    def clusterSettings(self, cmd):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         new_username = self.input.param("new-username", None)
@@ -900,7 +906,7 @@ class CouchbaseCliTest(CliBaseTest):
             options += " --cluster-port " + str(port)
 
         remote_client = RemoteMachineShellConnection(server)
-        output, error = remote_client.couchbase_cli("setting-cluster", hostname, options)
+        output, error = remote_client.couchbase_cli(cmd, hostname, options)
         remote_client.disconnect()
 
         if not expect_error:
@@ -916,6 +922,8 @@ class CouchbaseCliTest(CliBaseTest):
             if name is None:
                 name = init_name
 
+            if cmd == "cluster-edit":
+                self.verifyWarningOutput(output, "The cluster-edit command is depercated, use setting-cluster instead")
             self.assertTrue(self.verifyCommandOutput(output, expect_error, "Cluster settings modified"),
                             "Expected command to succeed")
             self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize, fts_ramsize),

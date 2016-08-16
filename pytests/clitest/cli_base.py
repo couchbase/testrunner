@@ -98,6 +98,12 @@ class CliBaseTest(BaseTestCase):
             log.info("Did not receive expected success message `SUCCESS: %s`", message)
             return False
 
+    def verifyWarningOutput(self, output, message):
+        for line in output:
+            if line == "WARNING: " + message:
+                return True
+        log.info("Did not receive expected error message `WARNING: %s`", message)
+        return False
 
     def verifyServices(self, server, expected_services):
         """Verifies that the services on a given node match the expected service
