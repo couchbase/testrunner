@@ -1423,7 +1423,7 @@ class CouchbaseCluster:
         self.load_all_buckets(items)
 
         self.__log.info("Now loading extra keys to reach dgm limit")
-        seed = "%s-key-" % self.__name
+        seed = "%s-" % self.__name
         end = 0
         for bucket in self.__buckets:
             current_active_resident = StatsCommon.get_stats(
@@ -1432,8 +1432,8 @@ class CouchbaseCluster:
                 '',
                 'vb_active_perc_mem_resident')[self.__master_node]
             start = items
-            end = start + batch_size * 10
             while int(current_active_resident) > active_resident_ratio:
+                end = start + batch_size * 10
                 self.__log.info("loading %s keys ..." % (end-start))
 
                 kv_gen = JsonDocGenerator(seed,
@@ -1455,7 +1455,6 @@ class CouchbaseCluster:
                 for task in tasks:
                     task.result()
                 start = end
-                end = start + batch_size * 10
                 current_active_resident = StatsCommon.get_stats(
                     [self.__master_node],
                     bucket,
@@ -1472,6 +1471,7 @@ class CouchbaseCluster:
                                                     encoding="utf-8",
                                                     start=0,
                                                     end=end)
+        return self._kv_gen[OPS.CREATE]
 
     def update_bucket(self, bucket, fields_to_update=None, exp=0,
                     kv_store=1, flag=0, only_store_hash=True,
@@ -2882,7 +2882,7 @@ class FTSBaseTest(unittest.TestCase):
          Blocking call to load data to Couchbase and ES
         """
         if self._dgm_run:
-            self._cb_cluster.load_all_buckets_till_dgm(
+            self.create_gen = self._cb_cluster.load_all_buckets_till_dgm(
                 self._active_resident_ratio,
                 self.compare_es)
             return
