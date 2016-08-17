@@ -130,7 +130,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
                 self.run_cbq_query()
                 self.sleep(15,'wait for index')
-                self.query = 'CREATE INDEX {0} ON {1}( IFMISSING( IsSpecial,b, name ), join_day,name )'.format(idx,bucket.name)
+                self.query = 'CREATE INDEX {0} ON {1}( IFMISSING( IsSpecial,b, name ), join_day,name ) using {2}'.format(idx,bucket.name,self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -153,7 +153,7 @@ class QueriesIndexTests(QueryTests):
                 plan1 = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan1['~children'][0]['index']==idx)
 
-                self.query = 'CREATE INDEX {0} ON {1}( IFNULL( IsSpecial,b, name ), join_day,name )'.format(idx2,bucket.name)
+                self.query = 'CREATE INDEX {0} ON {1}( IFNULL( IsSpecial,b, name ), join_day,name ) using {2}'.format(idx2,bucket.name,self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -169,7 +169,7 @@ class QueriesIndexTests(QueryTests):
                 plan2 = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan2['~children'][0]['index']==idx2)
 
-                self.query = 'CREATE INDEX {0} ON {1}( MISSINGIF( IsSpecial,b ), join_day,name )'.format(idx3,bucket.name)
+                self.query = 'CREATE INDEX {0} ON {1}( MISSINGIF( IsSpecial,b ), join_day,name ) using {2}'.format(idx3,bucket.name,self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
                 self._verify_results(actual_result['results'], [])
@@ -186,7 +186,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(plan2['~children'][0]['index']==idx3)
 
 
-                self.query = 'CREATE INDEX {0} ON {1}( NULLIF( IsSpecial,b ), join_day,name )'.format(idx4,bucket.name)
+                self.query = 'CREATE INDEX {0} ON {1}( NULLIF( IsSpecial,b ), join_day,name ) using {2}'.format(idx4,bucket.name,self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
                 self._verify_results(actual_result['results'], [])
@@ -226,28 +226,13 @@ class QueriesIndexTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
-    def test_dynamic_names(self):
-        for bucket in self.buckets:
-            self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
-            actual_result = self.run_cbq_query()
-            expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
-            self.assertTrue(actual_result['results']==expected_result)
-            self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0}'.format(bucket.name)
-            self.run_cbq_query()
-            self.query = 'select * from {0}'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            number_of_docs= self.docs_per_day*2016
-            self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
-
-
-
 
     def test_subdoc_field(self):
             for bucket in self.buckets:
                 created_indexes = []
                 try:
                     idx = "idx"
-                    self.query = 'CREATE INDEX idx on {0}(tasks_points.task1) using {1}'.format(bucket.name,self.gsi_type)
+                    self.query = 'CREATE INDEX idx on {0}(tasks_points.task1) using {1}'.format(bucket.name,self.index_type)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, idx)
                     self._verify_results(actual_result['results'], [])
@@ -265,7 +250,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'select ARRAY_INTERSECT(join_yr,[2011,2012,2016,"test"], [2011,2016], [2012,2016]) as test from {0}'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['metrics']['resultCount'] == 1680)
+            number_of_doc = 1680*self.docs_per_day
+            self.assertTrue(actual_result['metrics']['resultCount'] == number_of_doc)
 
     def test_in_spans(self):
          for bucket in self.buckets:
