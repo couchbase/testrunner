@@ -275,7 +275,10 @@ def main():
 
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-                        time.sleep(30)     # don't do too much at once
+                        if options.serverType.lower() == 'docker':
+                            time.sleep(180)     # this is due to the docker port allocation race
+                        else:
+                            time.sleep(30)
                 else:
                     print 'not enough VMs at this time'
                     time.sleep(POLL_INTERVAL)
