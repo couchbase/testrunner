@@ -8,6 +8,7 @@ from memcached.helper.data_helper import LoadWithMcsoda
 from xdcrnewbasetests import XDCRNewBaseTest
 from xdcrnewbasetests import NodeHelper
 from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
+from scripts.install import InstallerJob
 
 
 # Assumption that at least 2 nodes on every cluster
@@ -726,5 +727,50 @@ class unidirectional(XDCRNewBaseTest):
                                         "error message found in " + str(node.ip))
             self.log.info("counter goes backward, maybe due to the pipeline is restarted "
                                         "error message not found in " + str(node.ip))
+
+        self.verify_results()
+
+    def test_verify_mb20463(self):
+        src_version = NodeHelper.get_cb_version(self.src_cluster.get_master_node())
+        if float(src_version[:3]) != 4.5:
+            self.log.info("Source cluster has to be at 4.5 for this test")
+            return
+
+        servs = self._input.servers[2:4]
+        params = {}
+        params['num_nodes'] = len(servs)
+        params['product'] = 'cb'
+        params['version'] = '4.1.2-6088'
+        params['vbuckets'] = [1024]
+        self.log.info("will install {0} on {1}".format('4.1.2-6088', [s.ip for s in servs]))
+        InstallerJob().parallel_install(servs, params)
+
+        if params['product'] in ["couchbase", "couchbase-server", "cb"]:
+            success = True
+            for server in servs:
+                success &= RemoteMachineShellConnection(server).is_couchbase_installed()
+                if not success:
+                    self.fail("some nodes were not installed successfully on target cluster!")
+
+        self.log.info("4.1.2 installed successfully on target cluster")
+
+        conn = RestConnection(self.dest_cluster.get_master_node())
+        conn.add_node(user=self._input.servers[3].rest_username, password=self._input.servers[3].rest_password,
+                      remoteIp=self._input.servers[3].ip)
+        self.sleep(30)
+        conn.rebalance(otpNodes=[node.id for node in conn.node_statuses()])
+        self.sleep(30)
+        conn.create_bucket(bucket='default', ramQuotaMB=512)
+
+        tasks = self.setup_xdcr_async_load()
+
+        NodeHelper.enable_firewall(self.dest_master)
+        self.sleep(30)
+        NodeHelper.disable_firewall(self.dest_master)
+
+        for task in tasks:
+            task.result()
+
+        self._wait_for_replication_to_catchup()
 
         self.verify_results()
