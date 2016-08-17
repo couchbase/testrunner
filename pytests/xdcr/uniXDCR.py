@@ -764,6 +764,8 @@ class unidirectional(XDCRNewBaseTest):
 
         tasks = self.setup_xdcr_async_load()
 
+        self.sleep(30)
+
         NodeHelper.enable_firewall(self.dest_master)
         self.sleep(30)
         NodeHelper.disable_firewall(self.dest_master)
@@ -771,6 +773,6 @@ class unidirectional(XDCRNewBaseTest):
         for task in tasks:
             task.result()
 
-        self._wait_for_replication_to_catchup()
+        self._wait_for_replication_to_catchup(timeout=600)
 
         self.verify_results()
