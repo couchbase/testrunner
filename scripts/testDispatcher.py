@@ -46,7 +46,7 @@ def main():
     parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y','--serverType', dest='serverType', default='VM')
-    #parser.add_option('-u','--url', dest='url', default=None) - toy build option is not there yet
+    parser.add_option('-u','--url', dest='url', default=None)
 
     options, args = parser.parse_args()
 
@@ -62,7 +62,8 @@ def main():
     #print 'url', options.url
 
 
-    print 'subcomponent is', options.subcomponent
+    print 'url is', options.url
+
 
 
 
@@ -138,6 +139,8 @@ def main():
                                     'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
                                     'parameters':data['parameters'], 'initNodes':initNodes,
                                     'installParameters':installParameters})
+
+
                 else:
                     print data['component'], data['subcomponent'], ' is not supported in this release'
             else:
@@ -169,6 +172,8 @@ def main():
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                          'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}'
+    if options.url is not None:
+        launchString = launchString + '&url=' + options.url
 
     summary = []
 
