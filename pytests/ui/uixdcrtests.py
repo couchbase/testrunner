@@ -196,6 +196,8 @@ class XDCRControls():
     def advanced_settings(self):
         self.max_replication = self.helper.find_control('xdcr_advanced_settings', 'max_replication')
         self.version = self.helper.find_control('xdcr_advanced_settings', 'version')
+        self.source_nozzle_per_node = self.helper.find_control('xdcr_advanced_settings', 'source_nozzle_per_node')
+        self.target_nozzle_per_node = self.helper.find_control('xdcr_advanced_settings', 'target_nozzle_per_node')
         self.checkpoint_interval = self.helper.find_control('xdcr_advanced_settings', 'checkpoint_interval')
         self.batch_count = self.helper.find_control('xdcr_advanced_settings', 'batch_count')
         self.batch_size = self.helper.find_control('xdcr_advanced_settings', 'batch_size')
@@ -271,7 +273,11 @@ class XDCRHelper():
         if advanced_settings:
             self.controls.create_replication_pop_up().advanced_settings_link.click()
             if 'version' in advanced_settings:
-                self.controls.advanced_settings().version.select(advanced_settings['version'])
+                self.controls.advanced_settings().version.select(value=advanced_settings['version'])
+            if 'source_nozzle_per_node' in advanced_settings:
+                self.controls.advanced_settings().source_nozzle_per_node.type(advanced_settings['source_nozzle_per_node'])
+            if 'target_nozzle_per_node' in advanced_settings:
+                self.controls.advanced_settings().target_nozzle_per_node.type(advanced_settings['target_nozzle_per_node'])
             if 'max_replication' in advanced_settings:
                 self.controls.advanced_settings().max_replication.type(advanced_settings['max_replication'])
             if 'checkpoint_interval' in advanced_settings:

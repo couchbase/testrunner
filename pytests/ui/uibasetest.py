@@ -302,9 +302,14 @@ class Control():
     def get_attribute(self, atr):
         return self.web_element.get_attribute(atr)
 
-    def select(self, label):
+    def select(self, label=None, value=None):
         element = Select(self.web_element)
-        element.select_by_visible_text(label)
+        if label:
+            element.select_by_visible_text(label)
+            return
+        if value:
+            element.select_by_value(value)
+            return
 
     def mouse_over(self):
         ActionChains(self.selenium).move_to_element(self.web_element).perform()
