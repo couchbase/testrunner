@@ -98,8 +98,16 @@ def main():
 
         else:
             # have a subcomponent, assume only 1 component
-            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent ='{2}';".\
-                format(options.run, options.component, options.subcomponent)
+
+            splitSubcomponents = options.subcomponent.split(',')
+            subcomponentString = ''
+            for i in range( len(splitSubcomponents) ):
+                print 'subcomponentString is', subcomponentString
+                subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
+                if i < len(splitSubcomponents) - 1:
+                    subcomponentString = subcomponentString + ','
+            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent in [{2}];".\
+                format(options.run, options.component, subcomponentString)
 
 
     print 'the query is', queryString #.format(options.run, componentString)
