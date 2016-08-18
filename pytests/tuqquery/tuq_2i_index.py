@@ -620,9 +620,22 @@ class QueriesIndexTests(QueryTests):
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_update_arrays(self):
+        created_indexes = []
         for bucket in self.buckets:
                 import pdb;pdb.set_trace()
-                self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN(hobbies[*].sports, 1) END".format(bucket.name)
+                self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN(tasks[*].Marketing, 1) END".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                idx = "nested_idx"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END,tasks,name) USING %s" % (
+                    idx, bucket.name, "tasks", self.index_type)
+
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
+                bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
                 print actual_result
 
@@ -813,7 +826,6 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 
 		plan = ExplainPlanHelper(actual_result)
-                print plan
                 self.assertTrue("covers" in str(plan))
                 #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][0]) == ("cover ((`%s`.`name`))" % bucket.name))
                 #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][1]) == ("cover (all (array (`x`.`RAM`) for `x` in (`%s`.`VMs`) end))" % bucket.name))
@@ -847,8 +859,7 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END,tasks,department,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
+
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])

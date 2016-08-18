@@ -869,15 +869,15 @@ class QueryTests(BaseTestCase):
 
     def test_meta_cas(self):
         for bucket in self.buckets:
-            self.query = 'insert into default values("k05", { "id":-9223372036854775808  } )'
+            self.query = 'insert into default values("k051", { "id":-9223372036854775808  } )'
             actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k03", { "id":-9223372036854775807  } )'
+            self.query = 'insert into default values("k031", { "id":-9223372036854775807  } )'
             actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k02", { "id":1470691191458562048 } )'
+            self.query = 'insert into default values("k021", { "id":1470691191458562048 } )'
             actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k01", { "id":9223372036854775807 } )';
+            self.query = 'insert into default values("k011", { "id":9223372036854775807 } )';
             actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k04", { "id":9223372036854775808 } )';
+            self.query = 'insert into default values("k041", { "id":9223372036854775808 } )';
             actual_result = self.run_cbq_query()
             scheme = "couchbase"
             host=self.master.ip
