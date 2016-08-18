@@ -10,7 +10,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
-                          WIN_COUCHBASE_BIN_PATH
+                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -1286,6 +1286,76 @@ class CouchbaseCliTest(CliBaseTest):
                                                                .format(self.servers[num + 3].ip))
                 self.assertTrue("INFO: rebalancing" in output[1])
                 self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+    def test_change_admin_password_with_read_only_account(self):
+        """ this test automation for bug MB-20170.
+            In the bug, when update password of admin, read only account is removed.
+            This test is to maker sure read only account stay after update password
+            of Administrator. """
+        if self.cb_version[:5] in COUCHBASE_FROM_SHERLOCK:
+            readonly_user = "readonlyuser_1"
+            curr_passwd = "password"
+            update_passwd = "password_1"
+            try:
+                self.log.info("remove any readonly user in cluster ")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                             "user-manage --list -c %s:8091 "
+                                             "-u Administrator -p %s "
+                           % (self.cli_command_path, self.shell.ip, curr_passwd))
+                self.log.info("read only user in this cluster %s" % output)
+                if output:
+                    for user in output:
+                        output, error = self.shell.execute_command("%scouchbase-cli "
+                                                    "user-manage --delete -c %s:8091 "
+                                                    "--ro-username=%s "
+                                                    "-u Administrator -p %s "
+                               % (self.cli_command_path, self.shell.ip, user,
+                                                                curr_passwd))
+                        self.log.info("%s" % output)
+                self.log.info("create a read only user account")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                              "user-manage -c %s:8091 --set "
+                                              "--ro-username=%s "
+                                            "--ro-password=readonlypassword "
+                                              "-u Administrator -p %s "
+                                      % (self.cli_command_path, self.shell.ip,
+                                                  readonly_user, curr_passwd))
+                self.log.info("%s" % output)
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                             "user-manage --list -c %s:8091 "
+                                              "-u Administrator -p %s "
+                                                    % (self.cli_command_path,
+                                                 self.shell.ip, curr_passwd))
+                self.log.info("readonly user craeted in this cluster %s" % output)
+                self.log.info("start update Administrator password")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                                   "cluster-edit -c %s:8091 "
+                                                    "-u Administrator -p %s "
+                                              "--cluster-username=Administrator "
+                                              "--cluster-password=%s"
+                                         % (self.cli_command_path, self.shell.ip,
+                                                     curr_passwd, update_passwd))
+                self.log.info("%s" % output)
+                self.log.info("verify if readonly user: %s still exist "
+                                                                 % readonly_user )
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                             "user-manage --list -c %s:8091 "
+                                              "-u Administrator -p %s "
+                                         % (self.cli_command_path, self.shell.ip,
+                                                                  update_passwd))
+                self.log.info(" current readonly user in cluster: %s" % output)
+                self.assertTrue(self._check_output("%s" % readonly_user, output))
+            finally:
+                self.log.info("reset password back to original in case test failed")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                                   "cluster-edit -c %s:8091 "
+                                                    "-u Administrator -p %s "
+                                              "--cluster-username=Administrator "
+                                              "--cluster-password=%s"
+                                         % (self.cli_command_path, self.shell.ip,
+                                                     update_passwd, curr_passwd))
+        else:
+            self.log.info("readonly account does not support on this version")
 
     def _check_output(self, word_check, output):
         found = False
