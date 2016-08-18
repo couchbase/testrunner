@@ -868,7 +868,6 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_meta_cas(self):
-        for bucket in self.buckets:
             self.query = 'insert into default values("k051", { "id":-9223372036854775808  } )'
             actual_result = self.run_cbq_query()
             self.query = 'insert into default values("k031", { "id":-9223372036854775807  } )'
