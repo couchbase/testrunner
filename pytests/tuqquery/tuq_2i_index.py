@@ -221,6 +221,14 @@ class QueriesIndexTests(QueryTests):
             finally:
                 self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                 self.run_cbq_query()
+                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k01")
+                self.run_cbq_query()
+                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k02")
+                self.run_cbq_query()
+                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k03")
+                self.run_cbq_query()
+                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k04")
+                self.run_cbq_query()
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
@@ -610,6 +618,15 @@ class QueriesIndexTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_update_arrays(self):
+        for bucket in self.buckets:
+                import pdb;pdb.set_trace()
+                self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN(hobbies[*].sports, 1) END".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                print actual_result
+
+
 
 
     def test_simple_array_index_all(self):
