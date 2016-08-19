@@ -258,7 +258,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'select ARRAY_INTERSECT(join_yr,[2011,2012,2016,"test"], [2011,2016], [2012,2016]) as test from {0}'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            number_of_doc = 1680*self.docs_per_day
+            number_of_doc = 10079
             self.assertTrue(actual_result['metrics']['resultCount'] == number_of_doc)
 
     def test_in_spans(self):
@@ -622,11 +622,10 @@ class QueriesIndexTests(QueryTests):
     def test_update_arrays(self):
         created_indexes = []
         for bucket in self.buckets:
-                import pdb;pdb.set_trace()
                 self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN(tasks[*].Marketing, 1) END".format(bucket.name)
-                actual_result = self.run_cbq_query()
+                self.run_cbq_query()
                 idx = "nested_idx"
-                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END,tasks,name) USING %s" % (
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j within i end) FOR i in %s END,tasks,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
 
                 actual_result = self.run_cbq_query()
@@ -634,11 +633,23 @@ class QueriesIndexTests(QueryTests):
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
-                self.query = "select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
-                bucket.name,bucket.name)
+                self.query = "select name from %s  WHERE ANY i IN tasks SATISFIES  (ANY j within i SATISFIES j='newValue' END) END ; " % (
+                bucket.name)
                 actual_result = self.run_cbq_query()
-                print actual_result
-
+                number_of_doc = 10079
+                self.assertTrue(actual_result['metrics']['resultCount']==number_of_doc)
+                self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN (ARRAY i.Marketing FOR i IN tasks END, 1) END;".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select name from %s  WHERE ANY i IN tasks SATISFIES  (ANY j within i SATISFIES j='newValue' END) END ; " % (
+                bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['metrics']['resultCount']==number_of_doc)
+                self.query = "UPDATE {0} SET i.Marketing = ( ARRAY OBJECT_ADD(s, 'newField', 'test' ) FOR s IN i.Marketing END ) FOR i IN tasks END;".format(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select name from %s  WHERE ANY i IN tasks SATISFIES  (ANY j within i SATISFIES j='newValue' END) END ; " % (
+                bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['metrics']['resultCount']==number_of_doc)
 
 
 

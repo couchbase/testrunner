@@ -16,7 +16,7 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-from sdk_client import SDKClient
+#from sdk_client import SDKClient
 
 
 def ExplainPlanHelper(res):
@@ -883,14 +883,14 @@ class QueryTests(BaseTestCase):
             if self.master.ip == "127.0.0.1":
                 scheme = "http"
                 host="{0}:{1}".format(self.master.ip,self.master.port)
-            client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
-            expected_result = []
-            keys = ["k01","k02","k03","k04","k05"]
-            for key in keys:
-                a, cas, b = client.get(key)
-                expected_result.append({"cas" : int(cas)})
-            expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))[0:10]
-            print "expected result is {0}".format(expected_result)
+            # client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
+            # expected_result = []
+            # keys = ["k01","k02","k03","k04","k05"]
+            # for key in keys:
+            #     a, cas, b = client.get(key)
+            #     expected_result.append({"cas" : int(cas)})
+            # expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))[0:10]
+            # print "expected result is {0}".format(expected_result)
 
             #self._verify_results(actual_result, expected_result)
 
