@@ -221,13 +221,13 @@ class QueriesIndexTests(QueryTests):
             finally:
                 self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                 self.run_cbq_query()
-                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k01")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k01")
                 self.run_cbq_query()
-                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k02")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k02")
                 self.run_cbq_query()
-                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k03")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k03")
                 self.run_cbq_query()
-                self.query = 'delete from {0} where meta().id = {1}' % (bucket.name, "k04")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k04")
                 self.run_cbq_query()
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -651,6 +651,58 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 self.assertTrue(actual_result['metrics']['resultCount']==number_of_doc)
 
+    def test_covering_index_collections(self):
+        created_indexes = []
+        idx = "ix"
+        idx2 = "ix2"
+        try:
+           for bucket in self.buckets:
+            self.query = "create index {1} on {0}(x)".format(bucket.name,idx)
+            actual_result =self.run_cbq_query()
+            self._wait_for_index_online(bucket, idx)
+            self._verify_results(actual_result['results'], [])
+            created_indexes.append(idx)
+            self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)'%(bucket.name,"x",10)
+            self.run_cbq_query()
+            self.query = 'explain select x1 from {0} let x1 = FIRST c for c IN [2,1,10] WHEN c = x END where x = 10 '.format(bucket.name)
+            self.test_explain_covering_index(idx)
+            self.query = 'select x1 from {0} let x1 = FIRST c for c IN [2,1,10] WHEN c = x END where x = 10 '.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.query = 'CREATE INDEX {1} ON {0}(SUBSTR(transDate,0,10),code) WHERE code != "" AND meta().id LIKE "account-customerXYZ%" '.format(bucket.name,idx2)
+            actual_result = self.run_cbq_query()
+            self._wait_for_index_online(bucket, idx2)
+            self._verify_results(actual_result['results'], [])
+            created_indexes.append(idx2)
+            self.query = 'INSERT into {0} values ("account-customerXYZ-123456789" ,{ "accountNumber": 123456789, "docId": "account-customerXYZ-123456789", "code": "001" , "transDate":"2016-07-02"})'.format(bucket.name)
+            self.run_cbq_query()
+            self.query = 'INSERT into {0} values("codes-version-9", ' \
+                         '{ "version": 9, "docId": "codes-version-9", "codes": [{ "code": "001", "type": "P", "title": "SYSTEM W MCC", "weight": 26.2466 },' \
+                         '{ "code": "166", "type": "P", "title": "SYSTEM W/O MCC", "weight": 14.6448 }] })'.format(bucket.name)
+            self.run_cbq_query()
+            self.query = 'explain SELECT SUBSTR(account.transDate,0,10) As transDate, AVG(codes.weight) As avgWeight ' \
+                         'FROM {0} account JOIN {0} codesDoc ON KEYS "codes-version-9" ' \
+                         'LET codes = FIRST c for c IN codesDoc.codes WHEN c.code = account.code END ' \
+                         'WHERE account.code != "" AND meta(account).id LIKE "account-customerXYZ-%" ' \
+                         'AND SUBSTR(account.transDate,0,10) >= "2016-07-01" AND SUBSTR(account.transDate,0,10) < "2016-07-03"' \
+                         'GROUP BY SUBSTR(account.transDate,0,10)'.format(bucket.name)
+            self.run_cbq_query()
+            self.test_explain_covering_index(idx2)
+            self.query = 'SELECT SUBSTR(account.transDate,0,10) As transDate, AVG(codes.weight) As avgWeight ' \
+                         'FROM {0} account JOIN {0} codesDoc ON KEYS "codes-version-9" ' \
+                         'LET codes = FIRST c for c IN codesDoc.codes WHEN c.code = account.code END ' \
+                         'WHERE account.code != "" AND meta(account).id LIKE "account-customerXYZ-%" ' \
+                         'AND SUBSTR(account.transDate,0,10) >= "2016-07-01" AND SUBSTR(account.transDate,0,10) < "2016-07-03"' \
+                         'GROUP BY SUBSTR(account.transDate,0,10)'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            print actual_result
+        finally:
+            for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
 
     def test_simple_array_index_all(self):
@@ -1010,7 +1062,6 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
-                print plan
 
                 self.assertTrue("covers" in str(plan))
                 self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((distinct (array (all (array `j` for `j` in `i` end)) for `i` in (`default`.`tasks`) end)))"))
@@ -1779,6 +1830,20 @@ class QueriesIndexTests(QueryTests):
                     self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
                     self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                     self.run_cbq_query()
+
+    def test_dynamic_names(self):
+        for bucket in self.buckets:
+            self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
+            actual_result = self.run_cbq_query()
+            expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
+            self.assertTrue(actual_result['results']==expected_result)
+            self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0}'.format(bucket.name)
+            self.run_cbq_query()
+            self.query = 'select * from {0}'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            number_of_docs= self.docs_per_day*2016
+            self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
+
 
     def test_distinct_raw_orderby(self):
         for bucket in self.buckets:

@@ -584,20 +584,6 @@ class QueryTests(BaseTestCase):
                           'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
-    def test_dynamic_names(self):
-        for bucket in self.buckets:
-            self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
-            actual_result = self.run_cbq_query()
-            expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
-            self.assertTrue(actual_result['results']==expected_result)
-            self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0}'.format(bucket.name)
-            self.run_cbq_query()
-            self.query = 'select * from {0}'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            number_of_docs= self.docs_per_day*2016
-            self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
-
-
 
 ##############################################################################################
 #
