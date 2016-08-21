@@ -219,8 +219,6 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(plan2['~children'][0]['index']==idx5)
 
             finally:
-                self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-                self.run_cbq_query()
                 self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k01")
                 self.run_cbq_query()
                 self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k02")
@@ -228,6 +226,8 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k03")
                 self.run_cbq_query()
                 self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k04")
+                self.run_cbq_query()
+                self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                 self.run_cbq_query()
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -664,22 +664,23 @@ class QueriesIndexTests(QueryTests):
             created_indexes.append(idx)
             self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
-            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)'%(bucket.name,"x",10)
+            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)'%(bucket.name,"k01",'{"x":10}')
             self.run_cbq_query()
             self.query = 'explain select x1 from {0} let x1 = FIRST c for c IN [2,1,10] WHEN c = x END where x = 10 '.format(bucket.name)
             self.test_explain_covering_index(idx)
             self.query = 'select x1 from {0} let x1 = FIRST c for c IN [2,1,10] WHEN c = x END where x = 10 '.format(bucket.name)
             actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'x1': 10}])
             self.query = 'CREATE INDEX {1} ON {0}(SUBSTR(transDate,0,10),code) WHERE code != "" AND meta().id LIKE "account-customerXYZ%" '.format(bucket.name,idx2)
             actual_result = self.run_cbq_query()
             self._wait_for_index_online(bucket, idx2)
             self._verify_results(actual_result['results'], [])
             created_indexes.append(idx2)
-            self.query = 'INSERT into {0} values ("account-customerXYZ-123456789" ,{ "accountNumber": 123456789, "docId": "account-customerXYZ-123456789", "code": "001" , "transDate":"2016-07-02"})'.format(bucket.name)
+            self.query = 'INSERT into %s (key,value) values("%s",{ "accountNumber": 123456789, "docId": "account-customerXYZ-123456789", "code": "001" , "transDate":"2016-07-02"})'%(bucket.name,"account-customerXYZ-123456789")
             self.run_cbq_query()
-            self.query = 'INSERT into {0} values("codes-version-9", ' \
+            self.query = 'INSERT into %s (key,value) values("%s", ' %(bucket.name,"codes-version-9") +\
                          '{ "version": 9, "docId": "codes-version-9", "codes": [{ "code": "001", "type": "P", "title": "SYSTEM W MCC", "weight": 26.2466 },' \
-                         '{ "code": "166", "type": "P", "title": "SYSTEM W/O MCC", "weight": 14.6448 }] })'.format(bucket.name)
+                         '{ "code": "166", "type": "P", "title": "SYSTEM W/O MCC", "weight": 14.6448 }] })'
             self.run_cbq_query()
             self.query = 'explain SELECT SUBSTR(account.transDate,0,10) As transDate, AVG(codes.weight) As avgWeight ' \
                          'FROM {0} account JOIN {0} codesDoc ON KEYS "codes-version-9" ' \
@@ -697,6 +698,8 @@ class QueriesIndexTests(QueryTests):
                          'GROUP BY SUBSTR(account.transDate,0,10)'.format(bucket.name)
             actual_result = self.run_cbq_query()
             print actual_result
+            self.assertTrue(actual_result['results'][0]['avgWeight']== 26.2466)
+            self.assertTrue(actual_result['results'][0]['transDate']=='2016-07-02')
         finally:
             for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)

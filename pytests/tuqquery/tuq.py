@@ -2154,7 +2154,6 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             s = pprint.pformat( res, indent=4 )
-            print s
             if index in s:
                 self.log.info("correct index used in json result ")
             else:
