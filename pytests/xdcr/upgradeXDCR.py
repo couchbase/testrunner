@@ -274,7 +274,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
     def is_ssl_over_memcached(self, master):
         if not NodeHelper.check_goxdcr_log(master,
-                    "Try to create a ssl over memcached connection"):
+                    "Trying to create a ssl over memcached connection"):
             if NodeHelper.check_goxdcr_log(master,
                     "Get or create ssl over proxy connection"):
                 self.log.error("SSL still uses ns_proxy connection!")
