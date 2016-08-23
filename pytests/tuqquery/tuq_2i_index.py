@@ -1836,6 +1836,9 @@ class QueriesIndexTests(QueryTests):
 
     def test_dynamic_names(self):
         for bucket in self.buckets:
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self.sleep(15,'wait for index')
             self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
             actual_result = self.run_cbq_query()
             expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
@@ -1846,6 +1849,8 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             number_of_docs= self.docs_per_day*2016
             self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
 
 
     def test_distinct_raw_orderby(self):
