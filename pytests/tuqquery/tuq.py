@@ -869,6 +869,24 @@ class QueryTests(BaseTestCase):
             if self.master.ip == "127.0.0.1":
                 scheme = "http"
                 host="{0}:{1}".format(self.master.ip,self.master.port)
+            self.query = 'select * from default where meta().id = "{0}"'.format("k051")
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results'][0]["default"]=={"id": -9223372036854776000})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k031")
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results'][0]["default"]=={"id": -9223372036854775807})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k021")
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results'][0]["default"]=={"id": 1470691191458562048})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k011")
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results'][0]["default"]=={"id": 9223372036854775807})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k041")
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results'][0]["default"]=={"id": 9223372036854776000})
+            self.query = 'delete from default where meta().id in ["k051","k021","k011","k041","k031"]'
+            self.run_cbq_query()
+
             # client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
             # expected_result = []
             # keys = ["k01","k02","k03","k04","k05"]
