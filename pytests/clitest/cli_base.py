@@ -364,6 +364,60 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verifyPendingServer(self, server, server_to_add, group_name, services):
+        rest = RestConnection(server)
+        settings = rest.get_all_zones_info()
+        if not settings or "groups" not in settings:
+            log.info("Group settings payload appears to be invalid")
+            return False
+
+        expected_services = services.replace("data", "kv")
+        expected_services = expected_services.replace("query", "n1ql")
+        expected_services = expected_services.split(",")
+
+        for group in settings["groups"]:
+            for node in group["nodes"]:
+                if node["hostname"] == server_to_add:
+                    if node["clusterMembership"] != "inactiveAdded":
+                        log.info("Node `%s` not in pending status", server_to_add)
+                        return False
+
+                    if group["name"] != group_name:
+                        log.info("Node `%s` not in correct group (%s vs %s)", node["hostname"], group_name,
+                                 group["name"])
+                        return False
+
+                    if len(node["services"]) != len(expected_services):
+                        log.info("Services do not match on %s (%s vs %s) ", node["hostname"], services,
+                                 ",".join(node["services"]))
+                        return False
+
+                    for service in node["services"]:
+                        if service not in expected_services:
+                            log.info("Services do not match on %s (%s vs %s) ", node["hostname"], services,
+                                     ",".join(node["services"]))
+                            return False
+                    return True
+
+        log.info("Node `%s` not found in nodes list", server_to_add)
+        return False
+
+
+    def verifyPendingServerDoesNotExist(self, server, server_to_add):
+        rest = RestConnection(server)
+        settings = rest.get_all_zones_info()
+        if not settings or "groups" not in settings:
+            log.info("Group settings payload appears to be invalid")
+            return False
+
+        for group in settings["groups"]:
+            for node in group["nodes"]:
+                if node["hostname"] == server_to_add:
+                    return False
+
+        log.info("Node `%s` not found in nodes list", server_to_add)
+        return True
+
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)
         for sec in range(timeout):

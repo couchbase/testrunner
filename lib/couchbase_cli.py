@@ -135,6 +135,26 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Rebalance stopped")
 
+    def server_add(self, server, server_username, server_password, group_name, services, index_storage_mode):
+        options = self._get_default_options()
+        if server:
+            options += " --server-add " + str(server)
+        if server_username:
+            options += " --server-add-username " + str(server_username)
+        if server_password:
+            options += " --server-add-password " + str(server_password)
+        if group_name:
+            options += " --group-name " + str(group_name)
+        if services:
+            options += " --services " + str(services)
+        if index_storage_mode:
+            options += " --index-storage-setting " + str(index_storage_mode)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("server-add", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Server added")
+
     def setting_audit(self, enabled, log_path, rotate_interval):
         options = self._get_default_options()
         if enabled is not None:

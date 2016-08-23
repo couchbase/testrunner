@@ -2,6 +2,7 @@ import copy
 import json
 import os
 from threading import Thread
+import time
 
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -1224,6 +1225,67 @@ class CouchbaseCliTest(CliBaseTest):
             if initialized and init_bucket_type is not None:
                 self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys),
                                 "Expected keys to exist after the flush failed")
+
+    def testServerAdd(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        num_servers = self.input.param("num-add-servers", None)
+        server_username = self.input.param("server-add-username", None)
+        server_password = self.input.param("server-add-password", None)
+        group = self.input.param("group-name", None)
+        services = self.input.param("services", None)
+        index_storage_mode = self.input.param("index-storage-mode", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+        init_index_storage_mode = self.input.param("init-index-storage-mode", None)
+        init_services = self.input.param("init-services", None)
+
+        server = copy.deepcopy(self.servers[0])
+
+        servers_list = list()
+        for i in range(0, num_servers):
+            servers_list.append("%s:%s" % (self.servers[i+1].ip, self.servers[i+1].port))
+        server_to_add = ",".join(servers_list)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, init_services, init_index_storage_mode, None,
+                                             server.rest_username, server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, _ = cli.server_add(server_to_add, server_username, server_password, group, services,
+                                      index_storage_mode)
+
+        if not services:
+            services = "kv"
+        if group:
+            if (group[0] == group[-1]) and group.startswith(("'", '"')):
+                group = group[1:-1]
+        else:
+            group = "Group 1"
+
+        if not index_storage_mode and "index" in services.split(","):
+            index_storage_mode = "default"
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server added"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyPendingServer(server, server_to_add, group, services),
+                            "Pending server has incorrect settings")
+            self.assertTrue(self.verifyIndexSettings(server, None, None, None, index_storage_mode, None, None),
+                            "Invalid index storage setting")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized:
+                self.assertTrue(self.verifyPendingServerDoesNotExist(server, server_to_add),
+                                "Pending server exists")
 
     # MB-8566
     def testSettingCompacttion(self):
