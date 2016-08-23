@@ -2,7 +2,7 @@ import json
 from fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.api.exception import FTSException, ServerUnavailableException
-
+from TestInput import TestInputSingleton
 
 class StableTopFTS(FTSBaseTest):
 
@@ -346,7 +346,7 @@ class StableTopFTS(FTSBaseTest):
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index")
-        self.create_es_index_mapping(index.es_custom_map)
+        self.create_es_index_mapping(index.es_custom_map,index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
@@ -404,3 +404,96 @@ class StableTopFTS(FTSBaseTest):
             thread.start()
         for thread in threads:
             thread.join()
+
+    def index_edit_and_query_custom_analyzer(self):
+        """
+        Index and query index, update map, query again, uses RQG
+        """
+        fail = False
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="custom_index")
+        self.create_es_index_mapping(index.es_custom_map, index.index_definition)
+        self.load_data()
+        self.wait_for_indexing_complete()
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        try:
+            self.run_query_and_compare(index)
+        except AssertionError as err:
+            self.log.error(err)
+            fail = True
+        self.log.info("Editing custom index with new custom analyzer...")
+        index.update_custom_analyzer(seed=index.cm_id + 10)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        # updating mapping on ES is not easy, often leading to merge issues
+        # drop and recreate the index, load again
+        self.create_es_index_mapping(index.es_custom_map,index.index_definition)
+        self.wait_for_indexing_complete()
+        try:
+            self.run_query_and_compare(index)
+        except AssertionError as err:
+            self.log.error(err)
+            fail = True
+        if fail:
+            raise err
+
+    def index_delete_custom_analyzer(self):
+        """
+        Create Index and then update by deleting custom analyzer in use, or custom filter in use.
+        """
+        error_msg = TestInputSingleton.input.param('error_msg', '')
+
+        fail = False
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="custom_index")
+        self.load_data()
+        self.wait_for_indexing_complete()
+
+        self.log.info("Editing custom index by deleting custom analyzer/filter in use...")
+        index.update_custom_analyzer(seed=index.cm_id + 10)
+        index.index_definition['uuid'] = index.get_uuid()
+        try:
+            index.update()
+        except Exception as err:
+            self.log.error(err)
+            if err.message.count(error_msg,0,len(err.message)):
+                self.log.info("Error is expected")
+            else:
+                self.log.info("Error is not expected")
+                raise err
+
+    def test_field_name_alias(self):
+        """
+        Test the Searchable As property in field mapping
+        """
+        field_name = self._input.param("field_name", "")
+        field_type = self._input.param("field_type", "")
+        field_alias = self._input.param("field_alias", "")
+
+        self.load_data()
+
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_child_field_to_default_mapping(field_name=field_name, field_type=field_type,
+                                                 field_alias=field_alias)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+            self.log.info("Hits: %s" % hits)

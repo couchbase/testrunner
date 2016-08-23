@@ -610,6 +610,42 @@ class FTSIndex:
         self.__log.info(json.dumps(self.index_definition["params"],
                                        indent=3))
 
+    def update_custom_analyzer(self, seed):
+        """
+        This method will update the custom analyzer in an index definition in 3 ways -
+        1) delete custom analyzer
+        2) remove a custom filter
+        3) change the custom analyzer used
+        """
+
+        delete_custom_analyzer = TestInputSingleton.input.param \
+            ("delete_custom_analyzer", False)
+        delete_custom_filter = TestInputSingleton.input.param \
+            ("delete_custom_filter", False)
+
+        # Deleting custom analyzer in use
+        if delete_custom_analyzer:
+            self.index_definition["params"]["mapping"]["analysis"] = {}
+        else:
+            if delete_custom_filter:
+                custom_filters = self.index_definition["params"]["mapping"] \
+                    ["analysis"]["analyzers"]["customAnalyzer1"]["token_filters"]
+                for custom_filter in custom_filters:
+                    self.__log.info("custom filter = " + custom_filter)
+                    del self.index_definition['params']['mapping']['analysis'] \
+                        ['token_filters'][custom_filter]
+            else:
+                from custom_map_generator.map_generator import CustomMapGenerator
+                cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
+                                            num_custom_analyzers=self.num_custom_analyzers,
+                                            multiple_filters=self.multiple_filters)
+                if self.num_custom_analyzers > 0:
+                    custom_analyzer_def = cm_gen.build_custom_analyzer()
+                    self.index_definition["params"]["mapping"]["analysis"] = \
+                        custom_analyzer_def
+                    self.index_definition['params']['mapping']['default_analyzer'] = \
+                        cm_gen.get_random_value(custom_analyzer_def["analyzers"].keys())
+
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
@@ -634,6 +670,35 @@ class FTSIndex:
             src_params = INDEX_DEFAULTS.SOURCE_FILE_PARAMS
         src_params.update(source_params)
         return src_params
+
+    def add_child_field_to_default_mapping(self, field_name, field_type,
+                                           field_alias=None):
+        """
+        This method will add a field mapping to a default mapping
+        """
+        self.index_definition['params']['mapping']={}
+        self.index_definition['params']['mapping']['default_mapping'] = {}
+        self.index_definition['params']['mapping']['default_mapping']\
+            ['properties']={}
+        if not field_alias:
+            field_alias = field_name
+        field_mapping={"dynamic": False,
+            "enabled": True,
+            "fields":[
+                {
+                    "analyzer": "",
+                    "display_order": "0",
+                    "include_in_all": True,
+                    "include_term_vectors": True,
+                    "index": True,
+                    "name": field_alias,
+                    "store": True,
+                    "type": field_type
+                }
+            ]
+        }
+        self.index_definition['params']['mapping']['default_mapping']\
+            ['properties'][field_name]=field_mapping
 
     def create(self):
         self.__log.info("Checking if index already exists ...")
