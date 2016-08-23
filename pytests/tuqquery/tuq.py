@@ -854,16 +854,17 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_meta_cas(self):
-            self.query = 'insert into default values("k051", { "id":-9223372036854775808  } )'
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k031", { "id":-9223372036854775807  } )'
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k021", { "id":1470691191458562048 } )'
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k011", { "id":9223372036854775807 } )';
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k041", { "id":9223372036854775808 } )';
-            actual_result = self.run_cbq_query()
+        for bucket in self.buckets:
+            self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%(bucket.name)
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%(bucket.name)
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k021", { "id":1470691191458562048 } )'%(bucket.name)
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k011", { "id":9223372036854775807 } )'%(bucket.name)
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k041", { "id":9223372036854775808 } )'%(bucket.name)
+            self.run_cbq_query()
             scheme = "couchbase"
             host=self.master.ip
             if self.master.ip == "127.0.0.1":
