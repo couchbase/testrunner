@@ -418,6 +418,17 @@ class CliBaseTest(BaseTestCase):
         log.info("Node `%s` not found in nodes list", server_to_add)
         return True
 
+    def verifyActiveServers(self, server, expected_num_servers):
+        rest = RestConnection(server)
+        settings = rest.get_pools_default()
+
+        count = 0
+        for node in settings["nodes"]:
+            if node["clusterMembership"] == "active":
+                count += 1
+
+        return count == expected_num_servers
+
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)
         for sec in range(timeout):

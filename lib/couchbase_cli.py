@@ -128,6 +128,16 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Cluster initialized")
 
+    def rebalance(self, remove_servers):
+        options = self._get_default_options()
+        if remove_servers:
+            options += " --server-remove " + str(remove_servers)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("rebalance", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Rebalance complete")
+
     def rebalance_stop(self):
         options = self._get_default_options()
         remote_client = RemoteMachineShellConnection(self.server)

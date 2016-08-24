@@ -1287,6 +1287,93 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(self.verifyPendingServerDoesNotExist(server, server_to_add),
                                 "Pending server exists")
 
+    def testRebalance(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        num_add_servers = self.input.param("num-add-servers", 0)
+        num_remove_servers = self.input.param("num-remove-servers", 0)
+        num_initial_servers = self.input.param("num-initial-servers", 1)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        self.assertTrue(num_initial_servers > num_remove_servers, "Specified more remove servers than initial servers")
+
+        srv_idx = 0
+        server = copy.deepcopy(self.servers[srv_idx])
+        srv_idx += 1
+
+        initial_servers_list = list()
+        for _ in range(0, num_initial_servers-1):
+            initial_servers_list.append("%s:%s" % (self.servers[srv_idx].ip, self.servers[srv_idx].port))
+            srv_idx += 1
+        initial_servers = ",".join(initial_servers_list)
+
+        add_servers_list = list()
+        for _ in range(0, num_add_servers):
+            add_servers_list.append("%s:%s" % (self.servers[srv_idx].ip, self.servers[srv_idx].port))
+            srv_idx += 1
+        servers_to_add = ",".join(add_servers_list)
+
+        remove_servers_list = list()
+        for i in range(0, num_remove_servers):
+            remove_servers_list.append("%s:%s" % (self.servers[i+1].ip, self.servers[i+1].port))
+        servers_to_remove = ",".join(remove_servers_list)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+            time.sleep(5)
+            if initial_servers != "":
+                _, _, errored = cli.server_add(initial_servers, server.rest_username, server.rest_password, None, None, None)
+                self.assertTrue(errored, "Unable to add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+            if servers_to_add != "":
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                self.assertTrue(errored, "Unable to add initial servers")
+
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, _ = cli.rebalance(servers_to_remove)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Rebalance complete"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyActiveServers(server, num_initial_servers + num_add_servers - num_remove_servers),
+                            "No new servers were added to the cluster")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized:
+                self.assertTrue(self.verifyActiveServers(server, num_initial_servers),
+                                "Expected no new servers to be in the cluster")
+
+    def testRebalanceInvalidRemoveServer(self):
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+        _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                         server.rest_password, None)
+        self.assertTrue(success, "Cluster initialization failed during test setup")
+        time.sleep(5)
+
+        stdout, _, _ = cli.rebalance("invalid.server:8091")
+
+        self.assertTrue(self.verifyCommandOutput(stdout, True, error_msg),
+                        "Expected error message not found")
+        self.assertTrue(self.verifyActiveServers(server, 1),
+                        "Expected no new servers to be in the cluster")
+
     # MB-8566
     def testSettingCompacttion(self):
         '''setting-compacttion OPTIONS:
