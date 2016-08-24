@@ -854,16 +854,15 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_meta_cas(self):
-        for bucket in self.buckets:
-            self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%(bucket.name)
+            self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%("default")
             self.run_cbq_query()
-            self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%(bucket.name)
+            self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%("default")
             self.run_cbq_query()
-            self.query = 'insert into %s values("k021", { "id":1470691191458562048 } )'%(bucket.name)
+            self.query = 'insert into %s values("k021", { "id":1470691191458562048 } )'%("default")
             self.run_cbq_query()
-            self.query = 'insert into %s values("k011", { "id":9223372036854775807 } )'%(bucket.name)
+            self.query = 'insert into %s values("k011", { "id":9223372036854775807 } )'%("default")
             self.run_cbq_query()
-            self.query = 'insert into %s values("k041", { "id":9223372036854775808 } )'%(bucket.name)
+            self.query = 'insert into %s values("k041", { "id":9223372036854775808 } )'%("default")
             self.run_cbq_query()
             scheme = "couchbase"
             host=self.master.ip
@@ -872,19 +871,19 @@ class QueryTests(BaseTestCase):
                 host="{0}:{1}".format(self.master.ip,self.master.port)
             self.query = 'select * from default where meta().id = "{0}"'.format("k051")
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'][0]["default"]=={"id": -9223372036854776000})
+            self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854776000L})
             self.query = 'select * from default where meta().id = "{0}"'.format("k031")
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'][0]["default"]=={"id": -9223372036854775807})
+            self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775807})
             self.query = 'select * from default where meta().id = "{0}"'.format("k021")
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'][0]["default"]=={"id": 1470691191458562048})
+            self.assertEquals(actual_result['results'][0]["default"],{'id': 1470691191458562048})
             self.query = 'select * from default where meta().id = "{0}"'.format("k011")
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'][0]["default"]=={"id": 9223372036854775807})
+            self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854775807})
             self.query = 'select * from default where meta().id = "{0}"'.format("k041")
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'][0]["default"]=={"id": 9223372036854776000})
+            self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854776000L})
             self.query = 'delete from default where meta().id in ["k051","k021","k011","k041","k031"]'
             self.run_cbq_query()
 
