@@ -419,12 +419,18 @@ class CliBaseTest(BaseTestCase):
         return True
 
     def verifyActiveServers(self, server, expected_num_servers):
+        return self._verifyServersByStatus(server, expected_num_servers, "active")
+
+    def verifyFailedServers(self, server, expected_num_servers):
+        return self._verifyServersByStatus(server, expected_num_servers, "inactiveFailed")
+
+    def _verifyServersByStatus(self, server, expected_num_servers, status):
         rest = RestConnection(server)
         settings = rest.get_pools_default()
 
         count = 0
         for node in settings["nodes"]:
-            if node["clusterMembership"] == "active":
+            if node["clusterMembership"] == status:
                 count += 1
 
         return count == expected_num_servers

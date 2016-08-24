@@ -128,6 +128,18 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Cluster initialized")
 
+    def failover(self, failover_servers, force):
+        options = self._get_default_options()
+        if failover_servers:
+            options += " --server-failover " + str(failover_servers)
+        if force:
+            options += " --force"
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("failover", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Server failed over")
+
     def rebalance(self, remove_servers):
         options = self._get_default_options()
         if remove_servers:

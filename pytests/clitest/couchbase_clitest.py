@@ -1374,6 +1374,67 @@ class CouchbaseCliTest(CliBaseTest):
         self.assertTrue(self.verifyActiveServers(server, 1),
                         "Expected no new servers to be in the cluster")
 
+    def testFailover(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        num_initial_servers = self.input.param("num-initial-servers", 2)
+        invalid_node = self.input.param("invalid-node", False)
+        no_failover_servers = self.input.param("no-failover-servers", False)
+        force = self.input.param("force", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        initial_servers_list = list()
+        for i in range(0, num_initial_servers - 1):
+            initial_servers_list.append("%s:%s" % (self.servers[i + 1].ip, self.servers[i + 1].port))
+        initial_servers = ",".join(initial_servers_list)
+
+        server_to_failover = "%s:%s" % (self.servers[1].ip, self.servers[1].port)
+        if invalid_node:
+            server_to_failover = "invalid.server:8091"
+        if no_failover_servers:
+            server_to_failover = None
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+            if initial_servers != "":
+                time.sleep(5)
+                _, _, errored = cli.server_add(initial_servers, server.rest_username, server.rest_password, None, None,
+                                               None)
+                self.assertTrue(errored, "Unable to add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+            _, _, success = cli.bucket_create("bucket", '""', "couchbase", 256, None, None, None, None,
+                                                  None, None)
+            self.assertTrue(success, "Bucket not created during test setup")
+            time.sleep(10)
+
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, _ = cli.failover(server_to_failover, force)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server failed over"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyActiveServers(server, num_initial_servers - 1),
+                            "Servers not failed over")
+            self.assertTrue(self.verifyFailedServers(server, 1),
+                            "Not all servers failed over have `inactiveFailed` status")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized:
+                self.assertTrue(self.verifyActiveServers(server, num_initial_servers),
+                                "Servers should not have been failed over")
+
     # MB-8566
     def testSettingCompacttion(self):
         '''setting-compacttion OPTIONS:
