@@ -203,6 +203,8 @@ class XDCRControls():
         self.batch_size = self.helper.find_control('xdcr_advanced_settings', 'batch_size')
         self.retry_interval = self.helper.find_control('xdcr_advanced_settings', 'retry_interval')
         self.replication_threshold = self.helper.find_control('xdcr_advanced_settings', 'replication_threshold')
+        self.collection_interval = self.helper.find_control('xdcr_advanced_settings', 'collection_interval')
+        self.logging = self.helper.find_control('xdcr_advanced_settings', 'logging')
         return self
 
     def errors_advanced_settings(self):
@@ -290,6 +292,10 @@ class XDCRHelper():
                 self.controls.advanced_settings().retry_interval.type(advanced_settings['retry_interval'])
             if 'replication_threshold' in advanced_settings:
                 self.controls.advanced_settings().replication_threshold.type(advanced_settings['replication_threshold'])
+            if 'collection_interval' in advanced_settings:
+                self.controls.advanced_settings().collection_interval.type(advanced_settings['collection_interval'])
+            if 'logging' in advanced_settings:
+                self.controls.advanced_settings().logging.select(value=advanced_settings['logging'])
             if len([el for el in self.controls.errors_advanced_settings() if el.is_displayed() and el.get_text() != '']) > 0:
                 raise Exception('Advanced setting error: %s' % str([el.get_text() for el in self.controls.errors_advanced_settings()
                                                                     if el.is_displayed() and el.get_text() != '']))
