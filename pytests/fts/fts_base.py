@@ -672,33 +672,104 @@ class FTSIndex:
         return src_params
 
     def add_child_field_to_default_mapping(self, field_name, field_type,
-                                           field_alias=None):
+                                               field_alias=None, analyzer=None):
+
         """
         This method will add a field mapping to a default mapping
         """
-        self.index_definition['params']['mapping']={}
-        self.index_definition['params']['mapping']['default_mapping'] = {}
-        self.index_definition['params']['mapping']['default_mapping']\
-            ['properties']={}
+
+        fields = str.split(field_name, '.')
+        nesting_level = len(fields)
+
+        child_map = {}
+        child_map['dynamic'] = False
+        child_map['enabled'] = True
+        child_map['properties'] = {}
+
+        child_field = {}
+        child_field['dynamic'] = False
+        child_field['enabled'] = True
         if not field_alias:
-            field_alias = field_name
-        field_mapping={"dynamic": False,
-            "enabled": True,
-            "fields":[
-                {
-                    "analyzer": "",
-                    "display_order": "0",
-                    "include_in_all": True,
-                    "include_term_vectors": True,
-                    "index": True,
-                    "name": field_alias,
-                    "store": True,
-                    "type": field_type
-                }
-            ]
+            field_alias = fields[len(fields) - 1]
+        child_field['fields'] = [
+            {
+                "analyzer": analyzer,
+                "display_order": "0",
+                "include_in_all": True,
+                "include_term_vectors": True,
+                "index": True,
+                "name": field_alias,
+                "store": True,
+                "type": field_type
+            }
+        ]
+
+        field_maps = []
+        field_maps.append(child_field)
+
+        if nesting_level > 1:
+            for x in xrange(0, nesting_level - 1):
+                field = fields.pop()
+                #Do a deepcopy of child_map into field_map since we dont
+                #want to have child_map altered because of changes on field_map
+                field_map = copy.deepcopy(child_map)
+                field_map['properties'][field] = field_maps.pop()
+                field_maps.append(field_map)
+
+        map = {}
+        if not self.index_definition['params'].has_key('mapping'):
+            map['default_mapping'] = {}
+            map['default_mapping']['properties'] = {}
+            map['default_mapping']['dynamic'] = False
+            map['default_mapping']['enabled'] = True
+            map['default_mapping']['properties'][fields.pop()] = field_maps.pop()
+            self.index_definition['params']['mapping'] = map
+        else:
+            map[fields.pop()] = field_maps.pop()
+            self.index_definition['params']['mapping']['default_mapping']['properties'] = map
+
+
+    def add_analyzer_to_existing_field_map(self, field_name, field_type,
+                                           field_alias=None, analyzer=None):
+        """
+        Add another field mapping with a different analyzer to an existing field map.
+        Can be enhanced to update other fields as well if required.
+        """
+        fields = str.split(field_name, '.')
+
+        if not field_alias:
+            field_alias = fields[len(fields) - 1]
+
+        child_field = {
+            "analyzer": analyzer,
+            "display_order": "0",
+            "include_in_all": True,
+            "include_term_vectors": True,
+            "index": True,
+            "name": field_alias,
+            "store": True,
+            "type": field_type
         }
-        self.index_definition['params']['mapping']['default_mapping']\
-            ['properties'][field_name]=field_mapping
+
+        map = copy.deepcopy(self.index_definition['params']['mapping']['default_mapping']['properties'])
+
+        map = self.update_nested_field_mapping(fields[len(fields) - 1], child_field, map)
+        self.index_definition['params']['mapping']['default_mapping']['properties'] = map
+
+
+    def update_nested_field_mapping(self, key, value, map):
+        """
+        Recurse through a given nested field mapping, and append the leaf node with the specified value.
+        Can be enhanced to update the current value as well if required.
+        """
+        for k, v in map.iteritems():
+            if k == key:
+                map[k]['fields'].append(value)
+                return map
+            else:
+                if map[k].has_key('properties'):
+                    map[k]['properties'] = self.update_nested_field_mapping(key, value, map[k]['properties'])
+        return map
 
     def create(self):
         self.__log.info("Checking if index already exists ...")
@@ -2054,6 +2125,9 @@ class FTSBaseTest(unittest.TestCase):
         self.__cluster_op = Cluster()
         self.__init_parameters()
         self.num_custom_analyzers = self._input.param("num_custom_analyzers", 0)
+        self.field_name = self._input.param("field_name", None)
+        self.field_type = self._input.param("field_type", None)
+        self.field_alias = self._input.param("field_alias", None)
 
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="

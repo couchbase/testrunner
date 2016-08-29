@@ -48,6 +48,20 @@ class BLEVE:
             "analysis": {
                 "analyzer": {
                 },
+                "char_filter": {
+                    "mapping": {
+                        "type": "mapping",
+                        "mappings": [
+                            "f => ph"
+                        ]
+                    }
+                },
+                "tokenizer":{
+                    "alphanumeric":{
+                        "type":"pattern",
+                        "pattern":"[^a-zA-Z0-9_]"
+                    }
+                },
                 "filter": {
                     "back_edge_ngram": {
                         "type":"edgeNGram",
@@ -67,9 +81,13 @@ class BLEVE:
                         "max_gram": 5,
                         "side": "front"
                     },
-                    "keyword_marker_en": {
+                    "keyword_marker": {
                         "type":"keyword_marker",
                         "keywords":STOPWORDS
+                    },
+                    "stopwords": {
+                        "type":"stop",
+                        "stopwords":STOPWORDS
                     },
                     "length": {
                         "type":"length",
@@ -88,6 +106,25 @@ class BLEVE:
                     "truncate": {
                         "length": 10,
                         "type": "truncate"
+                    },
+                    "cjk_bigram": {
+                        "type": "cjk_bigram"
+                    },
+                    "stemmer_it_light": {
+                        "type": "stemmer",
+                        "name": "light_italian"
+                    },
+                    "stemmer_fr_light": {
+                        "type": "stemmer",
+                        "name": "light_french"
+                    },
+                    "stemmer_fr_min": {
+                        "type": "stemmer",
+                        "name": "minimal_french"
+                    },
+                    "stemmer_pt_light": {
+                        "type": "stemmer",
+                        "name": "light_portuguese"
                     }
                 }
             }
@@ -97,7 +134,8 @@ class BLEVE:
     FTS_ES_ANALYZER_MAPPING = {
         "char_filters" : {
             "html":"html_strip",
-            "zero_width_spaces":"html_strip"
+            "zero_width_spaces":"html_strip",
+            "mapping":"mapping"
         },
         "token_filters": {
             "apostrophe":"apostrophe",
@@ -110,14 +148,22 @@ class BLEVE:
             "shingle":"shingle",
             "stemmer_porter":"porter_stem",
             "truncate":"truncate",
-            "keyword_marker_en":"keyword_marker_en"
+            "keyword_marker":"keyword_marker",
+            "stopwords":"stopwords",
+            "cjk_width":"cjk_width",
+            "cjk_bigram":"cjk_bigram",
+            "stemmer_it_light":"stemmer_it_light",
+            "stemmer_fr_light":"stemmer_fr_light",
+            "stemmer_fr_min": "stemmer_fr_min",
+            "stemmer_pt_light": "stemmer_pt_light"
         },
         "tokenizers": {
             "letter":"letter",
             "web":"uax_url_email",
             "whitespace":"whitespace",
             "unicode":"standard",
-            "single":"keyword"
+            "single":"keyword",
+            "alphanumeric":"alphanumeric"
         }
     }
 

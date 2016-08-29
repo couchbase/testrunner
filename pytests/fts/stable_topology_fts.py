@@ -468,18 +468,15 @@ class StableTopFTS(FTSBaseTest):
         """
         Test the Searchable As property in field mapping
         """
-        field_name = self._input.param("field_name", "")
-        field_type = self._input.param("field_type", "")
-        field_alias = self._input.param("field_alias", "")
-
         self.load_data()
 
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         self.wait_for_indexing_complete()
-        index.add_child_field_to_default_mapping(field_name=field_name, field_type=field_type,
-                                                 field_alias=field_alias)
+        index.add_child_field_to_default_mapping(field_name=self.field_name,
+                                                 field_type=self.field_type,
+                                                 field_alias=self.field_alias)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         self.sleep(5)
@@ -497,3 +494,61 @@ class StableTopFTS(FTSBaseTest):
                                                 zero_results_ok=zero_results_ok,
                                                 expected_hits=expected_hits)
             self.log.info("Hits: %s" % hits)
+
+    def test_one_field_multiple_analyzer(self):
+        """
+        1. Create an default FTS index on wiki dataset
+        2. Update it to add a field mapping for revision.text.#text field with 'en' analyzer
+        3. Should get 0 search results for a query
+        4. Update it to add another field mapping for the same field, with 'fr' analyzer
+        5. Same query should yield more results now.
+
+        """
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_child_field_to_default_mapping(field_name=self.field_name,
+                                                 field_type=self.field_type,
+                                                 field_alias=self.field_alias,
+                                                 analyzer="en")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits1", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+            self.log.info("Hits: %s" % hits)
+
+        index.add_analyzer_to_existing_field_map(field_name=field_name, field_type=field_type,
+                                                     field_alias=field_alias, analyzer="fr")
+
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits2", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+            self.log.info("Hits: %s" % hits)
+
