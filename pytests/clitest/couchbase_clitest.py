@@ -4,13 +4,14 @@ import os
 from threading import Thread
 
 from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
-                          WIN_COUCHBASE_BIN_PATH
+                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -783,51 +784,532 @@ class CouchbaseCliTest(CliBaseTest):
         rest = RestConnection(server)
         rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
 
-    def testBucketCreation(self):
-        bucket_name = self.input.param("bucket", "default")
-        bucket_type = self.input.param("bucket_type", "couchbase")
-        bucket_port = self.input.param("bucket_port", 11211)
-        bucket_replica = self.input.param("bucket_replica", 1)
-        bucket_password = self.input.param("bucket_password", None)
-        bucket_ramsize = self.input.param("bucket_ramsize", 200)
-        wait = self.input.param("wait", False)
-        enable_flush = self.input.param("enable_flush", None)
-        enable_index_replica = self.input.param("enable_index_replica", None)
+    def testSettingNotification(self):
+        enable = self.input.param("enable", None)
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        initialized = self.input.param("initialized", False)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
 
-        remote_client = RemoteMachineShellConnection(self.master)
-        rest = RestConnection(self.master)
-        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
-                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
-        buckets = rest.get_buckets()
-        result = True
-        if len(buckets) != 1:
-            self.log.error("Expected to get only 1 bucket")
-            result = False
-        bucket = buckets[0]
-        if bucket_name != bucket.name:
-            self.log.error("Bucket name is not correct")
-            result = False
-        if not (bucket_port == bucket.nodes[0].moxi or bucket_port == bucket.port):
-            self.log.error("Bucket port is not correct")
-            result = False
-        if bucket_type == "couchbase" and "membase" != bucket.type or\
-            (bucket_type == "memcached" and "memcached" != bucket.type):
-            self.log.error("Bucket type is not correct")
-            result = False
-        if bucket_type == "couchbase" and bucket_replica != bucket.numReplicas:
-            self.log.error("Bucket num replica is not correct")
-            result = False
-        if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
-            self.log.error("Bucket password is not correct")
-            result = False
-        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), int(int(buckets[0].stats.ram) * 1.05)):
-            self.log.error("Bucket RAM size is not correct")
-            result = False
+        server = copy.deepcopy(self.servers[-1])
+        hostname = "%s:%s" % (server.ip, server.port)
 
-        if not result:
-            self.fail("Bucket was created with incorrect properties")
+        if not initialized:
+            rest = RestConnection(server)
+            rest.force_eject_node()
 
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+            server.rest_username = username
+        if password is not None:
+            options += " -p " + str(password)
+            server.rest_password = password
+        if enable is not None:
+            options += " --enable-notification " + str(enable)
+
+        initialy_enabled = self.verifyNotificationsEnabled(server)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("setting-notification", hostname, options)
         remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Notification settings updated"),
+                            "Expected command to succeed")
+            if enable == 1:
+                self.assertTrue(self.verifyNotificationsEnabled(server), "Notification not enabled")
+            else:
+                self.assertTrue(not self.verifyNotificationsEnabled(server), "Notification are enabled")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg), "Expected error message not found")
+            self.assertTrue(self.verifyNotificationsEnabled(server) == initialy_enabled, "Notifications changed after error")
+
+    def testSettingCluster(self):
+        self.clusterSettings("setting-cluster")
+
+    def testClusterEdit(self):
+        self.clusterSettings("cluster-edit")
+
+    def clusterSettings(self, cmd):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        new_username = self.input.param("new-username", None)
+        new_password = self.input.param("new-password", None)
+        data_ramsize = self.input.param("data-ramsize", None)
+        index_ramsize = self.input.param("index-ramsize", None)
+        fts_ramsize = self.input.param("fts-ramsize", None)
+        name = self.input.param("name", None)
+        port = self.input.param("port", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_data_memory = 256
+        init_index_memory = 256
+        init_fts_memory = 256
+        init_name = "testrunner"
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            self.assertTrue(rest.init_cluster_memoryQuota(init_username, init_password, init_data_memory),
+                            "Setting data service RAM quota failed during test setup")
+            self.assertTrue(rest.set_indexer_memoryQuota(init_username, init_password, init_index_memory),
+                            "Setting index service RAM quota failed during test setup")
+            self.assertTrue(rest.set_fts_memoryQuota(init_username, init_password, init_fts_memory),
+                            "Setting full-text service RAM quota failed during test setup")
+            self.assertTrue(rest.set_cluster_name(init_name), "Setting cluster name failed during test setup")
+
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if new_username is not None:
+            options += " --cluster-username " + str(new_username)
+            if not expect_error:
+                server.rest_username = new_username
+        if new_password is not None:
+            options += " --cluster-password " + str(new_password)
+            if not expect_error:
+                server.rest_password = new_password
+        if data_ramsize:
+            options += " --cluster-ramsize " + str(data_ramsize)
+        if index_ramsize:
+            options += " --cluster-index-ramsize " + str(index_ramsize)
+        if fts_ramsize:
+            options += " --cluster-fts-ramsize " + str(fts_ramsize)
+        if name:
+            options += " --cluster-name " + str(name)
+            # strip quotes if the cluster name contains spaces
+            if (name[0] == name[-1]) and name.startswith(("'", '"')):
+                name = name[1:-1]
+        if port:
+            options += " --cluster-port " + str(port)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli(cmd, hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            # Update the cluster manager port if it was specified to be changed
+            if port:
+                server.port = port
+            if data_ramsize is None:
+                data_ramsize = init_data_memory
+            if index_ramsize is None:
+                index_ramsize = init_index_memory
+            if fts_ramsize is None:
+                fts_ramsize = init_fts_memory
+            if name is None:
+                name = init_name
+
+            if cmd == "cluster-edit":
+                self.verifyWarningOutput(output, "The cluster-edit command is depercated, use setting-cluster instead")
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Cluster settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize, fts_ramsize),
+                            "Ram quotas not set properly")
+            self.assertTrue(self.verifyClusterName(server, name), "Cluster name does not match")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg), "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server), "Cluster was initialized, but error was received")
+
+        # Reset the cluster (This is important for when we change the port number)
+        rest = RestConnection(server)
+        self.assertTrue(rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+                   "Cluster was not re-initialized at the end of the test")
+
+    def testBucketCompact(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        data_only = self.input.param("data-only", False)
+        views_only = self.input.param("views-only", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_bucket_type = self.input.param("init-bucket-type", None)
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if init_bucket_type == "couchbase":
+            init_bucket_type = "membase"
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            if init_bucket_type is not None:
+                self.assertTrue(rest.create_bucket(bucket_name, 256, "sasl", "", 1, 0, init_bucket_type, 0, 3,
+                                                   0, "valueOnly"),
+                                "Bucket not created during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+        if data_only:
+            options += " --data-only"
+        if views_only:
+            options += " --view-only"
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-compact", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket compaction started"),
+                            "Expected command to succeed")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+
+        # Reset the cluster (This is important for when we change the port number or username/password)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
+
+    def testBucketCreate(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        bucket_password = self.input.param("bucket-password", None)
+        bucket_type = self.input.param("bucket-type", None)
+        memory_quota = self.input.param("memory-quota", None)
+        eviction_policy = self.input.param("eviction-policy", None)
+        replica_count = self.input.param("replica-count", None)
+        enable_index_replica = self.input.param("enable-replica-index", None)
+        priority = self.input.param("priority", None)
+        enable_flush = self.input.param("enable-flush", None)
+        wait = self.input.param("wait", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+        if bucket_password is not None:
+            options += " --bucket-password " + bucket_password
+        if bucket_type is not None:
+            options += " --bucket-type " + bucket_type
+        if memory_quota is not None:
+            options += " --bucket-ramsize " + str(memory_quota)
+        if eviction_policy is not None:
+            options += " --bucket-eviction-policy " + eviction_policy
+        if replica_count is not None:
+            options += " --bucket-replica " + str(replica_count)
+        if enable_index_replica is not None:
+            options += " --enable-index-replica " + str(enable_index_replica)
+        if priority is not None:
+            options += " --bucket-priority " + priority
+        if enable_flush is not None:
+            options += " --enable-flush " + str(enable_flush)
+        if wait:
+            options += " --wait"
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-create", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket created"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_password, bucket_type, memory_quota,
+                                                      eviction_policy, replica_count, enable_index_replica, priority,
+                                                      enable_flush),
+                            "Bucket settings not set properly")
+        else:
+            self.assertTrue(not self.verifyContainsBucket(server, bucket_name),
+                            "Bucket was created even though an error occurred")
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+
+        # Reset the cluster (This is important for when we change the port number or username/password)
+        rest = RestConnection(server)
+        self.assertTrue(rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+                        "Cluster was not re-initialized at the end of the test")
+
+    def testBucketEdit(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        bucket_password = self.input.param("bucket-password", None)
+        memory_quota = self.input.param("memory-quota", None)
+        eviction_policy = self.input.param("eviction-policy", None)
+        replica_count = self.input.param("replica-count", None)
+        priority = self.input.param("priority", None)
+        enable_flush = self.input.param("enable-flush", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_bucket_type = self.input.param("init-bucket-type")
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if init_bucket_type == "couchbase":
+            init_bucket_type = "membase"
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            self.assertTrue(rest.create_bucket(bucket_name, 256, "sasl", "", 1, 0, init_bucket_type, 0, 3, 0, "valueOnly"),
+                            "Bucket not created during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+        if bucket_password is not None:
+            options += " --bucket-password " + bucket_password
+        if memory_quota is not None:
+            options += " --bucket-ramsize " + str(memory_quota)
+        if eviction_policy is not None:
+            options += " --bucket-eviction-policy " + eviction_policy
+        if replica_count is not None:
+            options += " --bucket-replica " + str(replica_count)
+        if priority is not None:
+            options += " --bucket-priority " + priority
+        if enable_flush is not None:
+            options += " --enable-flush " + str(enable_flush)
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-edit", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket edited"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_password, None, memory_quota,
+                                                      eviction_policy, replica_count, None, priority, enable_flush),
+                            "Bucket settings not set properly")
+        else:
+            # List buckets
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+
+        # Reset the cluster (This is important for when we change the port number or username/password)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
+
+    def testBucketDelete(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_bucket_type = self.input.param("init-bucket-type", None)
+
+        server = copy.deepcopy(self.servers[-1])
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if init_bucket_type == "couchbase":
+            init_bucket_type = "membase"
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+            server.rest_username = init_username
+            server.rest_password = init_password
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            if init_bucket_type != None:
+                self.assertTrue(rest.create_bucket(bucket_name, 256, "sasl", "", 1, 0, init_bucket_type, 0, 3,
+                                                   0, "valueOnly"),
+                                "Bucket not created during test setup")
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-delete", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket deleted"),
+                            "Expected command to succeed")
+            self.assertTrue(not self.verifyContainsBucket(server, bucket_name), "Bucket was not deleted")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized and init_bucket_type is not None:
+                self.assertTrue(self.verifyContainsBucket(server, bucket_name), "Bucket should not have been deleted")
+
+    def testBucketFlush(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        force = self.input.param("force", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_username = self.input.param("init-username", username)
+        init_password = self.input.param("init-password", password)
+        init_bucket_type = self.input.param("init-bucket-type", None)
+        init_enable_flush = int(self.input.param("init-enable-flush", 0))
+        insert_keys = 12
+
+        initial_server = self.servers[-1]
+        server = copy.deepcopy(initial_server)
+        hostname = "%s:%s" % (server.ip, server.port)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if init_bucket_type == "couchbase":
+            init_bucket_type = "membase"
+
+        if initialized:
+            if init_username is None:
+                init_username = "Administrator"
+            if init_password is None:
+                init_password = "password"
+
+            server.rest_username = init_username
+            server.rest_password = init_password
+            rest = RestConnection(server)
+            self.assertTrue(rest.init_cluster(init_username, init_password),
+                            "Cluster initialization failed during test setup")
+            if init_bucket_type is not None:
+                self.assertTrue(rest.create_bucket(bucket_name, 256, "sasl", "", 1, 0, init_bucket_type, 0, 3,
+                                                   init_enable_flush, "valueOnly"),
+                                "Bucket not created during test setup")
+                MemcachedClientHelper.load_bucket_and_return_the_keys([server], name=bucket_name, number_of_threads=1,
+                                                                      write_only=True, number_of_items=insert_keys,
+                                                                      moxi=False)
+                inserted = int(rest.get_bucket_json(bucket_name)["basicStats"]["itemCount"])
+                self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys))
+
+        options = ""
+        if username is not None:
+            options += " -u " + str(username)
+        if password is not None:
+            options += " -p " + str(password)
+        if bucket_name is not None:
+            options += " --bucket " + bucket_name
+        if force:
+            options += " --force"
+
+        remote_client = RemoteMachineShellConnection(server)
+        output, error = remote_client.couchbase_cli("bucket-flush", hostname, options)
+        remote_client.disconnect()
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, "Bucket flushed"),
+                            "Expected command to succeed")
+            self.assertTrue(self.waitForItemCount(server, bucket_name, 0),
+                            "Expected 0 keys to be in bucket after the flush")
+        else:
+            self.assertTrue(self.verifyCommandOutput(output, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized and init_bucket_type is not None:
+                self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys),
+                                "Expected keys to exist after the flush failed")
+
+        # Reset the cluster (This is important for when we change the port number or username/password)
+        rest = RestConnection(server)
+        self.assertTrue(
+            rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
+            "Cluster was not re-initialized at the end of the test")
 
     def testIndexerSettings(self):
         cli_command = "setting-index"
@@ -842,118 +1324,6 @@ class CouchbaseCliTest(CliBaseTest):
                                           options=options, cluster_host="localhost", \
                                             user="Administrator", password="password")
         self.assertEqual(output, ['SUCCESS: set index settings'])
-        remote_client.disconnect()
-
-    def testBucketModification(self):
-        cli_command = "bucket-edit"
-        bucket_password = self.input.param("bucket_password", None)
-        bucket_port = self.input.param("bucket_port", 11211)
-        enable_flush = self.input.param("enable_flush", None)
-        self.testBucketCreation()
-        bucket_port_new = self.input.param("bucket_port_new", None)
-        bucket_password_new = self.input.param("bucket_password_new", None)
-        bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
-        enable_flush_new = self.input.param("enable_flush_new", None)
-        enable_index_replica_new = self.input.param("enable_index_replica_new", None)
-        bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
-        bucket = self.input.param("bucket", "default")
-        rest = RestConnection(self.master)
-        remote_client = RemoteMachineShellConnection(self.master)
-
-        options = "--bucket={0}".format(bucket)
-        options += (" --enable-flush={0}".format(enable_flush_new), \
-                                        "")[enable_flush_new is None]
-        options += (" --enable-index-replica={0}".format(enable_index_replica_new), \
-                                                "")[enable_index_replica_new is None]
-        options += (" --bucket-port={0}".format(bucket_port_new), \
-                                               "")[bucket_port_new is None]
-        options += (" --bucket-password={0}".format(bucket_password_new), \
-                                           "")[bucket_password_new is None]
-        options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), \
-                                            "")[bucket_ramsize_new is None]
-
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                          options=options, cluster_host="localhost", \
-                                            user="Administrator", password="password")
-        self.assertEqual(output, ['SUCCESS: bucket-edit'])
-
-        if bucket_password_new is not None:
-            bucket_password_new = bucket_password
-        if bucket_port_new is not None:
-            bucket_port = bucket_port_new
-        if bucket_ramsize_new is not None:
-            bucket_ramsize = bucket_ramsize_new
-
-        buckets = rest.get_buckets()
-        result = True
-        if len(buckets) != 1:
-            self.log.error("Expected to ge only 1 bucket")
-            result = False
-        bucket = buckets[0]
-        if not (bucket_port == bucket.nodes[0].moxi or bucket_port == bucket.port):
-            self.log.error("Bucket port is not correct")
-            result = False
-        if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
-            self.log.error("Bucket password is not correct")
-            result = False
-        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), \
-                                                  int(int(buckets[0].stats.ram) * 1.05)):
-            self.log.error("Bucket RAM size is not correct")
-            result = False
-
-        if not result:
-            self.fail("Bucket was created with incorrect properties")
-
-        options = ""
-        cli_command = "bucket-flush"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                           options=options, cluster_host="localhost",
-                                             user="Administrator", password="password")
-        self.assertEqual(output, ['Running this command will totally PURGE database'
-                     ' data from disk. Do you really want to do it? (Yes/No)TIMED OUT:'
-            ' command: bucket-flush: localhost:8091, most likely bucket is not flushed'])
-        if not enable_flush:
-            cli_command = "bucket-flush --force"
-            options = "--bucket={0}".format(bucket)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
-                self.assertTrue(self._check_output("ERROR:", output))
-            else:
-                self.assertEqual(output, ['Database data will be purged from disk ...',
-                'ERROR: unable to bucket-flush; please check if the bucket exists or not;'
-                     ' (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
-            cli_command = "bucket-edit"
-            options = "--bucket={0} --enable-flush=1 --bucket-ramsize=500".format(bucket)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            self.assertEqual(output, ['SUCCESS: bucket-edit'])
-
-        cli_command = "bucket-flush --force"
-        options = "--bucket={0}".format(bucket)
-        if enable_flush_new is None:
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...',
-                                                               'SUCCESS: bucket-flush'])
-        elif int(enable_flush_new) == 0:
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                              options=options, cluster_host="localhost",
-                                              user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...',
-                                   'ERROR: unable to bucket-flush; please check if the '
-                                              'bucket exists or not; (400) Bad Request',
-                                         '{"_":"Flush is disabled for the bucket"}'])
-
-        cli_command = "bucket-delete"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                          options=options, cluster_host="localhost",
-                                          user="Administrator", password="password")
-        self.assertEqual(output, ['SUCCESS: bucket-delete'])
-
         remote_client.disconnect()
 
     # MB-8566
@@ -1286,6 +1656,76 @@ class CouchbaseCliTest(CliBaseTest):
                                                                .format(self.servers[num + 3].ip))
                 self.assertTrue("INFO: rebalancing" in output[1])
                 self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+    def test_change_admin_password_with_read_only_account(self):
+        """ this test automation for bug MB-20170.
+            In the bug, when update password of admin, read only account is removed.
+            This test is to maker sure read only account stay after update password
+            of Administrator. """
+        if self.cb_version[:5] in COUCHBASE_FROM_SHERLOCK:
+            readonly_user = "readonlyuser_1"
+            curr_passwd = "password"
+            update_passwd = "password_1"
+            try:
+                self.log.info("remove any readonly user in cluster ")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                             "user-manage --list -c %s:8091 "
+                                             "-u Administrator -p %s "
+                           % (self.cli_command_path, self.shell.ip, curr_passwd))
+                self.log.info("read only user in this cluster %s" % output)
+                if output:
+                    for user in output:
+                        output, error = self.shell.execute_command("%scouchbase-cli "
+                                                    "user-manage --delete -c %s:8091 "
+                                                    "--ro-username=%s "
+                                                    "-u Administrator -p %s "
+                               % (self.cli_command_path, self.shell.ip, user,
+                                                                curr_passwd))
+                        self.log.info("%s" % output)
+                self.log.info("create a read only user account")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                              "user-manage -c %s:8091 --set "
+                                              "--ro-username=%s "
+                                            "--ro-password=readonlypassword "
+                                              "-u Administrator -p %s "
+                                      % (self.cli_command_path, self.shell.ip,
+                                                  readonly_user, curr_passwd))
+                self.log.info("%s" % output)
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                             "user-manage --list -c %s:8091 "
+                                              "-u Administrator -p %s "
+                                                    % (self.cli_command_path,
+                                                 self.shell.ip, curr_passwd))
+                self.log.info("readonly user craeted in this cluster %s" % output)
+                self.log.info("start update Administrator password")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                                   "cluster-edit -c %s:8091 "
+                                                    "-u Administrator -p %s "
+                                              "--cluster-username=Administrator "
+                                              "--cluster-password=%s"
+                                         % (self.cli_command_path, self.shell.ip,
+                                                     curr_passwd, update_passwd))
+                self.log.info("%s" % output)
+                self.log.info("verify if readonly user: %s still exist "
+                                                                 % readonly_user )
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                             "user-manage --list -c %s:8091 "
+                                              "-u Administrator -p %s "
+                                         % (self.cli_command_path, self.shell.ip,
+                                                                  update_passwd))
+                self.log.info(" current readonly user in cluster: %s" % output)
+                self.assertTrue(self._check_output("%s" % readonly_user, output))
+            finally:
+                self.log.info("reset password back to original in case test failed")
+                output, error = self.shell.execute_command("%scouchbase-cli "
+                                                   "cluster-edit -c %s:8091 "
+                                                    "-u Administrator -p %s "
+                                              "--cluster-username=Administrator "
+                                              "--cluster-password=%s"
+                                         % (self.cli_command_path, self.shell.ip,
+                                                     update_passwd, curr_passwd))
+        else:
+            self.log.info("readonly account does not support on this version")
 
     def _check_output(self, word_check, output):
         found = False

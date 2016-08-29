@@ -10,6 +10,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from couchbase.exceptions import NotFoundError
 from couchbase.bucket import Bucket
 from couchbase_helper.cluster import Cluster
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 
 class Lww(XDCRNewBaseTest):
@@ -63,6 +64,12 @@ class Lww(XDCRNewBaseTest):
             output, error = conn.execute_command("date --set='" + output[-1] + "'")
             conn.log_command_output(output, error)
 
+    def _change_time_zone(self, cluster=None, time_zone="America/Los_Angeles"):
+        for node in cluster.get_nodes():
+            conn = RemoteMachineShellConnection(node)
+            output, error = conn.execute_command("timedatectl set-timezone " + time_zone)
+            conn.log_command_output(output, error)
+
     def _create_buckets(self, bucket='',
                        ramQuotaMB=1,
                        authType='none',
@@ -73,11 +80,11 @@ class Lww(XDCRNewBaseTest):
                        replica_index=1,
                        threadsNumber=3,
                        flushEnabled=1,
-                       evictionPolicy='valueOnly',
                        src_lww=True,
                        dst_lww=True,
                        skip_src=False,
                        skip_dst=False):
+        evictionPolicy= self._input.param("eviction_policy", 'valueOnly')
         if not skip_src:
             src_rest = RestConnection(self.c1_cluster.get_master_node())
             if src_lww:
@@ -124,6 +131,15 @@ class Lww(XDCRNewBaseTest):
         value[new_key] = value.pop(old_key)
         value[new_key] = new_val
         conn.upsert(key=doc_id, value=value)
+
+    def _kill_processes(self, crashed_nodes=[]):
+        for node in crashed_nodes:
+            NodeHelper.kill_erlang(node)
+
+    def _start_cb_server(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.start_couchbase()
+        shell.disconnect()
 
     def test_lww_enable(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -1525,7 +1541,7 @@ class Lww(XDCRNewBaseTest):
 
         self.verify_results()
 
-    def test_lww_with_src_bucket_flush(self):
+    def test_lww_with_rebalance_in_and_simult_upd_del(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
 
@@ -1546,13 +1562,17 @@ class Lww(XDCRNewBaseTest):
 
         self.c1_cluster.resume_all_replications()
 
-        self.c1_cluster.flush_buckets()
+        task = self.c1_cluster.async_rebalance_in(num_nodes=1)
 
         self.async_perform_update_delete()
 
+        task.result()
+
+        self._wait_for_replication_to_catchup()
+
         self.verify_results()
 
-    def test_lww_with_src_bucket_delete(self):
+    def test_lww_with_rebalance_out_and_simult_upd_del(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
 
@@ -1572,10 +1592,473 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
         self.c1_cluster.resume_all_replications()
+
+        task = self.c1_cluster.async_rebalance_out()
+
+        self.async_perform_update_delete()
+
+        task.result()
+
+        FloatingServers._serverlist.append(self._input.servers[1])
+
+        task = self.c1_cluster.async_rebalance_in()
+        task.result()
+
+        self._wait_for_replication_to_catchup()
+
+        self.verify_results()
+
+    def test_lww_with_failover_and_simult_upd_del(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
+
+        graceful = self._input.param("graceful", False)
+        self.recoveryType = self._input.param("recoveryType", None)
+        task = self.c1_cluster.async_failover(graceful=graceful)
+
+        self.async_perform_update_delete()
+
+        task.result()
+
+        self.sleep(30)
+
+        if self.recoveryType:
+            server_nodes = src_conn.node_statuses()
+            for node in server_nodes:
+                if node.ip == self._input.servers[1].ip:
+                    src_conn.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
+                    self.sleep(30)
+                    src_conn.add_back_node(otpNode=node.id)
+            rebalance = self.cluster.async_rebalance(self.c1_cluster.get_nodes(), [], [])
+            rebalance.result()
+
+        self._wait_for_replication_to_catchup()
+
+        self.verify_results()
+
+    def test_lww_disabled_extended_metadata(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, dst_lww=False)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW enabled on source bucket")
+        self.log.info("LWW not enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW enabled on dest bucket")
+        self.log.info("LWW not enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('C1-lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+        gen = DocumentGenerator('C2-lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
+
+        data_path = src_conn.get_data_path()
+        dump_file = data_path + "/default/0.couch.1"
+        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        json_parsed = json.loads(output[1])
+        self.assertEqual(json_parsed['conflict_resolution_mode'], 0,
+                         "Conflict resolution mode is LWW in extended metadata of src bucket")
+        self.log.info("Conflict resolution mode is not LWW in extended metadata of src bucket as expected")
+
+        data_path = dest_conn.get_data_path()
+        dump_file = data_path + "/default/0.couch.1"
+        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
+        conn = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        json_parsed = json.loads(output[1])
+        self.assertEqual(json_parsed['conflict_resolution_mode'], 0,
+                         "Conflict resolution mode is LWW in extended metadata of dest bucket")
+        self.log.info("Conflict resolution mode is not LWW in extended metadata of dest bucket as expected")
+
+    def test_lww_src_disabled_dst_enabled_extended_metadata(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=False)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW enabled on source bucket")
+        self.log.info("LWW not enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('C1-lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+        gen = DocumentGenerator('C2-lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
+
+        data_path = src_conn.get_data_path()
+        dump_file = data_path + "/default/0.couch.1"
+        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        json_parsed = json.loads(output[1])
+        self.assertEqual(json_parsed['conflict_resolution_mode'], 0,
+                         "Conflict resolution mode is LWW in extended metadata of src bucket")
+        self.log.info("Conflict resolution mode is not LWW in extended metadata of src bucket as expected")
+
+        data_path = dest_conn.get_data_path()
+        dump_file = data_path + "/default/0.couch.1"
+        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
+        conn = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        json_parsed = json.loads(output[1])
+        self.assertEqual(json_parsed['conflict_resolution_mode'], 0,
+                         "Conflict resolution mode is LWW in extended metadata of dest bucket")
+        self.log.info("Conflict resolution mode is not LWW in extended metadata of dest bucket as expected")
+
+    def test_lww_with_nodes_reshuffle(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        zones = src_conn.get_zone_names().keys()
+        source_zone = zones[0]
+        target_zone = "test_lww"
+        self.log.info("Current nodes in group {0} : {1}".format(source_zone,
+                                                                str(src_conn.get_nodes_in_zone(source_zone).keys())))
+        self.log.info("Creating new zone " + target_zone)
+        src_conn.add_zone(target_zone)
+        self.log.info("Moving {0} to new zone {1}".format(str(src_conn.get_nodes_in_zone(source_zone).keys()),
+                                                          target_zone))
+        src_conn.shuffle_nodes_in_zones(["{0}".format(str(src_conn.get_nodes_in_zone(source_zone).keys()))],
+                                        source_zone,target_zone)
+
+        gen = DocumentGenerator('C1-lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+        gen = DocumentGenerator('C2-lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
+
+        self.log.info("Moving {0} back to old zone {1}".format(str(src_conn.get_nodes_in_zone(source_zone).keys()),
+                                                               source_zone))
+        src_conn.shuffle_nodes_in_zones(["{0}".format(str(src_conn.get_nodes_in_zone(source_zone).keys()))],
+                                        target_zone,source_zone)
+        self.log.info("Deleting new zone " + target_zone)
+        src_conn.delete_zone(target_zone)
+
+    def test_lww_with_dst_failover_and_rebalance(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.async_load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.async_load_all_buckets_from_generator(gen2)
+
+        graceful = self._input.param("graceful", False)
+        self.recoveryType = self._input.param("recoveryType", None)
+        task = self.c2_cluster.async_failover(graceful=graceful)
+
+        task.result()
+
+        if self.recoveryType:
+            server_nodes = src_conn.node_statuses()
+            for node in server_nodes:
+                if node.ip == self._input.servers[3].ip:
+                    dest_conn.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
+                    self.sleep(30)
+                    dest_conn.add_back_node(otpNode=node.id)
+            rebalance = self.cluster.async_rebalance(self.c2_cluster.get_nodes(), [], [])
+            rebalance.result()
+
+        self.sleep(60)
+
+        self._wait_for_replication_to_catchup()
+
+        self.verify_results()
+
+    def test_lww_with_dst_bucket_flush(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.async_load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.async_load_all_buckets_from_generator(gen2)
+
+        self.c2_cluster.flush_buckets()
+
+        self.sleep(60)
+
+        self.verify_results()
+
+    def test_lww_with_dst_bucket_delete(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.async_load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.async_load_all_buckets_from_generator(gen2)
 
         self.c1_cluster.delete_bucket(bucket_name='default')
         self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
 
+        self.sleep(60)
+
+        self.verify_results()
+
+    def test_lww_with_rebooting_non_master_node(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.async_load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.async_load_all_buckets_from_generator(gen2)
+
+        rebooted_node_src = self.c1_cluster.reboot_one_node(self)
+        NodeHelper.wait_node_restarted(rebooted_node_src, self, wait_time=self._wait_timeout * 4, wait_if_warmup=True)
+
+        rebooted_node_dst = self.c2_cluster.reboot_one_node(self)
+        NodeHelper.wait_node_restarted(rebooted_node_dst, self, wait_time=self._wait_timeout * 4, wait_if_warmup=True)
+
+        self.sleep(120)
+
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([rebooted_node_dst], self, wait_if_warmup=True)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([rebooted_node_src], self, wait_if_warmup=True)
+
+        self.verify_results()
+
+    def test_lww_with_firewall(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.async_load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.async_load_all_buckets_from_generator(gen2)
+
+        NodeHelper.enable_firewall(self.c2_cluster.get_master_node())
+        self.sleep(30)
+        NodeHelper.disable_firewall(self.c2_cluster.get_master_node())
+
+        self.sleep(30)
+
+        self.verify_results()
+
+    def test_lww_with_node_crash_cluster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        crashed_nodes = []
+        crash = self._input.param("crash", "").split('-')
+        if "C1" in crash:
+            crashed_nodes += self.c1_cluster.get_nodes()
+            self._kill_processes(crashed_nodes)
+            self.sleep(30)
+        if "C2" in crash:
+            crashed_nodes += self.c2_cluster.get_nodes()
+            self._kill_processes(crashed_nodes)
+
+        for crashed_node in crashed_nodes:
+            self._start_cb_server(crashed_node)
+
+        if "C1" in crash:
+            NodeHelper.wait_warmup_completed(self.c1_cluster.get_nodes())
+            gen1 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+            self.c1_cluster.load_all_buckets_from_generator(gen1)
+
         self.async_perform_update_delete()
+
+        if "C2" in crash:
+            NodeHelper.wait_warmup_completed(self.c2_cluster.get_nodes())
+
+        self.verify_results()
+
+    def test_lww_with_auto_failover(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.log.info("Enabling auto failover on " + str(self.c1_cluster.get_master_node()))
+        src_conn.update_autofailover_settings(enabled=True, timeout=30)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
+
+        self.verify_results()
+
+    def test_lww_with_mixed_buckets(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self._create_buckets(bucket='sasl_bucket_1', ramQuotaMB=100, authType='sasl', saslPassword='password')
+        self._create_buckets(bucket='sasl_bucket_2', ramQuotaMB=100, authType='sasl', saslPassword='password')
+        self._create_buckets(bucket='standard_bucket_1', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
+        self._create_buckets(bucket='standard_bucket_2', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1)
+
+        for bucket in self.c1_cluster.get_buckets():
+            self.assertTrue(src_conn.is_lww_enabled(bucket=bucket.name), "LWW not enabled on source bucket " + str(bucket.name))
+            self.log.info("LWW enabled on source bucket " + str(bucket.name) + " as expected")
+            self.assertTrue(dest_conn.is_lww_enabled(bucket=bucket.name), "LWW not enabled on source bucket " + str(bucket.name))
+            self.log.info("LWW enabled on source bucket " + str(bucket.name) + " as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
+
+        self.verify_results()
+
+    def test_lww_with_diff_time_zones(self):
+        self.c3_cluster = self.get_cb_cluster_by_name('C3')
+
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+        c3_conn = RestConnection(self.c3_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                                proxyPort=11211, bucketType='membase', replica_index=1, threadsNumber=3,
+                                flushEnabled=1, lww=True)
+        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default', authType='none',
+                                   saslPassword='', replicaNumber=1, proxyPort=11211, bucketType='membase',
+                                   evictionPolicy='valueOnly')
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+        self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on c3 bucket")
+        self.log.info("LWW enabled on c3 bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        self._change_time_zone(self.c2_cluster, time_zone="America/Chicago")
+        self._change_time_zone(self.c3_cluster, time_zone="America/New_York")
+
+        gen1 = BlobGenerator("C3-lww-", "C3-lww-", self._value_size, end=self._num_items)
+        self.c3_cluster.load_all_buckets_from_generator(gen1)
+        gen1 = BlobGenerator("C2-lww-", "C2-lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("C1-lww-", "C1-lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
 
         self.verify_results()

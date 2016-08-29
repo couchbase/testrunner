@@ -16,7 +16,7 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-from sdk_client import SDKClient
+#from sdk_client import SDKClient
 
 
 def ExplainPlanHelper(res):
@@ -69,6 +69,7 @@ class QueryTests(BaseTestCase):
         self.named_prepare = self.input.param("named_prepare", None)
         self.monitoring = self.input.param("monitoring", False)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
+        self.cluster_ops = self.input.param("cluster_ops",False)
         self.isprepared = False
         self.server = self.master
         self.ispokemon = self.input.param("pokemon",False)
@@ -101,8 +102,9 @@ class QueryTests(BaseTestCase):
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
         #if (self.coverage == False):
-        self.shell.execute_command("killall -9 cbq-engine")
-        self.shell.execute_command("killall -9 indexer")
+        if (self.cluster_ops == False):
+            self.shell.execute_command("killall -9 cbq-engine")
+            self.shell.execute_command("killall -9 indexer")
         self.sleep(10, 'wait for indexer')
         self.log.info('-'*100)
         #if self.ispokemon:
@@ -582,6 +584,7 @@ class QueryTests(BaseTestCase):
                           'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
+
 ##############################################################################################
 #
 #   GROUP BY
@@ -851,30 +854,47 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_meta_cas(self):
-        for bucket in self.buckets:
-            self.query = 'insert into default values("k05", { "id":-9223372036854775808  } )'
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k03", { "id":-9223372036854775807  } )'
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k02", { "id":1470691191458562048 } )'
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k01", { "id":9223372036854775807 } )';
-            actual_result = self.run_cbq_query()
-            self.query = 'insert into default values("k04", { "id":9223372036854775808 } )';
-            actual_result = self.run_cbq_query()
+            self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%("default")
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%("default")
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k021", { "id":1470691191458562048 } )'%("default")
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k011", { "id":9223372036854775807 } )'%("default")
+            self.run_cbq_query()
+            self.query = 'insert into %s values("k041", { "id":9223372036854775808 } )'%("default")
+            self.run_cbq_query()
             scheme = "couchbase"
             host=self.master.ip
             if self.master.ip == "127.0.0.1":
                 scheme = "http"
                 host="{0}:{1}".format(self.master.ip,self.master.port)
-            client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
-            expected_result = []
-            keys = ["k01","k02","k03","k04","k05"]
-            for key in keys:
-                a, cas, b = client.get(key)
-                expected_result.append({"cas" : int(cas)})
-            expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))[0:10]
-            print "expected result is {0}".format(expected_result)
+            self.query = 'select * from default where meta().id = "{0}"'.format("k051")
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854776000L})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k031")
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775807})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k021")
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'][0]["default"],{'id': 1470691191458562048})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k011")
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854775807})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k041")
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854776000L})
+            self.query = 'delete from default where meta().id in ["k051","k021","k011","k041","k031"]'
+            self.run_cbq_query()
+
+            # client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
+            # expected_result = []
+            # keys = ["k01","k02","k03","k04","k05"]
+            # for key in keys:
+            #     a, cas, b = client.get(key)
+            #     expected_result.append({"cas" : int(cas)})
+            # expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))[0:10]
+            # print "expected result is {0}".format(expected_result)
 
             #self._verify_results(actual_result, expected_result)
 
@@ -2152,7 +2172,6 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             s = pprint.pformat( res, indent=4 )
-            print s
             if index in s:
                 self.log.info("correct index used in json result ")
             else:

@@ -2,7 +2,7 @@ from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
 import testconstants
 import json
-from testconstants import COUCHBASE_FROM_WATSON
+from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK
 from membase.helper.bucket_helper import BucketOperationHelper
 
 class docloaderTests(CliBaseTest):
@@ -64,6 +64,41 @@ class docloaderTests(CliBaseTest):
         self.verify_results(self.load_filename)
         self.verify_ddoc(self.load_filename)
         self.shell.delete_files(self.load_filename)
+
+    def test_docloader_from_file(self):
+        """ copy doc zip file to /tmp, unzip it and use docloader to load doc
+           from this directory """
+        print "here  ", self.short_v
+        if self.short_v in COUCHBASE_FROM_SPOCK:
+            self.shell.execute_command("cp %stravel-sample.zip %s" \
+                                    % (self.sample_files_path, self.tmp_path))
+            self.shell.execute_command("cd %s; unzip travel-sample.zip; cd %s"\
+                                        % (self.tmp_path, self.root_path))
+            self.shell.execute_command("%scbdocloader -n localhost:8091 "
+                                       "-u Administrator -p password "
+                                       "-b travel-sample %stravel-sample" \
+                                       % (self.cli_command_path, self.tmp_path))
+            """ check all indexes are completed """
+            index_name = []
+            result = self.rest.index_tool_stats()
+            end_time_i = time.time() + 60
+            for map in result:
+                if result["indexes"]:
+                    for x in result["indexes"]:
+                        if x["bucket"] == "travel-sample":
+                            if x["progress"] == 100 and x["index"] not in index_name:
+                                index_name.append(x["index"])
+                else:
+                    self.fail("indexing failed to build")
+            if len(index_name) < 10:
+                self.log.info("index list {0}".format(index_name))
+                self.fail("some indexing may not complete")
+            elif len(index_name) == 10:
+                self.log.info("travel-sample bucket is created and complete indexing")
+                self.log.info("index list in travel-sample bucket: {0}"
+                                           .format(index_name))
+            self.shell.execute_command("rm -rf %stravel-sample* " % self.tmp_path)
+            self.shell.disconnect()
 
     def verify_results(self, file):
         stats_tasks = []

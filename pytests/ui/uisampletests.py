@@ -315,6 +315,7 @@ class SettingsTests(BaseUITestCase):
                                                     num_expected, num_actual))
         self.log.info("Bucket items number is %s as expected" % num_actual)
 
+
 class ROuserTests(BaseUITestCase):
     def setUp(self):
         super(ROuserTests, self).setUp()
@@ -398,6 +399,45 @@ class ROuserTests(BaseUITestCase):
                         "Save button not disabled")
         self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().saveas_btn.get_attribute("class").find("dynamic_disabled") != -1,
                         "Save as button not disabled")
+
+
+class ExternalUserTests(BaseUITestCase):
+    def setUp(self):
+        super(ExternalUserTests, self).setUp()
+        self.helper = BaseHelper(self)
+        self.helper.login()
+        self.log.info("create bucket")
+        self.bucket = Bucket()
+        NavigationHelper(self).navigate('Data Buckets')
+        RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
+                                                           proxyPort=STANDARD_BUCKET_PORT + 6)
+
+    def tearDown(self):
+        super(ExternalUserTests, self).tearDown()
+
+    def test_external_user(self):
+        username = self.input.param('username', '')
+        full_name = self.input.param('full_name', '')
+        roles = self.input.param('roles', '')
+        expected_error = self.input.param('expected_error', '')
+        mode = self.input.param('mode', 'enable')
+
+        if roles == "":
+            roles =[]
+        else:
+            roles = roles.split(";")
+            roles = [role.replace("@", "*") for role in roles]
+
+        NavigationHelper(self).navigate('Security')
+        SettingsHelper(self).click_external_user_tab()
+        if mode == 'enable':
+            SettingsHelper(self).enable_authentication()
+        else:
+            SettingsHelper(self).disable_authentication()
+        SettingsHelper(self).create_external_user(username, full_name, roles, expected_error)
+        if not expected_error:
+            SettingsHelper(self).delete_external_user(username)
+
 
 class  RebalanceProgressTests(BaseUITestCase):
     def setUp(self):
@@ -658,10 +698,12 @@ Controls classes for tests
 class NavigationTestControls():
      def __init__(self, driver):
         self.helper = ControlsHelper(driver)
+
      def _navigation_tab(self, text):
         return self.helper.find_control('navigation', 'navigation_tab',
                                         parent_locator='navigation_bar',
                                         text=text)
+
      def _navigation_tab_link(self, text):
         return self.helper.find_control('navigation', 'navigation_tab_link',
                                         parent_locator='navigation_bar',
@@ -1096,8 +1138,9 @@ class SettingsTestControls():
                                         parent_locator='settings_bar',
                                         text=text)
 
-    def ro_tab(self):
+    def security_tabs(self):
         self.ro_tab = self.helper.find_control('user', 'ro_tab')
+        self.external_user_tab = self.helper.find_control('external_user', 'external_user_tab')
         return self
 
     def alerts_info(self):
@@ -1134,9 +1177,17 @@ class SettingsTestControls():
     def user_error_msgs(self):
         return self.helper.find_controls('user', 'error_msg')
 
+    def external_user_error_msgs(self):
+        return self.helper.find_controls('external_user', 'ext_error_message')
+
     def confirmation_user_delete(self):
         self.confirmation_dlg = self.helper.find_control('confirm_delete_ro','dlg')
         self.delete_btn  = self.helper.find_control('confirm_delete_ro','confirm_btn', parent_locator='dlg')
+        return self
+
+    def confirmation_external_user_delete(self):
+        self.confirmation_dlg = self.helper.find_control('confirm_delete_external_user','dlg')
+        self.delete_btn  = self.helper.find_control('confirm_delete_external_user', 'confirm_btn', parent_locator='dlg')
         return self
 
     def samples_buckets(self, bucket=''):
@@ -1146,6 +1197,27 @@ class SettingsTestControls():
         self.error_msg = self.helper.find_controls('sample_buckets','error')
         return self
 
+    def external_user_create_info(self, roles=[]):
+        self.img_enabled = self.helper.find_control('external_user', 'img_enabled')
+        self.img_disabled = self.helper.find_control('external_user', 'img_disabled')
+        self.enable_link = self.helper.find_control('external_user', 'enable_link')
+        self.disable_link = self.helper.find_control('external_user', 'disable_link')
+        self.label_disabled = self.helper.find_control('external_user', 'label_disabled')
+        self.add_user = self.helper.find_control('external_user', 'add_user')
+        self.name_inp = self.helper.find_control('external_user', 'name_inp')
+        self.name_full_inp = self.helper.find_control('external_user', 'name_full_inp')
+        self.roles_selector = self.helper.find_control('external_user', 'roles_selector')
+        self.save_button = self.helper.find_control('external_user', 'save_button')
+        self.cancel_button = self.helper.find_control('external_user', 'cancel_button')
+        self.ext_error_message = self.helper.find_control('external_user', 'ext_error_message')
+        self.delete_ext_user_btn = self.helper.find_control('external_user', 'delete_ext_user_btn')
+        self.edit_ext_user_btn = self.helper.find_control('external_user', 'edit_ext_user_btn')
+        self.roles_items = []
+        for role in roles:
+            self.roles_items.append(self.helper.find_control('external_user', 'roles_item', text=role))
+        return self
+
+
 '''
 Helpers
 '''
@@ -1154,7 +1226,6 @@ class NavigationHelper():
         self.tc = tc
         self.controls = NavigationTestControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=250)
-
 
     def _is_tab_selected(self, text):
         return self.controls._navigation_tab(text).get_attribute('class') \
@@ -2085,8 +2156,12 @@ class SettingsHelper():
         self.wait = WebDriverWait(tc.driver, timeout=250)
 
     def click_ro_tab(self):
-        self.controls.ro_tab().ro_tab.click()
+        self.controls.security_tabs().ro_tab.click()
         self.tc.log.info("tab Internal User/roles is selected")
+
+    def click_external_user_tab(self):
+        self.controls.security_tabs().external_user_tab.click()
+        self.tc.log.info("tab External User/Roles is selected")
 
     def navigate(self, tab):
         self.wait.until(lambda fn: self.controls._settings_tab_link(tab).is_displayed(),
@@ -2160,14 +2235,29 @@ class SettingsHelper():
     def is_user_created(self):
         return self.controls.user_create_info().delete_btn.is_displayed()
 
+    def is_external_user_created(self):
+        return self.controls.external_user_create_info().delete_ext_user_btn.is_displayed()
+
     def is_error_present(self):
         if self.get_error_msg():
+            return True
+        return False
+
+    def is_external_user_error_present(self):
+        if self.get_external_user_error_msg():
             return True
         return False
 
     def get_error_msg(self):
         msgs = []
         for control in self.controls.user_error_msgs():
+            if control.is_displayed() and control.get_text() != '':
+                msgs.append(control.get_text())
+        return msgs
+
+    def get_external_user_error_msg(self):
+        msgs = []
+        for control in self.controls.external_user_error_msgs():
             if control.is_displayed() and control.get_text() != '':
                 msgs.append(control.get_text())
         return msgs
@@ -2200,6 +2290,59 @@ class SettingsHelper():
             self.tc.log.error("User %s not created. error %s" % (user, error))
             raise Exception("ERROR while creating user: %s" % error)
         self.tc.log.info("User %s created" % user)
+
+    def create_external_user(self, user, fullname='', roles=[], expected_error=''):
+        self.tc.log.info("Try to add external user %s" % user)
+        self.wait.until(lambda fn: self.controls.external_user_create_info().add_user.is_displayed(),
+                    "Add User button is not displayed in %d sec" % (self.wait._timeout))
+        self.controls.external_user_create_info().add_user.click()
+        self.wait.until(lambda fn: self.controls.external_user_create_info().name_inp.is_displayed(),
+                        "Username is not displayed in %d sec" % (self.wait._timeout))
+        self.controls.external_user_create_info().name_inp.type(user)
+        self.controls.external_user_create_info().name_full_inp.type(fullname)
+        if roles:
+            for i in xrange(len(roles)):
+                self.controls.external_user_create_info().roles_selector.click()
+                self.controls.external_user_create_info(roles[i:]).roles_items[0].click()
+        self.controls.external_user_create_info().save_button.click()
+        self.wait.until(lambda fn: self.is_external_user_created() or self.is_external_user_error_present(),
+                    "No reaction for create btn in %d sec" % (self.wait._timeout))
+        if self.is_external_user_error_present():
+            error = self.get_external_user_error_msg()
+            self.tc.log.error("User %s not created. error %s" % (user, error))
+            if expected_error:
+                if expected_error != error[0]:
+                    raise Exception("Wrong ERROR while creating user: %s, expected: %s" % (error, expected_error))
+                else:
+                    self.tc.log.info("Expected error found: %s" % error)
+            else:
+                raise Exception("ERROR while creating user: %s" % error)
+        else:
+            if expected_error:
+                raise Exception("Expected ERROR '%s' not found. USer %s created!" % (expected_error, user))
+            else:
+                self.tc.log.info("User %s created" % user)
+
+    def delete_external_user(self, user):
+        self.tc.log.info("Delete external user %s" % user)
+        self.controls.helper.find_control('external_user', 'delete_by_user', text=user).click()
+        self.wait.until(lambda fn: self.controls.confirmation_external_user_delete().delete_btn.is_displayed(),
+                        "Confirmation pop up didn't appear in %d sec" % self.wait._timeout)
+        self.controls.confirmation_external_user_delete().delete_btn.click()
+        if self.controls.helper.find_control('external_user', 'delete_by_user', text=user).is_present():
+            self.wait.until(lambda fn: not self.controls.helper.find_control('external_user', 'delete_by_user', text=user).is_displayed(),
+                "Username is not displayed in %d sec" % self.wait._timeout)
+        self.tc.log.info("External user %s deleted" % user)
+
+    def disable_authentication(self):
+        if not self.controls.external_user_create_info().label_disabled.is_displayed():
+            self.controls.external_user_create_info().disable_link.click()
+
+    def enable_authentication(self):
+        if self.controls.external_user_create_info().label_disabled.is_displayed():
+            self.controls.external_user_create_info().enable_link.click()
+
+
 '''
 Objects
 '''

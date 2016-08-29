@@ -4,8 +4,10 @@ from membase.api.rest_client import RestConnection
 from testconstants import LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
+from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH
 import logger
 import random
+import time
 import zlib
 
 log = logger.Logger.get_logger()
@@ -30,10 +32,14 @@ class CliBaseTest(BaseTestCase):
         self.build_number = None
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         self.root_path = LINUX_ROOT_PATH
+        self.tmp_path = "/tmp/"
+        self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
         if type == 'windows':
             self.os = 'windows'
             self.root_path = WIN_ROOT_PATH
+            self.tmp_path = WIN_TMP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
+            self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
             self.cli_command_path = MAC_COUCHBASE_BIN_PATH
@@ -93,6 +99,12 @@ class CliBaseTest(BaseTestCase):
             log.info("Did not receive expected success message `SUCCESS: %s`", message)
             return False
 
+    def verifyWarningOutput(self, output, message):
+        for line in output:
+            if line == "WARNING: " + message:
+                return True
+        log.info("Did not receive expected error message `WARNING: %s`", message)
+        return False
 
     def verifyServices(self, server, expected_services):
         """Verifies that the services on a given node match the expected service
@@ -199,6 +211,71 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verifyBucketSettings(self, server, bucket_name, bucket_password, bucket_type, memory_quota, eviction_policy,
+                             replica_count, enable_index_replica, priority, enable_flush):
+        rest = RestConnection(server)
+        result = rest.get_bucket_json(bucket_name)
+        if bucket_password is not None and bucket_password != result["saslPassword"]:
+            log.info("Bucket password does not match (%s vs %s)", bucket_password, result["saslPassword"])
+            return False
+
+        if bucket_type == "couchbase":
+            bucket_type = "membase"
+
+        if bucket_type is not None and bucket_type != result["bucketType"]:
+            log.info("Memory quota does not match (%s vs %s)", bucket_type, result["bucketType"])
+            return False
+
+        quota = result["quota"]["rawRAM"] / 1024 / 1024
+        if memory_quota is not None and memory_quota != quota:
+            log.info("Bucket quota does not match (%s vs %s)", memory_quota, quota)
+            return False
+
+        if eviction_policy is not None and eviction_policy != result["evictionPolicy"]:
+            log.info("Eviction policy does not match (%s vs %s)", eviction_policy, result["evictionPolicy"])
+            return False
+
+        if replica_count is not None and replica_count != result["replicaNumber"]:
+            log.info("Replica count does not match (%s vs %s)", replica_count, result["replicaNumber"])
+            return False
+
+        if enable_index_replica == 1:
+            enable_index_replica = True
+        elif enable_index_replica == 0:
+            enable_index_replica = False
+
+        if enable_index_replica is not None and enable_index_replica != result["replicaIndex"]:
+            log.info("Replica index enabled does not match (%s vs %s)", enable_index_replica, result["replicaIndex"])
+            return False
+
+        if priority == "high":
+            priority = 8
+        elif priority == "low":
+            priority = 3
+
+        if priority is not None and priority != result["threadsNumber"]:
+            log.info("Bucket priority does not match (%s vs %s)", priority, result["threadsNumber"])
+            return False
+
+        if enable_flush is not None:
+            if enable_flush == 1 and "flush" not in result["controllers"]:
+                log.info("Bucket flush is not enabled, but it should be")
+                return False
+            elif enable_flush == 0 and "flush" in result["controllers"]:
+                log.info("Bucket flush is not enabled, but it should be")
+                return False
+
+        return True
+
+    def verifyContainsBucket(self, server, name):
+        rest = RestConnection(server)
+        buckets = rest.get_buckets()
+
+        for bucket in buckets:
+            if bucket.name == name:
+                return True
+        return False
+
     def verifyClusterName(self, server, name):
         rest = RestConnection(server)
         settings = rest.get_pools_default("waitChange=0")
@@ -231,10 +308,20 @@ class CliBaseTest(BaseTestCase):
 
         return False
 
-
     def verifyNotificationsEnabled(self, server):
         rest = RestConnection(server)
         enabled = rest.get_notifications()
         if enabled:
             return True
+        return False
+
+    def waitForItemCount(self, server, bucket_name, count, timeout=30):
+        rest = RestConnection(server)
+        for sec in range(timeout):
+            items = int(rest.get_bucket_json(bucket_name)["basicStats"]["itemCount"])
+            if items != count:
+                time.sleep(1)
+            else:
+                return True
+        log.info("Waiting for item count to be %d timed out", count)
         return False

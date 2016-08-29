@@ -1452,7 +1452,7 @@ class BaseTestCase(unittest.TestCase):
                                " % (cbstat_command, node, command, "default", saslpassword)
                     output, error = shell.execute_command(commands)
                 elif versions[0][:5] in testconstants.COUCHBASE_VERSION_3 or \
-                                versions[0][:5] in testconstants.SHERLOCK_VERSION:
+                                versions[0][:5] in testconstants.COUCHBASE_FROM_VERSION_4:
                     command = "dcp"
                     if not info == 'windows':
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \

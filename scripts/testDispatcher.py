@@ -46,7 +46,7 @@ def main():
     parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y','--serverType', dest='serverType', default='VM')
-    #parser.add_option('-u','--url', dest='url', default=None) - toy build option is not there yet
+    parser.add_option('-u','--url', dest='url', default=None)
 
     options, args = parser.parse_args()
 
@@ -62,7 +62,8 @@ def main():
     #print 'url', options.url
 
 
-    print 'subcomponent is', options.subcomponent
+    print 'url is', options.url
+
 
 
 
@@ -97,8 +98,16 @@ def main():
 
         else:
             # have a subcomponent, assume only 1 component
-            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent ='{2}';".\
-                format(options.run, options.component, options.subcomponent)
+
+            splitSubcomponents = options.subcomponent.split(',')
+            subcomponentString = ''
+            for i in range( len(splitSubcomponents) ):
+                print 'subcomponentString is', subcomponentString
+                subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
+                if i < len(splitSubcomponents) - 1:
+                    subcomponentString = subcomponentString + ','
+            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent in [{2}];".\
+                format(options.run, options.component, subcomponentString)
 
 
     print 'the query is', queryString #.format(options.run, componentString)
@@ -138,6 +147,8 @@ def main():
                                     'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
                                     'parameters':data['parameters'], 'initNodes':initNodes,
                                     'installParameters':installParameters})
+
+
                 else:
                     print data['component'], data['subcomponent'], ' is not supported in this release'
             else:
@@ -169,6 +180,8 @@ def main():
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                          'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}'
+    if options.url is not None:
+        launchString = launchString + '&url=' + options.url
 
     summary = []
 
@@ -275,7 +288,10 @@ def main():
 
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-                        time.sleep(15)     # don't do too much at once
+                        if options.serverType.lower() == 'docker':
+                            time.sleep(180)     # this is due to the docker port allocation race
+                        else:
+                            time.sleep(30)
                 else:
                     print 'not enough VMs at this time'
                     time.sleep(POLL_INTERVAL)

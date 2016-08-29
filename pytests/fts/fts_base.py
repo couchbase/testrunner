@@ -546,6 +546,7 @@ class FTSIndex:
         # Support for custom map
         self.custom_map = TestInputSingleton.input.param("custom_map", False)
         self.num_custom_analyzers = TestInputSingleton.input.param("num_custom_analyzers", 0)
+        self.multiple_filters = TestInputSingleton.input.param("multiple_filters", False)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
         if self.custom_map:
             self.generate_new_custom_map(seed=self.cm_id)
@@ -594,7 +595,8 @@ class FTSIndex:
 
     def generate_new_custom_map(self, seed):
         from custom_map_generator.map_generator import CustomMapGenerator
-        cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset, num_custom_analyzers=self.num_custom_analyzers)
+        cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset, num_custom_analyzers=self.num_custom_analyzers,
+                                    multiple_filters=self.multiple_filters)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
         print self.smart_query_fields
@@ -607,6 +609,42 @@ class FTSIndex:
                 cm_gen.get_random_value(custom_analyzer_def["analyzers"].keys())
         self.__log.info(json.dumps(self.index_definition["params"],
                                        indent=3))
+
+    def update_custom_analyzer(self, seed):
+        """
+        This method will update the custom analyzer in an index definition in 3 ways -
+        1) delete custom analyzer
+        2) remove a custom filter
+        3) change the custom analyzer used
+        """
+
+        delete_custom_analyzer = TestInputSingleton.input.param \
+            ("delete_custom_analyzer", False)
+        delete_custom_filter = TestInputSingleton.input.param \
+            ("delete_custom_filter", False)
+
+        # Deleting custom analyzer in use
+        if delete_custom_analyzer:
+            self.index_definition["params"]["mapping"]["analysis"] = {}
+        else:
+            if delete_custom_filter:
+                custom_filters = self.index_definition["params"]["mapping"] \
+                    ["analysis"]["analyzers"]["customAnalyzer1"]["token_filters"]
+                for custom_filter in custom_filters:
+                    self.__log.info("custom filter = " + custom_filter)
+                    del self.index_definition['params']['mapping']['analysis'] \
+                        ['token_filters'][custom_filter]
+            else:
+                from custom_map_generator.map_generator import CustomMapGenerator
+                cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
+                                            num_custom_analyzers=self.num_custom_analyzers,
+                                            multiple_filters=self.multiple_filters)
+                if self.num_custom_analyzers > 0:
+                    custom_analyzer_def = cm_gen.build_custom_analyzer()
+                    self.index_definition["params"]["mapping"]["analysis"] = \
+                        custom_analyzer_def
+                    self.index_definition['params']['mapping']['default_analyzer'] = \
+                        cm_gen.get_random_value(custom_analyzer_def["analyzers"].keys())
 
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
@@ -632,6 +670,35 @@ class FTSIndex:
             src_params = INDEX_DEFAULTS.SOURCE_FILE_PARAMS
         src_params.update(source_params)
         return src_params
+
+    def add_child_field_to_default_mapping(self, field_name, field_type,
+                                           field_alias=None):
+        """
+        This method will add a field mapping to a default mapping
+        """
+        self.index_definition['params']['mapping']={}
+        self.index_definition['params']['mapping']['default_mapping'] = {}
+        self.index_definition['params']['mapping']['default_mapping']\
+            ['properties']={}
+        if not field_alias:
+            field_alias = field_name
+        field_mapping={"dynamic": False,
+            "enabled": True,
+            "fields":[
+                {
+                    "analyzer": "",
+                    "display_order": "0",
+                    "include_in_all": True,
+                    "include_term_vectors": True,
+                    "index": True,
+                    "name": field_alias,
+                    "store": True,
+                    "type": field_type
+                }
+            ]
+        }
+        self.index_definition['params']['mapping']['default_mapping']\
+            ['properties'][field_name]=field_mapping
 
     def create(self):
         self.__log.info("Checking if index already exists ...")
@@ -1421,7 +1488,7 @@ class CouchbaseCluster:
         self.load_all_buckets(items)
 
         self.__log.info("Now loading extra keys to reach dgm limit")
-        seed = "%s-key-" % self.__name
+        seed = "%s-" % self.__name
         end = 0
         for bucket in self.__buckets:
             current_active_resident = StatsCommon.get_stats(
@@ -1430,8 +1497,8 @@ class CouchbaseCluster:
                 '',
                 'vb_active_perc_mem_resident')[self.__master_node]
             start = items
-            end = start + batch_size * 10
             while int(current_active_resident) > active_resident_ratio:
+                end = start + batch_size * 10
                 self.__log.info("loading %s keys ..." % (end-start))
 
                 kv_gen = JsonDocGenerator(seed,
@@ -1453,7 +1520,6 @@ class CouchbaseCluster:
                 for task in tasks:
                     task.result()
                 start = end
-                end = start + batch_size * 10
                 current_active_resident = StatsCommon.get_stats(
                     [self.__master_node],
                     bucket,
@@ -1470,6 +1536,7 @@ class CouchbaseCluster:
                                                     encoding="utf-8",
                                                     start=0,
                                                     end=end)
+        return self._kv_gen[OPS.CREATE]
 
     def update_bucket(self, bucket, fields_to_update=None, exp=0,
                     kv_store=1, flag=0, only_store_hash=True,
@@ -2880,7 +2947,7 @@ class FTSBaseTest(unittest.TestCase):
          Blocking call to load data to Couchbase and ES
         """
         if self._dgm_run:
-            self._cb_cluster.load_all_buckets_till_dgm(
+            self.create_gen = self._cb_cluster.load_all_buckets_till_dgm(
                 self._active_resident_ratio,
                 self.compare_es)
             return

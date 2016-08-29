@@ -898,6 +898,15 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def set_cluster_name(self, name):
+        api = self.baseUrl + 'pools/default'
+        if name is None:
+            name = ""
+        params = urllib.urlencode({'clusterName': name})
+        log.info('pools/default params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
     def set_indexer_storage_mode(self, username='Administrator',
                                  password='password',
                                  storageMode='forestdb'):

@@ -11,6 +11,7 @@ from backuptests import BackupHelper
 
 class QueriesOpsTests(QueryTests):
     def setUp(self):
+        self.cluster_ops=True
         super(QueriesOpsTests, self).setUp()
         self.query_params = {'scan_consistency' : 'statement_plus'}
         if self.nodes_init > 1 and not self._testMethodName == 'suite_setUp':
