@@ -1727,6 +1727,97 @@ class CouchbaseCliTest(CliBaseTest):
         else:
             self.log.info("readonly account does not support on this version")
 
+    def test_directory_backup_stuctrue(self):
+        """ directory of backup stuctrure should be like
+            /backup_path/date/date-mode/ as in
+            /tmp/backup/2016-08-19T185902Z/2016-08-19T185902Z-full/
+            automation test for bug in ticket MB-20021
+
+            default params to run:
+                backup_cmd=cbbackup,load_all=false,num_sasl_buckets=1 """
+        backup_cmd = self.input.param("backup_cmd", None)
+        load_all = self.input.param("load_all", None)
+        num_backup_bucket = self.input.param("num_backup_bucket", "all")
+        num_sasl_buckets = self.input.param("num_sasl_buckets", 1)
+        self.bucket_size = 200
+        self.cluster.create_default_bucket(self.master, self.bucket_size,
+                                                       self.num_replicas,
+                                enable_replica_index=self.enable_replica_index,
+                                          eviction_policy=self.eviction_policy)
+        self._create_sasl_buckets(self.master, num_sasl_buckets)
+        self.buckets = RestConnection(self.master).get_buckets()
+        if load_all is None:
+            self.shell.execute_cbworkloadgen("Administrator", "password", 10000,
+                                              0.95, "default", 125, " -j")
+        elif str(load_all).lower() == "true":
+            for bucket in self.buckets:
+                self.log.info("load data to bucket %s " % bucket.name)
+                self.shell.execute_cbworkloadgen("Administrator", "password", 10000,
+                                                      0.95, bucket.name, 125, " -j")
+        self.log.info("remove any backup data on node ")
+        self.shell.execute_command("rm -rf %sbackup" % self.tmp_path)
+        self.log.info("create backup data on node ")
+        self.shell.execute_command("mkdir %sbackup " % self.tmp_path)
+
+        """ start backup data and check directory structure """
+        output, error = self.shell.execute_command("date | grep -o '....$'")
+        dir_start_with = output[0] + "-"
+        backup_all_buckets = True
+        partial_backup_buckets = []
+        if backup_cmd == "cbbackup":
+            if num_backup_bucket == "all":
+                self.shell.execute_cluster_backup()
+            else:
+                if str(num_backup_bucket).isdigit() and \
+                       int(num_sasl_buckets) >= int(num_backup_bucket):
+                    backup_all_buckets = False
+                    for i in range(int(num_backup_bucket)):
+                        partial_backup_buckets.append("bucket" + str(i))
+                        option = "-b " + "bucket%s " % str(i)
+                        self.shell.execute_cluster_backup(command_options=option,
+                                                             delete_backup=False)
+            output, error = self.shell.execute_command("ls %sbackup " % self.tmp_path)
+            if output and len(output) == 1:
+                if output[0].startswith(dir_start_with):
+                    self.log.info("first level of backup dir is correct %s" % output[0])
+                else:
+                    self.fail("Incorrect directory name %s.  It should start with %s"
+                                                       % (output[0], dir_start_with))
+            elif output and len(output) > 1:
+                self.fail("first backup dir level should only have one directory")
+            elif not output:
+                self.fail("backup command did not run.  Empty directory %s" % output)
+            output, error = self.shell.execute_command("ls %sbackup/* " % self.tmp_path)
+            if output and len(output) == 1:
+                if output[0].startswith(dir_start_with):
+                    self.log.info("second level of backup dir is correct %s" % output[0])
+                else:
+                    self.fail("Incorrect directory name %s.  It should start with %s"
+                                                       % (output[0], dir_start_with))
+            elif output and len(output) > 1:
+                self.fail("second backup level should only have 1 directory at this run")
+            elif not output:
+                self.fail("backup command did not run.  Empty directory %s" % output)
+            output, error = self.shell.execute_command("ls %sbackup/*/* " % self.tmp_path)
+            self.log.info("backuped buckets: %s" % output)
+
+            """ check total buckets backup """
+            if backup_all_buckets:
+                for bucket in self.buckets:
+                    if "bucket-" + bucket.name in output:
+                        self.log.info("bucket %s was backuped " % bucket.name)
+                    else:
+                        self.fail("failed to backup bucket %s " % bucket.name)
+            else:
+                for bucket in partial_backup_buckets:
+                    if "bucket-%s" % bucket in output:
+                        self.log.info("bucket %s was backuped " % bucket)
+                    else:
+                        self.fail("failed to backup bucket %s " % bucket)
+        self.log.info("remove backup directory at the end of test")
+        self.shell.execute_command("rm -rf %sbackup" % self.tmp_path)
+        self.shell.disconnect()
+
     def _check_output(self, word_check, output):
         found = False
         if len(output) >=1 :

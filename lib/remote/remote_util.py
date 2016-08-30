@@ -3020,7 +3020,10 @@ class RemoteMachineShellConnection:
 
         command_options_string = ""
         if command_options is not '':
-            command_options_string = ' '.join(command_options)
+            if "-b" not in command_options:
+                command_options_string = ' '.join(command_options)
+            else:
+                command_options_string = command_options
         cluster_ip = cluster_ip or self.ip
         cluster_port = cluster_port or self.port
 

@@ -33,9 +33,11 @@ class CliBaseTest(BaseTestCase):
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         self.root_path = LINUX_ROOT_PATH
         self.tmp_path = "/tmp/"
+        self.cmd_ext = ""
         self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
         if type == 'windows':
             self.os = 'windows'
+            self.cmd_ext = ".exe"
             self.root_path = WIN_ROOT_PATH
             self.tmp_path = WIN_TMP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
@@ -46,6 +48,8 @@ class CliBaseTest(BaseTestCase):
         self.full_v, self.short_v, self.build_number = self.shell.get_cbversion(type)
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
+        self.cb_login_info = "%s:%s" % (self.couchbase_usrname,
+                                        self.couchbase_password)
         self.cli_command = self.input.param("cli_command", None)
         self.command_options = self.input.param("command_options", None)
         if self.command_options is not None:
