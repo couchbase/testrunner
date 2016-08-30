@@ -1764,7 +1764,8 @@ class CouchbaseCliTest(CliBaseTest):
         dir_start_with = output[0] + "-"
         backup_all_buckets = True
         partial_backup_buckets = []
-        if backup_cmd == "cbbackup":
+        if self.cb_version[:5] not in COUCHBASE_FROM_SPOCK and \
+                                       backup_cmd == "cbbackup":
             if num_backup_bucket == "all":
                 self.shell.execute_cluster_backup()
             else:
