@@ -6,11 +6,12 @@ Python based SDK client interface
 import crc32
 import time
 from couchbase import FMT_AUTO
-from memcached.helper.old_kvstore import ClientKeyValueStore
+from memcached.helper.kvstore import  KVStore
 from couchbase.bucket import Bucket as CouchbaseBucket
 from couchbase.exceptions import CouchbaseError,BucketNotFoundError
 from mc_bin_client import MemcachedError
 from couchbase.n1ql import N1QLQuery, N1QLRequest
+import threading
 
 class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
@@ -601,7 +602,7 @@ class SDKSmartClient(object):
 class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
     def __init__(self, rest, bucket, kv_store=None, info=None, store_enabled=True):
         SDKSmartClient.__init__(self, rest, bucket, info)
-        self.kv_store = kv_store or ClientKeyValueStore()
+        self.kv_store = kv_store or KVStore()
         self.store_enabled = store_enabled
         self._rlock = threading.Lock()
 

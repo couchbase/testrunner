@@ -2586,7 +2586,7 @@ class SimpleDataSet:
         for value in stat['partition_seqs'].itervalues():
                     partition_seq += value
         return partition_seq
-    
+
     def get_replica_partition_seq(self, view):
         rest = RestConnection(self.server)
         _, stat = rest.set_view_info(view.bucket, view.name)
