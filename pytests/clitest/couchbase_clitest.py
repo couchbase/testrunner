@@ -1815,7 +1815,90 @@ class CouchbaseCliTest(CliBaseTest):
                         self.log.info("bucket %s was backuped " % bucket)
                     else:
                         self.fail("failed to backup bucket %s " % bucket)
-        self.log.info("remove backup directory at the end of test")
+        elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+            if backup_cmd == "cbbackupmgr":
+                backup_repo = "backup-test"
+                node_credential = "--username Administrator --password password "
+                self.log.info("Create backup repo : %s" % backup_repo)
+                """ format of setting backup repo
+                    ./cbbackupmgr config --archive /tmp/backup --repo backup-test """
+                self.shell.execute_command("%s%s%s config --archive %s --repo %s"
+                                           % (self.cli_command_path, backup_cmd,
+                                              self.cmd_ext, self.cmd_backup_path,
+                                              backup_repo))
+                output, error = self.shell.execute_command("ls %s" % self.backup_path)
+                result = output
+                if result and backup_repo in result:
+                    self.log.info("repo %s successful created " % backup_repo)
+                    output, error = self.shell.execute_command("ls %s%s"
+                                                % (self.backup_path, backup_repo))
+                    if output and "backup-meta.json" in output:
+                        self.log.info("backup-meta.json successful created ")
+                    elif output:
+                        self.fail("fail to create backup-meta.json file")
+                if result and "logs" in result:
+                    self.log.info("logs dir successful created ")
+                    output, error = self.shell.execute_command("ls %slogs"
+                                                        % self.backup_path)
+                    if output and "backup.log" in output:
+                        self.log.info("backup.log file successful created ")
+                    else:
+                        self.fail("fail to create backup.log file")
+                """ start backup bucket
+                    command format:
+                    cbbackupmgr backup --archive /tmp/backup --repo backup-test
+                                       --host ip_addr
+                                       --username Administrator
+                                       --password password """
+                if num_backup_bucket == "all":
+                    self.shell.execute_command("%s%s%s backup --archive %s "
+                                               " --repo %s --host %s:8091 %s"
+                                               % (self.cli_command_path, backup_cmd,
+                                                  self.cmd_ext, self.cmd_backup_path,
+                                                  backup_repo, self.shell.ip,
+                                                  node_credential))
+                    out, err = self.shell.execute_command("ls %s%s"
+                                                % (self.backup_path, backup_repo))
+                    if out and len(out) > 1:
+                        """ Since in this dir, there is a dir start with a number
+                            and a file.  So the dir will list first.
+                            Example of this dir: 2016-08-.. backup-meta.json """
+                        if out[0].startswith(dir_start_with):
+                            self.log.info("First level of backup dir is correct %s"
+                                                                          % out[0])
+                        else:
+                            self.fail("Incorrect directory name %s.  "
+                                             "It should start with %s"
+                                           % (out[0], dir_start_with))
+                    elif out:
+                        self.fail("backup did not run correctly %s" % out)
+                out, err = self.shell.execute_command("ls %s%s/%s*"
+                                                % (self.backup_path, backup_repo,
+                                                                 dir_start_with))
+                """ get buckets in dir """
+                if out and len(out) >=1:
+                    if "plan.json" in out:
+                        out.remove("plan.json")
+                    else:
+                        self.fail("Missing plan.json file in this dir")
+                    out = [w.split("-", 1)[0] for w in out]
+                if backup_all_buckets:
+                    for bucket in self.buckets:
+                        if bucket.name in out:
+                            self.log.info("Bucket %s was backuped "
+                                                     % bucket.name)
+                        else:
+                            self.fail("failed to backup bucket %s "
+                                                     % bucket.name)
+                else:
+                    """ not implement yet """
+                    pass
+                """ Work to do:
+                      check content of backup bucket.
+                      Total dir and files:
+                        bucket-config.json  data  full-text.json  gsi.json
+                        range.json views.json """
+        self.log.info("Remove backup directory at the end of test")
         self.shell.execute_command("rm -rf %sbackup" % self.tmp_path)
         self.shell.disconnect()
 
