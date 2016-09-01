@@ -127,6 +127,7 @@ class CliBaseTest(BaseTestCase):
         rest = RestConnection(server)
         hostname = "%s:%s" % (server.ip, server.port)
         expected_services = expected_services.replace("data", "kv")
+        expected_services = expected_services.replace("query", "n1ql")
         expected_services = expected_services.split(",")
 
         nodes_services = rest.get_nodes_services()
