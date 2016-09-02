@@ -1987,7 +1987,7 @@ class CouchbaseCliTest(CliBaseTest):
                 out, err = self.shell.execute_command("ls %s%s/%s*"
                                                 % (self.backup_path, backup_repo,
                                                                  dir_start_with))
-                """ get buckets in dir """
+                """ get buckets in directory """
                 if out and len(out) >=1:
                     if "plan.json" in out:
                         out.remove("plan.json")
@@ -2002,14 +2002,24 @@ class CouchbaseCliTest(CliBaseTest):
                         else:
                             self.fail("failed to backup bucket %s "
                                                      % bucket.name)
-                else:
-                    """ not implement yet """
-                    pass
-                """ Work to do:
-                      check content of backup bucket.
+                """ Check content of backup bucket.
                       Total dir and files:
                         bucket-config.json  data  full-text.json  gsi.json
                         range.json views.json """
+                backup_folder_content = ["bucket-config.json", "data",
+                                         "full-text.json", "gsi.json",
+                                          "range.json", "views.json"]
+                for bucket in self.buckets:
+                    out, err = self.shell.execute_command("ls %s%s/%s*/%s-*"
+                                                % (self.backup_path, backup_repo,
+                                                    dir_start_with, bucket.name))
+                    if out and len(out) > 1:
+                        self.log.info("Check content of backup dir of bucket %s: %s"
+                                                               % (bucket.name, out))
+                        self.assertEqual(out, backup_folder_content)
+                    else:
+                        self.fail("Missing backup dir or files in backup bucket %s"
+                                                                     % bucket.name)
         self.log.info("Remove backup directory at the end of test")
         self.shell.execute_command("rm -rf %sbackup" % self.tmp_path)
         self.shell.disconnect()
