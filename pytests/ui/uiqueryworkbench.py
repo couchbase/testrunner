@@ -18,7 +18,9 @@ class QueryWorkbenchTests(BaseUITestCase):
         self.queryHelper = QueryWorkbenchHelper(self)
         self.baseHelper.login()
         self.baseHelper.loadSampleBucket(self.servers[0], self.bucketname)
-        RestConnection(self.servers[0]).query_tool("DROP INDEX `beer`.`beer_index_sec` USING GSI;")
+        rest = RestConnection(self.servers[0])
+        rest.set_indexer_storage_mode()
+        rest.query_tool("DROP INDEX `beer`.`beer_index_sec` USING GSI;")
 
     def tearDown(self):
         super(QueryWorkbenchTests, self).tearDown()
