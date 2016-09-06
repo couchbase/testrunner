@@ -2372,6 +2372,24 @@ class RestConnection(object):
             return content['total_hits'], content['hits'], content['took'], \
                    content['status']
 
+    def run_fts_query_with_facets(self, index_name, query_json):
+        """Method run an FTS query through rest api"""
+        api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        headers = self._create_capi_headers_with_auth(
+            self.username,
+            self.password)
+        status, content, header = self._http_request(
+            api,
+            "POST",
+            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
+            headers,
+            timeout=70)
+
+        if status:
+            content = json.loads(content)
+            return content['total_hits'], content['hits'], content['took'], \
+                   content['status'], content['facets']
+
 
     """ End of FTS rest APIs """
 

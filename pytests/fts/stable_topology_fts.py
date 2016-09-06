@@ -552,3 +552,54 @@ class StableTopFTS(FTSBaseTest):
                                                 expected_hits=expected_hits)
             self.log.info("Hits: %s" % hits)
 
+    def test_facets(self):
+        field_indexed = self._input.param("field_indexed",True)
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_child_field_to_default_mapping(field_name="type",
+                                                 field_type="text",
+                                                 field_alias="type",
+                                                 analyzer="keyword")
+        if field_indexed:
+            index.add_child_field_to_default_mapping(field_name="dept",
+                                                 field_type="text",
+                                                 field_alias="dept",
+                                                 analyzer="keyword")
+            index.add_child_field_to_default_mapping(field_name="salary",
+                                                 field_type="number",
+                                                 field_alias="salary")
+            index.add_child_field_to_default_mapping(field_name="join_date",
+                                                 field_type="datetime",
+                                                 field_alias="join_date")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, _, _, _, facets = index.execute_query_with_facets(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Facets: %s" % facets)
+                if facets:
+                    index.validate_facets_in_search_results(no_of_hits=hits,
+                                                        facets_returned=facets)
+                else:
+                    if not (field_indexed) and hits==0:
+                        self.log.info("No hits/facets returned as the field "
+                                      "was not indexed")
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: "+ err.message)
