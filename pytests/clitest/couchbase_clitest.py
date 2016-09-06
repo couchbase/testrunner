@@ -1435,6 +1435,52 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(self.verifyActiveServers(server, num_initial_servers),
                                 "Servers should not have been failed over")
 
+    def testUserManage(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        list = self.input.param("list", False)
+        delete = self.input.param("delete", False)
+        set = self.input.param("set", False)
+        ro_username = self.input.param("ro-username", None)
+        ro_password = self.input.param("ro-password", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_ro_username = self.input.param("init-ro-username", None)
+        init_ro_password = self.input.param("init-ro-password", None)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+            if init_ro_username and init_ro_password:
+                self.assertTrue(rest.create_ro_user(init_ro_username, init_ro_password), "Setting initial ro user failed")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        print cli
+        stdout, _, errored = cli.user_manage(delete, list, set, ro_username, ro_password)
+
+        if not expect_error:
+            if list:
+                self.assertTrue(stdout[0] == init_ro_username, "Listed ro user is not correct")
+            else:
+                self.assertTrue(errored, "Expected command to succeed")
+            if set:
+                self.assertTrue(self.verifyReadOnlyUser(server, ro_username), "Read only user was not set")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized and init_ro_username:
+                self.assertTrue(self.verifyReadOnlyUser(server, init_ro_username), "Read only user was changed")
+
     # MB-8566
     def testSettingCompacttion(self):
         '''setting-compacttion OPTIONS:

@@ -2646,6 +2646,11 @@ class RestConnection(object):
         log.info("Latest logs from UI on {0}:".format(self.ip))
         for lg in logs: log.error(lg)
 
+    def get_ro_user(self):
+        api = self.baseUrl + 'settings/readOnlyAdminName'
+        status, content, header = self._http_request(api, 'GET', '')
+        return content, status
+
     def delete_ro_user(self):
         api = self.baseUrl + 'settings/readOnlyUser'
         status, content, header = self._http_request(api, 'DELETE', '')

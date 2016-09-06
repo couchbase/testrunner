@@ -239,6 +239,30 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Notification settings updated")
 
+    def user_manage(self, delete, list, set, ro_username, ro_password):
+        options = self._get_default_options()
+        if delete:
+            options += " --delete "
+        if list:
+            options += " --list "
+        if set:
+            options += " --set "
+        if ro_username is not None:
+            options += " --ro-username " + str(ro_username)
+        if ro_password:
+            options += " --ro-password " + str(ro_password)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("user-manage", self.hostname, options)
+        remote_client.disconnect()
+
+        if delete:
+            return stdout, stderr, self._was_success(stdout, "Local read-only user deleted")
+        elif set:
+            return stdout, stderr, self._was_success(stdout, "Local read-only user created")
+        else:
+            return stdout, stderr, self._no_error_in_output(stdout)
+
     def _setting_cluster(self, cmd, data_ramsize, index_ramsize, fts_ramsize, cluster_name, cluster_username,
                          cluster_password, cluster_port):
         options = self._get_default_options()
@@ -269,6 +293,22 @@ class CouchbaseCLI():
         if self.password is not None:
             options += " -p " + str(self.password)
         return options
+
+    def _no_error_in_output(self, stdout):
+        """Inspects each line of the command output and checks to see if the command errored
+
+        This check is used for API's that get data and do not simply report a success message.
+
+        Options:
+        stdout - A list of output lines from stdout
+
+        Returns true if not error was found, false otherwise
+        """
+
+        for line in stdout:
+            if line.startswith("ERROR:"):
+                return False
+        return True
 
     def _was_success(self, stdout, message):
         """Inspects each line of the command output and checks to see if the command succeeded

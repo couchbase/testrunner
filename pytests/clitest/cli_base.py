@@ -435,6 +435,21 @@ class CliBaseTest(BaseTestCase):
 
         return count == expected_num_servers
 
+    def verifyReadOnlyUser(self, server, username):
+        rest = RestConnection(server)
+        ro_user, status = rest.get_ro_user()
+        if not status:
+            log.info("Getting the read only user failed")
+            return False
+
+        if ro_user.startswith('"') and ro_user.endswith('"'):
+            ro_user = ro_user[1:-1]
+
+        if ro_user != username:
+            log.info("Read only user name does not match (%s vs %s)", ro_user, username)
+            return False
+        return True
+
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)
         for sec in range(timeout):
