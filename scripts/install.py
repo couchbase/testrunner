@@ -243,7 +243,8 @@ class Installer(object):
                                              os_architecture=info.architecture_type,
                                              build_version=version,
                                              product='membase-server-enterprise')
-                elif len(version) > 6 and version[6:] == CB_RELEASE_BUILDS[version[:5]]:
+                elif len(version) > 6 and version[6:].replace("-rel", "") == \
+                                                    CB_RELEASE_BUILDS[version[:5]]:
                     build = BuildQuery().find_couchbase_release_build(
                                             deliverable_type=info.deliverable_type,
                                             os_architecture=info.architecture_type,
