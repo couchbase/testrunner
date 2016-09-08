@@ -86,6 +86,7 @@ class Getcoredumps(object):
                     command = "mkdir -p /tmp/backup_crash/{0};" \
                               "mv -f /tmp/core* /tmp/backup_crash/{0};" \
                               "mv -f /opt/{1}/var/lib/{1}/erl_crash.dump* /tmp/backup_crash/{0}; " \
+                              "mv -f /opt/{1}/var/lib/{1}/*.dmp /tmp/backup_crash/{0};" \
                               "mv -f /opt/{1}/var/lib/{1}/crash/*.dmp /tmp/backup_crash/{0};".\
                         format(stamp, server_type)
                     print "put all crashes on {0} in backup folder: /tmp/backup_crash/{1}".format(self.server.ip, stamp)

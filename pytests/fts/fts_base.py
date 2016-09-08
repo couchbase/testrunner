@@ -405,6 +405,15 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
+    def get_data_dir(node):
+        """Gets couchbase data directory, even for cluster_run
+        """
+        _, dir = RestConnection(node).diag_eval(
+            'filename:absname(element(2, application:get_env(ns_server,path_config_datadir))).')
+
+        return str(dir).replace('\"','')
+
+    @staticmethod
     def rename_nodes(servers):
         """Rename server name from ip to their hostname
         @param servers: list of server objects.
@@ -2491,6 +2500,13 @@ class FTSBaseTest(unittest.TestCase):
                 self.log.info("Collecting logs @ {0}".format(server.ip))
                 NodeHelper.collect_logs(server)
 
+        # backup pindex_data if the test has failed
+        if self._input.param('backup_pindex_data', False) and \
+                self.__is_test_failed():
+            for server in self._input.servers:
+                self.log.info("Backing up pindex data @ {0}".format(server.ip))
+                self.backup_pindex_data(server)
+
         try:
             if self.__is_cleanup_not_needed():
                 self.log.warn("CLEANUP WAS SKIPPED")
@@ -2507,6 +2523,7 @@ class FTSBaseTest(unittest.TestCase):
         finally:
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
+
 
     def __init_logger(self):
         if self._input.param("log_level", None):
@@ -3441,3 +3458,27 @@ class FTSBaseTest(unittest.TestCase):
                 print "unable to obtain fts diags from {0}".format(diag_url)
             except Exception as e:
                 print "unable to obtain fts diags from {0} :{1}".format(diag_url, e)
+
+    def backup_pindex_data(self, server):
+        remote = RemoteMachineShellConnection(server)
+        stamp = time.strftime("%d_%m_%Y_%H_%M")
+        data_dir = NodeHelper.get_data_dir(server)
+
+        try:
+            info = remote.extract_remote_info()
+            if info.type.lower() != 'windows':
+                self.log.info("Backing up pindex data files from {0}".format(server.ip))
+                command = "mkdir -p /tmp/backup_pindex_data/{0};" \
+                          "zip -r /tmp/backup_pindex_data/{0}/fts_pindex_data.zip " \
+                          "{1}/data/@fts/*".format(stamp, data_dir)
+
+                remote.execute_command(command)
+                output, error = remote.execute_command("ls -la /tmp/backup_pindex_data/{0}".format(stamp))
+                for o in output:
+                    print o
+                self.log.info("***pindex files for {0} are copied to /tmp/backup_pindex_data/{1} on {0}".format(server.ip,stamp))
+                remote.disconnect()
+                return True
+        except Exception as ex:
+            print ex
+            return False
