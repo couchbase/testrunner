@@ -177,6 +177,8 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server added")
 
+
+
     def setting_audit(self, enabled, log_path, rotate_interval):
         options = self._get_default_options()
         if enabled is not None:
@@ -190,6 +192,56 @@ class CouchbaseCLI():
         stdout, stderr = remote_client.couchbase_cli("setting-audit", self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Audit settings modified")
+
+    def setting_alert(self, enabled, email_recipients, email_sender, email_username, email_password, email_host,
+                      email_port, encrypted, alert_af_node, alert_af_max_reached, alert_af_node_down, alert_af_small,
+                      alert_af_disable, alert_ip_changed, alert_disk_space, alert_meta_overhead, alert_meta_oom,
+                      alert_write_failed, alert_audit_dropped):
+        options = self._get_default_options()
+
+        if enabled is not None:
+            options += " --enable-email-alert " + str(enabled)
+        if email_recipients is not None:
+            options += " --email-recipients " + str(email_recipients)
+        if email_sender is not None:
+            options += " --email-sender " + str(email_sender)
+        if email_username is not None:
+            options += " --email-user " + str(email_username)
+        if email_password is not None:
+            options += " --email-password " + str(email_password)
+        if email_host is not None:
+            options += " --email-host " + str(email_host)
+        if email_port is not None:
+            options += " --email-port " + str(email_port)
+        if encrypted is not None:
+            options += "--enable-email-encrypt" + str(encrypted)
+        if alert_af_node:
+            options += " --alert-auto-failover-node "
+        if alert_af_max_reached:
+            options += " --alert-auto-failover-max-reached "
+        if alert_af_node_down:
+            options += " --alert-auto-failover-node-down "
+        if alert_af_small:
+            options += " --alert-auto-failover-cluster-small "
+        if alert_af_disable:
+            options += " --alert-auto-failover-disable "
+        if alert_ip_changed:
+            options += " --alert-ip-changed "
+        if alert_disk_space:
+            options += " --alert-disk-space "
+        if alert_meta_overhead:
+            options += " --alert-meta-overhead "
+        if alert_meta_oom:
+            options += " --alert-meta-oom "
+        if alert_write_failed:
+            options += " --alert-write-failed "
+        if alert_audit_dropped:
+            options += " --alert-audit-msg-dropped "
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("setting-alert", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Email alert settings modified")
 
     def setting_autofailover(self, enabled, timeout):
         options = self._get_default_options()

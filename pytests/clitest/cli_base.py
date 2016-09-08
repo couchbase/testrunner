@@ -486,6 +486,80 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verifyAlertSettings(self, server, enabled, email_recipients, email_sender, email_username, email_password, email_host,
+                            email_port, encrypted, alert_af_node, alert_af_max_reached, alert_af_node_down, alert_af_small,
+                            alert_af_disable, alert_ip_changed, alert_disk_space, alert_meta_overhead, alert_meta_oom,
+                            alert_write_failed, alert_audit_dropped):
+        rest = RestConnection(server)
+        settings = rest.get_alerts_settings()
+        print settings
+
+        if not enabled:
+            if not settings["enabled"]:
+                return True
+            else:
+                log.info("Alerts should be disabled")
+                return False
+
+        if encrypted is None or encrypted == "0":
+            encrypted = False
+        else:
+            encrypted = True
+
+        if email_recipients is not None and not self._list_compare(email_recipients.split(","), settings["recipients"]):
+            log.info("Email recipients don't match (%s vs %s)", email_recipients.split(","), settings["recipients"])
+            return False
+
+        if email_sender is not None and email_sender != settings["sender"]:
+            log.info("Email sender does not match (%s vs %s)", email_sender, settings["sender"])
+            return False
+
+        if email_username is not None and email_username != settings["emailServer"]["user"]:
+            log.info("Email username does not match (%s vs %s)", email_username, settings["emailServer"]["user"])
+            return False
+
+        if email_host is not None and email_host != settings["emailServer"]["host"]:
+            log.info("Email host does not match (%s vs %s)", email_host, settings["emailServer"]["host"])
+            return False
+
+        if email_port is not None and email_port != settings["emailServer"]["port"]:
+            log.info("Email port does not match (%s vs %s)", email_port, settings["emailServer"]["port"])
+            return False
+
+        if encrypted is not None and encrypted != settings["emailServer"]["encrypt"]:
+            log.info("Email encryption does not match (%s vs %s)", encrypted, settings["emailServer"]["encrypt"])
+            return False
+
+        alerts = list()
+        if alert_af_node:
+            alerts.append('auto_failover_node')
+        if alert_af_max_reached:
+            alerts.append('auto_failover_maximum_reached')
+        if alert_af_node_down:
+            alerts.append('auto_failover_other_nodes_down')
+        if alert_af_small:
+           alerts.append('auto_failover_cluster_too_small')
+        if alert_af_disable:
+            alerts.append('auto_failover_disabled')
+        if alert_ip_changed:
+            alerts.append('ip')
+        if alert_disk_space:
+            alerts.append('disk')
+        if alert_meta_overhead:
+            alerts.append('overhead')
+        if alert_meta_oom:
+            alerts.append('ep_oom_errors')
+        if alert_write_failed:
+            alerts.append('ep_item_commit_failed')
+        if alert_audit_dropped:
+            alerts.append('audit_dropped_events')
+
+        if not self._list_compare(alerts, settings["alerts"]):
+            log.info("Alerts don't match (%s vs %s)", alerts, settings["alerts"])
+            return False
+
+        return True
+
     def _list_compare(self, list1, list2):
         if len(list1) != len(list2):
             return False

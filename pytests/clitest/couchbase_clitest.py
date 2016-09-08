@@ -1049,6 +1049,64 @@ class CouchbaseCliTest(CliBaseTest):
             if not initialized:
                 self.assertTrue(self.verifyLdapSettings(server, None, None, None, 0), "LDAP setting changed")
 
+    def testSettingAlert(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        enabled = self.input.param("enabled", None)
+        email_recipients = self.input.param("email-recipients", None)
+        email_sender = self.input.param("email-sender", None)
+        email_username = self.input.param("email-user", None)
+        email_password = self.input.param("email-password", None)
+        email_host = self.input.param("email-host", None)
+        email_port = self.input.param("email-port", None)
+        encrypted = self.input.param("encrypted", None)
+        alert_af_node = self.input.param("alert-auto-failover-node", False)
+        alert_af_max_reached = self.input.param("alert-auto-failover-max-reached", False)
+        alert_af_node_down = self.input.param("alert-auto-failover-node-down", False)
+        alert_af_small = self.input.param("alert-auto-failover-cluster-small", False)
+        alert_af_disable = self.input.param("alert-auto-failover-disable", False)
+        alert_ip_changed = self.input.param("alert-ip-changed", False)
+        alert_disk_space = self.input.param("alert-disk-space", False)
+        alert_meta_overhead = self.input.param("alert-meta-overhead", False)
+        alert_meta_oom = self.input.param("alert-meta-oom", False)
+        alert_write_failed = self.input.param("alert-write-failed", False)
+        alert_audit_dropped = self.input.param("alert-audit-msg-dropped", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, username, password)
+        if initialized:
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        stdout, _, _ = cli.setting_alert(enabled, email_recipients, email_sender, email_username, email_password,
+                                         email_host, email_port, encrypted, alert_af_node, alert_af_max_reached,
+                                         alert_af_node_down, alert_af_small, alert_af_disable, alert_ip_changed,
+                                         alert_disk_space, alert_meta_overhead, alert_meta_oom, alert_write_failed,
+                                         alert_audit_dropped)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Email alert settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyAlertSettings(server, enabled, email_recipients, email_sender, email_username,
+                                                     email_password, email_host, email_port, encrypted, alert_af_node,
+                                                     alert_af_max_reached, alert_af_node_down, alert_af_small,
+                                                     alert_af_disable, alert_ip_changed, alert_disk_space,
+                                                     alert_meta_overhead, alert_meta_oom, alert_write_failed,
+                                                     alert_audit_dropped),
+                            "Alerts settings not set")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
     def testBucketCompact(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
