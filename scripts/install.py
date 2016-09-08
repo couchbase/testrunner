@@ -27,7 +27,8 @@ from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
-from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4
+from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
+                          CB_RELEASE_BUILDS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 import TestInput
 
@@ -237,11 +238,12 @@ class Installer(object):
                     sys.exit("version is not support yet")
             for name in names:
                 if version[:5] in releases_version:
-                    build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
-                                                                     os_architecture=info.architecture_type,
-                                                                     build_version=version,
-                                                                     product='membase-server-enterprise')
-                elif version[:5] in cb_releases_version:
+                    build = BuildQuery().find_membase_release_build(
+                                             deliverable_type=info.deliverable_type,
+                                             os_architecture=info.architecture_type,
+                                             build_version=version,
+                                             product='membase-server-enterprise')
+                elif len(version) > 6 and version[6:] == CB_RELEASE_BUILDS[version[:5]]:
                     build = BuildQuery().find_couchbase_release_build(
                                             deliverable_type=info.deliverable_type,
                                             os_architecture=info.architecture_type,
@@ -249,19 +251,20 @@ class Installer(object):
                                             product=name,
                                             os_version = info.distribution_version)
                 else:
-                    builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout, \
-                                      direct_build_url=direct_build_url, \
-                                      deliverable_type=info.deliverable_type, \
-                                      architecture_type=info.architecture_type, \
-                                      edition_type=name, \
-                                      repo=build_repo, toy=toy, \
-                                      distribution_version=info.distribution_version.lower(), \
+                    builds, changes = BuildQuery().get_all_builds(version=version,
+                                      timeout=timeout,
+                                      direct_build_url=direct_build_url,
+                                      deliverable_type=info.deliverable_type,
+                                      architecture_type=info.architecture_type,
+                                      edition_type=name,
+                                      repo=build_repo, toy=toy,
+                                      distribution_version=info.distribution_version.lower(),
                                       distribution_type=info.distribution_type.lower())
-                    build = BuildQuery().find_build(builds, name, info.deliverable_type, \
-                                                    info.architecture_type, version, toy=toy, \
-                                                    openssl=openssl, direct_build_url=direct_build_url, \
-                                                    distribution_version=info.distribution_version.lower(), \
-                                                    distribution_type=info.distribution_type.lower())
+                    build = BuildQuery().find_build(builds, name, info.deliverable_type,
+                                               info.architecture_type, version, toy=toy,
+                                     openssl=openssl, direct_build_url=direct_build_url,
+                                 distribution_version=info.distribution_version.lower(),
+                                       distribution_type=info.distribution_type.lower())
 
                 if build:
                     if 'amazon' in params:
