@@ -450,6 +450,55 @@ class CliBaseTest(BaseTestCase):
             return False
         return True
 
+    def verifyLdapSettings(self, server, admins, ro_admins, default, enabled):
+        rest = RestConnection(server)
+        settings = rest.ldapRestOperationGetResponse()
+
+        if admins is None:
+            admins = []
+        else:
+            admins = admins.split(",")
+
+        if ro_admins is None:
+            ro_admins = []
+        else:
+            ro_admins = ro_admins.split(",")
+
+        if str(enabled) == "0":
+            admins = []
+            ro_admins = []
+
+        if default == "admins" and str(enabled) == "1":
+            if settings["admins"] != "asterisk":
+                log.info("Admins don't match (%s vs asterisk)", settings["admins"])
+                return False
+        elif not self._list_compare(settings["admins"], admins):
+            log.info("Admins don't match (%s vs %s)", settings["admins"], admins)
+            return False
+
+        if default == "roadmins" and str(enabled) == "1":
+            if settings["roAdmins"] != "asterisk":
+                log.info("Read only admins don't match (%s vs asterisk)", settings["roAdmins"])
+                return False
+        elif not self._list_compare(settings["roAdmins"], ro_admins):
+            log.info("Read only admins don't match (%s vs %s)", settings["roAdmins"], ro_admins)
+            return False
+
+        return True
+
+    def _list_compare(self, list1, list2):
+        if len(list1) != len(list2):
+            return False
+        for elem1 in list1:
+            found = False
+            for elem2 in list2:
+                if elem1 == elem2:
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
+
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)
         for sec in range(timeout):

@@ -1014,6 +1014,41 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(not self.isClusterInitialized(server),
                                 "Cluster was initialized, but error was received")
 
+    def testSettingLdap(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        admins = self.input.param("admins", None)
+        ro_admins = self.input.param("ro-admins", None)
+        enabled = self.input.param("enabled", False)
+        default = self.input.param("default", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, username, password)
+        if initialized:
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        stdout, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "LDAP settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyLdapSettings(server, admins, ro_admins, default, enabled), "LDAP settings not set")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(self.verifyLdapSettings(server, None, None, None, 0), "LDAP setting changed")
+
     def testBucketCompact(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)

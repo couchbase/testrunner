@@ -229,6 +229,22 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Indexer settings modified")
 
+    def setting_ldap(self, admins, ro_admins, default, enabled):
+        options = self._get_default_options()
+        if admins:
+            options += " --ldap-admins " + str(admins)
+        if ro_admins:
+            options += " --ldap-roadmins " + str(ro_admins)
+        if default:
+            options += " --ldap-default " + str(default)
+        if enabled is not None:
+            options += " --ldap-enabled " + str(enabled)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("setting-ldap", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "LDAP settings modified")
+
     def setting_notification(self, enable):
         options = self._get_default_options()
         if enable is not None:
