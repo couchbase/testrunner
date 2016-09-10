@@ -167,7 +167,11 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             before_index_ops = self._run_before_index_tasks()
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
-                remote.terminate_process(process_name=self.targetProcess)
+                if self.targetProcess == "memcached":
+                    remote.kill_memcached()
+                else:
+                    remote.terminate_process(process_name=self.targetProcess)
+            self.sleep(20)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             self._run_after_index_tasks()
@@ -201,10 +205,11 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.stop_server()
-            self.sleep(20)
+            self.sleep(30)
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.start_server()
+            self.sleep(30)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             self._run_after_index_tasks()
@@ -377,8 +382,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                    [], [servr_out[0]])
             in_between_index_ops = self._run_in_between_tasks()
             rebalance.result()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             self.sleep(120)
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             self._run_after_index_tasks()
         except Exception, ex:
             raise
@@ -397,7 +402,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._run_tasks([before_index_ops])
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
-                self.sleep(10)
+                self.sleep(20)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, in_between_index_ops])
         except Exception, ex:
@@ -406,7 +411,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         finally:
             for node in self.nodes_out_list:
                 self.stop_firewall_on_node(node)
-                self.sleep(10)
+                self.sleep(30)
             self._run_after_index_tasks()
 
     def test_couchbase_bucket_compaction(self):
@@ -417,7 +422,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         kvOps_tasks = self._run_kvops_tasks()
         before_index_ops = self._run_before_index_tasks()
         for bucket in self.buckets:
-            compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
+            compact_tasks.append(self.cluster.async_compact_bucket(self.master, bucket))
         in_between_index_ops = self._run_in_between_tasks()
         self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
         for task in compact_tasks:

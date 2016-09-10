@@ -557,6 +557,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_map = self.get_index_stats()
         for bucket_name in index_map.keys():
             for index_name, index_val in index_map[bucket_name].iteritems():
+                self.log.info("For bucket {0} and index {1} num_docs_pending: {2} and num_docs_queued: {3}"
+                              .format(bucket_name, index_name, index_val["num_docs_pending"],
+                                      index_val["num_docs_queued"]))
                 if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
                     return False
         return True
