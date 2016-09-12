@@ -289,7 +289,7 @@ def main():
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
                         if options.serverType.lower() == 'docker':
-                            time.sleep(180)     # this is due to the docker port allocation race
+                            time.sleep(240)     # this is due to the docker port allocation race
                         else:
                             time.sleep(30)
                 else:

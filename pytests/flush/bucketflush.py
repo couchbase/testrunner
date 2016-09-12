@@ -39,7 +39,7 @@ class BucketFlushTests(BaseTestCase):
     def persist_and_verify(self):
 
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
-        self._verify_all_buckets(self.master, max_verify=self.max_verify)
+        self._verify_all_buckets(self.master, max_verify=self.max_verify,timeout=360)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
 
     """Basic test for bucket flush functionality. Test loads data in bucket and then calls Flush. Verify curr_items=0 after flush.
