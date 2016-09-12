@@ -1,0 +1,265 @@
+import sys
+import paramiko
+from basetestcase import BaseTestCase
+import json
+import os
+import zipfile
+import pprint
+import Queue
+import json
+from membase.helper.cluster_helper import ClusterOperationHelper
+import mc_bin_client
+import threading
+from memcached.helper.data_helper import  VBucketAwareMemcached
+from mysql_client import MySQLClient
+from membase.api.rest_client import RestConnection, Bucket
+from couchbase_helper.tuq_helper import N1QLHelper
+from couchbase_helper.query_helper import QueryHelper
+from remote.remote_util import RemoteMachineShellConnection
+from lib.membase.helper.bucket_helper import BucketOperationHelper
+
+
+class RQGASTERIXTests(BaseTestCase):
+    """ Class for defining tests for RQG base testing """
+
+    def setUp(self):
+        super(RQGASTERIXTests, self).setUp()
+        self.client_map={}
+        self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
+                      .format(self.case_number, self._testMethodName))
+        self.skip_setup_cleanup = True
+        self.remove_alias = self.input.param("remove_alias",True)
+        self.number_of_buckets = self.input.param("number_of_buckets",5)
+        self.crud_type = self.input.param("crud_type","update")
+        self.populate_with_replay = self.input.param("populate_with_replay",False)
+        self.crud_batch_size = self.input.param("crud_batch_size",1)
+        self.record_failure= self.input.param("record_failure",False)
+        self.failure_record_path= self.input.param("failure_record_path","/tmp")
+        self.use_mysql= self.input.param("use_mysql",True)
+        self.initial_loading_to_cb= self.input.param("initial_loading_to_cb",True)
+        self.change_bucket_properties = self.input.param("change_bucket_properties",False)
+        self.database= self.input.param("database","flightstats")
+        self.merge_operation= self.input.param("merge_operation",False)
+        self.load_copy_table= self.input.param("load_copy_table",False)
+        self.user_id= self.input.param("user_id","root")
+        self.user_cluster = self.input.param("user_cluster","Administrator")
+        self.password= self.input.param("password","")
+        self.password_cluster = self.input.param("password_cluster","password")
+        self.generate_input_only = self.input.param("generate_input_only",False)
+        self.using_gsi= self.input.param("using_gsi",True)
+        self.reset_database = self.input.param("reset_database",True)
+        self.items = self.input.param("items",1000)
+        self.mysql_url= self.input.param("mysql_url","localhost")
+        self.mysql_url=self.mysql_url.replace("_",".")
+        self.n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
+        self.concurreny_count= self.input.param("concurreny_count",10)
+        self.total_queries= self.input.param("total_queries",None)
+        self.run_query_with_primary= self.input.param("run_query_with_primary",False)
+        self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
+        self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
+        self.test_file_path= self.input.param("test_file_path",None)
+        self.db_dump_path= self.input.param("db_dump_path",None)
+        self.input_rqg_path= self.input.param("input_rqg_path",None)
+        self.set_limit = self.input.param("set_limit",0)
+        self.query_count= 0
+        self.use_rest = self.input.param("use_rest",True)
+        self.ram_quota = self.input.param("ram_quota",512)
+        self.drop_bucket = self.input.param("drop_bucket",False)
+        if self.input_rqg_path != None:
+            self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
+            self.test_file_path = self.input_rqg_path+"/input/source_input_rqg_run.txt"
+        self.query_helper = QueryHelper()
+        self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
+        self._initialize_n1ql_helper()
+        self.rest = RestConnection(self.master)
+        self.indexer_memQuota = self.input.param("indexer_memQuota",1024)
+        if self.initial_loading_to_cb:
+            self._initialize_cluster_setup()
+        if not(self.use_rest):
+            self._ssh_client = paramiko.SSHClient()
+            self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            try:
+                self.os = self.shell.extract_remote_info().type.lower()
+            except Exception, ex:
+                self.log.error('SETUP FAILED')
+                self.tearDown()
+
+
+
+    def tearDown(self):
+        super(RQGASTERIXTests, self).tearDown()
+        if hasattr(self, 'reset_database'):
+            self.skip_cleanup= self.input.param("skip_cleanup",False)
+            if self.use_mysql and self.reset_database and (not self.skip_cleanup):
+                try:
+                    self.client.drop_database(self.database)
+                except Exception, ex:
+                    self.log.info(ex)
+
+
+    def _initialize_cluster_setup(self):
+        if self.use_mysql:
+            self.log.info(" Will load directly from mysql")
+            self._initialize_mysql_client()
+            if not self.generate_input_only:
+                self._setup_and_load_buckets()
+        else:
+            self.log.info(" Will load directly from file snap-shot")
+            if self.populate_with_replay:
+                self._initialize_mysql_client()
+            self._setup_and_load_buckets_from_files()
+
+        self._initialize_n1ql_helper()
+        #create copy of simple table if this is a merge operation
+        self.sleep(10)
+        if self.gsi_type ==  "memory_optimized":
+            os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip,self.indexer_memQuota))
+            self.sleep(10)
+
+            # self.log.info("Increasing Indexer Memory Quota to {0}".format(self.indexer_memQuota))
+            # self.rest.set_indexer_memoryQuota(indexMemoryQuota=self.indexer_memQuota)
+            # self.sleep(120)
+        if self.change_bucket_properties:
+            shell = RemoteMachineShellConnection(self.master)
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
+            self.sleep(10,"Updating maxBucket count to 15")
+
+    def _initialize_mysql_client(self):
+        if self.reset_database:
+            self.client = MySQLClient(host = self.mysql_url,
+                user_id = self.user_id, password = self.password)
+            path  = "b/resources/rqg/{0}/database_definition/definition.sql".format(self.database)
+            self.database = self.database+"_"+str(self.query_helper._random_int())
+            populate_data = False
+            if not self.populate_with_replay:
+                populate_data = True
+            self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data, number_of_tables  = self.number_of_buckets)
+            self._copy_table_for_merge()
+        else:
+            self.client = MySQLClient(database = self.database, host = self.mysql_url,
+                user_id = self.user_id, password = self.password)
+
+    def _initialize_n1ql_helper(self):
+        self.n1ql_helper = N1QLHelper(version = "sherlock", shell = None,
+            use_rest = True, max_verify = self.max_verify,
+            buckets = self.buckets, item_flag = None,
+            n1ql_port = self.n1ql_server.n1ql_port, full_docs_list = [],
+            log = self.log, input = self.input, master = self.master,database = self.database)
+
+    def test_rqg_concurrent(self):
+        # Get Data Map
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        check = True
+        failure_map = {}
+        batches = []
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+        # Load All the templates
+        self.test_file_path= self.unzip_template(self.test_file_path)
+        with open(self.test_file_path) as f:
+            query_list = f.readlines()
+        if self.total_queries  == None:
+            self.total_queries = len(query_list)
+        for n1ql_query_info in query_list:
+            data = n1ql_query_info
+            batch.append({str(test_case_number):data})
+            if count == self.concurreny_count:
+                inserted_count += len(batch)
+                batches.append(batch)
+                count = 1
+                batch = []
+            else:
+                count +=1
+            test_case_number += 1
+            if test_case_number > self.total_queries:
+                break
+        if inserted_count != len(query_list):
+            batches.append(batch)
+        result_queue = Queue.Queue()
+        input_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
+        # Run Test Batches
+        test_case_number = 1
+        thread_list = []
+        for i in xrange(self.concurreny_count):
+            t = threading.Thread(target=self._testrun_worker, args = (input_queue, result_queue, failure_record_queue))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        for test_batch in batches:
+            # Build all required secondary Indexes
+            list = [data[data.keys()[0]] for data in test_batch]
+            list = self.client._convert_template_query_info(
+                    table_map = table_map,
+                    n1ql_queries = list,
+                    gen_expected_result = False)
+
+            # Create threads and run the batch
+            for test_case in list:
+                test_case_input = test_case
+                input_queue.put({"test_case_number":test_case_number, "test_data":test_case_input})
+                test_case_number += 1
+            # Capture the results when done
+            check = False
+        for t in thread_list:
+            t.join()
+
+            import pdb;pdb.set_trace()
+            for bucket in self.buckets:
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
+        self.assertTrue(success, summary)
+
+    def _testrun_worker(self, input_queue, result_queue, failure_record_queue = None):
+        count = 0
+        while True:
+            if self.total_queries <= (self.query_count):
+                break
+            if not input_queue.empty():
+                data = input_queue.get()
+                test_data = data["test_data"]
+                test_case_number = data["test_case_number"]
+                self._run_basic_test(test_data, test_case_number, result_queue, failure_record_queue)
+                count = 0
+            else:
+                count += 1
+                if count > 1000:
+                    return
+
+    def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
+        data = test_data
+        print "data is {0}".format(data)
+        import pdb;pdb.set_trace()
+        n1ql_query = data["sql"]
+        sql_query = data["sql"]
+        table_name = data["bucket"]
+        expected_result = data["expected_result"]
+        self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
+        result_run = {}
+        result_run["n1ql_query"] = n1ql_query
+        result_run["sql_query"] = sql_query
+        result_run["test_case_number"] = test_case_number
+        if self.set_limit > 0 and n1ql_query.find("DISTINCT") > 0:
+            result_limit = self.query_helper._add_limit_to_query(n1ql_query,self.set_limit)
+            query_index_run = self._run_queries_and_verify(n1ql_query = result_limit , sql_query = sql_query, expected_result = expected_result)
+            result_run["run_query_with_limit"] = query_index_run
+        if  expected_result == None:
+            expected_result = self._gen_expected_result(sql_query)
+            data["expected_result"] = expected_result
+        query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
+        result_run["run_query_without_index_hint"] = query_index_run
+        if self.run_query_with_primary:
+            index_info = {"name":"`#primary`","type":"GSI"}
+            query = self.query_helper._add_index_hints_to_query(n1ql_query, [index_info])
+            query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
+            result_run["run_query_with_primary"] = query_index_run
+
+        result_queue.put(result_run)
+        self._check_and_push_failure_record_queue(result_run, data, failure_record_queue)
+        self.query_count += 1
+        self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
