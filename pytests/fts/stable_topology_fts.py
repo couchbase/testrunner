@@ -300,13 +300,7 @@ class StableTopFTS(FTSBaseTest):
         #delete default bucket
         self._cb_cluster.delete_bucket("default")
         master = self._cb_cluster.get_master_node()
-        from lib.remote.remote_util import RemoteMachineShellConnection
-        shell = RemoteMachineShellConnection(master)
-        shell.execute_command("""curl -v -u Administrator:password \
-                         -X POST http://{0}:8091/sampleBuckets/install \
-                      -d '["beer-sample"]'""".format(master.ip))
-        shell.disconnect()
-        self.sleep(20)
+        self.load_sample_buckets(server=master, bucketName="beer-sample")
         bucket = self._cb_cluster.get_bucket_by_name("beer-sample")
         index = self.create_index(bucket, "beer-index")
         self.wait_for_indexing_complete()
@@ -531,8 +525,10 @@ class StableTopFTS(FTSBaseTest):
                                                 expected_hits=expected_hits)
             self.log.info("Hits: %s" % hits)
 
-        index.add_analyzer_to_existing_field_map(field_name=field_name, field_type=field_type,
-                                                     field_alias=field_alias, analyzer="fr")
+        index.add_analyzer_to_existing_field_map(field_name=self.field_name,
+                                                 field_type=self.field_type,
+                                                 field_alias=self.field_alias,
+                                                 analyzer="fr")
 
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
@@ -593,13 +589,105 @@ class StableTopFTS(FTSBaseTest):
                                                 expected_hits=expected_hits)
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Facets: %s" % facets)
-                if facets:
-                    index.validate_facets_in_search_results(no_of_hits=hits,
+                index.validate_facets_in_search_results(no_of_hits=hits,
                                                         facets_returned=facets)
-                else:
-                    if not (field_indexed) and hits==0:
-                        self.log.info("No hits/facets returned as the field "
-                                      "was not indexed")
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: "+ err.message)
+
+    def test_doc_config(self):
+        # delete default bucket
+        self._cb_cluster.delete_bucket("default")
+        master = self._cb_cluster.get_master_node()
+
+        # Load Travel Sample bucket and create an index
+        self.load_sample_buckets(server=master, bucketName="travel-sample")
+        bucket = self._cb_cluster.get_bucket_by_name("travel-sample")
+        index = self.create_index(bucket, "travel-index")
+        self.sleep(10)
+
+        # Add Type Mapping
+        index.add_type_mapping_to_index_definition(type="airport",
+                                                   analyzer="en")
+        mode = self._input.param("doc_config_mode", "type_field")
+        index.add_doc_config_to_index_definition(mode=mode)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(15)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True,
+                                  zero_rows_ok=False)
+
+        # Run Query
+        expected_hits = int(self._input.param("expected_hits", 0))
+        query = eval(self._input.param("query", str(self.sample_query)))
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=False,
+                                                expected_hits=expected_hits)
+                self.log.info("Hits: %s" % hits)
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    def test_boost_query_type(self):
+        # Create bucket, create index
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_type_mapping_to_index_definition(type="emp",
+                                                   analyzer="keyword")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(15)
+        self.wait_for_indexing_complete()
+        zero_results_ok = False
+        expected_hits = 3
+
+        # Run Query w/o Boosting and get the rank for Doc emp10000071
+        query = {"disjuncts":[{"match": "Safiya", "field": "name"},
+                              {"match": "Palmer", "field": "name"}]}
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Contents: %s" % contents)
+                rank_before_boosting = index.get_rank_of_doc_in_search_results(
+                                    content=contents, doc_id=u'emp10000071')
+                self.log.info("Rank before boosting: %s" % rank_before_boosting)
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+        # Run Query w/ Boosting and get the rank for Doc emp10000071.
+        # Should have improved than w/o boosting
+        query = {"disjuncts":[{"match": "Safiya^2", "field": "name"},
+                              {"match": "Palmer", "field": "name"}]}
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Contents: %s" % contents)
+                rank_after_boosting = index.get_rank_of_doc_in_search_results(
+                                    content=contents, doc_id=u'emp10000071')
+                self.log.info ("Rank after boosting: %s" % rank_after_boosting)
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+        if not rank_after_boosting < rank_before_boosting:
+            self.fail("Testcase failed: Boosting did not improve rank for "
+                      "doc id : u'emp10000071'")

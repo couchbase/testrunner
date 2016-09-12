@@ -773,6 +773,58 @@ class FTSIndex:
                                                          map[k]['properties'])
         return map
 
+    def add_type_mapping_to_index_definition(self,type,analyzer):
+        """
+        Add Type Mapping to Index Definition (and disable default mapping)
+        """
+        type_map = {}
+        type_map[type] = {}
+        type_map[type]['default_analyzer'] = analyzer
+        type_map[type]['display_order'] = 0
+        type_map[type]['dynamic'] = True
+        type_map[type]['enabled'] = True
+
+        if not self.index_definition['params'].has_key('mapping'):
+            self.index_definition['params']['mapping'] = {}
+            self.index_definition['params']['mapping']['default_mapping'] = {}
+            self.index_definition['params']['mapping']['default_mapping'] \
+                                                        ['properties'] = {}
+            self.index_definition['params']['mapping']['default_mapping'] \
+                                                        ['dynamic'] = False
+
+        self.index_definition['params']['mapping']['default_mapping'] \
+                                                        ['enabled'] = False
+        self.index_definition['params']['mapping']['types'] = type_map
+
+    def add_doc_config_to_index_definition(self, mode):
+        """
+        Add Document Type Configuration to Index Definition
+        """
+        doc_config = {}
+        doc_config['mode']=mode
+
+        if mode=='docid_regexp':
+            doc_config['docid_regexp'] = "([^_]*)"
+
+        if mode == 'docid_prefix':
+            doc_config['docid_prefix_delim'] = "-"
+
+        if mode == "type_field":
+            doc_config['type_field'] = "type"
+
+        self.index_definition['params']['doc_config'] = {}
+        self.index_definition['params']['doc_config'] = doc_config
+
+    def get_rank_of_doc_in_search_results(self, content, doc_id):
+        """
+        Fetch rank of a given document in Search Results
+        """
+        try:
+            return content.index(doc_id) + 1
+        except Exception as err:
+            self.__log.info("Doc ID %s not found in search results." % doc_id)
+            return -1
+
     def create(self):
         self.__log.info("Checking if index already exists ...")
         rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -971,6 +1023,7 @@ class FTSIndex:
         """
         facets = TestInputSingleton.input.param("facets", None).split(",")
         size = TestInputSingleton.input.param("facets_size", 5)
+        field_indexed = TestInputSingleton.input.param("field_indexed", True)
         terms_facet_name = "Department"
         numeric_range_facet_name = "Salaries"
         date_range_facet_name = "No. of Years"
@@ -988,16 +1041,21 @@ class FTSIndex:
                 raise FTSException(facet_name + " not present in the "
                                                 "search results")
 
-            # Validate Total No. It can be more than no. of hits (due
-            # to analyzer chosen), but not less.
+            # Validate Total No. with no. of hits. It can be unequal if
+            # the field is not indexed, but not otherwise.
             total_count = facets_returned[facet_name]['total']
             missing_count = facets_returned[facet_name]['missing']
             others_count = facets_returned[facet_name]['other']
             if not total_count == no_of_hits:
-                raise FTSException("Total count of results in " + facet_name
+                if field_indexed:
+                    raise FTSException("Total count of results in " + facet_name
                                    + " Facet (" + str(total_count) +
                                    ") is not equal to total hits in search "
                                    "results (" + str(no_of_hits) + ")")
+                else:
+                    if not ((missing_count == no_of_hits) and (total_count == 0)):
+                        raise FTSException("Field not indexed, but counts "
+                                           "are not expected")
 
             # Validate only if there are some search results
             if not total_count == 0:
@@ -1028,7 +1086,7 @@ class FTSIndex:
                     raise FTSException("Requerying returns different results "
                                        "than expected")
             else:
-                self.__log.info("Zero hits and zero total count in facet.")
+                self.__log.info("Zero total count in facet.")
 
         self.__log.info("Validated Facets in search results")
 
@@ -2680,6 +2738,15 @@ class FTSBaseTest(unittest.TestCase):
             num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
+
+    def load_sample_buckets(self, server, bucketName):
+        from lib.remote.remote_util import RemoteMachineShellConnection
+        shell = RemoteMachineShellConnection(server)
+        shell.execute_command("""curl -v -u Administrator:password \
+                             -X POST http://{0}:8091/sampleBuckets/install \
+                          -d '["{1}"]'""".format(server.ip, bucketName))
+        shell.disconnect()
+        self.sleep(20)
 
     def load_employee_dataset(self, num_items=None):
         """
