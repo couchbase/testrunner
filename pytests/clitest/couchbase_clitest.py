@@ -1574,6 +1574,34 @@ class CouchbaseCliTest(CliBaseTest):
             if initialized and init_ro_username:
                 self.assertTrue(self.verifyReadOnlyUser(server, init_ro_username), "Read only user was changed")
 
+    def testCollectLogStop(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        print cli
+        stdout, _, errored = cli.collect_logs_stop()
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
     # MB-8566
     def testSettingCompacttion(self):
         '''setting-compacttion OPTIONS:

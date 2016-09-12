@@ -128,6 +128,13 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Cluster initialized")
 
+    def collect_logs_stop(self):
+        options = self._get_default_options()
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("collect-logs-stop", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Log collection stopped")
+
     def failover(self, failover_servers, force):
         options = self._get_default_options()
         if failover_servers:
