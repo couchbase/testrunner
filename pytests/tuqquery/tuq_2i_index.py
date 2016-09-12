@@ -258,7 +258,11 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'select ARRAY_INTERSECT(join_yr,[2011,2012,2016,"test"], [2011,2016], [2012,2016]) as test from {0}'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            number_of_doc = 10079
+            os = self.shell.extract_remote_info().type.lower()
+            if os == "windows":
+                number_of_doc = 1680
+            else:
+                number_of_doc = 10079
             self.assertTrue(actual_result['metrics']['resultCount'] == number_of_doc)
 
     def test_in_spans(self):
@@ -636,7 +640,11 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select name from %s  WHERE ANY i IN tasks SATISFIES  (ANY j within i SATISFIES j='newValue' END) END ; " % (
                 bucket.name)
                 actual_result = self.run_cbq_query()
-                number_of_doc = 10079
+                os = self.shell.extract_remote_info().type.lower()
+                if os == "windows":
+                    number_of_doc = 1680
+                else:
+                    number_of_doc = 10079
                 self.assertTrue(actual_result['metrics']['resultCount']==number_of_doc)
                 self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN (ARRAY i.Marketing FOR i IN tasks END, 1) END;".format(bucket.name)
                 actual_result = self.run_cbq_query()
