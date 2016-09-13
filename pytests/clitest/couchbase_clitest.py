@@ -634,54 +634,6 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertEqual(output, ["(u'notRunning', None)"])
         remote_client.disconnect()
 
-    def testNodeInit(self):
-        server = self.servers[-1]
-        remote_client = RemoteMachineShellConnection(server)
-        prefix = ''
-        type = remote_client.extract_remote_info().distribution_type
-        if type.lower() == 'windows':
-            prefix_path = "C:"
-
-        data_path = self.input.param("data_path", None)
-        index_path = self.input.param("index_path", None)
-
-        if data_path is not None:
-            data_path = prefix + data_path.replace('|', "/")
-        if index_path is not None:
-            index_path = prefix + index_path.replace('|', "/")
-
-        server_info = self._get_cluster_info(remote_client, cluster_port=server.port, \
-                              user=server.rest_username, password=server.rest_password)
-        data_path_before = server_info["storage"]["hdd"][0]["path"]
-        index_path_before = server_info["storage"]["hdd"][0]["index_path"]
-
-        try:
-            rest = RestConnection(server)
-            rest.force_eject_node()
-            cli_command = "node-init"
-            options = ""
-            options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
-            options += ("--node-init-index-path={0} ".format(index_path), "")[index_path is None]
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                              options=options, cluster_host="localhost", \
-                                                user="Administrator", password="password")
-            self.sleep(7)  # time needed to reload couchbase
-            """ no output print out.  Bug https://issues.couchbase.com/browse/MB-13704
-                output    []
-                error    []
-                It need to check when this bug is fixed """
-            #self.assertEqual(output[0], "SUCCESS: init localhost")
-            rest.init_cluster()
-            server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-            data_path_after = server_info["storage"]["hdd"][0]["path"]
-            index_path_after = server_info["storage"]["hdd"][0]["index_path"]
-            self.assertEqual((data_path, data_path_before)[data_path is None], data_path_after)
-            self.assertEqual((index_path, index_path_before)[index_path is None], index_path_after)
-        finally:
-            rest = RestConnection(server)
-            rest.force_eject_node()
-            rest.init_cluster()
-
     def testClusterInit(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
@@ -1654,6 +1606,50 @@ class CouchbaseCliTest(CliBaseTest):
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
+    def testNodeInit(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        data_path = self.input.param("data-path", None)
+        index_path = self.input.param("index-path", None)
+        hostname = self.input.param("hostname", None)
+        initialized = self.input.param("initialized", False)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        node_settings = rest.get_nodes_self()
+
+        if data_path is not None and data_path == "valid":
+            data_path = self.log_path
+
+        if index_path is not None and index_path == "valid":
+            index_path = self.log_path
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.node_init(data_path, index_path, hostname)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            if data_path is None:
+                data_path = node_settings.storage[0].path
+            if index_path is None:
+                index_path = node_settings.storage[0].index_path
+            self.assertTrue(self.verify_node_settings(server, data_path, index_path, hostname),
+                            "Node settings not changed")
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
                             "Expected error message not found")

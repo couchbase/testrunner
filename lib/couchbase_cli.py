@@ -167,6 +167,20 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server failed over")
 
+    def node_init(self, data_path, index_path, hostname):
+        options = self._get_default_options()
+        if data_path:
+            options += " --node-init-data-path " + str(data_path)
+        if index_path:
+            options += " --node-init-data-path " + str(index_path)
+        if hostname:
+            options += " --node-init-hostname " + str(hostname)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("node-init", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Node initialized")
+
     def rebalance(self, remove_servers):
         options = self._get_default_options()
         if remove_servers:

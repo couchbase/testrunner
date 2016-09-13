@@ -560,6 +560,22 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verify_node_settings(self, server, data_path, index_path, hostname):
+        rest = RestConnection(server)
+        node_settings = rest.get_nodes_self()
+
+        if data_path != node_settings.storage[0].path:
+            log.info("Data path does not match (%s vs %s)", data_path, node_settings.storage[0].path)
+            return False
+        if index_path != node_settings.storage[0].index_path:
+            log.info("Index path does not match (%s vs %s)", index_path, node_settings.storage[0].index_path)
+            return False
+        if hostname is not None:
+            if hostname != node_settings.hostname:
+                log.info("Hostname does not match (%s vs %s)", hostname, node_settings.hostname)
+                return True
+        return True
+
     def _list_compare(self, list1, list2):
         if len(list1) != len(list2):
             return False
