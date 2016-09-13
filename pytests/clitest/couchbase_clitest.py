@@ -1558,7 +1558,6 @@ class CouchbaseCliTest(CliBaseTest):
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        print cli
         stdout, _, errored = cli.user_manage(delete, list, set, ro_username, ro_password)
 
         if not expect_error:
@@ -1573,6 +1572,64 @@ class CouchbaseCliTest(CliBaseTest):
                             "Expected error message not found")
             if initialized and init_ro_username:
                 self.assertTrue(self.verifyReadOnlyUser(server, init_ro_username), "Read only user was changed")
+
+    def testCollectLogStart(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        all_nodes = self.input.param("all-nodes", False)
+        nodes = self.input.param("nodes", 0)
+        upload = self.input.param("upload", None)
+        upload_host = self.input.param("upload-host", None)
+        upload_customer = self.input.param("customer", None)
+        upload_ticket = self.input.param("ticket", None)
+        invalid_node = self.input.param("invalid-node", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_num_servers = self.input.param("init-num-servers", 1)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        servers_to_add = list()
+        for idx in range(init_num_servers-1):
+            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+        servers_to_add = ",".join(servers_to_add)
+
+        log_nodes = None
+        if nodes > 0 or invalid_node is not None:
+            log_nodes = list()
+            for idx in range(nodes):
+                log_nodes.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+            if invalid_node is not None:
+                log_nodes.append("invalid:8091")
+            log_nodes = ",".join(log_nodes)
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+            if init_num_servers > 1:
+                time.sleep(5)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                self.assertTrue(errored, "Could not add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.collect_logs_start(all_nodes, log_nodes, upload, upload_host, upload_customer, upload_ticket)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
 
     def testCollectLogStop(self):
         username = self.input.param("username", None)
@@ -1593,7 +1650,6 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue(success, "Cluster initialization failed during test setup")
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        print cli
         stdout, _, errored = cli.collect_logs_stop()
 
         if not expect_error:

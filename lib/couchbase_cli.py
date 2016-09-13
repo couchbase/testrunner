@@ -128,6 +128,26 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Cluster initialized")
 
+    def collect_logs_start(self, all_nodes, nodes, upload, upload_host, upload_customer, upload_ticket):
+        options = self._get_default_options()
+        if all_nodes is True:
+            options += " --all-nodes "
+        if nodes is not None:
+            options += " --nodes " + str(nodes)
+        if upload is True:
+            options += " --upload "
+        if upload_host is not None:
+            options += " --upload-host " + str(upload_host)
+        if upload_customer is not None:
+            options += " --customer " + str(upload_customer)
+        if upload_ticket is not None:
+            options += " --ticket " + str(upload_ticket)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("collect-logs-start", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Log collection started")
+
     def collect_logs_stop(self):
         options = self._get_default_options()
         remote_client = RemoteMachineShellConnection(self.server)
