@@ -2397,12 +2397,26 @@ class Lww(XDCRNewBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        obj = src_def.get(key='lww-0')
-        self.log.info("C1 result: " + str(obj.value))
-        obj = dest_def.get(key='lww-0')
-        self.log.info("C2 result: " + str(obj.value))
-        obj = c3_def.get(key='lww-0')
-        self.log.info("C3 result: " + str(obj.value))
+        try:
+            obj = src_def.get(key='lww-0')
+            if obj:
+                self.fail("Doc not deleted in C1")
+        except NotFoundError:
+            self.log.info("Doc deleted in C1 as expected")
+
+        try:
+            obj = dest_def.get(key='lww-0')
+            if obj:
+                self.fail("Doc not deleted in C2")
+        except NotFoundError:
+            self.log.info("Doc deleted in C2 as expected")
+
+        try:
+            obj = c3_def.get(key='lww-0')
+            if obj:
+                self.fail("Doc not deleted in C3")
+        except NotFoundError:
+            self.log.info("Doc deleted in C3 as expected")
 
         conn1 = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn1.stop_couchbase()
