@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 from couchbase.bucket import Bucket
@@ -191,4 +192,4 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         log.info("Updating {0} in all documents in bucket {1}...".format(field, bucket_name))
         query = "SELECT * FROM {0}".format(bucket_name)
         for row in bucket.n1ql_query(query):
-            yield row[bucket.bucket]['_id'], bucket.get(key=row[bucket.bucket]['_id']).value
+            yield row[bucket.bucket]['_id'], json.loads(bucket.get(key=row[bucket.bucket]['_id']).value)
