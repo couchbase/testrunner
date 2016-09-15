@@ -30,6 +30,8 @@ from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from membase.helper.cluster_helper import ClusterOperationHelper
+
+from couchbase_cli import CouchbaseCLI
 import testconstants
 
 
@@ -1116,17 +1118,16 @@ class BaseTestCase(unittest.TestCase):
 
     def change_password(self, new_password="new_password"):
         nodes = RestConnection(self.master).node_statuses()
-        remote_client = RemoteMachineShellConnection(self.master)
-        options = "--cluster-init-password=%s" % new_password
-        cli_command = "cluster-edit"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
-                                                            cluster_host="localhost:8091",
-                                                            user=self.master.rest_username,
-                                                            password=self.master.rest_password)
+
+
+        cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password  )
+        output, err, result = cli.setting_cluster(data_ramsize=False, index_ramsize=False, fts_ramsize=False, cluster_name=None,
+                         cluster_username=None, cluster_password=new_password, cluster_port=False)
+
         self.log.info(output)
         # MB-10136 & MB-9991
-        if error:
-            raise Exception("Password didn't change! %s" % error)
+        if not result:
+            raise Exception("Password didn't change!")
         self.log.info("new password '%s' on nodes: %s" % (new_password, [node.ip for node in nodes]))
         for node in nodes:
             for server in self.servers:
