@@ -159,6 +159,7 @@ class CWCTests(CWCBaseTest):
                            --upload-host='{4}' --customer='{5}' --ticket='{6}' " .format(self.bin_path, \
                            command, self.master.ip, num_node_collect, self.uploadHost, self.customer, \
                            self.ticket))
+        self.log.info("Command output is {0} {1}".format(o,e) )
         shell.log_command_output(o, e)
         if "runCmd" in o[0]:
             o = o[1:]
