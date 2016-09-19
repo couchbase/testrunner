@@ -3428,11 +3428,12 @@ class RemoteMachineShellConnection:
                         o, r = self.execute_command("dpkg --get-selections | grep libssl")
                         self.log_command_output(o, r)
                         if not o:
-                            o, r = self.execute_command("apt-get install -y libssl0.9.8")
-                            self.log_command_output(o, r)
-                            o, r = self.execute_command("dpkg --get-selections | grep libssl")
-                            log.info("package {0} should not appear below".format(o[:11]))
-                            self.log_command_output(o, r)
+                            pass   # CBQE-36124 - some SSL stuff which is not needed anymore anyway
+                            #o, r = self.execute_command("apt-get install -y libssl0.9.8")
+                            #self.log_command_output(o, r)
+                            #o, r = self.execute_command("dpkg --get-selections | grep libssl")
+                            #log.info("package {0} should not appear below".format(o[:11]))
+                            #self.log_command_output(o, r)
                         elif o:
                             for s in o:
                                 if "libssl0.9.8" not in s:
