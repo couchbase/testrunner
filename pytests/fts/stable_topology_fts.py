@@ -3,6 +3,7 @@ from fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from TestInput import TestInputSingleton
+import copy
 
 class StableTopFTS(FTSBaseTest):
 
@@ -691,3 +692,75 @@ class StableTopFTS(FTSBaseTest):
         if not rank_after_boosting < rank_before_boosting:
             self.fail("Testcase failed: Boosting did not improve rank for "
                       "doc id : u'emp10000071'")
+
+    def test_doc_id_query_type(self):
+        # Create bucket, create index
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_type_mapping_to_index_definition(type="emp",
+                                                   analyzer="keyword")
+
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(15)
+        self.wait_for_indexing_complete()
+
+        expected_hits = int(self._input.param("expected_hits", 0))
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        # From the Query string, fetch the Doc IDs
+        doc_ids = copy.deepcopy(query['ids'])
+
+        # If invalid_doc_id param is passed, add this to the query['ids']
+        invalid_doc_id = self._input.param("invalid_doc_id",0)
+        if invalid_doc_id:
+            query['ids'].append(invalid_doc_id)
+
+        # If disjuncts_query is passed, join query and disjuncts_query
+        # to form a new query string
+        disjuncts_query = self._input.param("disjuncts_query", None)
+        if disjuncts_query:
+            if isinstance(disjuncts_query, str):
+                disjuncts_query = json.loads(disjuncts_query)
+            new_query = {}
+            new_query['disjuncts'] = []
+            new_query['disjuncts'].append(disjuncts_query)
+            new_query['disjuncts'].append(query)
+            query = new_query
+
+        # Execute Query
+        zero_results_ok = False
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query,
+                                            zero_results_ok=zero_results_ok,
+                                            expected_hits=expected_hits,
+                                            return_raw_hits=True)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Contents: %s" % contents)
+                # For each doc id passed in the query, validate the
+                # presence in the search results
+                for doc_id in doc_ids:
+                    self.assertTrue(index.is_doc_present_in_query_result_content
+                                    (contents=contents, doc_id=doc_id),"Doc ID "
+                                    "%s is not present in Search results"
+                                    % doc_id)
+                    score = index.get_score_from_query_result_content\
+                        (contents=contents, doc_id=doc_id)
+                    self.log.info ("Score for Doc ID {0} is {1}".
+                                   format(doc_id,score))
+                if invalid_doc_id:
+                    # Validate if invalid doc id was passed, it should
+                    # not be present in the search results
+                    self.assertFalse(index.is_doc_present_in_query_result_content
+                                     (contents=contents, doc_id=invalid_doc_id),
+                                     "Doc ID %s is present in Search results"
+                                     % invalid_doc_id)
+
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)

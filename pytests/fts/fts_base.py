@@ -962,7 +962,8 @@ class FTSIndex:
 
         return facet_definition
 
-    def execute_query(self, query, zero_results_ok=True, expected_hits=None):
+    def execute_query(self, query, zero_results_ok=True, expected_hits=None,
+                      return_raw_hits=False):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -991,7 +992,10 @@ class FTSIndex:
         if expected_hits and expected_hits == hits:
             self.__log.info("SUCCESS! Expected hits: %s, fts returned: %s"
                             % (expected_hits, hits))
-        return hits, doc_ids, time_taken, status
+        if not return_raw_hits:
+            return hits, doc_ids, time_taken, status
+        else:
+            return hits, matches, time_taken, status
 
     def execute_query_with_facets(self, query, zero_results_ok=True,
                                   expected_hits=None):
@@ -1177,6 +1181,17 @@ class FTSIndex:
             return False
         else:
             return True
+
+    def get_score_from_query_result_content(self, contents, doc_id):
+        for content in contents:
+            if content['id'] == doc_id:
+                return content['score']
+
+    def is_doc_present_in_query_result_content(self, contents, doc_id):
+        for content in contents:
+            if content['id'] == doc_id:
+                return True
+        return False
 
 
 class CouchbaseCluster:
