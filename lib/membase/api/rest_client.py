@@ -2463,6 +2463,11 @@ class RestConnection(object):
 
         return self.diag_eval(cmd)
 
+    def get_auto_compaction_settings(self):
+        api = self.baseUrl + "settings/autoCompaction"
+        status, content, header = self._http_request(api)
+        return json.loads(content)
+
     def set_auto_compaction(self, parallelDBAndVC="false",
                             dbFragmentThreshold=None,
                             viewFragmntThreshold=None,

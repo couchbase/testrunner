@@ -301,6 +301,33 @@ class CouchbaseCLI():
         return self._setting_cluster("setting-cluster", data_ramsize, index_ramsize, fts_ramsize, cluster_name,
                                      cluster_username, cluster_password, cluster_port)
 
+    def setting_compaction(self, db_frag_perc, db_frag_size, view_frag_perc, view_frag_size, from_period, to_period,
+                           abort_outside, parallel_compact, purgeInt):
+        options = self._get_default_options()
+        if db_frag_perc is not None:
+            options += " --compaction-db-percentage " + str(db_frag_perc)
+        if db_frag_size is not None:
+            options += " --compaction-db-size " + str(db_frag_size)
+        if view_frag_perc is not None:
+            options += " --compaction-view-percentage " + str(view_frag_perc)
+        if view_frag_size is not None:
+            options += " --compaction-view-size " + str(view_frag_size)
+        if from_period is not None:
+            options += " --compaction-period-from " + str(from_period)
+        if to_period is not None:
+            options += " --compaction-period-to " + str(to_period)
+        if abort_outside is not None:
+            options += " --enable-compaction-abort " + str(abort_outside)
+        if parallel_compact is not None:
+            options += " --enable-compaction-parallel " + str(parallel_compact)
+        if purgeInt is not None:
+            options += " --metadata-purge-interval " + str(purgeInt)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("setting-compaction", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Compaction settings modified")
+
     def setting_index(self, max_rollbacks, stable_snap_interval, mem_snap_interval, storage_mode, threads,
                       log_level):
         options = self._get_default_options()

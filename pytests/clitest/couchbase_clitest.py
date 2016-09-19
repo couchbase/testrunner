@@ -775,6 +775,52 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(not self.isClusterInitialized(server),
                                 "Cluster was initialized, but error was received")
 
+    def testSettingCompaction(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+
+        db_frag_perc = self.input.param("db-frag-perc", None)
+        db_frag_size = self.input.param("db-frag-size", None)
+        view_frag_perc = self.input.param("view-frag-perc", None)
+        view_frag_size = self.input.param("view-frag-size", None)
+        from_period = self.input.param("from-period", None)
+        to_period = self.input.param("to-period", None)
+        abort_outside = self.input.param("abort-outside", None)
+        parallel_compact = self.input.param("parallel-compact", None)
+        purgeInt = self.input.param("purge-interval", None)
+
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, username, password)
+        if initialized:
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        stdout, _, errored = cli.setting_compaction(db_frag_perc, db_frag_size, view_frag_perc, view_frag_size,
+                                                    from_period, to_period, abort_outside, parallel_compact, purgeInt)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            self.assertTrue(self.verifyCompactionSettings(server, db_frag_perc, db_frag_size, view_frag_perc,
+                                                          view_frag_size, from_period, to_period, abort_outside,
+                                                          parallel_compact, purgeInt),
+                            "Settings don't match")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server),
+                                "Cluster was initialized, but error was received")
+
     def testSettingAutoFailover(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
@@ -1653,46 +1699,6 @@ class CouchbaseCliTest(CliBaseTest):
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
                             "Expected error message not found")
-
-    # MB-8566
-    def testSettingCompacttion(self):
-        '''setting-compacttion OPTIONS:
-        --compaction-db-percentage=PERCENTAGE     at which point database compaction is triggered
-        --compaction-db-size=SIZE[MB]             at which point database compaction is triggered
-        --compaction-view-percentage=PERCENTAGE   at which point view compaction is triggered
-        --compaction-view-size=SIZE[MB]           at which point view compaction is triggered
-        --compaction-period-from=HH:MM            allow compaction time period from
-        --compaction-period-to=HH:MM              allow compaction time period to
-        --enable-compaction-abort=[0|1]           allow compaction abort when time expires
-        --enable-compaction-parallel=[0|1]        allow parallel compaction for database and view'''
-        compaction_db_percentage = self.input.param("compaction-db-percentage", None)
-        compaction_db_size = self.input.param("compaction-db-size", None)
-        compaction_view_percentage = self.input.param("compaction-view-percentage", None)
-        compaction_view_size = self.input.param("compaction-view-size", None)
-        compaction_period_from = self.input.param("compaction-period-from", None)
-        compaction_period_to = self.input.param("compaction-period-to", None)
-        enable_compaction_abort = self.input.param("enable-compaction-abort", None)
-        enable_compaction_parallel = self.input.param("enable-compaction-parallel", None)
-        bucket = self.input.param("bucket", "default")
-        output = self.input.param("output", '')
-        rest = RestConnection(self.master)
-        remote_client = RemoteMachineShellConnection(self.master)
-        self.testBucketCreation()
-        cli_command = "setting-compacttion"
-        options = "--bucket={0}".format(bucket)
-        options += (" --compaction-db-percentage={0}".format(compaction_db_percentage), "")[compaction_db_percentage is None]
-        options += (" --compaction-db-size={0}".format(compaction_db_size), "")[compaction_db_size is None]
-        options += (" --compaction-view-percentage={0}".format(compaction_view_percentage), "")[compaction_view_percentage is None]
-        options += (" --compaction-view-size={0}".format(compaction_view_size), "")[compaction_view_size is None]
-        options += (" --compaction-period-from={0}".format(compaction_period_from), "")[compaction_period_from is None]
-        options += (" --compaction-period-to={0}".format(compaction_period_to), "")[compaction_period_to is None]
-        options += (" --enable-compaction-abort={0}".format(enable_compaction_abort), "")[enable_compaction_abort is None]
-        options += (" --enable-compaction-parallel={0}".format(enable_compaction_parallel), "")[enable_compaction_parallel is None]
-
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ['SUCCESS: bucket-edit'])
-        cluster_status = rest.cluster_status()
-        remote_client.disconnect()
 
     """ tests for the group-manage option. group creation, renaming and deletion are tested .
         These tests require a cluster of four or more nodes. """

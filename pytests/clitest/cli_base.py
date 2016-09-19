@@ -576,6 +576,80 @@ class CliBaseTest(BaseTestCase):
                 return True
         return True
 
+    def verifyCompactionSettings(self, server, db_frag_perc, db_frag_size, view_frag_perc, view_frag_size, from_period,
+                                 to_period, abort_outside, parallel_compact, purgeInt):
+        rest = RestConnection(server)
+        settings = rest.get_auto_compaction_settings()
+        ac = settings["autoCompactionSettings"]
+
+        if db_frag_perc is not None and str(db_frag_perc) != str(ac["databaseFragmentationThreshold"]["percentage"]):
+            log.info("DB frag perc does not match (%s vs %s)", str(db_frag_perc),
+                     str(ac["databaseFragmentationThreshold"]["percentage"]))
+            return False
+
+        if db_frag_size is not None and str(db_frag_size*1024**2) != str(ac["databaseFragmentationThreshold"]["size"]):
+            log.info("DB frag size does not match (%s vs %s)", str(db_frag_size*1024**2),
+                     str(ac["databaseFragmentationThreshold"]["size"]))
+            return False
+
+        if view_frag_perc is not None and str(view_frag_perc) != str(ac["viewFragmentationThreshold"]["percentage"]):
+            log.info("View frag perc does not match (%s vs %s)", str(view_frag_perc),
+                     str(ac["viewFragmentationThreshold"]["percentage"]))
+            return False
+
+        if view_frag_size is not None and str(view_frag_size*1024**2) != str(ac["viewFragmentationThreshold"]["size"]):
+            log.info("View frag size does not match (%s vs %s)", str(view_frag_size*1024**2),
+                     str(ac["viewFragmentationThreshold"]["size"]))
+            return False
+
+        print from_period, to_period
+        if from_period is not None:
+            fromHour, fromMin = from_period.split(":", 1)
+            if int(fromHour) != int(ac["allowedTimePeriod"]["fromHour"]):
+                log.info("From hour does not match (%s vs %s)", str(fromHour),
+                         str(ac["allowedTimePeriod"]["fromHour"]))
+                return False
+            if int(fromMin) != int(ac["allowedTimePeriod"]["fromMinute"]):
+                log.info("From minute does not match (%s vs %s)", str(fromMin),
+                         str(ac["allowedTimePeriod"]["fromMinute"]))
+                return False
+
+        if to_period is not None:
+            toHour, toMin = to_period.split(":", 1)
+            if int(toHour) != int(ac["allowedTimePeriod"]["toHour"]):
+                log.info("To hour does not match (%s vs %s)", str(toHour),
+                         str(ac["allowedTimePeriod"]["toHour"]))
+                return False
+            if int(toMin) != int(ac["allowedTimePeriod"]["toMinute"]):
+                log.info("To minute does not match (%s vs %s)", str(toMin),
+                         str(ac["allowedTimePeriod"]["toMinute"]))
+                return False
+
+        if str(abort_outside) == "1":
+            abort_outside = True
+        elif str(abort_outside) == "0":
+            abort_outside = False
+
+        if abort_outside is not None and abort_outside != ac["allowedTimePeriod"]["abortOutside"]:
+            log.info("Abort outside does not match (%s vs %s)", abort_outside, ac["allowedTimePeriod"]["abortOutside"])
+            return False
+
+        if str(parallel_compact) == "1":
+            parallel_compact = True
+        elif str(parallel_compact) == "0":
+            parallel_compact = False
+
+        if parallel_compact is not None and parallel_compact != ac["parallelDBAndViewCompaction"]:
+            log.info("Parallel compact does not match (%s vs %s)", str(parallel_compact),
+                     str(ac["parallelDBAndViewCompaction"]))
+            return False
+
+        if purgeInt is not None and str(purgeInt) != str(settings["purgeInterval"]):
+            log.info("Purge interval does not match (%s vs %s)", str(purgeInt), str(settings["purgeInterval"]))
+            return False
+
+        return True
+
     def _list_compare(self, list1, list2):
         if len(list1) != len(list2):
             return False
