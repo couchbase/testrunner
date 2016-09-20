@@ -108,11 +108,11 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         self._run_tasks(kv_ops)
 
     def test_set_compaction_end_time_abort(self):
-        kv_ops = self._run_kvops_tasks()
-        date = datetime.now()
         servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
+        kv_ops = self._run_kvops_tasks()
+        date = datetime.now()
         #Trust Me this works
         dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
