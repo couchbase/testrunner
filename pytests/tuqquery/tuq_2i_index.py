@@ -1165,7 +1165,6 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']==idx3)
-                import pdb;pdb.set_trace()
                 self.assertTrue("cover" in str(plan))
 
                 self.query = "select meta().id from %s WHERE  tasks[1]='Sales'" % (
@@ -4625,7 +4624,6 @@ class QueriesIndexTests(QueryTests):
                     created_indexes.append(index_name)
                     self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task ON KEYS ['key1']" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
-                    #import pdb;pdb.set_trace()
 		    plan = ExplainPlanHelper(res)
                     self.assertTrue(plan["~children"][0]["index"] == "#primary",
                                     "Index should be %s, but is: %s" % (index_name, plan))
