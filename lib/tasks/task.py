@@ -106,8 +106,13 @@ def parallel(method, *args, **kwargs):
         worker_process.start()
         log.info(" worker - {} started". format(worker_process.name))
 
-    num_threads = 20
-    green_workers = parallelmethod(create_pool(generator,num_threads))
+    if parallelmethod:
+        '''
+        This parallel method is for KV related doc,
+        for FTS where we dont do any kV store this is not needed
+        '''
+        num_threads = 20
+        green_workers = parallelmethod(create_pool(generator,num_threads))
     '''
      reassigning gnerator
     '''
@@ -115,8 +120,9 @@ def parallel(method, *args, **kwargs):
         worker.join()
         log.info(" worker - {} joined". format(worker.name))
 
-    gevent.joinall(green_workers)
-    log.info(" All load to kvstore threads are joined")
+    if parallelmethod:
+        gevent.joinall(green_workers)
+        log.info(" All load to kvstore threads are joined")
 
 
 class Task(Future):
@@ -1017,9 +1023,9 @@ class ESLoadGeneratorTask(Task):
         self.log.info("Starting to load data into Elastic Search ...")
 
     @parallel
-    def load_data(self, generator, event):
+    def load_data(self, generator, parallel_method=None):
         start, _ = generator.getrange()
-        while generator.has_next() and not event.is_set():
+        while generator.has_next():
             key, doc = generator.next()
             doc = json.loads(doc)
             self.es_instance.load_data(self.index_name,
@@ -1036,7 +1042,7 @@ class ESLoadGeneratorTask(Task):
         self.set_result(True)
 
     def execute(self, task_manager):
-        self.load_data(self.generator, self.event)
+        self.load_data(self.generator)
         self.state = FINISHED
         self.set_result(True)
 
