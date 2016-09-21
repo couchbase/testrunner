@@ -167,6 +167,43 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server failed over")
 
+    def group_manage(self, create, delete, list, move_servers, rename, name, to_group, from_group):
+        options = self._get_default_options()
+        if create:
+            options += " --create "
+        if delete:
+            options += " --delete "
+        if list:
+            options += " --list "
+        if rename is not None:
+            options += " --rename " + str(rename)
+        if move_servers is not None:
+            options += " --move-servers " + str(move_servers)
+        if name:
+            options += " --group-name " + str(name)
+        if to_group:
+            options += " --to-group " + str(to_group)
+        if from_group:
+            options += " --from-group " + str(from_group)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("group-manage", self.hostname, options)
+        remote_client.disconnect()
+
+        success = False
+        if create:
+            success = self._was_success(stdout, "Server group created")
+        elif delete:
+            success = self._was_success(stdout, "Server group deleted")
+        elif list:
+            success = self._no_error_in_output(stdout)
+        elif move_servers:
+            success = self._was_success(stdout, "Servers moved between groups")
+        elif rename:
+            success = self._was_success(stdout, "Server group renamed")
+
+        return stdout, stderr, success
+
     def node_init(self, data_path, index_path, hostname):
         options = self._get_default_options()
         if data_path:

@@ -650,6 +650,17 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verifyGroupExists(self, server, name):
+        rest = RestConnection(server)
+        groups = rest.get_zone_names()
+        print groups
+
+        for gname, _ in groups.iteritems():
+            if name == gname:
+                return True
+
+        return False
+
     def _list_compare(self, list1, list2):
         if len(list1) != len(list2):
             return False
