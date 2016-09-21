@@ -3131,6 +3131,19 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(actual_result,reverse=True)
             self.assertEqual(actual_result,expected_result)
 
+    def test_push_limit(self):
+        for bucket in self.buckets:
+             self.query = 'insert into %s(KEY, VALUE) VALUES ("f01", {"f1":"f1"})' % (bucket.name)
+             self.run_cbq_query()
+             self.query = 'insert into %s(KEY, VALUE) VALUES ("f02", {"f1":"f1","f2":"f2"})' % (bucket.name)
+             self.run_cbq_query()
+             self.query = 'create index if1 on %s(f1)'%bucket.name
+             self.query = 'select q.id, q.f1,q.f2 from (select meta().id, f1,f2 from %s where f1="f1") q where q.f2 = "f2" limit 1'%bucket.name
+             result = self.run_cbq_query()
+             self.assertTrue(result['metrics']['resultCount']==1)
+             self.query = 'delete from %s use keys("f01","f02")'%bucket.name
+
+
 ##############################################################################################
 #
 #  Number fns
