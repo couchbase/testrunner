@@ -267,6 +267,16 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server added")
 
+    def server_readd(self, servers):
+        options = self._get_default_options()
+        if servers:
+            options += " --server-add " + str(servers)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("server-readd", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Servers recovered")
+
     def setting_audit(self, enabled, log_path, rotate_interval):
         options = self._get_default_options()
         if enabled is not None:
