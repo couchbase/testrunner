@@ -174,6 +174,9 @@ class BatchedDocumentGenerator(object):
         if self._batch_size <= 0:
             raise ValueError("Invalid Batch size {0}".format(self._batch_size))
 
+    def get_docgen(self):
+        return self._doc_gen
+
     def getrange(self):
         return self._doc_gen.getrange()
 
@@ -310,8 +313,7 @@ class JsonDocGenerator(KVGenerator):
             return doc_dict
         elif self.op_type == "delete":
             # for deletes, just keep/return empty docs with just type field
-            for count in xrange(self.start, self.end):
-                self.gen_docs[count] = {'type': 'emp'}
+            self.gen_docs = {'type': 'emp' for count in range(self.start, self.end)}
 
     def update(self, fields_to_update=None):
         """

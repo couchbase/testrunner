@@ -34,7 +34,7 @@ from decorator import decorator
 import concurrent.futures
 import itertools
 from memcached.helper.kvstore import Synchronized
-from multiprocessing import Process
+from multiprocessing import Process, cpu_count
 import gevent
 from gevent import Greenlet
 
@@ -87,7 +87,7 @@ def parallel(method, *args, **kwargs):
 
     log = logger.Logger.get_logger()
     workers = []
-    num_workers = 10 #cpu_count().real
+    num_workers = cpu_count().real
     generator = args[1]
     parallelmethod = args[2]
     for value in create_pool(generator, num_workers):
@@ -109,9 +109,9 @@ def parallel(method, *args, **kwargs):
     if parallelmethod:
         '''
         This parallel method is for KV related doc,
-        for FTS where we dont do any kV store this is not needed
+        for JSON doc loading where we do not do any kV store this is not needed
         '''
-        num_threads = 20
+        num_threads = 8
         green_workers = parallelmethod(create_pool(generator,num_threads))
     '''
      reassigning gnerator
@@ -749,21 +749,19 @@ class GenericLoadingTask(Thread, Task):
     @concurrenttest
     def load_kvstore_parallel(self, work_range):
         start, end = work_range
-        localgen = copy.deepcopy(self.generator)
+        if isinstance(self.generator, BatchedDocumentGenerator):
+            localgen = copy.deepcopy(self.generator.get_docgen())
+        else:
+            localgen = copy.deepcopy(self.generator)
+
         localgen.setrange({'start': start, 'end': end})
         while localgen.has_next():
             try:
-                if isinstance(self.generator, BatchedDocumentGenerator):
-                    key_val = localgen.next_batch()
-                    partition_keys_dic = self.kv_store.acquire_partitions(key_val.keys())
-                    self._populate_kvstore(partition_keys_dic, key_val)
-                else:
-                    key, value = localgen.next()
-                    value = json.dumps(value)
-                    partition = self.kv_store.acquire_partition(key)["partition"]
-                    if self.only_store_hash:
-                        value = str(crc32.crc32_hash(value))
-                    partition.set(key, value, self.exp, self.flag)
+                key, value = localgen.next()
+                partition = self.kv_store.acquire_partition(key)["partition"]
+                if self.only_store_hash:
+                    value = str(crc32.crc32_hash(value))
+                partition.set(key, value, self.exp, self.flag)
             except Exception as e:
                 raise e
 

@@ -12,7 +12,6 @@ urlgrabber
 yum-metadata-parser
 httplib2
 boto
-fabric
 futures
 gevent
 greenlet
