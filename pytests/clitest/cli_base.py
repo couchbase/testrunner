@@ -402,7 +402,6 @@ class CliBaseTest(BaseTestCase):
         log.info("Node `%s` not found in nodes list", server_to_add)
         return False
 
-
     def verifyPendingServerDoesNotExist(self, server, server_to_add):
         rest = RestConnection(server)
         settings = rest.get_all_zones_info()
@@ -434,6 +433,34 @@ class CliBaseTest(BaseTestCase):
                 count += 1
 
         return count == expected_num_servers
+
+    def verifyRecoveryType(self, server, recovery_servers, recovery_type):
+        rest = RestConnection(server)
+        settings = rest.get_all_zones_info()
+        if not settings or "groups" not in settings:
+            log.info("Group settings payload appears to be invalid")
+            return False
+
+        if not recovery_servers:
+            return True
+
+        num_found = 0
+        recovery_servers = recovery_servers.split(",")
+        for group in settings["groups"]:
+            for node in group["nodes"]:
+                for rs in recovery_servers:
+                    if node["hostname"] == rs:
+                        if node["recoveryType"] != recovery_type:
+                            log.info("Node %s doesn't contain recovery type %s ", rs, recovery_type)
+                            return False
+                        else:
+                            num_found = num_found + 1
+
+        if num_found == len(recovery_servers):
+            return True
+
+        log.info("Node `%s` not found in nodes list", ",".join(recovery_servers))
+        return False
 
     def verifyReadOnlyUser(self, server, username):
         rest = RestConnection(server)

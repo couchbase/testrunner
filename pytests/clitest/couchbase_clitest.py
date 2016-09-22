@@ -1776,6 +1776,69 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
                             "Expected error message not found")
 
+    def testRecovery(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        servers = self.input.param("servers", 0)
+        recovery_type = self.input.param("recovery-type", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        skip_failover = self.input.param("skip-failover", False)
+        init_num_servers = self.input.param("init-num-servers", 1)
+        invalid_recover_server = self.input.param("invalid-recover-server", None)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        servers_to_recover = None
+        if servers > 0:
+            servers_to_recover = []
+            for idx in range(servers):
+                servers_to_recover.append("%s:%s" % (self.servers[idx+1].ip, self.servers[idx+1].port))
+            servers_to_recover = ",".join(servers_to_recover)
+
+        if invalid_recover_server:
+            servers_to_recover = invalid_recover_server
+
+        servers_to_add = []
+        for idx in range(init_num_servers - 1):
+            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+        servers_to_add = ",".join(servers_to_add)
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+            if init_num_servers > 1:
+                time.sleep(5)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None,
+                                               None)
+                self.assertTrue(errored, "Could not add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+
+            if servers_to_recover and not skip_failover:
+                for restore_server in servers_to_recover.split(","):
+                    _, _, errored = cli.failover(restore_server, True)
+                    self.assertTrue(errored, "Unable to failover servers")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.recovery(servers_to_recover, recovery_type)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            self.assertTrue(self.verifyRecoveryType(server, servers_to_recover, recovery_type), "Servers not recovered")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
     def test_change_admin_password_with_read_only_account(self):
         """ this test automation for bug MB-20170.
             In the bug, when update password of admin, read only account is removed.

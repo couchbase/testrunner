@@ -235,6 +235,18 @@ class CouchbaseCLI():
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Rebalance stopped")
 
+    def recovery(self, servers, recovery_type):
+        options = self._get_default_options()
+        if servers:
+            options += " --server-recovery " + str(servers)
+        if recovery_type:
+            options += " --recovery-type " + str(recovery_type)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("recovery", self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Servers recovered")
+
     def server_add(self, server, server_username, server_password, group_name, services, index_storage_mode):
         options = self._get_default_options()
         if server:
@@ -254,8 +266,6 @@ class CouchbaseCLI():
         stdout, stderr = remote_client.couchbase_cli("server-add", self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server added")
-
-
 
     def setting_audit(self, enabled, log_path, rotate_interval):
         options = self._get_default_options()
