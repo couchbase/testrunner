@@ -3,7 +3,8 @@ query:
 
 select:
 #	SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_fields_comparisons |
-    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists ;
+    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists |
+    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists limit 1;
 	#SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_agg_exists |
     #SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME  WHERE subquery_in;
 
