@@ -231,7 +231,7 @@ class RQGASTERIXTests(BaseTestCase):
             data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}","password":""}} ;'.format(bucket.name,self.master.ip)  + "\n"
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
             data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
-        import pdb;pdb.set_trace()
+        #import pdb;pdb.set_trace()
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)

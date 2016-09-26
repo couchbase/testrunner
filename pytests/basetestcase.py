@@ -423,7 +423,7 @@ class BaseTestCase(unittest.TestCase):
         return quota
 
     def _bucket_creation(self):
-        if (self.default_bucket==True):
+        if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
                                                enable_replica_index=self.enable_replica_index,
                                                eviction_policy=self.eviction_policy)
