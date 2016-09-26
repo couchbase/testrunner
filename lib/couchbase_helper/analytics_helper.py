@@ -83,7 +83,6 @@ class AnalyticsHelper():
 
 
             print query
-            import pdb;pdb.set_trace()
             result = RestConnection(server).analytics_tool(query, self.analytics_port, query_params=query_params, verbose = verbose)
 
         if isinstance(result, str) or 'errors' in result:
