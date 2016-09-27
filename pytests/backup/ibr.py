@@ -93,7 +93,7 @@ class IBRTests(BackupBaseTest):
             if 'failover.json' in line:
                 if re.search(pattern_backup_files, line):
                     failover += 1
-            if 'meta.json' in line:
+            if self.cb_version[:5] != "4.5.1" and 'meta.json' in line:
                 if re.search(pattern_backup_files, line):
                     meta_json += 1
             if 'design.json' in line:
@@ -104,16 +104,21 @@ class IBRTests(BackupBaseTest):
                            .format(expected_data_cbb, data_cbb))
         self.log.info("expected_failover_json {0} failover {1}"
                       .format(expected_failover_json, failover))
-        self.log.info("expected_meta_json {0} meta_json {1}"
+        if self.cb_version[:5] != "4.5.1":
+            self.log.info("expected_meta_json {0} meta_json {1}"
                         .format(expected_meta_json,  meta_json))
         """ add json support later in this test
             self.log.info("expected_design_json {0} design_json {1}"
                           .format(expected_design_json, design_json)) """
 
-        if data_cbb == expected_data_cbb and failover == expected_failover_json and \
-            meta_json == expected_meta_json:
-            # add support later in and design_json == expected_design_json:
-            return True
+        if self.cb_version[:5] != "4.5.1":
+            if data_cbb == expected_data_cbb and failover == expected_failover_json and \
+                meta_json == expected_meta_json:
+                # add support later in and design_json == expected_design_json:
+                return True
+        else:
+            if data_cbb == expected_data_cbb and failover == expected_failover_json:
+                return True
 
         return False
 
