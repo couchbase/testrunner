@@ -130,7 +130,7 @@ class AutoCompactionTests(BaseTestCase):
                 insert_thread.start()
 
                 compact_run = remote_client.wait_till_compaction_end(rest, bucket_name,
-                                                                     timeout_in_seconds=(self.wait_timeout * 5))
+                                                                     timeout_in_seconds=(self.wait_timeout * 10))
 
                 if not compact_run:
                     self.fail("auto compaction does not run")
