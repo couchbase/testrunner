@@ -104,7 +104,6 @@ class RQGASTERIXTests(BaseTestCase):
             f.close()
             url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
-            import pdb;pdb.set_trace()
             os.system(cmd)
             os.remove(filename)
 
