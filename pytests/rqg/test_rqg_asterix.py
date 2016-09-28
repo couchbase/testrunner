@@ -104,8 +104,10 @@ class RQGASTERIXTests(BaseTestCase):
             f.close()
             url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+            import pdb;pdb.set_trace()
             os.system(cmd)
             os.remove(filename)
+
 
         if hasattr(self, 'reset_database'):
             #self.skip_cleanup= self.input.param("skip_cleanup",False)
@@ -369,21 +371,29 @@ class RQGASTERIXTests(BaseTestCase):
 
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
-
         n1ql_query = data["n1ql"]
+        LOCK = threading.Lock()
+
         if (self.joins or self.subquery):
             n1ql_query = data["sql"]
-            i = n1ql_query.find("t_")
-            temp = n1ql_query[i:i+3]
-            print "temp is %s" %(temp)
-            n1ql_query = re.sub(r't_.',"VALUE t_",n1ql_query)
-            print "n1ql query before replace is %s" %n1ql_query
-            n1ql_query = n1ql_query.replace("t_",temp)
-            print "n1ql query after replace  is %s" %n1ql_query
-            if ("IN" in n1ql_query):
-                index = n1ql_query.find("IN (")
-                n1ql_query = n1ql_query[0:index] + "IN [" + n1ql_query[index+1:].replace(")","]",1)
-                print "n1ql query after in replace  is %s"%n1ql_query
+            #import pdb;pdb.set_trace()
+            if LOCK.acquire(False):
+                print "got the lock"
+                i = n1ql_query.find("t_")
+                temp = n1ql_query[i:i+4]
+                print "temp is {0}".format(temp)
+                n1ql_query = n1ql_query.replace("t_","VALUE t_",1)
+                print "n1ql query before replace is %s" %n1ql_query
+                n1ql_query = n1ql_query.replace("t_",temp,1)
+                print "n1ql query after replace  is %s" %n1ql_query
+                #import pdb;pdb.set_trace()
+                if ("IN" in n1ql_query):
+                    index = n1ql_query.find("IN (")
+                    temp1 = n1ql_query[0:index] + " IN [ "
+                    temp2 = n1ql_query[index+4:].replace(")","]",1)
+                    n1ql_query = temp1 + temp2
+                    print "n1ql query after in replace  is %s"%n1ql_query
+                LOCK.release()
 
 
 
@@ -604,26 +614,6 @@ class RQGASTERIXTests(BaseTestCase):
         for t in thread_list:
             t.join()
 
-        if self.drop_index == True:
-            query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
-            actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
-            #print actual_result['results']
-            index_names = []
-            keyspaces = []
-            for indexes in actual_result['results']:
-                index_names.append(indexes['indexes']['name'])
-                keyspaces.append(indexes['indexes']['keyspace_id'])
-            i=0
-            for name in index_names:
-                keyspace = keyspaces[i]
-                if (name =='#primary'):
-                    query = 'drop primary index on {0}'.format(keyspace)
-                else:
-                    query = 'drop index {0}.{1}'.format(keyspace,name)
-                #import pdb;pdb.set_trace()
-                i+=1
-                #import pdb;pdb.set_trace()
-                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'})
         if self.drop_bucket == True:
             #import pdb;pdb.set_trace()
             for bucket in self.buckets:
