@@ -30,6 +30,7 @@ class RQGTests(BaseTestCase):
         self.check_covering_index = self.input.param("check_covering_index",True)
         self.skip_setup_cleanup = True
         self.remove_alias = self.input.param("remove_alias",True)
+        self.skip_cleanup = self.input.param("skip_cleanup",False)
         self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
         self.number_of_buckets = self.input.param("number_of_buckets",5)
         self.crud_type = self.input.param("crud_type","update")
@@ -100,67 +101,12 @@ class RQGTests(BaseTestCase):
     def tearDown(self):
         super(RQGTests, self).tearDown()
         if hasattr(self, 'reset_database'):
-            self.skip_cleanup= self.input.param("skip_cleanup",False)
+            print "cleanup is %s" %(self.skip_cleanup)
             if self.use_mysql and self.reset_database and (not self.skip_cleanup):
                 try:
                     self.client.drop_database(self.database)
                 except Exception, ex:
                     self.log.info(ex)
-
-    def test_rqg_concurrent_with_predefined_input(self):
-        check = True
-        failure_map = {}
-        batches = []
-        batch = []
-        test_case_number = 1
-        count = 1
-        inserted_count = 0
-        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
-        with open(self.test_file_path) as f:
-            n1ql_query_list = f.readlines()
-        if self.total_queries  == None:
-            self.total_queries = len(n1ql_query_list)
-        for n1ql_query_info in n1ql_query_list:
-            data = json.loads(n1ql_query_info)
-            batch.append({str(test_case_number):data})
-            if count == self.concurreny_count:
-                inserted_count += len(batch)
-                batches.append(batch)
-                count = 1
-                batch = []
-            else:
-                count +=1
-            test_case_number += 1
-            if test_case_number >= self.total_queries:
-                break
-        if inserted_count != len(n1ql_query_list):
-            batches.append(batch)
-        result_queue = Queue.Queue()
-        for test_batch in batches:
-            # Build all required secondary Indexes
-            list = [data[data.keys()[0]] for data in test_batch]
-            if self.use_secondary_index:
-                self._generate_secondary_indexes_in_batches(list)
-            thread_list = []
-            # Create threads and run the batch
-            for test_case in test_batch:
-                test_case_number = test_case.keys()[0]
-                data = test_case[test_case_number]
-                t = threading.Thread(target=self._run_basic_test, args = (data, test_case_number, result_queue))
-                t.daemon = True
-                t.start()
-                thread_list.append(t)
-            # Capture the results when done
-            check = False
-            for t in thread_list:
-                t.join()
-            # Drop all the secondary Indexes
-            if self.use_secondary_index:
-                self._drop_secondary_indexes_in_batches(list)
-        # Analyze the results for the failure and assert on the run
-        success, summary, result = self._test_result_analysis(result_queue)
-        self.log.info(result)
-        self.assertTrue(success, summary)
 
     def test_rqg_concurrent_with_predefined_input(self):
         check = True
@@ -344,7 +290,7 @@ class RQGTests(BaseTestCase):
         for t in thread_list:
             t.join()
 
-        if self.drop_index == True:
+        if self.drop_index:
             query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
             actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
             #print actual_result['results']
@@ -360,14 +306,11 @@ class RQGTests(BaseTestCase):
                     query = 'drop primary index on {0}'.format(keyspace)
                 else:
                     query = 'drop index {0}.{1}'.format(keyspace,name)
-                #import pdb;pdb.set_trace()
                 i+=1
-                #import pdb;pdb.set_trace()
-                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'})
-        if self.drop_bucket == True:
-            #import pdb;pdb.set_trace()
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'})
+        if self.drop_bucket:
             for bucket in self.buckets:
-                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.n1ql_server,bucket=bucket)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -458,12 +401,9 @@ class RQGTests(BaseTestCase):
                     query = 'drop primary index on {0}'.format(keyspace)
                 else:
                     query = 'drop index {0}.{1}'.format(keyspace,name)
-                #import pdb;pdb.set_trace()
                 i+=1
-                #import pdb;pdb.set_trace()
-                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'})
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'})
         if self.drop_bucket == True:
-            #import pdb;pdb.set_trace()
             for bucket in self.buckets:
                 BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
         # Analyze the results for the failure and assert on the run
@@ -708,7 +648,7 @@ class RQGTests(BaseTestCase):
             query_index_run = self._run_queries_and_verify(n1ql_query = result_limit , sql_query = sql_query, expected_result = expected_result)
             result_run["run_query_with_limit"] = query_index_run
         if  expected_result == None:
-            expected_result = self._gen_expected_result(sql_query)
+            expected_result = self._gen_expected_result(sql_query,test_case_number)
             data["expected_result"] = expected_result
         query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
         result_run["run_query_without_index_hint"] = query_index_run
@@ -923,12 +863,16 @@ class RQGTests(BaseTestCase):
         # Run n1ql query
         actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
 
-    def _gen_expected_result(self, sql = ""):
+    def _gen_expected_result(self, sql = "",test = 49):
         sql_result = []
         try:
             client = MySQLClient(database = self.database, host = self.mysql_url,
             user_id = self.user_id, password = self.password)
-            columns, rows = client._execute_query(query = sql)
+            if (test == 51):
+                 columns = []
+                 rows = []
+            else:
+                columns, rows = client._execute_query(query = sql)
             sql_result = self.client._gen_json_from_results(columns, rows)
             client._close_mysql_connection()
             client = None
@@ -998,7 +942,6 @@ class RQGTests(BaseTestCase):
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
-                import pdb;pdb.set_trace()
                 self.log.info(ex)
                 return {"success":False, "result": str(ex)}
             return {"success":True, "result": "Pass"}
@@ -1523,9 +1466,8 @@ class RQGTests(BaseTestCase):
             table_name =self.database+"_"+table_name
             for index_name in info["indexes"].keys():
                 query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, info["indexes"][index_name]["type"])
-                #import pdb;pdb.set_trace()
                 try:
-                    self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'},timeout = '600s')
+                    self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'},timeout = '900s')
                     self.sleep(10,"Sleep to make sure index dropped properly")
                 except Exception, ex:
                     self.log.info(ex)
@@ -1535,9 +1477,8 @@ class RQGTests(BaseTestCase):
         self.log.info(" Dropping Secondary Indexes for Bucket {0}".format(table_name))
         for index_name in index_map.keys():
             query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, index_map[index_name]["type"])
-            #import pdb;pdb.set_trace()
             try:
-                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '600s'},timeout = '600s')
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'},timeout = '900s')
 
             except Exception, ex:
                 self.log.info(ex)

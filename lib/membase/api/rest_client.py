@@ -12,6 +12,8 @@ from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 from testconstants import COUCHBASE_FROM_VERSION_4
 
+import httplib2
+import logger
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -2660,6 +2662,56 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'PUT', params)
         return status
 
+    def analytics_tool(self, query, port=8095, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
+                   verbose = True, encoded_plan=None, servers=None):
+        key = 'prepared' if is_prepared else 'statement'
+        headers = None
+        content=""
+        prepared = json.dumps(query)
+        if is_prepared:
+            if named_prepare and encoded_plan:
+                http = httplib2.Http()
+                if len(servers)>1:
+                    url = "http://%s:%s/query/service" % (servers[1].ip, port)
+                else:
+                    url = "http://%s:%s/query/service" % (self.ip, port)
+
+                headers = {'Content-type': 'application/json'}
+                body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
+
+                response, content = http.request(url, 'POST', headers=headers, body=json.dumps(body))
+
+                return eval(content)
+
+            elif named_prepare and not encoded_plan:
+                params = 'prepared=' + urllib.quote(prepared, '~()')
+                params = 'prepared="%s"'% named_prepare
+            else:
+                prepared = json.dumps(query)
+                prepared = str(prepared.encode('utf-8'))
+                params = 'prepared=' + urllib.quote(prepared, '~()')
+            if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
+            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
+            log.info("%s"%api)
+        else:
+            params = {key : query}
+            if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
+                del query_params['creds']
+            params.update(query_params)
+            params = urllib.urlencode(params)
+            if verbose:
+                log.info('query params : {0}'.format(params))
+            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
+        status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
+        try:
+            return json.loads(content)
+        except ValueError:
+            return content
+
     def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
         key = 'prepared' if is_prepared else 'statement'
@@ -2704,6 +2756,56 @@ class RestConnection(object):
             if verbose:
                 log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
+        status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
+        try:
+            return json.loads(content)
+        except ValueError:
+            return content
+
+    def analytics_tool(self, query, port=8095, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
+                   verbose = True, encoded_plan=None, servers=None):
+        key = 'prepared' if is_prepared else 'statement'
+        headers = None
+        content=""
+        prepared = json.dumps(query)
+        if is_prepared:
+            if named_prepare and encoded_plan:
+                http = httplib2.Http()
+                if len(servers)>1:
+                    url = "http://%s:%s/query/service" % (servers[1].ip, port)
+                else:
+                    url = "http://%s:%s/query/service" % (self.ip, port)
+
+                headers = {'Content-type': 'application/json'}
+                body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
+
+                response, content = http.request(url, 'POST', headers=headers, body=json.dumps(body))
+
+                return eval(content)
+
+            elif named_prepare and not encoded_plan:
+                params = 'prepared=' + urllib.quote(prepared, '~()')
+                params = 'prepared="%s"'% named_prepare
+            else:
+                prepared = json.dumps(query)
+                prepared = str(prepared.encode('utf-8'))
+                params = 'prepared=' + urllib.quote(prepared, '~()')
+            if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
+            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
+            log.info("%s"%api)
+        else:
+            params = {key : query}
+            if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
+                del query_params['creds']
+            params.update(query_params)
+            params = urllib.urlencode(params)
+            if verbose:
+                log.info('query params : {0}'.format(params))
+            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:
             return json.loads(content)
