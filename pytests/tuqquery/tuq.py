@@ -1,3 +1,4 @@
+import os
 import pprint
 import logger
 import json
@@ -61,6 +62,7 @@ class QueryTests(BaseTestCase):
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
+        self.analytics = self.input.param("analytics",False)
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.index_type = self.input.param("index_type", 'GSI')
@@ -72,7 +74,6 @@ class QueryTests(BaseTestCase):
         self.cluster_ops = self.input.param("cluster_ops",False)
         self.isprepared = False
         self.server = self.master
-        self.ispokemon = self.input.param("pokemon",False)
         self.rest = RestConnection(self.server)
         #self.coverage = self.input.param("coverage",False)
         self.cover = self.input.param("cover", False)
@@ -107,6 +108,8 @@ class QueryTests(BaseTestCase):
             self.shell.execute_command("killall -9 indexer")
         self.sleep(10, 'wait for indexer')
         self.log.info('-'*100)
+        if (self.analytics):
+            self.setup_analytics()
         #if self.ispokemon:
             #self.set_indexer_pokemon_settings()
 
@@ -145,6 +148,23 @@ class QueryTests(BaseTestCase):
                                 pid = [item for item in output if item][1]
                                 self.shell.execute_command("kill -9 %s" % pid)
 
+    def setup_analytics(self):
+        data = 'use Default;' + "\n"
+        for bucket in self.buckets:
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}","password":""}} ;'.format(bucket.name,self.master.ip)  + "\n"
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
+            data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
+        #import pdb;pdb.set_trace()
+        filename = "file.txt"
+        f = open(filename,'w')
+        f.write(data)
+        f.close()
+        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        cmd = 'curl -s --data pretty=true --data format=CLEAN_JSON --data-urlencode "statement@file.txt" ' + url
+        os.system(cmd)
+        os.remove(filename)
+
+
 ##############################################################################################
 #
 #   SIMPLE CHECKS
@@ -170,8 +190,6 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = 'SELECT ALL job_title FROM %s ORDER BY job_title'  % (bucket.name)
             actual_result = self.run_cbq_query()
-
-
             expected_result = [{"job_title" : doc['job_title']}
                              for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
@@ -194,15 +212,16 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['skill']))
             self._verify_results(actual_result['results'], expected_result)
 
-            self.query = 'SELECT ALL tasks_points.* ' +\
+            if (self.analytics == False):
+                self.query = 'SELECT ALL tasks_points.* ' +\
                          'FROM %s'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [doc['tasks_points'] for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc:
+                actual_result = self.run_cbq_query()
+                expected_result = [doc['tasks_points'] for doc in self.full_list]
+                expected_result = sorted(expected_result, key=lambda doc:
                                      (doc['task1'], doc['task2']))
-            actual_result = sorted(actual_result['results'], key=lambda doc:
+                actual_result = sorted(actual_result['results'], key=lambda doc:
                                      (doc['task1'], doc['task2']))
-            self._verify_results(actual_result, expected_result)
+                self._verify_results(actual_result, expected_result)
 
     def set_indexer_pokemon_settings(self):
         projector_json = { "projector.dcp.numConnections": 1 }
@@ -3259,6 +3278,7 @@ class QueryTests(BaseTestCase):
              result = self.run_cbq_query()
              self.assertTrue(result['metrics']['resultCount']==1)
              self.query = 'delete from %s use keys("f01","f02")'%bucket.name
+             self.run_cbq_query()
 
 
 ##############################################################################################
@@ -3650,8 +3670,19 @@ class QueryTests(BaseTestCase):
                 from_clause = re.sub(r'SELECT.*', '', re.sub(r'ORDER BY.*', '', re.sub(r'GROUP BY.*', '', from_clause)))
                 hint = ' USE INDEX (%s using %s) ' % (self.hint_index, self.index_type)
                 query = query.replace(from_clause, from_clause + hint)
+
+            if self.analytics:
+                query = query + ";"
+                for bucket in self.buckets:
+                    query = query.replace(bucket.name,bucket.name+"_shadow")
+
             self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
+            if self.analytics:
+                result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params, is_prepared=is_prepared,
+                                                        named_prepare=self.named_prepare, encoded_plan=encoded_plan,
+                                                        servers=self.servers)
+            else :
+                result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
                                                         named_prepare=self.named_prepare, encoded_plan=encoded_plan,
                                                         servers=self.servers)
         else:
