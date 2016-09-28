@@ -646,3 +646,28 @@ class RQGASTERIXTests(BaseTestCase):
             for t in thread_list:
                 t.join()
 
+    def dump_failure_data(self, failure_record_queue):
+        if not self.record_failure:
+            return
+        import uuid
+        sub_dir = str(uuid.uuid4()).replace("-","")
+        self.data_dump_path= self.failure_record_path+"/"+sub_dir
+        os.mkdir(self.data_dump_path)
+        input_file_path=self.data_dump_path+"/input"
+        os.mkdir(input_file_path)
+        f_write_file = open(input_file_path+"/source_input_rqg_run.txt",'w')
+        secondary_index_path=self.data_dump_path+"/index"
+        os.mkdir(secondary_index_path)
+        database_dump = self.data_dump_path+"/db_dump"
+        os.mkdir(database_dump)
+        f_write_index_file = open(secondary_index_path+"/secondary_index_definitions.txt",'w')
+        client = MySQLClient(database = self.database, host = self.mysql_url,
+            user_id = self.user_id, password = self.password)
+        client.dump_database(data_dump_path = database_dump)
+        client._close_mysql_connection()
+        f_write_index_file.write(json.dumps(self.sec_index_map))
+        f_write_index_file.close()
+        while not failure_record_queue.empty():
+            f_write_file.write(json.dumps(failure_record_queue.get())+"\n")
+        f_write_file.close()
+
