@@ -2433,3 +2433,75 @@ class Lww(XDCRNewBaseTest):
         conn2.start_couchbase()
         conn3.start_couchbase()
 
+    def test_v_topology_with_clocks_out_of_sync(self):
+        self.c3_cluster = self.get_cb_cluster_by_name('C3')
+
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+        c3_conn = RestConnection(self.c3_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=True, dst_lww=True)
+        c3_conn.create_bucket(bucket='default', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                                proxyPort=11211, bucketType='membase', replica_index=1, threadsNumber=3,
+                                flushEnabled=1, lww=True)
+        self.c3_cluster.add_bucket(ramQuotaMB=100, bucket='default', authType='none',
+                                   saslPassword='', replicaNumber=1, proxyPort=11211, bucketType='membase',
+                                   evictionPolicy='valueOnly')
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on C1 bucket")
+        self.log.info("LWW enabled on C1 bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on C2 bucket")
+        self.log.info("LWW enabled on C2 bucket as expected")
+        self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
+        self.log.info("LWW enabled on C3 bucket as expected")
+
+        self._offset_wall_clock(self.c1_cluster, offset_secs=3600)
+        self._offset_wall_clock(self.c2_cluster, offset_secs=7200)
+        self._offset_wall_clock(self.c3_cluster, offset_secs=10800)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        gen1 = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen1)
+        self._wait_for_replication_to_catchup()
+
+        gen2 = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
+        self.c3_cluster.load_all_buckets_from_generator(gen2)
+        self._wait_for_replication_to_catchup()
+
+        self.c1_cluster.pause_all_replications()
+        self.c3_cluster.pause_all_replications()
+
+        self.sleep(30)
+
+        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+        dest_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+        c3_def = self._get_python_sdk_client(self.c3_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+
+        self._upsert(conn=c3_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self._upsert(conn=src_def, doc_id='lww-0', old_key='key', new_key='key2', new_val='value2')
+
+        self.c1_cluster.resume_all_replications()
+        self.c3_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
+
+        obj = dest_def.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "C3 doc did not win using LWW")
+
+        conn1 = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn1.stop_couchbase()
+        conn2 = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
+        conn2.stop_couchbase()
+        conn3 = RemoteMachineShellConnection(self.c3_cluster.get_master_node())
+        conn3.stop_couchbase()
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+        conn1.start_couchbase()
+        conn2.start_couchbase()
+        conn3.start_couchbase()
