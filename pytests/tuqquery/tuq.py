@@ -99,7 +99,8 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
-            self.create_primary_index_for_3_0_and_greater()
+            if (self.analytics == False):
+                self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
         #if (self.coverage == False):
@@ -3277,7 +3278,7 @@ class QueryTests(BaseTestCase):
              self.query = 'select q.id, q.f1,q.f2 from (select meta().id, f1,f2 from %s where f1="f1") q where q.f2 = "f2" limit 1'%bucket.name
              result = self.run_cbq_query()
              self.assertTrue(result['metrics']['resultCount']==1)
-             self.query = 'delete from %s use keys("f01","f02")'%bucket.name
+             self.query = 'delete from %s use keys["f01","f02"]'%bucket.name
              self.run_cbq_query()
 
 
