@@ -1106,7 +1106,6 @@ class QueriesIndexTests(QueryTests):
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
-
                 idx2 = "idxtasks"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY x FOR x in %s END) USING %s" % (
                     idx2, bucket.name, "tasks", self.index_type)
@@ -1192,7 +1191,7 @@ class QueriesIndexTests(QueryTests):
                              " AND  NOT (department = 'Manager') order BY  meta().id  limit 10"
                 actual_result = self.run_cbq_query()
 
-                self.query = "select meta().id from %s use index(`#primary`) WHERE  tasks[0].Marketing={1}".format(bucket.name,str1) + \
+                self.query = "select meta().id from {0} use index(`#primary`) WHERE  tasks[0].Marketing={1}".format(bucket.name,str1) + \
                              " AND  NOT (department = 'Manager') order BY meta().id limit 10"
 
                 expected_result = self.run_cbq_query()
