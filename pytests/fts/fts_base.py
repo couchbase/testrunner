@@ -2515,9 +2515,12 @@ class FTSBaseTest(unittest.TestCase):
                 self.log.info("Collecting logs @ {0}".format(server.ip))
                 NodeHelper.collect_logs(server)
 
-        # backup pindex_data if the test has failed
-        if self._input.param('backup_pindex_data', False) and \
-                self.__is_test_failed():
+        # ---backup pindex_data if the test has failed
+        # if self._input.param('backup_pindex_data', False) and \
+        #        self.__is_test_failed():
+        # To reproduce MB-20494, temporarily remove condition to
+        # backup_pindex_data only if test has failed.
+        if self._input.param('backup_pindex_data', False) :
             for server in self._input.servers:
                 self.log.info("Backing up pindex data @ {0}".format(server.ip))
                 self.backup_pindex_data(server)

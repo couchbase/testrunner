@@ -648,50 +648,69 @@ class StableTopFTS(FTSBaseTest):
         zero_results_ok = False
         expected_hits = 3
 
-        # Run Query w/o Boosting and get the rank for Doc emp10000071
-        query = {"disjuncts":[{"match": "Safiya", "field": "name"},
-                              {"match": "Palmer", "field": "name"}]}
+        # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
+        # emp10000042. Should be the same
+        query = {"disjuncts": [{"match": "Safiya", "field": "name"},
+                               {"match": "Palmer", "field": "name"}]}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
         try:
             for index in self._cb_cluster.get_indexes():
                 hits, contents, _, _ = index.execute_query(query,
-                                                zero_results_ok=zero_results_ok,
-                                                expected_hits=expected_hits)
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True)
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
-                rank_before_boosting = index.get_rank_of_doc_in_search_results(
-                                    content=contents, doc_id=u'emp10000071')
-                self.log.info("Rank before boosting: %s" % rank_before_boosting)
+                score_before_boosting_doc1 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000071')
+                score_before_boosting_doc2 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000042')
+
+                self.log.info("Scores before boosting:")
+                self.log.info("")
+                self.log.info("emp10000071: %s", score_before_boosting_doc1)
+                self.log.info("emp10000042: %s", score_before_boosting_doc2)
+
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
 
-        # Run Query w/ Boosting and get the rank for Doc emp10000071.
-        # Should have improved than w/o boosting
-        query = {"disjuncts":[{"match": "Safiya^2", "field": "name"},
-                              {"match": "Palmer", "field": "name"}]}
+        if not score_before_boosting_doc1 == score_before_boosting_doc2:
+            self.fail("Testcase failed: Scores for emp10000071 & emp10000042 "
+                      "are not equal before boosting")
+
+        # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
+        # emp10000042. emp10000071 score should have improved w.r.t. emp10000042
+        query = {"disjuncts": [{"match": "Safiya^2", "field": "name"},
+                               {"match": "Palmer", "field": "name"}]}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
         try:
             for index in self._cb_cluster.get_indexes():
                 hits, contents, _, _ = index.execute_query(query,
-                                                zero_results_ok=zero_results_ok,
-                                                expected_hits=expected_hits)
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True)
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
-                rank_after_boosting = index.get_rank_of_doc_in_search_results(
-                                    content=contents, doc_id=u'emp10000071')
-                self.log.info ("Rank after boosting: %s" % rank_after_boosting)
+                score_after_boosting_doc1 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000071')
+                score_after_boosting_doc2 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000042')
+
+                self.log.info("Scores after boosting:")
+                self.log.info("")
+                self.log.info("emp10000071: %s", score_after_boosting_doc1)
+                self.log.info("emp10000042: %s", score_after_boosting_doc2)
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
 
-        if not rank_after_boosting < rank_before_boosting:
-            self.fail("Testcase failed: Boosting did not improve rank for "
-                      "doc id : u'emp10000071'")
+        if not score_after_boosting_doc1 > score_after_boosting_doc2:
+            self.fail("Testcase failed: Boosting didn't improve score for emp10000071 w.r.t emp10000042")
 
     def test_doc_id_query_type(self):
         # Create bucket, create index
