@@ -36,12 +36,10 @@ class KVStore(object):
         seed = random.choice(range(self.num_locks))
         for itr in range(self.num_locks):
             part_num = (seed + itr) % self.num_locks
-            self.cache[part_num]["lock"].acquire()
             if has_valid and self.cache[part_num]["partition"].has_valid_keys():
                 return self.cache[part_num]["partition"], part_num
             if not has_valid and self.cache[part_num]["partition"].has_deleted_keys():
                 return self.cache[part_num]["partition"], part_num
-            self.cache[part_num]["lock"].release()
         return None, None
 
     def key_set(self):
@@ -52,7 +50,6 @@ class KVStore(object):
             partition = self.cache[itr]["partition"]
             valid_keys.extend(partition.valid_key_set())
             deleted_keys.extend(partition.deleted_key_set())
-            self.cache[itr]["lock"].release()
         return valid_keys, deleted_keys
 
     def __len__(self):

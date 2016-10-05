@@ -31,8 +31,6 @@ from TestInput import TestInputServer
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 from decorator import decorator
-import concurrent.futures
-import itertools
 from memcached.helper.kvstore import Synchronized
 from multiprocessing import Process, cpu_count
 import gevent
@@ -892,23 +890,23 @@ class GenericLoadingTask(Thread, Task):
             '''
 
     def _process_values_for_update(self, partition_keys_dic, key_val):
-        for partition, keys in partition_keys_dic.items():
-            for key in keys:
-                value = partition.get_valid(key)
-                if value is None:
-                    del key_val[key]
-                    continue
-                try:
-                    value = key_val[key]  # new updated value, however it is not their in orginal code "LoadDocumentsTask"
-                    value_json = json.loads(value)
-                    value_json['mutated'] += 1
-                    value = json.dumps(value_json)
-                except ValueError:
-                    index = random.choice(range(len(value)))
-                    value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
-                finally:
-                    key_val[key] = value
-
+        for part, keys in partition_keys_dic.items():
+            with Synchronized(dict(part)) as partition:
+                for key in keys:
+                    value = partition.get_valid(key)
+                    if value is None:
+                        del key_val[key]
+                        continue
+                    try:
+                        value = key_val[key]  # new updated value, however it is not their in orginal code "LoadDocumentsTask"
+                        value_json = json.loads(value)
+                        value_json['mutated'] += 1
+                        value = json.dumps(value_json)
+                    except ValueError:
+                        index = random.choice(range(len(value)))
+                        value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+                    finally:
+                        key_val[key] = value
 
     def _populate_kvstore(self, partition_keys_dic, key_val):
         for part, keys in partition_keys_dic.items():
@@ -947,6 +945,10 @@ class LoadDocumentsTask(GenericLoadingTask):
         function += self.op_type
         try:
             if self.op_type == "create":
+                print " the load_kvstore_parallel is before ", self.kv_store, self.load_kvstore_parallel
+                if self.kv_store == None:
+                    self.load_kvstore_parallel = None
+                print " the load_kvstore_parallel is", self.kv_store, self.load_kvstore_parallel
                 getattr(self, function)(self.generator, self.load_kvstore_parallel)
             else:
                 while self.has_next():
@@ -1247,16 +1249,13 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_deleted_key()
         if key is None:
-            self.kv_store.release_partition(part_num)
             return
 
         value = partition.get_deleted(key)
         if value is None:
-            self.kv_store.release_partition(part_num)
             return
 
         self._unlocked_create(partition, key, value)
-        self.kv_store.release_partition(part_num)
 
     def _update_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition()
@@ -1265,11 +1264,9 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_valid_key()
         if key is None:
-            self.kv_store.release_partition(part_num)
             return
 
         self._unlocked_update(partition, key)
-        self.kv_store.release_partition(part_num)
 
     def _delete_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition()
@@ -1278,7 +1275,6 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_valid_key()
         if key is None:
-            self.kv_store.release_partition(part_num)
             return
 
         self._unlocked_delete(partition, key)
@@ -1491,18 +1487,15 @@ class BatchedValidateDataTask(GenericLoadingTask):
             key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec)
         except ValueError, error:
             self.state = FINISHED
-            self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
         except BaseException, error:
-        # handle all other exception, for instance concurrent.futures._base.TimeoutError
             self.state = FINISHED
-            self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
-        for partition, keys in partition_keys_dic.items():
-            self._check_validity(partition, keys, key_vals)
-        self.kv_store.release_partitions(partition_keys_dic.keys())
+        for part, keys in partition_keys_dic.items():
+            with Synchronized(dict(part)) as partition:
+                self._check_validity(partition, keys, key_vals)
 
     def _check_validity(self, partition, keys, key_vals):
 
