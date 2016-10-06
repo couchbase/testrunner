@@ -92,20 +92,19 @@ class RQGASTERIXTests(BaseTestCase):
 
     def tearDown(self):
         super(RQGASTERIXTests, self).tearDown()
-        if len(self.buckets) > 0:
-            data = 'use Default ;' + "\n"
-            for bucket in self.buckets:
+        data = 'use Default ;' + "\n"
+        for bucket in self.buckets:
                 data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
                 data += 'drop dataset {0}'.format(bucket.name) + "_shadow ;" + "\n"
                 data += 'drop bucket {0} ;'.format(bucket.name) + "\n"
-            filename = "file.txt"
-            f = open(filename,'w')
-            f.write(data)
-            f.close()
-            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
-            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
-            os.system(cmd)
-            os.remove(filename)
+        filename = "file.txt"
+        f = open(filename,'w')
+        f.write(data)
+        f.close()
+        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+        os.system(cmd)
+        os.remove(filename)
 
 
         if hasattr(self, 'reset_database'):
@@ -371,28 +370,26 @@ class RQGASTERIXTests(BaseTestCase):
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
         n1ql_query = data["n1ql"]
-        LOCK = threading.Lock()
+        #LOCK = threading.Lock()
 
         if (self.joins or self.subquery):
             n1ql_query = data["sql"]
             #import pdb;pdb.set_trace()
-            if LOCK.acquire(False):
-                print "got the lock"
-                i = n1ql_query.find("t_")
-                temp = n1ql_query[i:i+4]
-                print "temp is {0}".format(temp)
-                n1ql_query = n1ql_query.replace("t_","VALUE t_",1)
-                print "n1ql query before replace is %s" %n1ql_query
-                n1ql_query = n1ql_query.replace("t_",temp,1)
-                print "n1ql query after replace  is %s" %n1ql_query
-                #import pdb;pdb.set_trace()
-                if ("IN" in n1ql_query):
+            #if LOCK.acquire(False):
+            #i = n1ql_query.find("t_")
+            #temp = n1ql_query[i:i+4]
+            #print "temp is {0}".format(temp)
+            #n1ql_query = n1ql_query.replace("t_","VALUE t_",1)
+            #print "n1ql query before replace is %s" %n1ql_query
+            #n1ql_query = n1ql_query.replace("t_",temp,1)
+            #print "n1ql query after replace  is %s" %n1ql_query
+            if ("IN" in n1ql_query):
                     index = n1ql_query.find("IN (")
                     temp1 = n1ql_query[0:index] + " IN [ "
                     temp2 = n1ql_query[index+4:].replace(")","]",1)
                     n1ql_query = temp1 + temp2
                     print "n1ql query after in replace  is %s"%n1ql_query
-                LOCK.release()
+            #LOCK.release()
 
 
 
