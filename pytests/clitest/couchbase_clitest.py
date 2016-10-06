@@ -456,19 +456,17 @@ class CouchbaseCliTest(CliBaseTest):
         for num in xrange(nodes_readd):
             self.log.info("add back node {0} to cluster" \
                     .format(self.servers[nodes_add - nodes_rem - num ].ip))
-            options = "--server-add={0}:8091 --server-add-username=Administrator \
-                       --server-add-password=password" \
-                            .format(self.servers[nodes_add - nodes_rem - num ].ip)
+            options = "--server-add={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options, cluster_host="localhost",
                                                                 cluster_port=8091, user="Administrator",
                                                                 password="password")
             if len(output) == 2:
-                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}" \
-                                          .format(self.servers[nodes_add - nodes_rem - num ].ip), ""])
+                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
+                                          "by the recovery command", "SUCCESS: Servers recovered"])
             else:
-                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}" \
-                                          .format(self.servers[nodes_add - nodes_rem - num ].ip)])
+                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
+                                          "by the recovery command", "SUCCESS: Servers recovered"])
 
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
@@ -524,34 +522,38 @@ class CouchbaseCliTest(CliBaseTest):
             # try to set recovery when nodes failovered (MB-11230)
             options = "--server-recovery={0}:8091 --recovery-type=delta".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual("SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip), output[0])
+            self.assertEqual("SUCCESS: Servers recovered", output[0])
 
         for num in xrange(nodes_recovery):
             cli_command = "server-readd"
             self.log.info("add node {0} back to cluster".format(self.servers[nodes_add - nodes_rem - num].ip))
-            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num].ip)
+            options = "--server-add={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             if (len(output) == 2):
-                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
+                                          "by the recovery command", "SUCCESS: Servers recovered"])
             else:
-                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
+                                          "by the recovery command", "SUCCESS: Servers recovered"])
             cli_command = "recovery"
             options = "--server-recovery={0}:8091 --recovery-type=delta".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             if (len(output) == 2):
-                self.assertEqual(output, ["SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+                self.assertEqual(output, ["SUCCESS: Servers recovered", ""])
             else:
-                self.assertEqual(output, ["SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+                self.assertEqual(output, ["SUCCESS: Servers recovered"])
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
             self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
-            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num ].ip)
+            options = "--server-add={0}:8091".format(self.servers[nodes_add - nodes_rem - num ].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             if (len(output) == 2):
-                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip), ""])
+                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
+                                          "by the recovery command", "SUCCESS: Servers recovered"])
             else:
-                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip)])
+                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
+                                          "by the recovery command", "SUCCESS: Servers recovered"])
 
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
