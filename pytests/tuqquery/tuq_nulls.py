@@ -4,6 +4,7 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 class NULLTests(QueryTests):
     def setUp(self):
         self.skip_generation = True
+        self.analytics = False
         super(NULLTests, self).setUp()
         self.gens_load = self.generate_docs()
 #        for bucket in self.buckets:

@@ -134,6 +134,20 @@ class QueryTests(BaseTestCase):
     def tearDown(self):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
+        if self.analytics:
+            data = 'use Default ;' + "\n"
+            for bucket in self.buckets:
+                data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
+                data += 'drop dataset {0}'.format(bucket.name) + "_shadow ;" + "\n"
+                data += 'drop bucket {0} ;'.format(bucket.name) + "\n"
+            filename = "file.txt"
+            f = open(filename,'w')
+            f.write(data)
+            f.close()
+            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+            os.system(cmd)
+            os.remove(filename)
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
@@ -152,16 +166,15 @@ class QueryTests(BaseTestCase):
     def setup_analytics(self):
         data = 'use Default;' + "\n"
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}","password":""}} ;'.format(bucket.name,self.master.ip)  + "\n"
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
             data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
-        #import pdb;pdb.set_trace()
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
         f.close()
         url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
-        cmd = 'curl -s --data pretty=true --data format=CLEAN_JSON --data-urlencode "statement@file.txt" ' + url
+        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
         os.system(cmd)
         os.remove(filename)
 
@@ -873,7 +886,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"flags" : self.item_flag}]
             self._verify_results(actual_result['results'], expected_result)
 
-    def test_meta_cas(self):
+    def test_long_values(self):
             self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%("default")
             self.run_cbq_query()
             self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%("default")
@@ -917,6 +930,13 @@ class QueryTests(BaseTestCase):
             # print "expected result is {0}".format(expected_result)
 
             #self._verify_results(actual_result, expected_result)
+
+    def test_meta_cas(self):
+        for bucket in self.buckets:
+            self.query = 'select meta().cas from {0} order by meta().id limit 10'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            print actual_result
+
 
     def test_meta_negative(self):
         queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
@@ -3676,12 +3696,11 @@ class QueryTests(BaseTestCase):
                 query = query + ";"
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
-
-            self.log.info('RUN QUERY %s' % query)
-            if self.analytics:
+                self.log.info('RUN QUERY %s' % query)
                 result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params, is_prepared=is_prepared,
                                                         named_prepare=self.named_prepare, encoded_plan=encoded_plan,
                                                         servers=self.servers)
+
             else :
                 result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
                                                         named_prepare=self.named_prepare, encoded_plan=encoded_plan,

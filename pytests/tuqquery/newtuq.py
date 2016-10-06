@@ -6,6 +6,7 @@ import uuid
 import copy
 import math
 import re
+import os
 
 import testconstants
 import datetime
@@ -38,6 +39,7 @@ class QueryTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
+        self.analytics = self.input.param("analytics",False)
         self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.index_type = self.input.param("index_type", 'GSI')
@@ -60,7 +62,10 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
-        self.create_primary_index_for_3_0_and_greater()
+        if (self.analytics == False):
+                self.create_primary_index_for_3_0_and_greater()
+        if (self.analytics):
+            self.setup_analytics()
 
     def suite_setUp(self):
         try:
@@ -75,6 +80,20 @@ class QueryTests(BaseTestCase):
     def tearDown(self):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
+        if self.analytics:
+            data = 'use Default ;' + "\n"
+            for bucket in self.buckets:
+                data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
+                data += 'drop dataset {0}'.format(bucket.name) + "_shadow ;" + "\n"
+                data += 'drop bucket {0} ;'.format(bucket.name) + "\n"
+            filename = "file.txt"
+            f = open(filename,'w')
+            f.write(data)
+            f.close()
+            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+            os.system(cmd)
+            os.remove(filename)
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
@@ -84,6 +103,21 @@ class QueryTests(BaseTestCase):
                 self.shell.execute_command("killall tuqtng")
                 self.shell.disconnect()
 
+
+    def setup_analytics(self):
+        data = 'use Default;' + "\n"
+        for bucket in self.buckets:
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
+            data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
+        filename = "file.txt"
+        f = open(filename,'w')
+        f.write(data)
+        f.close()
+        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        cmd = 'curl -s --data pretty=true --data format=CLEAN_JSON --data-urlencode "statement@file.txt" ' + url
+        os.system(cmd)
+        os.remove(filename)
 
 ##############################################################################################
 #
@@ -568,7 +602,17 @@ class QueryTests(BaseTestCase):
         if self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
             self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
+
+            if self.analytics:
+                query = query + ";"
+                for bucket in self.buckets:
+                    query = query.replace(bucket.name,bucket.name+"_shadow")
+                result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params)
+
+            else :
+                result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
+
+
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
