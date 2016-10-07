@@ -62,7 +62,7 @@ class QueryTests(BaseTestCase):
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
-        self.analytics = self.input.param("analytics",False)
+        #self.analytics = self.input.param("analytics",False)
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.index_type = self.input.param("index_type", 'GSI')
@@ -134,7 +134,7 @@ class QueryTests(BaseTestCase):
     def tearDown(self):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
-        if self.analytics:
+        if self.analytics == True:
             data = 'use Default ;' + "\n"
             for bucket in self.buckets:
                 data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"

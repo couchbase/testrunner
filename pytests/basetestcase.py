@@ -41,6 +41,7 @@ class BaseTestCase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.primary_index_created = False
         self.use_sdk_client =  self.input.param("use_sdk_client",False)
+        self.analytics = self.input.param("analytics",False)
         if self.input.param("log_level", None):
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
