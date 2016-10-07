@@ -14,6 +14,7 @@ from testconstants import COUCHBASE_FROM_VERSION_4
 
 import httplib2
 import logger
+import traceback
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -362,7 +363,14 @@ class RestConnection(object):
             http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
             if http_res == u'unknown pool':
                 return False
-            versions = list(set([node["version"][:1] for node in http_res["nodes"]]))
+            try:
+                versions = list(set([node["version"][:1] for node in http_res["nodes"]]))
+            except:
+                log.error('Error while processing cluster info {0}'.format(http_res))
+                # not really clear what to return but False see to be a good start until we figure what is happening
+                return False
+
+
             if '1' in versions and '2' in versions:
                  return True
             return False
