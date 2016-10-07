@@ -4,6 +4,9 @@ from cbas_base import *
 class CBASFunctionalTests(CBASBaseTest):
     def setUp(self):
         super(CBASFunctionalTests, self).setUp()
+        self.validate_error = False
+        if self.expected_error:
+            self.validate_error = True
 
     def tearDown(self):
         super(CBASFunctionalTests, self).tearDown()
@@ -14,21 +17,13 @@ class CBASFunctionalTests(CBASBaseTest):
         self.load_sample_buckets(server=self.master, bucketName="travel-sample")
 
         # Create bucket on CBAS
-        if not self.expected_error:
-            result = self.create_bucket_on_cbas(
-                cbas_bucket_name=self.cbas_bucket_name,
-                cb_bucket_name=self.cb_bucket_name,
-                cb_server_ip=self.cb_server_ip,
-                cb_bucket_password=self.cb_bucket_password)
-        else:
-            result = self.create_bucket_on_cbas(
-                cbas_bucket_name=self.cbas_bucket_name,
-                cb_bucket_name=self.cb_bucket_name,
-                cb_server_ip=self.cb_server_ip,
-                cb_bucket_password=self.cb_bucket_password,
-                validate_error_msg=True)
+        result = self.create_bucket_on_cbas(
+            cbas_bucket_name=self.cbas_bucket_name,
+            cb_bucket_name=self.cb_bucket_name,
+            cb_server_ip=self.cb_server_ip,
+            validate_error_msg=self.validate_error)
         if not result:
-            self.fail("Test failed")
+            self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_create_another_bucket_on_cbas(self):
         # Delete Default bucket and load travel-sample bucket
@@ -38,23 +33,14 @@ class CBASFunctionalTests(CBASBaseTest):
         # Create first bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
-                                   cb_server_ip=self.cb_server_ip,
-                                   cb_bucket_password=self.cb_bucket_password)
+                                   cb_server_ip=self.cb_server_ip)
 
         # Create another bucket on CBAS
-        if not self.expected_error:
-            result = self.create_bucket_on_cbas(
-                cbas_bucket_name=self.cbas_bucket_name,
-                cb_bucket_name=self.cb_bucket_name,
-                cb_server_ip=self.cb_server_ip,
-                cb_bucket_password=self.cb_bucket_password)
-        else:
-            result = self.create_bucket_on_cbas(
-                cbas_bucket_name=self.cbas_bucket_name,
-                cb_bucket_name=self.cb_bucket_name,
-                cb_server_ip=self.cb_server_ip,
-                cb_bucket_password=self.cb_bucket_password,
-                validate_error_msg=True)
+        result = self.create_bucket_on_cbas(
+            cbas_bucket_name=self.cbas_bucket_name,
+            cb_bucket_name=self.cb_bucket_name,
+            cb_server_ip=self.cb_server_ip,
+            validate_error_msg=self.validate_error)
         if not result:
             self.fail("Test failed")
 
@@ -66,24 +52,16 @@ class CBASFunctionalTests(CBASBaseTest):
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
-                                   cb_server_ip=self.cb_server_ip,
-                                   cb_bucket_password=self.cb_bucket_password)
+                                   cb_server_ip=self.cb_server_ip)
 
         # Create dataset on the CBAS bucket
-        cbas_bucket_name_for_ds = self.input.param('cbas_bucket_name_for_ds',
-                                                   self.cbas_bucket_name)
-        if not self.expected_error:
-            result = self.create_dataset_on_bucket(
-                cbas_bucket_name=cbas_bucket_name_for_ds,
-                cbas_dataset_name=self.cbas_dataset_name)
-        else:
-            result = self.create_dataset_on_bucket(
-                cbas_bucket_name=cbas_bucket_name_for_ds,
-                cbas_dataset_name=self.cbas_dataset_name,
-                validate_error_msg=True)
+        result = self.create_dataset_on_bucket(
+            cbas_bucket_name=self.cbas_bucket_name_invalid,
+            cbas_dataset_name=self.cbas_dataset_name,
+            validate_error_msg=self.validate_error)
 
         if not result:
-            self.fail("Test failed")
+            self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_create_another_dataset_on_bucket(self):
         # Delete Default bucket and load travel-sample bucket
@@ -93,24 +71,194 @@ class CBASFunctionalTests(CBASBaseTest):
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
-                                   cb_server_ip=self.cb_server_ip,
-                                   cb_bucket_password=self.cb_bucket_password)
+                                   cb_server_ip=self.cb_server_ip)
 
         # Create first dataset on the CBAS bucket
-        cbas_bucket_name_for_ds = self.input.param('cbas_bucket_name_for_ds',
-                                                   self.cbas_bucket_name)
-        self.create_dataset_on_bucket(cbas_bucket_name=cbas_bucket_name_for_ds,
+        self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
                                       cbas_dataset_name=self.cbas_dataset_name)
 
         # Create another dataset on the CBAS bucket
-        cbas_dataset2_name = self.input.param('cbas_dataset2_name', None)
-        if not self.expected_error:
-            result = self.create_dataset_on_bucket(
-                cbas_bucket_name=cbas_bucket_name_for_ds,
-                cbas_dataset_name=cbas_dataset2_name)
-        else:
-            result = self.create_dataset_on_bucket(
-                cbas_bucket_name=cbas_bucket_name_for_ds,
-                cbas_dataset_name=cbas_dataset2_name, validate_error_msg=True)
+        result = self.create_dataset_on_bucket(
+            cbas_bucket_name=self.cbas_bucket_name,
+            cbas_dataset_name=self.cbas_dataset2_name,
+            validate_error_msg=self.validate_error)
         if not result:
-            self.fail("Test failed")
+            self.fail("FAIL : Actual error msg does not match the expected")
+
+    def test_connect_bucket(self):
+        # Delete Default bucket and load travel-sample bucket
+        self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(server=self.master,
+                                 bucketName="travel-sample")
+
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        if not self.skip_create_dataset:
+            self.create_dataset_on_bucket(
+                cbas_bucket_name=self.cbas_bucket_name,
+                cbas_dataset_name=self.cbas_dataset_name)
+
+        # Connect to Bucket
+        result = self.connect_to_bucket(cbas_bucket_name=
+                                        self.cbas_bucket_name_invalid,
+                                        cb_bucket_password=self.cb_bucket_password,
+                                        validate_error_msg=self.validate_error)
+
+        if not result:
+            self.fail("FAIL : Actual error msg does not match the expected")
+
+    def test_connect_bucket_on_a_connected_bucket(self):
+        # Delete Default bucket and load travel-sample bucket
+        self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(server=self.master,
+                                 bucketName="travel-sample")
+
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        self.create_dataset_on_bucket(
+            cbas_bucket_name=self.cbas_bucket_name,
+            cbas_dataset_name=self.cbas_dataset_name)
+
+        # Connect to Bucket
+        self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+
+        # Create another connection to bucket
+        result = self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                                        cb_bucket_password=self.cb_bucket_password,
+                                        validate_error_msg=self.validate_error)
+
+        if not result:
+            self.fail("FAIL : Actual error msg does not match the expected")
+
+    def test_disconnect_bucket(self):
+        # Delete Default bucket and load travel-sample bucket
+        self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(server=self.master,
+                                 bucketName="travel-sample")
+
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                                      cbas_dataset_name=self.cbas_dataset_name)
+
+        # Connect to Bucket
+        self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+
+        # Disconnect from bucket
+        result = self.disconnect_from_bucket(cbas_bucket_name=
+                                             self.cbas_bucket_name_invalid,
+                                             disconnect_if_connected=
+                                             self.disconnect_if_connected,
+                                             validate_error_msg=self.validate_error)
+
+        if not result:
+            self.fail("FAIL : Actual error msg does not match the expected")
+
+    def test_disconnect_bucket_already_disconnected(self):
+        # Delete Default bucket and load travel-sample bucket
+        self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
+
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        self.create_dataset_on_bucket(
+            cbas_bucket_name=self.cbas_bucket_name,
+            cbas_dataset_name=self.cbas_dataset_name)
+
+        # Connect to Bucket
+        self.connect_to_bucket(
+            cbas_bucket_name=self.cbas_bucket_name,
+            cb_bucket_password=self.cb_bucket_password)
+
+        # Disconnect from Bucket
+        self.disconnect_from_bucket(cbas_bucket_name=self.cbas_bucket_name)
+
+        # Disconnect again from the same bucket
+        result = self.disconnect_from_bucket(cbas_bucket_name=
+                                             self.cbas_bucket_name,
+                                             disconnect_if_connected=
+                                             self.disconnect_if_connected,
+                                             validate_error_msg=self.validate_error)
+
+        if not result:
+            self.fail("FAIL : Actual error msg does not match the expected")
+
+    def test_drop_dataset_on_bucket(self):
+        # Delete Default bucket and load travel-sample bucket
+        self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
+
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                                      cbas_dataset_name=self.cbas_dataset_name)
+
+        # Connect to Bucket
+        self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+
+        # Drop Connection
+        if not self.skip_drop_connection:
+            self.disconnect_from_bucket(self.cbas_bucket_name)
+
+        # Drop dataset
+        result = self.drop_dataset(
+            cbas_dataset_name=self.cbas_dataset_name_invalid,
+            validate_error_msg=self.validate_error)
+
+        if not result:
+            self.fail("FAIL : Actual error msg does not match the expected")
+
+    def test_drop_cbas_bucket(self):
+        # Delete Default bucket and load travel-sample bucket
+        self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
+
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                                      cbas_dataset_name=self.cbas_dataset_name)
+
+        # Connect to Bucket
+        self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+
+        # Drop connection and dataset
+        if not self.skip_drop_connection:
+            self.disconnect_from_bucket(self.cbas_bucket_name)
+
+        if not self.skip_drop_dataset:
+            self.drop_dataset(self.cbas_dataset_name)
+
+        result = self.drop_cbas_bucket(
+            cbas_bucket_name=self.cbas_bucket_name_invalid,
+            validate_error_msg=self.validate_error)
+
+        if not result:
+            self.fail("FAIL : Actual error msg does not match the expected")
