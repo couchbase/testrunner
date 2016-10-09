@@ -378,8 +378,12 @@ class rbacmain:
             line = line.rstrip('\n')
             if line=='MECH=ldap' and mech_value == 'pam':
                 f2.write(line.replace('MECH=ldap', 'MECH=pam'))
+                f2.write("\n")
+                f2.write("\n")
             elif line=='MECH=pam' and mech_value == 'ldap':
                 f2.write(line.replace('MECH=pam', 'MECH=ldap'))
+                f2.write("\n")
+                f2.write("\n")
             else:
                 f2.write(line + "\n")
         f1.close()
