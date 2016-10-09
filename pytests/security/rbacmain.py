@@ -405,7 +405,7 @@ class rbacmain:
     def setup_auth_mechanism(self, servers, type, rest):
         for server in servers:
             self.getRemoteFile(server)
-            self.update_file_inline(new_value=type)
+            self.update_file_inline(mech_value=type)
             self.writeFile(server)
             self.restart_saslauth(server)
         api = rest.baseUrl + 'settings/saslauthdAuth'
