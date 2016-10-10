@@ -518,23 +518,6 @@ class QueriesIndexTests(QueryTests):
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx2)
-
-         #        self.query = "EXPLAIN select name from %s where any v in %s.join_yr satisfies v = 2016 END " % (
-         #        bucket.name, bucket.name) + \
-         #                     "AND (ANY x IN %s.VMs SATISFIES x.RAM between 1 and 5 END) " % (bucket.name) + \
-         #                     "AND  NOT (department = 'Manager') ORDER BY name limit 10"
-         #        actual_result = self.run_cbq_query()
-        #
-		# plan = ExplainPlanHelper(actual_result)
-         #        print actual_result
-         #        self.assertTrue(
-         #            plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
-         #            "Intersect Scan is not being used in and query for 2 array indexes")
-        #
-         #        result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['index']
-         #        result2 = plan['~children'][0]['~children'][0]['scans'][1]['scans'][0]['index']
-         #        self.assertTrue(result1 == idx2 or result1 == idx)
-         #        self.assertTrue(result2 == idx or result2 == idx2)
                 self.query = "select name from %s where any v in %s.join_yr satisfies v = 2016 END " % (
                 bucket.name, bucket.name) + \
                              "AND (ANY x IN %s.VMs SATISFIES x.RAM between 1 and 5 END) " % (bucket.name) + \
@@ -572,39 +555,6 @@ class QueriesIndexTests(QueryTests):
                 created_indexes.append(idx4)
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
-
-         #        self.query = "EXPLAIN select name from %s where any v in %s.join_yr satisfies v = 2016 END " % (
-         #        bucket.name, bucket.name) + \
-         #                     "AND (ANY x IN %s.VMs SATISFIES x.RAM between 1 and 5 END) " % (bucket.name) + \
-         #                     "AND  NOT (department = 'Manager') ORDER BY name limit 10"
-         #        actual_result_within = self.run_cbq_query()
-		# plan = ExplainPlanHelper(actual_result_within)
-         #        self.assertTrue(
-         #            plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
-         #            "Intersect Scan is not being used in and query for 2 array indexes")
-        #
-         #        result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['index']
-         #        result2 = plan['~children'][0]['~children'][0]['scans'][1]['scans'][0]['index']
-         #        self.assertTrue(result1 == idx3 or result1 == idx4)
-         #        self.assertTrue(result2 == idx4 or result2 == idx3)
-
-
-         #        self.query = "EXPLAIN select name from %s where any v within %s.join_yr satisfies v = 2016 END " % (
-         #        bucket.name, bucket.name) + \
-         #                     "AND (ANY x within %s.VMs SATISFIES x.RAM between 1 and 5 END) " % (bucket.name) + \
-         #                     "AND  NOT (department = 'Manager') ORDER BY name limit 10"
-         #        actual_result_within = self.run_cbq_query()
-        #
-		# plan = ExplainPlanHelper(actual_result_within)
-         #        self.assertTrue(
-         #            plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
-         #            "Intersect Scan is not being used in and query for 2 array indexes")
-        #
-         #        result3 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['index']
-         #        result4 = plan['~children'][0]['~children'][0]['scans'][1]['scans'][0]['index']
-        #
-         #        self.assertTrue(result3 == idx4 or result3 == idx3)
-         #        self.assertTrue(result4 == idx3 or result4 == idx4)
                 self.query = "select name from %s USE INDEX(%s) where " % (
                 bucket.name,idx4) + \
                              "(ANY x within %s.VMs SATISFIES x.RAM between 1 and 5  END ) " % (bucket.name) + \
@@ -626,6 +576,7 @@ class QueriesIndexTests(QueryTests):
     def test_update_arrays(self):
         created_indexes = []
         for bucket in self.buckets:
+            try:
                 self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN(tasks[*].Marketing, 1) END".format(bucket.name)
                 self.run_cbq_query()
                 idx = "nested_idx"
@@ -658,6 +609,13 @@ class QueriesIndexTests(QueryTests):
                 bucket.name)
                 actual_result = self.run_cbq_query()
                 self.assertTrue(actual_result['metrics']['resultCount']==number_of_doc)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
 
     def test_covering_index_collections(self):
         created_indexes = []
@@ -877,6 +835,7 @@ class QueriesIndexTests(QueryTests):
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
                 self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((`%s`.`department`))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['index']) == idx)
                 #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][1]) == ("cover ((distinct (array `v` for `v` in (`%s`.`join_yr`) end)))" % bucket.name))
                 #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][2]) == ("cover ((`default`.`join_yr`)" ))
                 #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][3]) == ("cover ((`default`.`name`)" ))
@@ -1386,7 +1345,6 @@ class QueriesIndexTests(QueryTests):
                 self.query = "explain SELECT x FROM default emp1 USE INDEX(%s)  UNNEST emp1.VMs as x  JOIN default task ON KEYS meta(`emp1`).id where  x.RAM > 1 and x.RAM < 5   ;" %(idx4)
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                print plan
                 self.assertTrue("covers" in str(plan))
 
 
@@ -1446,7 +1404,6 @@ class QueriesIndexTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-
 
 
     def test_unnest_multilevel_attribute_covering(self):
@@ -1850,7 +1807,7 @@ class QueriesIndexTests(QueryTests):
                              "order BY name limit 10"
                 actual_result = self.run_cbq_query()
                 actual_result = sorted(actual_result['results'])
-                self.query = "select name from %s WHERE department = 'Support' and ANY i IN %s.hobbies.hobby SATISFIES i = 'art' END " % (
+                self.query = "select name from %s use index (`#primary`) WHERE department = 'Support' and ANY i IN %s.hobbies.hobby SATISFIES i = 'art' END " % (
                 bucket.name,bucket.name) + \
                              "order BY name limit 10"
                 expected_result = self.run_cbq_query()
@@ -1889,7 +1846,7 @@ class QueriesIndexTests(QueryTests):
                              "order BY name limit 10"
                 actual_result = self.run_cbq_query()
                 actual_result = sorted(actual_result['results'])
-                self.query = "select name from %s WHERE department = 'Support' and ANY i IN %s.hobbies.hobby SATISFIES i = 'art' END " % (
+                self.query = "select name from %s use index (`#primary`) WHERE department = 'Support' and ANY i IN %s.hobbies.hobby SATISFIES i = 'art' END " % (
                 bucket.name,bucket.name) + \
                              "order BY name limit 10"
                 expected_result = self.run_cbq_query()
@@ -2242,8 +2199,14 @@ class QueriesIndexTests(QueryTests):
                 "ON KEYS meta(`employee`).id WHERE ANY i IN employee.address SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                print plan
                 self.assertTrue("covers" in str(plan))
+                self.query = "SELECT employee.department new_project " +\
+                "FROM %s as employee use index (`#primary`)  JOIN default as new_project_full " % (bucket.name) +\
+                "ON KEYS meta(`employee`).id WHERE ANY i IN employee.address SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
+                expected_result = self.run_cbq_query()
+                expected_result = expected_result['results']
+                self.assertTrue(sorted(expected_result)==sorted(actual_result['results']))
+
              finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -4727,3 +4690,1085 @@ class QueriesIndexTests(QueryTests):
             if item['indexes']['keyspace_id'] == bucket.name and item['indexes']['name'] == index_name:
                 return True
         return False
+
+    def test_nested_attr_token_within(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "nested_idx_attr"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i FOR i within tokens(%s) END) USING %s" % (
+                    idx, bucket.name, "hobbies", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                idx2 = "nested_idx_attr2"
+                self.query = "CREATE INDEX %s ON %s( ALL ARRAY i FOR i within tokens(%s) END) USING %s" % (
+                    idx2, bucket.name, "hobbies", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
+
+                self.query = "EXPLAIN select name from %s use index(%s) WHERE ANY i within tokens(%s.hobbies) SATISFIES i = 'bhangra' END " % (
+                bucket.name,idx2,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx2)
+
+                self.query = "EXPLAIN select name from %s use index(%s) WHERE ANY i within tokens(%s.hobbies) SATISFIES i = 'bhangra' END " % (
+                bucket.name,idx,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx)
+
+                self.query = "select name from %s use index(%s) WHERE ANY i within tokens(%s.hobbies) SATISFIES i = 'bhangra' END " % (
+                bucket.name,idx,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                actual_result1 = sorted(actual_result['results'])
+
+                self.query = "select name from %s use index(%s) WHERE ANY i within tokens(%s.hobbies) SATISFIES i = 'bhangra' END " % (
+                bucket.name,idx2,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                actual_result2 = sorted(actual_result['results'])
+
+                self.query = "select name from %s use index(`#primary`) WHERE ANY i within tokens(%s.hobbies) SATISFIES i = 'bhangra' END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                actual_result3 = sorted(actual_result['results'])
+
+
+                self.assertTrue(actual_result1 ==  actual_result2 == actual_result3)
+
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_nested_attr_array_tokens_in_distinct(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "nested_idx_attr"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i.dance end) FOR i in tokens(%s) END) USING %s" % (
+                    idx, bucket.name, "hobbies.hobby", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = "EXPLAIN select name from %s WHERE ANY i IN tokens(%s.hobbies.hobby) SATISFIES  (ANY j IN i.dance SATISFIES j='contemporary' end) END and department='Support'" % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx)
+                actual_result = self.run_cbq_query()
+                self.query = "select name from %s WHERE ANY i IN tokens(%s.hobbies.hobby) SATISFIES  (ANY j IN i.dance SATISFIES j='contemporary' end) END and department='Support'" % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                actual_result = sorted(actual_result['results'])
+                self.query = "select name from %s USE INDEX(`#primary`) WHERE ANY i IN tokens(%s.hobbies.hobby) SATISFIES  (ANY j IN i.dance SATISFIES j='contemporary' end) END and department='Support'" % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                expected_result = self.run_cbq_query()
+                expected_result = sorted(expected_result['results'])
+                self.assertTrue(actual_result==expected_result)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_nested_attr_token(self):
+         for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "nested_idx_attr"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in tokens(%s) END) USING %s" % (
+                    idx, bucket.name, "tasks", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                idx2 = "nested_idx_attr2"
+                self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( All array j.region1 for j in i.Marketing end) FOR i in tokens(%s) END) USING %s" % (
+                    idx2, bucket.name, "tasks", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                self.assertTrue(self._is_index_in_list(bucket, idx2), "Index is not in list")
+
+                idx3 = "nested_idx_attr3"
+                self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in tokens(%s) END) USING %s" % (
+                    idx3, bucket.name, "tasks", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx3)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx3)
+                self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
+
+                idx4 = "nested_idx_attr4"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( ALL array j.region1 for j in i.Marketing end) FOR i in tokens(%s) END) USING %s" % (
+                    idx4, bucket.name, "tasks", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx4)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx4)
+                self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
+
+                self.query = "EXPLAIN select name from %s USE INDEX(%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx)
+
+                self.query = "EXPLAIN select name from %s USE INDEX(%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx2,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx2)
+
+                self.query = "EXPLAIN select name from %s USE INDEX(%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx3,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "Union Scan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx3)
+
+                self.query = "EXPLAIN select name from %s USE INDEX(%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx4,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "Union Scan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx4)
+
+                self.query = "select name from %s use index (%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result1 = self.run_cbq_query()
+                self.query = "select name from %s use index (%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx2,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result2 = self.run_cbq_query()
+
+                self.query = "select name from %s use index (%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx3,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result3 = self.run_cbq_query()
+
+                self.query = "select name from %s use index (%s) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,idx4,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result4 = self.run_cbq_query()
+
+
+                self.query = "select name from %s use index (`#primary`) WHERE ANY i IN tokens(%s.tasks) SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result5 = self.run_cbq_query()
+
+                self.assertTrue(sorted(actual_result1['results'])==sorted(actual_result2['results']))
+                self.assertTrue(sorted(actual_result2['results'])==sorted(actual_result3['results']))
+                self.assertTrue(sorted(actual_result4['results'])==sorted(actual_result3['results']))
+                self.assertTrue(sorted(actual_result4['results'])==sorted(actual_result5['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+    def test_unnest_multilevel_attribute_tokens(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "nested_idx_attr_nest"
+                self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in tokens(i.Marketing) end) FOR i in %s END) USING %s" % (
+                    idx, bucket.name, "tasks", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+
+                self.query = "explain SELECT emp.name FROM %s emp  UNNEST emp.tasks as i UNNEST tokens(i.Marketing) as j where j.region1 = 'South'" % (bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                print plan
+                self.assertTrue(
+                    plan['~children'][0]['#operator'] == 'DistinctScan',
+                    "Union Scan is not being used")
+                result1 = plan['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx)
+
+                self.query = "select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN tokens(i.Marketing) SATISFIES j.region1='South' end) END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                self.query = "select name from %s USE INDEX(`#primary`) WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN tokens(i.Marketing) SATISFIES j.region1='South' end) END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result['results'])==sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+    def test_tokens_join_unnest_alias_covering(self):
+        for bucket in self.buckets:
+            created_indexes=[]
+            try:
+                idx4 = "idxVM2"
+                self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within tokens(%s) END,VMs) USING %s" % (
+                    idx4, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx4)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx4)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
+
+                # idx5 = "idxVM3"
+                # self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.os FOR x within %s END) USING %s" % (
+                #     idx5, bucket.name, "VMs", self.index_type)
+                # # if self.gsi_type:
+                # #     self.query += " WITH {'index_type': 'memdb'}"
+                # create_result = self.run_cbq_query()
+                # self._wait_for_index_online(bucket, idx5)
+                # self._verify_results(create_result['results'], [])
+                # created_indexes.append(idx5)
+
+                #self.assertTrue(self._is_index_in_list(bucket, idx5), "Index is not in list")
+
+                self.query = "explain SELECT x FROM default emp1  UNNEST tokens(emp1.VMs) as x  JOIN default task ON KEYS meta(`emp1`).id where  x.RAM > 1 and x.RAM < 5   ;"
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.query = "SELECT x FROM default emp1 UNNEST tokens(emp1.VMs) as x JOIN default task ON KEYS meta(`emp1`).id  where  x.RAM > 1 and x.RAM < 5 ;"
+                actual_result = self.run_cbq_query()
+                self.query = "SELECT x FROM default emp1 USE INDEX(`#primary`)  UNNEST tokens(emp1.VMs) as x  JOIN default task ON KEYS meta(`emp1`).id where  x.RAM > 1 and x.RAM < 5 ;"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result['results']) ==sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_simple_tokens_all(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idxjoin_yr"
+                self.query = 'CREATE INDEX %s ON %s( ALL ARRAY v FOR v in tokens(%s,{"case":"lower"}) END) USING %s' % (
+                    idx, bucket.name, "join_yr", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                idx2 = "idxVM"
+                self.query = 'CREATE INDEX %s ON %s( All ARRAY x.RAM FOR x in tokens(%s,{"names":true}) END) USING %s' % (
+                    idx2, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+
+                self.query = 'EXPLAIN select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower"}) satisfies v = 2016 END ' % (
+                bucket.name, bucket.name) + \
+                             'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND  NOT (department = "Manager") ORDER BY name limit 10'
+                actual_result = self.run_cbq_query()
+
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
+
+                result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
+                result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+                self.assertTrue(result1 == idx2 or result1 == idx)
+                self.assertTrue(result2 == idx or result2 == idx2)
+                self.query = 'select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower"}) satisfies v = 2016 END ' % (
+                bucket.name, bucket.name) + \
+                             'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND  NOT (department = "Manager") ORDER BY name limit 10'
+                actual_result = self.run_cbq_query()
+
+                self.query = 'select name from %s use index (`#primary`) where any v in tokens(%s.join_yr,{\'"case"\':"lower"}) satisfies v = 2016 END ' % (
+                bucket.name, bucket.name) + \
+                             'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND  NOT (department = "Manager") ORDER BY name limit 10'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result['results'])==sorted(expected_result['results']))
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                drop_result = self.run_cbq_query()
+                self._verify_results(drop_result['results'], [])
+                self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+                created_indexes.remove(idx)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx2, self.index_type)
+                drop_result = self.run_cbq_query()
+                self._verify_results(drop_result['results'], [])
+                self.assertFalse(self._is_index_in_list(bucket, idx2), "Index is in list")
+                created_indexes.remove(idx2)
+
+                idx3 = "idxjoin_yr2"
+                self.query = 'CREATE INDEX %s ON %s( all ARRAY v FOR v within tokens(%s,{"names":true,"case":"lower"}) END) USING %s' % (
+
+                    idx3, bucket.name, "join_yr", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx3)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx3)
+                self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
+                idx4 = "idxVM2"
+                self.query = 'CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within tokens(%s,{"names":true,"case":"lower"}) END) USING %s' % (
+                    idx4, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx4)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx4)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
+
+                self.query = 'EXPLAIN select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower",\'"names"\':true}) satisfies v = 2016 END ' % (
+                bucket.name, bucket.name) + \
+                             'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true,\'"case"\':"lower"}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND  NOT (department = "Manager") ORDER BY name limit 10'
+                actual_result_within = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result_within)
+                self.assertTrue(
+                    plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
+                    "Intersect Scan is not being used in and query for 2 array indexes")
+
+                result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
+                result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+                self.assertTrue(result1 == idx3 or result1 == idx4)
+                self.assertTrue(result2 == idx4 or result2 == idx3)
+
+                idx5 = "idxtokens1"
+                self.query = 'CREATE INDEX %s ON %s( all ARRAY v FOR v within tokens(%s)  END) USING %s' % (
+
+                    idx5, bucket.name, "join_yr", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx5)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx5)
+                self.assertTrue(self._is_index_in_list(bucket, idx5), "Index is not in list")
+
+                idx8 = "idxtokens2"
+                self.query = 'CREATE INDEX %s ON %s( all ARRAY v FOR v within tokens(%s,{"names":true,"case":"lower","specials":false})  END) USING %s' % (
+
+                    idx8, bucket.name, "join_yr", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx8)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx8)
+                self.assertTrue(self._is_index_in_list(bucket, idx8), "Index is not in list")
+
+                idx6 = "idxVM4"
+                self.query = 'CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within tokens(%s,{"specials":false}) END) USING %s' % (
+                    idx6, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx6)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx6)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx6), "Index is not in list")
+
+                idx7 = "idxVM3"
+                self.query = 'CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within tokens(%s,{"names":true,"case":"lower"}) END) USING %s' % (
+                    idx7, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx7)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx7)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx7), "Index is not in list")
+
+                self.query = 'EXPLAIN select name from %s where any v within tokens(%s.join_yr,{"case"}) satisfies v = 2016 END ' % (
+                bucket.name, bucket.name) + \
+                             'AND (ANY x within tokens(%s.VMs,{"specials"}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND  NOT (department = "Manager") ORDER BY name limit 10'
+                # actual_result_within = self.run_cbq_query()
+                # self.assertTrue("Object member has no value" in actual_result_within)
+
+                self.query = 'select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower",\'"names"\':true,\'"specials"\':false}) satisfies v = 2016 END ' % (
+                bucket.name, bucket.name) + \
+                             'AND (ANY x within tokens(%s.VMs,{"specials":false}) SATISFIES x.RAM between 1 and 5  END ) ' % (bucket.name) + \
+                             'AND  NOT (department = "Manager") order by name limit 10'
+                actual_result_within = self.run_cbq_query()
+                self.query = "select name from %s use index (`#primary`) where any v in tokens(%s.join_yr) satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND (ANY x within tokens(%s.VMs) SATISFIES x.RAM between 1 and 5  END ) " % (bucket.name) + \
+                             "AND  NOT (department = 'Manager') order by name limit 10"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result_within['results']) == sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_nested_attr_tokens(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "nested_idx_attr"
+                self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( all array j for j in i.dance end) FOR i in tokens(%s) END,hobbies.hobby,department,name) USING %s" % (
+                    idx, bucket.name, "hobbies.hobby", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = "EXPLAIN select name from %s WHERE ANY i IN tokens(%s.hobbies.hobby) SATISFIES  (ANY j IN i.dance SATISFIES j='contemporary' end) END and department='Support'" % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+
+                self.assertTrue("covers" in str(plan))
+                self.query = "select name from %s WHERE ANY i IN tokens(%s.hobbies.hobby) SATISFIES  (ANY j IN i.dance SATISFIES j='contemporary' end) END and department='Support'" % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                actual_result = sorted(actual_result['results'])
+                self.query = "select name from %s USE INDEX(`#primary`) WHERE ANY i IN tokens(%s.hobbies.hobby) SATISFIES  (ANY j IN i.dance SATISFIES j='contemporary' end) END and department='Support'" % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                expected_result = self.run_cbq_query()
+                expected_result = sorted(expected_result['results'])
+                self.assertTrue(actual_result==expected_result)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx),"Index is in list")
+
+    def test_tokens_partial_index_distinct_covering(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = 'CREATE INDEX %s ON %s( distinct array i FOR i in tokens(%s,{"names":true}) END,hobbies.hobby,name) WHERE (department = "Support")  USING %s' % (
+                  idx, bucket.name, "hobbies.hobby", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = 'EXPLAIN select name from %s WHERE department = "Support" and (ANY i IN tokens(%s.hobbies.hobby,{\'"names"\':true}) SATISFIES  i = "art" END) ' % (
+                bucket.name,bucket.name) + \
+                             'order BY name limit 10'
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.query = 'select name from %s WHERE department = "Support" and ( ANY i IN tokens(%s.hobbies.hobby,{\'"names"\':true} ) SATISFIES i = "art" END) ' % (bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+
+                actual_result = self.run_cbq_query()
+                actual_result = sorted(actual_result['results'])
+                self.query = 'select name from %s use index (`#primary`) WHERE department = "Support" and (ANY i IN tokens(%s.hobbies.hobby,{\'"names"\':true}) SATISFIES i = "art" END) ' % (
+                bucket.name,bucket.name) + \
+                             'order BY name limit 10'
+                expected_result = self.run_cbq_query()
+                expected_result = sorted(expected_result['results'])
+                self.assertTrue(actual_result==expected_result)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_tokens_distinct_covering(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s( distinct array i FOR i in tokens(%s) END,hobbies.hobby,name) WHERE (department = 'Support')  USING %s" % (
+                  idx, bucket.name, "hobbies.hobby", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "EXPLAIN select name from %s WHERE department = 'Support' and (ANY i IN tokens(%s.hobbies.hobby) SATISFIES  i = 'art' END) " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                print plan
+                self.assertTrue("covers" in str(plan))
+                self.query = "select name from %s WHERE department = 'Support' and ANY i IN tokens(%s.hobbies.hobby) SATISFIES i = 'art' END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                actual_result = sorted(actual_result['results'])
+                self.query = "select name from %s use index (`#primary`) WHERE department = 'Support' and ANY i IN tokens(%s.hobbies.hobby) SATISFIES i = 'art' END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                expected_result = self.run_cbq_query()
+                expected_result = sorted(expected_result['results'])
+                self.assertTrue(actual_result==expected_result)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_tokens_with_inner_joins_covering(self):
+        for bucket in self.buckets:
+             created_indexes = []
+             try:
+                idx = "nested_inner_join"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.city for j in i end) FOR i in tokens(%s) END,address,department) USING %s" % (
+                    idx, bucket.name, "address", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "EXPLAIN SELECT employee.department new_project " +\
+                "FROM %s as employee  JOIN default as new_project_full " % (bucket.name) +\
+                "ON KEYS meta(`employee`).id WHERE ANY i IN tokens(employee.address) SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.query = "SELECT employee.department new_project " +\
+                "FROM %s as employee  JOIN default as new_project_full " % (bucket.name) +\
+                "ON KEYS meta(`employee`).id WHERE ANY i IN tokens(employee.address) SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
+                actual_result = self.run_cbq_query()
+                self.query = "SELECT employee.department new_project " +\
+                "FROM %s as employee use index (`#primary`)  JOIN default as new_project_full " % (bucket.name) +\
+                "ON KEYS meta(`employee`).id  WHERE ANY i IN tokens(employee.address) SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
+                expected_result = self.run_cbq_query()
+                expected_result = expected_result['results']
+                self.assertTrue(sorted(expected_result)==sorted(actual_result['results']))
+
+             finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+    def test_tokens_regexp_covering(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "iregex"
+                self.query = " CREATE INDEX %s ON %s( DISTINCT ARRAY REGEXP_LIKE(v.os,%s)  FOR v IN tokens(VMs) END,VMs )  USING %s" % (
+                  idx, bucket.name,"'ub%'", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "EXPLAIN select VMs from %s  WHERE ANY v IN tokens(VMs) SATISFIES REGEXP_LIKE(v.os,%s) = 1 END  " % (
+                bucket.name,"'ub%'") + \
+                             "limit 10"
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+
+                self.assertTrue("covers" in str(plan))
+
+                self.query = "select VMs from %s  WHERE ANY v IN tokens(VMs) SATISFIES REGEXP_LIKE(v.os,%s) = 1 END  " % (
+                bucket.name,"'ub%'") + \
+                             "limit 10"
+                actual_result = self.run_cbq_query()
+                self.query = "select VMs from %s use index(`#primary`)  WHERE ANY v IN tokens(VMs) SATISFIES REGEXP_LIKE(v.os,%s) = 1  END  " % (
+                bucket.name,"'ub%'") + \
+                             "limit 10"
+
+                expected_result = self.run_cbq_query()
+                expected_result = expected_result['results']
+
+                self.assertTrue(sorted(expected_result)==sorted(actual_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+    def test_tokens_greatest_covering(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "igreatest"
+                self.query = " CREATE INDEX %s ON %s( department, DISTINCT ARRAY GREATEST(v.RAM,100)  FOR v IN tokens(VMs) END ,VMs,name )  USING %s" % (
+                    idx, bucket.name, self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = " EXPLAIN select name from %s WHERE department = 'Support' and ANY v IN tokens(VMs) SATISFIES GREATEST(v.RAM,100) END " % (
+                    bucket.name)
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                print plan
+                self.assertTrue("covers" in str(plan))
+                self.query = "select name from %s WHERE department = 'Support' and ANY v IN tokens(VMs) SATISFIES GREATEST(v.RAM,100) END " % (
+                    bucket.name)
+                actual_result = self.run_cbq_query()
+                actual_result = actual_result['results']
+                self.query = "select name from %s USE index(`#primary`) WHERE department = 'Support' and ANY v IN tokens(VMs) SATISFIES GREATEST(v.RAM,100) END " % (
+                    bucket.name)
+                expected_result = self.run_cbq_query()
+                expected_result = expected_result['results']
+                self.assertTrue(sorted(expected_result)==sorted(actual_result))
+
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_unnest_tokens_covering(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "unnest_idx"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( ALL array j for j in i end) FOR i in tokens(%s) END,department,tasks,name) USING %s" % (
+                    idx, bucket.name, "tasks", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = "EXPLAIN select %s.name from %s  UNNEST TOKENS(tasks) AS i UNNEST i AS j WHERE j = 'Search' " % (
+                bucket.name,bucket.name) + \
+                             "AND (ANY x IN TOKENS(default.tasks) SATISFIES x = 'Sales' END) " + \
+                             "AND  NOT (%s.department = 'Manager') order BY %s.name limit 10" % (bucket.name,bucket.name)
+
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][2]) == ("cover ((`default`.`tasks`))" ))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][3]) == ("cover ((`default`.`name`))" ))
+
+                self.query = "select %s.name from %s UNNEST TOKENS(tasks) AS i UNNEST i AS j WHERE j = 'Search'  " % (
+                bucket.name,bucket.name) + \
+                             "AND (ANY x IN tokens(%s.tasks) SATISFIES x = 'Sales' END) " % (bucket.name) + \
+                             "AND  NOT (%s.department = 'Manager') order BY %s.name limit 10" % (bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select %s.name from %s use index (`#primary`)  UNNEST TOKENS(tasks) AS i UNNEST i as j WHERE j = 'Search'  " % (
+                bucket.name,bucket.name) + \
+                             "AND (ANY x IN tokens(%s.tasks) SATISFIES x = 'Sales' END) " % (bucket.name) + \
+                             "AND  NOT (%s.department = 'Manager') order BY %s.name limit 10" % (bucket.name,bucket.name)
+                expected_result = self.run_cbq_query()
+
+                self.assertEqual(sorted(actual_result['results']),sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_nested_token_covering(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "nested_idx"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT ARRAY j for j in i end) FOR i in tokens(%s) END,tasks,department,name)" % (
+                    idx, bucket.name, "tasks")
+
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+
+                self.query = "EXPLAIN select name from %s WHERE ANY i IN tokens(tasks) SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
+                bucket.name) + \
+                             "AND  NOT (department = 'Manager') order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['index']) == idx)
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][1]) == ("cover ((`%s`.`tasks`))" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][2]) == ("cover ((`default`.`department`)"))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][3]) == ("cover ((meta(`default`).`id`))"))
+                self.query = "select name from %s WHERE ANY i IN tokens(tasks) SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
+                bucket.name) + \
+                             "AND  NOT (department = 'Manager') order BY name limit 10"
+                actual_result = self.run_cbq_query()
+
+                self.query = "select name from %s use index(`#primary`) WHERE ANY i IN tokens(tasks) SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
+                bucket.name) + \
+                             "AND  NOT (department = 'Manager') order BY name limit 10"
+                expected_result =  self.run_cbq_query()
+                self.assertTrue(sorted(actual_result['results']) == sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_simple_token_nonarrayindex(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idxjoin_yr"
+                self.query = "CREATE INDEX %s ON %s( ARRAY v FOR v in tokens(%s) END) USING %s" % (
+                    idx, bucket.name, "join_yr", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                idx2 = "idxVM"
+                self.query = "CREATE INDEX %s ON %s( ARRAY x.RAM FOR x in tokens(%s) END) USING %s" % (
+                    idx2, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                self.query = "select name from %s where any v in tokens(%s.join_yr) satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND ( ANY x IN tokens(%s.VMs) SATISFIES x.RAM between 1 and 5 END ) " % (bucket.name) + \
+                             "AND  NOT (department = 'Manager') ORDER BY name limit 10"
+                actual_result = self.run_cbq_query()
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                drop_result = self.run_cbq_query()
+                self._verify_results(drop_result['results'], [])
+                self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+                created_indexes.remove(idx)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx2, self.index_type)
+                drop_result = self.run_cbq_query()
+                self._verify_results(drop_result['results'], [])
+                self.assertFalse(self._is_index_in_list(bucket, idx2), "Index is in list")
+                created_indexes.remove(idx2)
+
+                idx3 = "idxjoin_yr2"
+                self.query = "CREATE INDEX %s ON %s(  ARRAY v FOR v within tokens(%s) END) USING %s" % (
+                    idx3, bucket.name, "join_yr", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx3)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx3)
+                self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
+                idx4 = "idxVM2"
+                self.query = "CREATE INDEX %s ON %s(  ARRAY x.RAM FOR x within tokens(%s) END) USING %s" % (
+                    idx4, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx4)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx4)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
+                self.query = "select name from %s USE INDEX(%s) where " % (bucket.name,idx4) + \
+                             "(ANY x within tokens(%s.VMs) SATISFIES x.RAM between 1 and 5  END ) " % (bucket.name) + \
+                             "AND  NOT (department = 'Manager') order by name limit 10"
+                actual_result_within = self.run_cbq_query()
+                self.query = "select name from %s USE INDEX(`#primary`) where " % (
+                bucket.name) + \
+                             "(ANY x within tokens(%s.VMs) SATISFIES x.RAM between 1 and 5  END ) " % (bucket.name) + \
+                             "AND  NOT (department = 'Manager') order by name limit 10"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result_within['results']) == sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_simple_unnest_token(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "unnest_idx"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( ALL array j for j in i end) FOR i in tokens(%s) END) USING %s" % (
+                    idx, bucket.name, "tasks", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = "EXPLAIN select %s.name from %s UNNEST tokens(tasks) as i UNNEST i as j WHERE j = 'Search' " % (
+                bucket.name,bucket.name) + \
+                             "AND (ANY x IN %s.tasks SATISFIES x = 'Sales' END) " % (bucket.name) + \
+                             "AND  NOT (%s.department = 'Manager') order BY %s.name limit 10" % (bucket.name,bucket.name)
+                # self.query = "EXPLAIN select %s.name from %s UNNEST tasks as i UNNEST i as j WHERE j = 'Search' " % (
+                #  bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                # self.assertTrue(
+                #     plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
+                #     "Intersect Scan is not being used in and query for 2 array indexes")
+                result1 =plan['~children'][0]['~children'][0]['scan']['index']
+
+                #result2 =plan['~children'][0]['~children'][0]['scans'][1]['scans'][0]['index']
+                self.assertTrue(result1 == idx )
+                #self.assertTrue(result2 == idx or result2 == idx2)
+                self.query = "select %s.name from %s  UNNEST tokens(tasks) as i UNNEST i as j WHERE j = 'Search'  " % (
+                bucket.name,bucket.name) + \
+                             "AND (ANY x IN %s.tasks SATISFIES x = 'Sales' END) " % (bucket.name) + \
+                             "AND  NOT (%s.department = 'Manager') order BY %s.name limit 10" % (bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select %s.name from %s use index (`#primary`)  UNNEST tokens(tasks) as i UNNEST i as j WHERE j = 'Search'  " % (
+                bucket.name,bucket.name) + \
+                             "AND (ANY x IN %s.tasks SATISFIES x = 'Sales' END) " % (bucket.name) + \
+                             "AND  NOT (%s.department = 'Manager') order BY %s.name limit 10" % (bucket.name,bucket.name)
+                expected_result = self.run_cbq_query()
+
+                self.assertEqual(sorted(actual_result['results']),sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_join_unnest_alias_tokens(self):
+        for bucket in self.buckets:
+            created_indexes=[]
+            try:
+                idx4 = "idxVM2"
+                self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within tokens(%s) END) USING %s" % (
+                    idx4, bucket.name, "VMs", self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx4)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx4)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
+
+                # idx5 = "idxVM3"
+                # self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.os FOR x within %s END) USING %s" % (
+                #     idx5, bucket.name, "VMs", self.index_type)
+                # # if self.gsi_type:
+                # #     self.query += " WITH {'index_type': 'memdb'}"
+                # create_result = self.run_cbq_query()
+                # self._wait_for_index_online(bucket, idx5)
+                # self._verify_results(create_result['results'], [])
+                # created_indexes.append(idx5)
+
+                #self.assertTrue(self._is_index_in_list(bucket, idx5), "Index is not in list")
+
+                self.query = "explain SELECT x FROM default emp1 USE INDEX(%s)  UNNEST tokens(emp1.VMs) as x  JOIN default task ON KEYS meta(`emp1`).id where x.RAM > 1 and x.RAM < 5  ;" %(idx4)
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                result1 =plan['~children'][0]['scan']['index']
+                self.assertTrue(result1==idx4)
+                self.query = "SELECT x FROM default emp1 USE INDEX(%s) UNNEST tokens(emp1.VMs) as x JOIN default task ON KEYS meta(`emp1`).id  where  x.RAM > 1 and x.RAM < 5 ;"%(idx4)
+                actual_result = self.run_cbq_query()
+                self.query = "SELECT x FROM default emp1 USE INDEX(`#primary`)  UNNEST tokens(emp1.VMs) as x  JOIN default task ON KEYS meta(`emp1`).id  where  x.RAM > 1 and x.RAM < 5 ;"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result['results']) ==sorted(expected_result['results']))
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_simple_token(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idxjoin_yr"
+                self.query = "CREATE INDEX %s ON %s (department, DISTINCT (ARRAY lower(to_string(d)) for d in tokens(%s) END),join_yr,name)  " % (idx, bucket.name,"join_yr")
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                idx2 = "idxVM"
+                self.query = "CREATE INDEX %s ON %s(`name`,(DISTINCT (array (`x`.`RAM`) for `x` in tokens(%s) end)),VMs)" % (
+                    idx2, bucket.name, "VMs")
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                created_indexes.append(idx2)
+
+                self.query = "EXPLAIN select name from %s WHERE ANY d in tokens(join_yr) satisfies lower(to_string(d)) = '2016' END " % (
+                bucket.name) + \
+                             "AND  NOT (department = 'Manager') ORDER BY name limit 10"
+                actual_result = self.run_cbq_query()
+
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((`%s`.`department`))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['index']) == idx)
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][1]) == ("cover ((distinct (array `v` for `v` in (`%s`.`join_yr`) end)))" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][2]) == ("cover ((`default`.`join_yr`)" ))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][3]) == ("cover ((`default`.`name`)" ))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][4]) == ("cover ((meta(`default`).`id`))" ))
+
+                self.query = "select name from %s WHERE ANY d in tokens(join_yr) satisfies lower(to_string(d)) = '2016' END " % (
+                bucket.name) + \
+                             "AND  NOT (department = 'Manager') ORDER BY name limit 10"
+                actual_result = self.run_cbq_query()
+
+                self.query = "select name from %s use index(`#primary`) WHERE ANY d in tokens(join_yr) satisfies lower(to_string(d)) = '2016' END " % (
+                bucket.name) + \
+                             "AND  NOT (department = 'Manager') ORDER BY name limit 10"
+                expected_result = self.run_cbq_query()
+
+                self.assertTrue(sorted(actual_result['results']) == sorted(expected_result['results']))
+
+                self.query = "EXPLAIN select name from %s where (ANY x within tokens(VMs) SATISFIES x.RAM between 1 and 5  END ) " % (
+                bucket.name) + \
+                             "and name is not null ORDER BY name limit 10"
+                actual_result = self.run_cbq_query()
+
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['index']) == idx2)
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][0]) == ("cover ((`%s`.`name`))" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][1]) == ("cover (all (array (`x`.`RAM`) for `x` in (`%s`.`VMs`) end))" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][2]) == ("cover ((`%s`.`VMs`)" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][3]) == ("cover ((meta(`default`).`id`))" % bucket.name))
+
+                self.query = "select name from `%s` where (ANY x within tokens(VMs) SATISFIES x.RAM between 1 and 5  END ) " % (
+                bucket.name) + \
+                             "and name is not null ORDER BY name limit 10"
+                actual_result = self.run_cbq_query()
+
+                self.query = "select name from `%s` use index(`#primary`) where (ANY x within tokens(VMs) SATISFIES x.RAM between 1 and 5  END ) " % (
+                bucket.name) + \
+                             "and name is not null ORDER BY name limit 10"
+                expected_result = self.run_cbq_query()
+
+                self.assertTrue(sorted(actual_result['results']) == sorted(expected_result['results']))
+
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")

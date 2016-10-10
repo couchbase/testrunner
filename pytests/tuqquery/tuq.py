@@ -111,6 +111,7 @@ class QueryTests(BaseTestCase):
         self.log.info('-'*100)
         if (self.analytics):
             self.setup_analytics()
+        self.sleep(100,'wait for analytics setup')
         #if self.ispokemon:
             #self.set_indexer_pokemon_settings()
 
@@ -177,6 +178,7 @@ class QueryTests(BaseTestCase):
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
         os.system(cmd)
         os.remove(filename)
+
 
 
 ##############################################################################################
