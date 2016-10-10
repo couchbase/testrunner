@@ -111,7 +111,7 @@ class QueryTests(BaseTestCase):
         self.log.info('-'*100)
         if (self.analytics):
             self.setup_analytics()
-        self.sleep(100,'wait for analytics setup')
+        self.sleep(30,'wait for analytics setup')
         #if self.ispokemon:
             #self.set_indexer_pokemon_settings()
 
@@ -630,6 +630,10 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
                          "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
                          "ORDER BY tasks_points.task1"
+            if (self.analytics):
+                 self.query = "SELECT d.tasks_points.task1 AS task from %s d " % (bucket.name) +\
+                         "WHERE d.join_mo>7 GROUP BY d.tasks_points.task1 " +\
+                         "ORDER BY d.tasks_points.task1"
             actual_result = self.run_cbq_query()
 
             expected_result = [{"task" : doc['tasks_points']["task1"]}
