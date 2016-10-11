@@ -111,7 +111,7 @@ class QueryTests(BaseTestCase):
         self.log.info('-'*100)
         if (self.analytics):
             self.setup_analytics()
-        self.sleep(30,'wait for analytics setup')
+            self.sleep(30,'wait for analytics setup')
         #if self.ispokemon:
             #self.set_indexer_pokemon_settings()
 
@@ -668,6 +668,13 @@ class QueryTests(BaseTestCase):
                          "ORDER BY tasks_points.task1"
             actual_result = self.run_cbq_query()
 
+            if self.analytics:
+                self.query = "SELECT d.tasks_points.task1 AS task from %s d " % (bucket.name) +\
+                         "WHERE d.join_mo>7 GROUP BY d.tasks_points.task1 " +\
+                         "HAVING COUNT(d.tasks_points.task1) > 0 AND "  +\
+                         "(MIN(d.join_day)=1 OR MAX(d.join_yr=2011)) " +\
+                         "ORDER BY d.tasks_points.task1"
+
             tmp_groups = set([doc['tasks_points']["task1"] for doc in self.full_list])
             expected_result = [{"task" : group} for group in tmp_groups
                                if [doc['tasks_points']["task1"]
@@ -713,6 +720,15 @@ class QueryTests(BaseTestCase):
                          "AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 end) "  % (
                                                                       bucket.name) +\
                          "GROUP BY job_title ORDER BY job_title"
+
+            if self.analytics:
+                self.query = "SELECT d.job_title, AVG(d.test_rate) as avg_rate FROM %s d " % (bucket.name) +\
+                         "WHERE (ANY d.skill IN %s.skills SATISFIES d.skill = 'skill2010' end) " % (
+                                                                      bucket.name) +\
+                         "AND (ANY d.vm IN %s.VMs SATISFIES d.vm.RAM = 5 end) "  % (
+                                                                      bucket.name) +\
+                         "GROUP BY d.job_title ORDER BY d.job_title"
+
             actual_result = self.run_cbq_query()
 
             tmp_groups = set([doc["job_title"] for doc in self.full_list])
@@ -1034,6 +1050,9 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "select name, FIRST vm.os for vm in VMs end as OS from %s" % (
                                                                            bucket.name)
+            if self.analytics:
+              self.query =  "select name, VMs[0].os as OS from %s" %(bucket.name);
+
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['name'], doc['OS']))
@@ -1054,6 +1073,10 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT join_mo, SUM(tasks_points.task1) as points_sum" +\
                         " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
                         "ORDER BY join_mo"
+            if self.analytics:
+                self.query = "SELECT d.join_mo, SUM(d.tasks_points.task1) as points_sum" +\
+                        " FROM %s d WHERE d.join_mo < 5 GROUP BY d.join_mo " % (bucket.name) +\
+                        "ORDER BY d.join_mo"
             actual_result = self.run_cbq_query()
 
             tmp_groups = set([doc['join_mo'] for doc in self.full_list
@@ -1110,6 +1133,11 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT join_mo, AVG(tasks_points.task1) as points_avg" +\
                         " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
                         "ORDER BY join_mo"
+
+            if self.analytics:
+                self.query = "SELECT d.join_mo, AVG(d.tasks_points.task1) as points_avg" +\
+                        " FROM %s d WHERE d.join_mo < 5 GROUP BY d.join_mo " % (bucket.name) +\
+                        "ORDER BY d.join_mo"
             actual_result = self.run_cbq_query()
 
             tmp_groups = set([doc['join_mo'] for doc in self.full_list
@@ -1129,6 +1157,13 @@ class QueryTests(BaseTestCase):
                          "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
                          "HAVING AVG(employees.test_rate) > 0 and " +\
                          "SUM(test_rate) < 100000"
+
+            if self.analytics:
+                self.query = "SELECT d.join_mo, AVG(d.test_rate) as rate FROM %s d" % (bucket.name) +\
+                         " WHERE d.job_title='Sales' GROUP BY d.join_mo " +\
+                         "HAVING AVG(d.employees.test_rate) > 0 and " +\
+                         "SUM(d.test_rate) < 100000"
+
             actual_result = self.run_cbq_query()
 
             actual_result = [{'join_mo' : doc['join_mo'],
@@ -2227,6 +2262,11 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "SELECT job_title, SUM(test_rate) % COUNT(distinct join_yr)" +\
             " as avg_per_year from {0} group by job_title".format(bucket.name)
+
+            if self.analytics:
+                  self.query = "SELECT d.job_title, SUM(d.test_rate) % COUNT(d.join_yr)" +\
+            " as avg_per_year from {0} d group by d.job_title".format(bucket.name)
+
             actual_result = self.run_cbq_query()
             actual_result = [{"job_title": doc["job_title"],
                               "avg_per_year" : round(doc["avg_per_year"],2)}
@@ -2250,6 +2290,11 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT job_title, (SUM(tasks_points.task1) +" +\
             " SUM(tasks_points.task2)) % COUNT(distinct join_yr) as avg_per_year" +\
             " from {0} group by job_title".format(bucket.name)
+
+            if self.analytics:
+                 self.query = "SELECT d.job_title, (SUM(d.tasks_points.task1) +" +\
+            " SUM(d.tasks_points.task2)) % COUNT(d.join_yr) as avg_per_year" +\
+            " from {0} d group by d.job_title".format(bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = [{"job_title": doc["job_title"],
                               "avg_per_year" : round(doc["avg_per_year"],2)}
