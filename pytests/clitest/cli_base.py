@@ -23,6 +23,10 @@ class CliBaseTest(BaseTestCase):
         self.vbucket_count = 1024
         self.shell = RemoteMachineShellConnection(self.master)
         self.rest = RestConnection(self.master)
+        self.import_back = self.input.param("import_back", False)
+        if self.import_back:
+            if len(self.servers) < 3:
+                self.fail("This test needs minimum of 3 vms to run ")
         self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
         info = self.shell.extract_remote_info()
@@ -63,8 +67,9 @@ class CliBaseTest(BaseTestCase):
         if self.command_options is not None:
             self.command_options = self.command_options.split(";")
         if str(self.__class__).find('couchbase_clitest.CouchbaseCliTest') == -1:
-            servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
-            self.cluster.rebalance(self.servers[:1], servers_in, [])
+            if len(self.servers) > 1 and int(self.nodes_init) == 1:
+                servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
+                self.cluster.rebalance(self.servers[:1], servers_in, [])
 
     def tearDown(self):
         if not self.input.param("skip_cleanup", True):
