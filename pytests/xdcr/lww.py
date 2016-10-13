@@ -638,40 +638,12 @@ class Lww(XDCRNewBaseTest):
         self.assertFalse(dest_conn.is_lww_enabled(), "LWW enabled on dest bucket")
         self.log.info("LWW not enabled on dest bucket as expected")
 
-        self.setup_xdcr()
-        self.merge_all_buckets()
-
-        self.c1_cluster.pause_all_replications()
-
-        self.sleep(30)
-
-        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
-        self.sleep(10)
-        dst_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
-        self.sleep(10)
-
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
-        self.c2_cluster.load_all_buckets_from_generator(gen)
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
-        self.c1_cluster.load_all_buckets_from_generator(gen)
-        # update doc at C1 thrice
-        self._upsert(conn=src_def, doc_id='lww-0', old_key='key1', new_key='key2', new_val='value2')
-        self._upsert(conn=src_def, doc_id='lww-0', old_key='key2', new_key='key3', new_val='value3')
-        self._upsert(conn=src_def, doc_id='lww-0', old_key='key3', new_key='key4', new_val='value4')
-        # update doc at C2 twice
-        self._upsert(conn=dst_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
-        self._upsert(conn=dst_def, doc_id='lww-0', old_key='key1', new_key='key2', new_val='value2')
-
-        self.c1_cluster.resume_all_replications()
-        self._wait_for_replication_to_catchup()
-
-        obj = src_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key4':'value4'}, obj.value, "Src doc did not win using Rev Id")
-        obj = dst_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key4':'value4'}, obj.value, "Src doc did not win using Rev Id")
-        self.log.info("Src doc won using Rev Id as expected")
-
-        self.verify_results(skip_verify_data=['default'])
+        try:
+            self.setup_xdcr()
+        except Exception as e:
+            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
+                            "TimeSynchronization mismatch message not thrown as expected")
+            self.log.info("TimeSynchronization mismatch message thrown as expected")
 
     def test_seq_upd_on_uni_with_lww_disabled_source_and_target_wins(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -683,40 +655,12 @@ class Lww(XDCRNewBaseTest):
         self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
         self.log.info("LWW enabled on dest bucket as expected")
 
-        self.setup_xdcr()
-        self.merge_all_buckets()
-
-        self.c1_cluster.pause_all_replications()
-
-        self.sleep(30)
-
-        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
-        self.sleep(10)
-        dst_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
-        self.sleep(10)
-
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
-        self.c1_cluster.load_all_buckets_from_generator(gen)
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
-        self.c2_cluster.load_all_buckets_from_generator(gen)
-        # update doc at C2 thrice
-        self._upsert(conn=dst_def, doc_id='lww-0', old_key='key1', new_key='key2', new_val='value2')
-        self._upsert(conn=dst_def, doc_id='lww-0', old_key='key2', new_key='key3', new_val='value3')
-        self._upsert(conn=dst_def, doc_id='lww-0', old_key='key3', new_key='key4', new_val='value4')
-        # update doc at C1 twice
-        self._upsert(conn=src_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
-        self._upsert(conn=src_def, doc_id='lww-0', old_key='key1', new_key='key2', new_val='value2')
-
-        self.c1_cluster.resume_all_replications()
-        self._wait_for_replication_to_catchup()
-
-        obj = src_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Target doc did not win using Rev Id")
-        obj = dst_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key4':'value4'}, obj.value, "Target doc did not win using Rev Id")
-        self.log.info("Target doc won using Rev Id as expected")
-
-        self.verify_results(skip_verify_data=['default'], skip_verify_revid=['default'])
+        try:
+            self.setup_xdcr()
+        except Exception as e:
+            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
+                            "TimeSynchronization mismatch message not thrown as expected")
+            self.log.info("TimeSynchronization mismatch message thrown as expected")
 
     def test_seq_upd_on_bi_with_lww_disabled_on_both_clusters(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -1717,40 +1661,12 @@ class Lww(XDCRNewBaseTest):
         self.assertFalse(dest_conn.is_lww_enabled(), "LWW enabled on dest bucket")
         self.log.info("LWW not enabled on dest bucket as expected")
 
-        self.setup_xdcr()
-        self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
-
-        gen = DocumentGenerator('lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen)
-        gen = DocumentGenerator('lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen)
-
-        self.c1_cluster.resume_all_replications()
-
-        self._wait_for_replication_to_catchup()
-
-        data_path = src_conn.get_data_path()
-        dump_file = data_path + "/default/0.couch.1"
-        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
-        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
-        output, error = conn.execute_command(cmd)
-        conn.log_command_output(output, error)
-        json_parsed = json.loads(output[1])
-        self.assertEqual(json_parsed['conflict_resolution_mode'], 1,
-                         "Conflict resolution mode is not LWW in extended metadata of src bucket")
-        self.log.info("Conflict resolution mode is LWW in extended metadata of src bucket as expected")
-
-        data_path = dest_conn.get_data_path()
-        dump_file = data_path + "/default/0.couch.1"
-        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
-        conn = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
-        output, error = conn.execute_command(cmd)
-        conn.log_command_output(output, error)
-        json_parsed = json.loads(output[1])
-        self.assertEqual(json_parsed['conflict_resolution_mode'], 0,
-                         "Conflict resolution mode is LWW in extended metadata of dest bucket")
-        self.log.info("Conflict resolution mode is not LWW in extended metadata of dest bucket as expected")
+        try:
+            self.setup_xdcr()
+        except Exception as e:
+            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
+                            "TimeSynchronization mismatch message not thrown as expected")
+            self.log.info("TimeSynchronization mismatch message thrown as expected")
 
     def test_lww_with_nodes_reshuffle(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -2363,75 +2279,12 @@ class Lww(XDCRNewBaseTest):
         self.assertTrue(c3_conn.is_lww_enabled(), "LWW not enabled on C3 bucket")
         self.log.info("LWW enabled on C3 bucket as expected")
 
-        self._offset_wall_clock(self.c1_cluster, offset_secs=3600)
-        self._offset_wall_clock(self.c2_cluster, offset_secs=7200)
-        self._offset_wall_clock(self.c3_cluster, offset_secs=10800)
-
-        self.setup_xdcr()
-        self.merge_all_buckets()
-
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
-        self.c1_cluster.load_all_buckets_from_generator(gen)
-        self._wait_for_replication_to_catchup()
-
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
-        self.c3_cluster.pause_all_replications()
-
-        self.sleep(30)
-
-        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
-        self.sleep(10)
-        dest_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
-        self.sleep(10)
-        c3_def = self._get_python_sdk_client(self.c3_cluster.get_master_node().ip, 'default')
-        self.sleep(10)
-
-        self._upsert(conn=dest_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
-        self._upsert(conn=c3_def, doc_id='lww-0', old_key='key', new_key='key2', new_val='value2')
-        src_def.remove(key='lww-0')
-
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
-        self.c3_cluster.resume_all_replications()
-
-        self._wait_for_replication_to_catchup()
-
         try:
-            obj = src_def.get(key='lww-0')
-            if obj:
-                self.fail("Doc not deleted in C1")
-        except NotFoundError:
-            self.log.info("Doc deleted in C1 as expected")
-
-        try:
-            obj = dest_def.get(key='lww-0')
-            if obj:
-                self.fail("Doc not deleted in C2")
-        except NotFoundError:
-            self.log.info("Doc deleted in C2 as expected")
-
-        try:
-            obj = c3_def.get(key='lww-0')
-            if obj:
-                self.fail("Doc not deleted in C3")
-        except NotFoundError:
-            self.log.info("Doc deleted in C3 as expected")
-
-        conn1 = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
-        conn1.stop_couchbase()
-        conn2 = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
-        conn2.stop_couchbase()
-        conn3 = RemoteMachineShellConnection(self.c3_cluster.get_master_node())
-        conn3.stop_couchbase()
-
-
-        self._enable_ntp_and_sync()
-        self._disable_ntp()
-
-        conn1.start_couchbase()
-        conn2.start_couchbase()
-        conn3.start_couchbase()
+            self.setup_xdcr()
+        except Exception as e:
+            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
+                            "TimeSynchronization mismatch message not thrown as expected")
+            self.log.info("TimeSynchronization mismatch message thrown as expected")
 
     def test_v_topology_with_clocks_out_of_sync(self):
         self.c3_cluster = self.get_cb_cluster_by_name('C3')
