@@ -723,10 +723,8 @@ class QueryTests(BaseTestCase):
 
             if self.analytics:
                 self.query = "SELECT d.job_title, AVG(d.test_rate) as avg_rate FROM %s d " % (bucket.name) +\
-                         "WHERE (ANY skill IN skills SATISFIES skill = 'skill2010' end) " % (
-                                                                      bucket.name) +\
-                         "AND (ANY vm IN VMs SATISFIES vm.RAM = 5 end) "  % (
-                                                                      bucket.name) +\
+                         "WHERE (ANY skill IN skills SATISFIES skill = 'skill2010' ) " +\
+                         "AND (ANY vm IN VMs SATISFIES vm.RAM = 5) " +\
                          "GROUP BY d.job_title ORDER BY d.job_title"
 
             actual_result = self.run_cbq_query()
@@ -1095,8 +1093,8 @@ class QueryTests(BaseTestCase):
                          "SUM(test_rate) < 100000"
             if self.analytics:
                 self.query = "SELECT d.join_mo, SUM(d.test_rate) as rate FROM %s d " % (bucket.name) +\
-                         "as employees WHERE d.job_title='Sales' GROUP BY d.join_mo " +\
-                         "HAVING SUM(d.employees.test_rate) > 0 and " +\
+                         " WHERE d.job_title='Sales' GROUP BY d.join_mo " +\
+                         "HAVING SUM(d.test_rate) > 0 and " +\
                          "SUM(d.test_rate) < 100000"
             actual_result = self.run_cbq_query()
             actual_result = [{"join_mo" : doc["join_mo"], "rate" : round(doc["rate"])} for doc in actual_result['results']]
@@ -1144,7 +1142,6 @@ class QueryTests(BaseTestCase):
                         " FROM %s d WHERE d.join_mo < 5 GROUP BY d.join_mo " % (bucket.name) +\
                         "ORDER BY d.join_mo"
             actual_result = self.run_cbq_query()
-            print actual_result
             tmp_groups = set([doc['join_mo'] for doc in self.full_list
                               if doc['join_mo'] < 5])
             expected_result = [{"join_mo" : group,
@@ -1166,7 +1163,7 @@ class QueryTests(BaseTestCase):
             if self.analytics:
                 self.query = "SELECT d.join_mo, AVG(d.test_rate) as rate FROM %s d" % (bucket.name) +\
                          " WHERE d.job_title='Sales' GROUP BY d.join_mo " +\
-                         "HAVING AVG(d.employees.test_rate) > 0 and " +\
+                         "HAVING AVG(d.test_rate) > 0 and " +\
                          "SUM(d.test_rate) < 100000"
 
             actual_result = self.run_cbq_query()

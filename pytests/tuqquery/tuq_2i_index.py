@@ -2189,6 +2189,10 @@ class QueriesIndexTests(QueryTests):
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
                 self.query = "SELECT employee.department new_project " +\
+                "FROM %s as employee  JOIN default as new_project_full " % (bucket.name) +\
+                "ON KEYS meta(`employee`).id WHERE ANY i IN employee.address SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
+                actual_result = self.run_cbq_query()
+                self.query = "SELECT employee.department new_project " +\
                 "FROM %s as employee use index (`#primary`)  JOIN default as new_project_full " % (bucket.name) +\
                 "ON KEYS meta(`employee`).id WHERE ANY i IN employee.address SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
                 expected_result = self.run_cbq_query()
