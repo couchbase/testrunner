@@ -3686,7 +3686,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
             if self.analytics:
-                    self.query = "SELECT d.join_mo, sum_test from %s WHERE d.join_mo>7 group by d.join_mo letting sum_test = sum(d.tasks_points.task1)" % (bucket.name)
+                    self.query = "SELECT d.join_mo, sum_test from %s d WHERE d.join_mo>7 group by d.join_mo letting sum_test = sum(d.tasks_points.task1)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
 
