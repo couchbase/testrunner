@@ -2,9 +2,9 @@ import json
 import string
 import random
 import gzip
+
 from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
 from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
-
 
 class KVGenerator(object):
     def __init__(self, name, start, end):
@@ -12,7 +12,6 @@ class KVGenerator(object):
         self.start = start
         self.end = end
         self.itr = start
-
     def has_next(self):
         return self.itr < self.end
 
@@ -73,15 +72,14 @@ class DocumentGenerator(KVGenerator):
     def next(self):
         if self.itr >= self.end:
             raise StopIteration
-
         seed = self.itr
         doc_args = []
         for arg in self.args:
             value = arg[seed % len(arg)]
             doc_args.append(value)
             seed /= len(arg)
-
-        json_doc = json.loads(self.template.format(*doc_args).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        doc = self.template.format(*doc_args).replace('\'', '"').replace('True', 'true').replace('False', 'false').replace('\\', '\\\\')
+        json_doc = json.loads(doc)
         json_doc['_id'] = self.name + '-' + str(self.itr)
         self.itr += 1
         return json_doc['_id'], json.dumps(json_doc).encode("ascii", "ignore")

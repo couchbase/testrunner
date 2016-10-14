@@ -91,7 +91,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         return create_index_task
 
     def create_index_using_rest(self, bucket, query_definition, exprType='N1QL', deploy_node_info=None):
-        ind_content = query_definition.generate_gsi_index_create_query_using_rest(bucket=bucket, deploy_node_info=None,
+        ind_content = query_definition.generate_gsi_index_create_query_using_rest(bucket=bucket.name, deploy_node_info=None,
                                                                                   defer_build=None,
                                                                                   index_where_clause=None,
                                                                                   gsi_type=self.gsi_type)
