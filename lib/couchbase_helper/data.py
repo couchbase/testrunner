@@ -36,15 +36,3 @@ LANGUAGES = ['English', 'Spanish', 'German', 'Italian', 'French',
 
 DEPT = ['Engineering', 'Sales', 'Support', 'Marketing', 'Info-tech', 'Finance',
         'HR', 'Pre-sales', 'Accounts', 'Dev-ops', 'Training']
-
-COUNTRIES = ["India", "US", "UK", "Japan", "France", "Germany", "China", "Korea", "Canada", "Cuba",
-     "West Indies", "Australia", "New Zealand", "Nepal", "Sri Lanka", "Pakistan", "Mexico",
-     "belgium", "Netherlands", "Brazil", "Costa Rica", "Cambodia", "Fiji", "Finland", "haiti",
-     "Hong Kong", "Iceland", "Iran", "Iraq", "Italy", "Greece", "Jamaica", "Kenya", "Kuwait", "Macau",
-     "Spain","Morocco", "Maldives", "Norway"]
-
-COUNTRY_CODE = ["Ind123", "US123", "UK123", "Jap123", "Fra123", "Ger123", "Chi123", "Kor123", "Can123",
-        "Cub123", "Wes123", "Aus123", "New123", "Nep123", "Sri123", "Pak123", "Mex123", "bel123",
-        "Net123", "Bra123", "Cos123", "Cam123", "Fij123", "Fin123", "hai123", "Hon123", "Ice123",
-        "Ira123", "Ira123", "Ita123", "Gre123", "Jam123", "Ken123", "Kuw123", "Mac123", "Spa123",
-        "Mor123", "Mal123", "Nor123"]

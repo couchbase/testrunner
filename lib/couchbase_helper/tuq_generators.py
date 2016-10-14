@@ -2,13 +2,11 @@ import copy
 from documentgenerator import  DocumentGenerator
 import re
 import datetime
+import logger
 import json
-import random, string
+import random
 import os
 import logger
-
-from data import COUNTRIES, COUNTRY_CODE, FIRST_NAMES, LAST_NAMES
-
 log = logger.Logger.get_logger()
 
 class TuqGenerators(object):
@@ -29,8 +27,6 @@ class TuqGenerators(object):
                             if isinstance(attr[1], bool)]
         self.type_args['list_str'] = [attr[0] for attr in full_set[0].iteritems()
                             if isinstance(attr[1], list) and isinstance(attr[1][0], unicode)]
-        self.type_args['list_int'] = [attr[0] for attr in full_set[0].iteritems()
-                            if isinstance(attr[1], list) and isinstance(attr[1][0], int)]
         self.type_args['list_obj'] = [attr[0] for attr in full_set[0].iteritems()
                             if isinstance(attr[1], list) and isinstance(attr[1][0], dict)]
         self.type_args['obj'] = [attr[0] for attr in full_set[0].iteritems()
@@ -109,7 +105,7 @@ class TuqGenerators(object):
         conditions = conditions.replace('IS NOT NULL', 'is not None')
         satisfy_expr = self.format_satisfy_clause()
         if satisfy_expr:
-            conditions = re.sub(r'ANY.*END', '', conditions).strip()
+            conditions = re.sub(r'ANY.*END', '', clause)
         regex = re.compile("[\w']+\.[\w']+")
         atts = regex.findall(conditions)
         for att in atts:
@@ -130,19 +126,7 @@ class TuqGenerators(object):
         for attr in attributes:
             conditions = conditions.replace(' %s ' % attr, ' doc["%s"] ' % attr)
         if satisfy_expr:
-            if conditions:
-                for join in ["AND", "OR"]:
-                    present = conditions.find(join)
-                    if present > -1:
-                        conditions = conditions.replace(join, join.lower())
-                        if present > 0:
-                            conditions += '' + satisfy_expr
-                            break
-                        else:
-                            conditions = satisfy_expr + ' ' + conditions
-                            break
-            else:
-                conditions += '' + satisfy_expr
+            conditions += '' + satisfy_expr
         if from_clause and from_clause.find('.') != -1:
             sub_attrs = [att for name, group in self.type_args.iteritems()
                          for att in group if att not in attributes]
@@ -232,7 +216,7 @@ class TuqGenerators(object):
                     self.aggr_fns['COUNT'] = {}
                     if attr[0].upper() == 'DISTINCT':
                         attr = attr[1:]
-                        self.distinct= True
+                        self.distict= True
                     if attr[0].find('.') != -1:
                         parent, child = attr[0].split('.')
                         attr[0] = child
@@ -258,7 +242,7 @@ class TuqGenerators(object):
                     continue
             elif attr[0].upper() == 'DISTINCT':
                 attr = attr[1:]
-                self.distinct= True
+                self.distict= True
             if attr[0] == '*':
                 condition += '"*" : doc,'
             elif len(attr) == 1:
@@ -328,7 +312,7 @@ class TuqGenerators(object):
             result = [eval(select_clause) for doc in self.full_set if eval(where_clause)]
         else:
             result = [eval(select_clause) for doc in self.full_set]
-        if self.distinct:
+        if self.distict:
             result = [dict(y) for y in set(tuple(x.items()) for x in result)]
         if unnest_clause:
             unnest_attr = unnest_clause[5:-2]
@@ -531,7 +515,6 @@ class TuqGenerators(object):
         return self.parent_selected
 
     def format_satisfy_clause(self):
-        result_clause = ''
         if self.query.find('ANY') == -1 and self.query.find('EVERY') == -1:
             return ''
         satisfy_clause = re.sub(r'.*ANY', '', re.sub(r'END.*', '', self.query)).strip()
@@ -549,14 +532,12 @@ class TuqGenerators(object):
                     main_attr = 'doc["%s"]["%s"]' % (self.aliases[parent], child)
                 else:
                     main_attr = 'doc["%s"]' % (child)
-        var = "att"
         if self.query.find('ANY') != -1:
-            var = re.sub(r'.*ANY', '', re.sub(r'IN.*', '', self.query)).strip()
-            result_clause = 'len([{0} for {1} in {2} if '.format(var, var, main_attr)
+            result_clause = 'len([att for att in %s if ' % main_attr
         satisfy_expr = re.sub(r'.*SATISFIES', '', re.sub(r'END.*', '', satisfy_clause)).strip()
         for expr in satisfy_expr.split():
             if expr.find('.') != -1:
-                result_clause += ' {0}["{1}"] '.format(var, expr.split('.')[1])
+                result_clause += ' att["%s"] ' % expr.split('.')[1]
             elif expr.find('=') != -1:
                 result_clause += ' == '
             elif expr.upper() in ['AND', 'OR', 'NOT']:
@@ -567,7 +548,7 @@ class TuqGenerators(object):
         return result_clause
 
     def _clear_current_query(self):
-        self.distinct = False
+        self.distict = False
         self.aggr_fns = {}
         self.aliases = {}
         self.attr_order_clause_greater_than_select = []
@@ -832,6 +813,24 @@ class JsonGenerator:
                                                   sales, [delivery], is_support,
                                                   is_priority, [contact],
                                                   [name], rate,
+                                                  start=start, docs_per_day=end))
+        else:
+            template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
+            if self.template_items_num:
+                for num in xrange(self.template_items_num - 2):
+                    template += '"item_%s" : "value_%s",' % (num, num)
+            template += ' "sales" : {3} }}'
+            sales = self._shuffle([200000, 400000, 600000, 800000],isShuffle)
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        random.seed(count)
+                        count += 1
+                        prefix = str(random.random()*100000)
+                        generators.append(DocumentGenerator(key_prefix + prefix,
+                                                  template,
+                                                  [year], [month], [day],
+                                                  sales,
                                                   start=start, end=end))
         return generators
 
@@ -886,74 +885,6 @@ class JsonGenerator:
                                                 name, email, countries, codes,  start=start, end=end))
         return generators
 
-    def generate_all_type_documents_for_gsi(self, start=0, docs_per_day=10):
-        """
-        Document fields:
-        name: String
-        age: Number
-        email: Alphanumeric + Special Character
-        premium_customer: Boolean or <NULL>
-        Address: Object
-                {Line 1: Alphanumeric + Special Character
-                Line 2: Alphanumeric + Special Character or <NULL>
-                City: String
-                Country: String
-                postal_code: Number
-                }
-        travel_history: Array of string - Duplicate elements ["India", "US", "UK", "India"]
-        travel_history_code: Array of alphanumerics - Duplicate elements
-        booking_history: Array of objects
-                        {source:
-                         destination:
-                          }
-        credit_cards: Array of numbers
-        secret_combination: Array of mixed data types
-        countries_visited: Array of strings - non-duplicate elements
-
-        :param start:
-        :param docs_per_day:
-        :param isShuffle:
-        :return:
-        """
-        generators = []
-        bool_vals = [True, False]
-        template = r'{{ "name":"{0}", "email":"{1}", "age":{2}, "premium_customer":{3}, ' \
-                   '"address":{4}, "travel_history":{5}, "travel_history_code":{6}, "travel_details":{7},' \
-                   '"booking":{8}, "credit_cards":{9}, "secret_combination":{10}, "countries_visited":{11}, ' \
-                   '"question_values":{12}}}'
-        name = random.choice(FIRST_NAMES)
-        age = random.randint(25, 70)
-        last_name = random.choice(LAST_NAMES)
-        dob = "{0}-{1}-{2}".format(random.randint(1970, 1999),
-                                   random.randint(1, 28), random.randint(1, 12))
-        email = "{0}.{1}.{2}@abc.com".format(name, last_name, dob.split("-")[1])
-        premium_customer = random.choice(bool_vals)
-        address = {}
-        address["line_1"] = "Street No. {0}".format(random.randint(100, 200))
-        address["line_2"] = "null"
-        if not random.choice(bool_vals):
-            address["address2"] = "Building {0}".format(random.randint(1, 6))
-        address["city"] = "Bangalore"
-        address["contact"] = "{0} {1}".format(name, last_name)
-        address["country"] = "India"
-        address["postal_code"] = "{0}".format(random.randint(560071, 560090))
-        credit_cards = [random.randint(-1000000, 9999999) for i in range(random.randint(3, 7))]
-        secret_combo = [''.join(random.choice(string.lowercase) for i in range(7)),
-                        random.randint(1000000, 9999999)]
-        travel_history = [random.choice(COUNTRIES[:9]) for i in range(1, 11)]
-        travel_history_code = [COUNTRY_CODE[COUNTRIES.index(i)] for i in travel_history]
-        travel_details = [{"country": travel_history[i], "code": travel_history_code[i]}
-                          for i in range(len(travel_history))]
-        countries_visited = list(set(travel_history))
-        booking = {"source": random.choice(COUNTRIES), "destination": random.choice(COUNTRIES)}
-        confirm_question_values = [random.choice(bool_vals) for i in range(5)]
-        prefix = "airline_record_" + str(random.random()*100000)
-        generators.append(DocumentGenerator(prefix, template, [name], [email], [age], [premium_customer],
-                                            [address], [travel_history], [travel_history_code], [travel_details],
-                                            [booking], [credit_cards], [secret_combo], [countries_visited],
-                                            [confirm_question_values], start=start, end=docs_per_day))
-        return generators
-
     def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day = 1, isShuffle = False):
         generators = []
         count = 1
@@ -981,6 +912,7 @@ class JsonGenerator:
                 for month in join_mo:
                     for day in join_day:
                         random.seed(count)
+                        count += 1
                         prefix = str(random.random()*100000)
                         generators.append(DocumentGenerator(key_prefix + prefix,
                                                template,
@@ -1031,3 +963,4 @@ class JsonGenerator:
             random.shuffle(data)
             return data
         return data
+
