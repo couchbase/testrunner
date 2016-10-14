@@ -39,6 +39,8 @@ class CBASBaseTest(BaseTestCase):
                                                      False)
         self.skip_drop_dataset = self.input.param('skip_drop_dataset', False)
 
+        self.query_id = self.input.param('query_id',None)
+
         # Drop any existing buckets and datasets
         self.cleanup_cbas()
 
@@ -52,7 +54,7 @@ class CBASBaseTest(BaseTestCase):
         shell = RemoteMachineShellConnection(server)
         shell.execute_command("""curl -v -u Administrator:password -X POST http://{0}:8091/sampleBuckets/install -d '["{1}"]'""".format(server.ip, bucketName))
         shell.disconnect()
-        self.sleep(10)
+        self.sleep(5)
 
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
                               cb_server_ip,
@@ -72,12 +74,16 @@ class CBASBaseTest(BaseTestCase):
                 return True
 
     def create_dataset_on_bucket(self, cbas_bucket_name, cbas_dataset_name,
+                                 where_field=None, where_value = None,
                                  validate_error_msg=False):
         """
         Creates a shadow dataset on a CBAS bucket
         """
         cmd_create_dataset = "create shadow dataset {0} on {1};".format(
             cbas_dataset_name, cbas_bucket_name)
+        if where_field and where_value:
+            cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";".format(
+                cbas_dataset_name, cbas_bucket_name, where_field, where_value)
         status, metrics, errors, results = self.execute_statement_on_cbas(
             cmd_create_dataset, self.master)
         if validate_error_msg:
