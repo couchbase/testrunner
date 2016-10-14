@@ -1960,6 +1960,12 @@ class QueryTests(BaseTestCase):
                                                             bucket.name) +\
                          " ORDER BY name"
 
+            if self.analytics:
+                self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 )" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+
             actual_result = self.run_cbq_query()
             expected_result = [{"name" : doc['name']}
                                for doc in self.full_list
@@ -1973,6 +1979,12 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 END)" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+
+            if self.analytics:
+                self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 )" % (
                                                             bucket.name) +\
                          " ORDER BY name"
 
@@ -1991,6 +2003,14 @@ class QueryTests(BaseTestCase):
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
                                                                       bucket.name) +\
                         " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
+                                                                bucket.name) +\
+                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+
+            if self.analytics:
+                 self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' )" % (
+                                                                      bucket.name) +\
+                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 )"  % (
                                                                 bucket.name) +\
                         "AND  NOT (job_title = 'Sales') ORDER BY name"
 
@@ -2014,6 +2034,14 @@ class QueryTests(BaseTestCase):
                                                                 bucket.name) +\
                         "AND  NOT (job_title = 'Sales') ORDER BY name"
 
+            if self.analytics:
+                self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' )" % (
+                                                                      bucket.name) +\
+                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM <= 5 )"  % (
+                                                                bucket.name) +\
+                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+
             actual_result = self.run_cbq_query()
             expected_result = [{"name" : doc['name'], "email" : doc["email"]}
                                for doc in self.full_list
@@ -2031,6 +2059,14 @@ class QueryTests(BaseTestCase):
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
                                                                       bucket.name) +\
                         " AND (ANY vm IN %s.VMs SATISFIES vm.RAM >= 5 END)"  % (
+                                                                bucket.name) +\
+                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+
+            if self.analytics:
+                self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' )" % (
+                                                                      bucket.name) +\
+                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM >= 5 )"  % (
                                                                 bucket.name) +\
                         "AND  NOT (job_title = 'Sales') ORDER BY name"
 
@@ -3649,7 +3685,11 @@ class QueryTests(BaseTestCase):
     def test_letting(self):
         for bucket in self.buckets:
             self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
+            if self.analytics:
+                    self.query = "SELECT d.join_mo, sum_test from %s WHERE d.join_mo>7 group by d.join_mo letting sum_test = sum(d.tasks_points.task1)" % (bucket.name)
+
             actual_list = self.run_cbq_query()
+
             actual_result = sorted(actual_list['results'])
             tmp_groups = set([doc['join_mo'] for doc in self.full_list if doc['join_mo']>7])
             expected_result = [{"join_mo" : group,
