@@ -321,6 +321,11 @@ class NULLTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT feature_name FROM %s"  % bucket.name +\
                         " WHERE ANY story_point_n IN story_point SATISFIES story_point_n IS NULL END ORDER BY feature_name"
+
+            if self.analytics:
+                self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE ANY story_point_n IN story_point SATISFIES story_point_n IS NULL ORDER BY feature_name"
+
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()

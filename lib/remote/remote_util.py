@@ -2242,7 +2242,6 @@ class RemoteMachineShellConnection:
         filedata = ""
         if not(query==""):
             main_command = main_command + " -s=\"" + query+ '"'
-            print "main_command is %s" %main_command
         elif (self.remote and not(queries=="")):
             sftp = self._ssh_client.open_sftp()
             filein = sftp.open(filename, 'w')

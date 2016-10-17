@@ -400,7 +400,8 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories" +\
             " FROM %s WHERE VMs IS NOT NULL "  % (bucket.name)
-
+            if self.analytics:
+                self.query = 'SELECT (SELECT VALUE vm.memory FROM VMs AS vm) AS vm_memories FROM %s WHERE VMs IS NOT NULL '% bucket.name
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (doc['vm_memories']))
             expected_result = [{"vm_memories" : [vm["memory"] for vm in doc['VMs']]}
