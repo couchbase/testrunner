@@ -8,6 +8,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
+from testconstants import COUCHBASE_FROM_SPOCK
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -194,7 +195,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Backup successfully completed" not in output[0]:
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK and (error or output):
+            return output, error
+        elif self.cb_version[:5] not in COUCHBASE_FROM_SPOCK and \
+              (error or "Backup successfully completed" not in output[0]):
             return output, error
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
