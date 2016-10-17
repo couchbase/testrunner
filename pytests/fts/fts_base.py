@@ -2698,12 +2698,20 @@ class FTSBaseTest(unittest.TestCase):
                 FloatingServers._serverlist.append(server)
 
     def __calculate_bucket_size(self, cluster_quota, num_buckets):
+
+        if 'quota_percent' in self._input.test_params:
+            quota_percent = int(self._input.test_params['quota_percent'])
+        else:
+            quota_percent = None
+
         dgm_run = self._input.param("dgm_run", 0)
         if dgm_run:
             # buckets cannot be created if size<100MB
             bucket_size = 256
+        elif quota_percent is not None:
+             bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
         else:
-            bucket_size = int((float(cluster_quota) - 500) / float(num_buckets))
+            bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
         return bucket_size
 
     def __create_buckets(self):
