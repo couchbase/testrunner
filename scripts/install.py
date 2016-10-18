@@ -30,6 +30,8 @@ from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
                           CB_RELEASE_BUILDS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
+from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
+from testconstants import WIN_COUCHBASE_PORT_CONFIG_PATH, WIN_COUCHBASE_OLD_CONFIG_PATH
 import TestInput
 
 
@@ -45,17 +47,18 @@ Options:
  -i <file>        Path to .ini file containing cluster information.
 
 Available keys:
- product=cb|mb           Used to specify couchbase or membase.
- version=SHORT_VERSION   Example: "2.0.0r-71".
- parallel=false          Useful when you're installing a cluster.
- toy=                    Install a toy build
- init_nodes=False        Initialize nodes
- vbuckets=               The number of vbuckets in the server installation.
- sync_threads=True       Sync or acync threads(+S or +A)
- erlang_threads=         Number of erlang threads (default=16:16 for +S type)
- upr=True                Enable UPR replication
- xdcr_upr=               Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
- fts_query_limit=1000000 Set a limit for the max results to be returned by fts for any query
+ product=cb|mb              Used to specify couchbase or membase.
+ version=SHORT_VERSION      Example: "2.0.0r-71".
+ parallel=false             Useful when you're installing a cluster.
+ toy=                       Install a toy build
+ init_nodes=False           Initialize nodes
+ vbuckets=                  The number of vbuckets in the server installation.
+ sync_threads=True          Sync or acync threads(+S or +A)
+ erlang_threads=            Number of erlang threads (default=16:16 for +S type)
+ upr=True                   Enable UPR replication
+ xdcr_upr=                  Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
+ fts_query_limit=1000000    Set a limit for the max results to be returned by fts for any query
+ change_indexer_ports=false Sets indexer ports values to non-default ports
 
 
 Examples:
@@ -1013,6 +1016,45 @@ def check_build(input):
 params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
+def change_couchbase_indexer_ports(input):
+    params = {"indexer_admin_port": 9110,
+            "indexer_scan_port": 9111,
+            "indexer_http_port": 9112,
+            "indexer_stream_init_port": 9113,
+            "indexer_stream_catchup_port": 9114,
+            "indexer_stream_maint_port": 9115}
+    remote_client = RemoteMachineShellConnection(input.servers[0])
+    info = remote_client.extract_remote_info()
+    remote_client.disconnect()
+    type = info.type.lower()
+    if type == "windows":
+        port_config_path = WIN_COUCHBASE_PORT_CONFIG_PATH
+        old_config_path = WIN_COUCHBASE_OLD_CONFIG_PATH
+    else:
+        port_config_path = LINUX_COUCHBASE_PORT_CONFIG_PATH
+        old_config_path = LINUX_COUCHBASE_OLD_CONFIG_PATH
+    filename = "static_config"
+    for node in input.servers:
+        output_lines = ''
+        remote = RemoteMachineShellConnection(node)
+        remote.stop_server()
+        lines = remote.read_remote_file(port_config_path, filename)
+        for line in lines:
+            for key in params.keys():
+                if key in line:
+                    line = ""
+                    break
+            output_lines += "{0}".format(line)
+        for key in params.keys():
+            line = "{" + str(key) + ", " + str(params[key]) + "}."
+            output_lines += "{0}\n".format(line)
+        output_lines = output_lines.replace(r'"', r'\"')
+        remote.write_remote_file(port_config_path, filename, output_lines)
+        remote.delete_file(old_config_path, "/config.dat")
+    for node in input.servers:
+        remote = RemoteMachineShellConnection(node)
+        remote.start_server()
+
 def main():
     log.info('*****Starting the complete install process ****')
     log_install_failed = "some nodes were not install successfully!"
@@ -1060,6 +1102,9 @@ def main():
             success &= RemoteMachineShellConnection(server).is_moxi_installed()
         if not success:
             sys.exit(log_install_failed)
+    if "change_indexer_ports" in input.test_params and input.test_params["change_indexer_ports"].lower() == 'true'\
+            and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
+        change_couchbase_indexer_ports(input)
 
 if __name__ == "__main__":
     main()
