@@ -3,6 +3,7 @@ from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from lib.couchbase_helper.analytics_helper import *
+from couchbase_helper.documentgenerator import DocumentGenerator
 
 
 class CBASBaseTest(BaseTestCase):
@@ -62,7 +63,7 @@ class CBASBaseTest(BaseTestCase):
         """
         Creates a bucket on CBAS
         """
-        cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"bucket\":\"" + cb_bucket_name + "\",\"nodes\":\"" + cb_server_ip + "\"};"
+        cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"name\":\"" + cb_bucket_name + "\",\"nodes\":\"" + cb_server_ip + "\"};"
         status, metrics, errors, results = self.execute_statement_on_cbas(
             cmd_create_bucket, self.master)
         if validate_error_msg:
@@ -207,12 +208,13 @@ class CBASBaseTest(BaseTestCase):
         """
         try:
             # Disconnect from all connected buckets
-            cmd_get_buckets = "select BucketName from Metadata.`Bucket`;"
+            #cmd_get_buckets = "select BucketName from Metadata.`Bucket`;"
+            cmd_get_buckets = "select Name from Metadata.`Bucket`;"
             status, metrics, errors, results = self.execute_statement_on_cbas(
                 cmd_get_buckets, self.master)
             if (results != None) & (len(results) > 0):
                 for row in results:
-                    self.disconnect_from_bucket(row['BucketName'],
+                    self.disconnect_from_bucket(row['Name'],
                                                 disconnect_if_connected=True)
                     self.log.info(
                         "********* Disconnected all buckets *********")
@@ -235,9 +237,85 @@ class CBASBaseTest(BaseTestCase):
                 cmd_get_buckets, self.master)
             if (results != None) & (len(results) > 0):
                 for row in results:
-                    self.drop_cbas_bucket(row['BucketName'])
+                    self.drop_cbas_bucket(row['Name'])
                     self.log.info("********* Dropped all buckets *********")
             else:
                 self.log.info("********* No buckets to drop *********")
         except Exception as e:
             self.log.info(e.message)
+
+    def perform_doc_ops_in_all_cb_buckets(self, num_items, operation,start_key=0, end_key=1000):
+        """
+        Create/Update/Delete docs in all cb buckets
+        :param num_items: No. of items to be created/deleted/updated
+        :param operation: String - "create","update","delete"
+        :param start_key: Doc Key to start the operation with
+        :param end_key: Doc Key to end the operation with
+        :return:
+        """
+        number = 100
+        first = ['james', 'sharon']
+        template = '{{ "number": {0}, "first_name": "{1}" , "mutated":0}}'
+        gen_load = DocumentGenerator('test_docs', template, [number, ], first,
+                                     start=start_key, end=end_key)
+        self.log.info("%s %s documents..." % (operation, num_items))
+        try:
+            self._load_all_buckets(self.master, gen_load, operation, 0)
+            self._verify_stats_all_buckets([self.master])
+        except Exception as e:
+            self.log.info(e.message)
+
+    def get_num_items_in_cbas_dataset(self, dataset_name):
+        """
+        Gets the count of docs in the cbas dataset
+        """
+        total_items = -1
+        mutated_items = -1
+        cmd_get_num_items = "select count(*) from %s;" % dataset_name
+        cmd_get_num_mutated_items = "select count(*) from %s where mutated>0;" % dataset_name
+
+        status, metrics, errors, results = self.execute_statement_on_cbas(
+            cmd_get_num_items, self.master)
+        if status != "success":
+            self.log.error("Query failed")
+        else:
+            self.log.info("No. of items in CBAS dataset {0} : {1}".format(dataset_name,results[0]['$1']))
+            total_items = results[0]['$1']
+
+        status, metrics, errors, results = self.execute_statement_on_cbas(
+            cmd_get_num_mutated_items, self.master)
+        if status != "success":
+            self.log.error("Query failed")
+        else:
+            self.log.info("No. of items mutated in CBAS dataset {0} : {1}".format(dataset_name, results[0]['$1']))
+            mutated_items = results[0]['$1']
+
+        return total_items, mutated_items
+
+    def validate_cbas_dataset_items_count(self, dataset_name, expected_count, expected_mutated_count=0):
+        """
+        Compares the count of CBAS dataset total and mutated items with the expected values.
+        """
+        count, mutated_count = self.get_num_items_in_cbas_dataset(dataset_name)
+        tries = 12
+        if expected_mutated_count:
+            while (count < expected_count or mutated_count < expected_mutated_count) and tries > 0:
+                self.sleep(10)
+                count, mutated_count = self.get_num_items_in_cbas_dataset(dataset_name)
+                tries -= 1
+        else :
+            while count < expected_count and tries > 0:
+                self.sleep(10)
+                count, mutated_count = self.get_num_items_in_cbas_dataset(
+                    dataset_name)
+                tries -= 1
+
+        self.log.info("Expected Count: %s, Actual Count: %s" % (expected_count, count))
+        self.log.info("Expected Mutated Count: %s, Actual Mutated Count: %s" % (expected_mutated_count, mutated_count))
+
+        if count != expected_count:
+            return False
+        elif mutated_count == expected_mutated_count:
+            return True
+        else:
+            return False
