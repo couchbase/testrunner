@@ -445,7 +445,7 @@ class auditTest(BaseTestCase):
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
-                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
                 rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                    '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
                 self.log.info ("value of server is {0}".format(server))
@@ -479,7 +479,7 @@ class auditTest(BaseTestCase):
                                 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                 'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
-                                "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
+                                "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
             restFirstNode.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                 '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
 
@@ -499,7 +499,7 @@ class auditTest(BaseTestCase):
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
-                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
                 rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                    '11211', 'membase', 0, expectedResults['num_threads'], 0 , 'valueOnly')
 
