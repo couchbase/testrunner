@@ -210,10 +210,18 @@ class NewUpgradeBaseTest(BaseTestCase):
                 build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
             elif version[:5] in COUCHBASE_MP_VERSION:
                 build_repo = MV_LATESTBUILD_REPO
+
+        if self.initial_build_type == "community":
+            edition_type = "couchbase-server-community"
+        else:
+            edition_type = "couchbase-server-enterprise"
+
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
-                    deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
-                    edition_type="couchbase-server-enterprise", repo=build_repo, \
-                    distribution_version=info.distribution_version.lower())
+                                                      deliverable_type=info.deliverable_type,
+                                                      architecture_type=info.architecture_type, \
+                                                      edition_type=edition_type, repo=build_repo, \
+                                                      distribution_version=info.distribution_version.lower())
+
         self.log.info("finding build %s for machine %s" % (version, server))
 
         if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
