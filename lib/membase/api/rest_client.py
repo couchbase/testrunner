@@ -1822,7 +1822,7 @@ class RestConnection(object):
     def is_lww_enabled(self, bucket='default'):
         bucket_info = self.get_bucket_json(bucket=bucket)
         try:
-            if bucket_info['timeSynchronization'] == 'enabledWithoutDrift':
+            if bucket_info['conflictResolutionType'] == 'lww':
                 return True
         except KeyError:
             return False
@@ -1873,8 +1873,7 @@ class RestConnection(object):
                       threadsNumber=3,
                       flushEnabled=1,
                       evictionPolicy='valueOnly',
-                      lww=False,
-                      drift=False):
+                      lww=False):
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
@@ -1917,10 +1916,7 @@ class RestConnection(object):
                            'flushEnabled': flushEnabled,
                            'evictionPolicy': evictionPolicy}
         if lww:
-            if drift:
-                init_params['timeSynchronization'] = 'enabledWithDrift'
-            else:
-                init_params['timeSynchronization'] = 'enabledWithoutDrift'
+            init_params['conflictResolutionType'] = 'lww'
         params = urllib.urlencode(init_params)
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
