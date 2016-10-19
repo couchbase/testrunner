@@ -105,7 +105,7 @@ class CBASBucketOperations(CBASBaseTest):
                 "No. of items in CBAS dataset do not match that in the CB bucket")
 
     def update_all_docs_in_cb_bucket(self):
-        self.setup_for_test(skip_data_loading=True)
+        self.setup_for_test(skip_data_loading=False)
 
         # Update all docs in Couchbase bucket
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "update", 0,
