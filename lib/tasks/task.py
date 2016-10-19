@@ -105,7 +105,6 @@ class NodeInitializeTask(Task):
         self.services = services
         self.gsi_type = gsi_type
 
-
     def execute(self, task_manager):
         try:
             rest = RestConnection(self.server)
@@ -113,7 +112,10 @@ class NodeInitializeTask(Task):
                 self.state = FINISHED
                 self.set_exception(error)
                 return
-        info = rest.get_nodes_self()
+        info = Future.wait_until(lambda: rest.get_nodes_self(),
+                                 lambda x: x.memoryTotal > 0, 10)
+        self.log.info("server: %s, nodes/self: %s", self.server, info.__dict__)
+
         username = self.server.rest_username
         password = self.server.rest_password
 
@@ -155,7 +157,7 @@ class NodeInitializeTask(Task):
                         self.quota = kv_quota
                 else:
                     self.set_exception(Exception("KV RAM need to be larger than %s MB "
-                                      "at node  %s"  % (MIN_KV_QUOTA, self.server.ip)))
+                                      "at node %s"  % (MIN_KV_QUOTA, self.server.ip)))
         rest.init_cluster_memoryQuota(username, password, self.quota)
         rest.set_indexer_storage_mode(username, password, self.gsi_type)
 
