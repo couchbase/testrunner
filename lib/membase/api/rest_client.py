@@ -3436,7 +3436,7 @@ class Bucket(object):
         self.saslPassword = saslPassword
         self.authType = ""
         self.bucket_size = bucket_size
-        self.kvs = {1:KVStore()}
+        self.kvs = {1:KVStore(), 0 : None}
         self.authType = authType
         self.master_id = master_id
         self.eviction_policy = eviction_policy

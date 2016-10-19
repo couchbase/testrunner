@@ -21,6 +21,7 @@ from remote.remote_util import RemoteUtilHelper
 from couchbase_helper.stats_tools import StatsCommon
 from scripts.collect_server_info import cbcollectRunner
 from tasks.future import TimeoutError
+from memcached.helper.kvstore import Synchronized
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.exception import ServerUnavailableException, XDCRException
@@ -1215,19 +1216,18 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for key in valid_keys_second:
             # replace/add the values for each key in first kvs
             if key not in valid_keys_first:
-                partition1 = kv_store_first[kvs_num].acquire_partition(key)
-                partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                key_add = partition2.get_key(key)
-                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
-                kv_store_first[kvs_num].release_partition(key)
-                kv_store_second[kvs_num].release_partition(key)
+                part1 = kv_store_first[kvs_num].acquire_partition(key)
+                part2 = kv_store_second[kvs_num].acquire_partition(key)
+                with Synchronized(dict(part1)) as partition1, Synchronized(dict(part2)) as partition2:
+                    key_add = partition2.get_key(key)
+                    partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
 
         for key in deleted_keys_second:
             # add deleted keys to first kvs if the where deleted only in second kvs
             if key not in deleted_keys_first:
-                partition1 = kv_store_first[kvs_num].acquire_partition(key)
-                partition1.delete(key)
-                kv_store_first[kvs_num].release_partition(key)
+                part1 = kv_store_first[kvs_num].acquire_partition(key)
+                with Synchronized(dict(part1)) as partition1:
+                    partition1.delete(key)
 
     def __do_merge_buckets(self, src_master, dest_master, bidirection):
         src_buckets = self._get_cluster_buckets(src_master)

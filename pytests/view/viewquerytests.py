@@ -1978,6 +1978,7 @@ class ViewQueryTests(BaseTestCase):
             for gen_load in gens_load:
                 items += (gen_load.end - gen_load.start)
             self.log.info("%s %s documents..." % (op_type, items))
+            kv_store = 1 if self.kv_store_required == True else 0
             task = self.cluster.async_load_gen_docs(data_set.server, bucket.name, gens_load,
                                                  bucket.kvs[kv_store], op_type, exp, flag,
                                                  only_store_hash, batch_size, pause_secs,
@@ -2586,7 +2587,7 @@ class SimpleDataSet:
         for value in stat['partition_seqs'].itervalues():
                     partition_seq += value
         return partition_seq
-    
+
     def get_replica_partition_seq(self, view):
         rest = RestConnection(self.server)
         _, stat = rest.set_view_info(view.bucket, view.name)
