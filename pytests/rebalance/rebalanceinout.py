@@ -344,62 +344,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
         for t in thread_list:
             t.join()
 
-    def test_start_stop_rebalance_in_out(self):
-        """
-        Start-stop rebalance in/out with adding/removing aditional after stopping rebalance.
-
-        This test begins by loading a given number of items into the cluster. It then
-        add  servs_in nodes and remove  servs_out nodes and start rebalance. Then rebalance
-        is stopped when its progress reached 20%. After we add  extra_nodes_in and remove
-        extra_nodes_out. Restart rebalance with new cluster configuration. Later rebalance
-        will be stop/restart on progress 40/60/80%. After each iteration we wait for
-        the disk queues to drain, and then verify that there has been no data loss,
-        sum(curr_items) match the curr_items_total. Once cluster was rebalanced the test is finished.
-        The oder of add/remove nodes looks like:
-        self.nodes_init|servs_in|extra_nodes_in|extra_nodes_out|servs_out
-        """
-        extra_nodes_in = self.input.param("extra_nodes_in", 0)
-        extra_nodes_out = self.input.param("extra_nodes_out", 0)
-        servs_init = self.servers[:self.nodes_init]
-        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
-        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
-        extra_servs_in = [self.servers[i + self.nodes_init + self.nodes_in] for i in range(extra_nodes_in)]
-        extra_servs_out = [self.servers[self.nodes_init - i - 1 - self.nodes_out] for i in range(extra_nodes_out)]
-        rest = RestConnection(self.master)
-        self._wait_for_stats_all_buckets(servs_init)
-        self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
-        self.log.info("adding nodes {0} to cluster".format(servs_in))
-        self.log.info("removing nodes {0} from cluster".format(servs_out))
-        add_in_once = extra_servs_in
-        result_nodes = set(servs_init + servs_in) - set(servs_out)
-        # the latest iteration will be with i=5, for this case rebalance should be completed,
-        # that also is verified and tracked
-        for i in range(1, 6):
-            if i == 1:
-                rebalance = self.cluster.async_rebalance(servs_init[:self.nodes_init], servs_in, servs_out)
-            else:
-                rebalance = self.cluster.async_rebalance(servs_init[:self.nodes_init] + servs_in, add_in_once,
-                                                         servs_out + extra_servs_out)
-                add_in_once = []
-                result_nodes = set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out)
-            self.sleep(20)
-            expected_progress = 20 * i
-            reached = RestHelper(rest).rebalance_reached(expected_progress)
-            self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-            if not RestHelper(rest).is_cluster_rebalanced():
-                stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
-                self.assertTrue(stopped, msg="unable to stop rebalance")
-            rebalance.result()
-            if RestHelper(rest).is_cluster_rebalanced():
-                self.verify_cluster_stats(result_nodes)
-                self.log.info(
-                    "rebalance was completed when tried to stop rebalance on {0}%".format(str(expected_progress)))
-                break
-            else:
-                self.log.info("rebalance is still required")
-                self._verify_all_buckets(self.master, timeout=None, max_verify=self.max_verify, batch_size=1)
-        self.verify_unacked_bytes_all_buckets()
-
     def test_incremental_rebalance_out_in_with_mutation(self):
         """
         Rebalances nodes in and out of the cluster while doing mutations.

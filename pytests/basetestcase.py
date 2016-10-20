@@ -882,7 +882,7 @@ class BaseTestCase(unittest.TestCase):
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None,
                              timeout=None, check_items=True, only_store_hash=True,
                              replica_to_read=None, batch_size=1000, check_bucket_stats=True,
-                             check_ep_items_remaining=False):
+                             check_ep_items_remaining=False, verify_total_items=True):
         servers = self.get_kv_nodes(servers)
         if servers is None:
             servers = self.servers
@@ -906,11 +906,12 @@ class BaseTestCase(unittest.TestCase):
             if check_bucket_stats:
                 self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
-            verified = True
-            for bucket in self.buckets:
-                verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
-            self.assertTrue(verified, "Lost items!!! Replication was completed but "
-                                      "          sum(curr_items) don't match the curr_items_total")
+            if verify_total_items:
+                verified = True
+                for bucket in self.buckets:
+                    verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
+                self.assertTrue(verified, "Lost items!!! Replication was completed but "
+                                          "          sum(curr_items) don't match the curr_items_total")
         else:
             self.log.warn("verification of items was omitted")
 
