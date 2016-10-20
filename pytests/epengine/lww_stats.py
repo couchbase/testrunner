@@ -1,0 +1,267 @@
+import time
+from basetestcase import BaseTestCase
+
+
+from sdk_client import SDKClient
+
+
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+from couchbase_helper.documentgenerator import BlobGenerator
+
+import zlib
+
+class LWWStatsTests(BaseTestCase):
+
+    # The stats related epctl vbucket commands actually apply to the whole bucket but we need a vbucket parameter,
+    # (which is apparently ignore)
+    DUMMY_VBUCKET = ' 123'    # the leading space is needed
+
+    def setUp(self):
+
+        super(LWWStatsTests, self).setUp()
+
+
+
+
+    def tearDown(self):
+        super(LWWStatsTests, self).tearDown()
+
+
+    def test_time_sync_threshold_setting(self, password='password'):
+        DEFAULT_THRESHOLD = 5000000
+
+
+        self.log.info('starting test_time_sync_threshold_setting')
+
+        # bucket is created with lww in base test case using the LWW parameter
+
+        # get the stats
+        client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
+        ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
+        self.assertTrue(ahead_threshold == DEFAULT_THRESHOLD,
+                        'Ahead threshold mismatch expected: {0} actual {1}'.format(DEFAULT_THRESHOLD, ahead_threshold))
+        # change the setting and verify it is per the new setting - this may or may not be supported
+
+        shell = RemoteMachineShellConnection(self.servers[0])
+        output, error = shell.execute_cbepctl(self.buckets[0], "", "set vbucket_param",
+                              "hlc_drift_ahead_threshold_us ", str(DEFAULT_THRESHOLD/2) + DUMMY_VBUCKET)
+        if len(error) > 0:
+            self.fail('Failed to set the drift counter threshold, please check the logs.')
+
+        ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
+        self.assertTrue(ahead_threshold == DEFAULT_THRESHOLD/2,
+                        'Ahead threshold mismatch expected: {0} actual {1}'.format(DEFAULT_THRESHOLD/2, ahead_threshold))
+
+
+        # generally need to fill out a matrix here behind/ahead - big and small
+
+
+
+    def test_poisoned_cas(self, password='password'):
+
+
+        #import pdb;pdb.set_trace()
+
+        self.log.info('starting test_poisoned_cas')
+
+        ONE_HOUR_IN_SECONDS = 3600
+
+        """
+        - set the clock ahead
+        - do lots of sets and get some CASs
+        - do a set and get the CAS (flag, CAS, value) and save it
+        - set the clock back
+        - verify the CAS is still big on new sets
+        - reset the CAS
+        - do the vbucket max cas and verify
+        - do a new mutation and verify the CAS is smaller
+
+
+        """
+
+
+
+
+        sdk_client = SDKClient(scheme='couchbase',hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
+        mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
+        shell = RemoteMachineShellConnection(self.servers[0])
+
+        # move the system clock ahead to poison the CAS
+        shell = RemoteMachineShellConnection(self.servers[0])
+        self.assertTrue(  shell.change_system_time( ONE_HOUR_IN_SECONDS ), 'Failed to advance the clock')
+
+
+        output,error = shell.execute_command('date')
+        self.log.info('Date after is set forward {0}'.format( output ))
+
+
+
+
+        rc = sdk_client.set('key1', 'val1')
+        rc = mc_client.get('key1' )
+        poisoned_cas = rc[1]
+        self.log.info('The poisoned CAS is {0}'.format(poisoned_cas))
+
+
+
+
+        # do lots of mutations to set the max CAS for all vbuckets
+
+        gen_load  = BlobGenerator('key-for-cas-test', 'value-for-cas-test-', self.value_size, end=10000)
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+
+
+        # move the clock back again and verify the CAS stays large
+        self.assertTrue(  shell.change_system_time( -ONE_HOUR_IN_SECONDS ), 'Failed to change the clock')
+        output, error = shell.execute_command('date')
+        self.log.info('Date after is set backwards {0}'.format( output))
+
+
+
+
+        rc = sdk_client.set('key2', 'val2')
+        second_poisoned_cas = rc.cas
+        self.log.info('The second_poisoned CAS is {0}'.format(second_poisoned_cas))
+        self.assertTrue(  second_poisoned_cas > poisoned_cas,
+                'Second poisoned CAS {0} is not larger than the first poisoned cas'.format(second_poisoned_cas,poisoned_cas))
+
+
+
+
+        # reset the CAS for all vbuckets. This needs to be done in conjunction with a clock change. If the clock is not
+        # changed then the CAS will immediately continue with the clock. I see two scenarios:
+        # 1. Set the clock back 1 hours and the CAS back 30 minutes, the CAS should be used
+        # 2. Set the clock back 1 hour, set the CAS back 2 hours, the clock should be use
+
+
+        # do case 1, set the CAS back 30 minutes.  Calculation below assumes the CAS is in microseconds
+        earlier_max_cas = poisoned_cas - 30 * 60 * 1000000
+        for i in range(self.vbuckets):
+            output, error = shell.execute_cbepctl(self.buckets[0], "", "set_vbucket_param",
+                              "max_cas ", str(i) + ' ' + str(earlier_max_cas)  )
+            if len(error) > 0:
+                self.fail('Failed to set the max cas')
+
+        # verify the max CAS
+
+        for i in range(self.vbuckets):
+            max_cas = int( mc_client.stats('vbucket-details')['vb_' + str(i) + ':max_cas'] )
+            self.assertTrue(max_cas == earlier_max_cas,
+                    'Max CAS not properly set for vbucket {0} set as {1} and observed {2}'.format(i,earlier_max_cas, max_cas ) )
+            self.log.info('Per cbstats the max cas for bucket {0} is {1}'.format(i, max_cas) )
+
+
+
+        rc1 = sdk_client.set('key-after-resetting cas', 'val1')
+        rc2 = mc_client.get('key-after-resetting cas' )
+        #import pdb;pdb.set_trace()
+        set_cas_after_reset_max_cas = rc2[1]
+        self.log.info('The later CAS is {0}'.format(set_cas_after_reset_max_cas))
+        self.assertTrue( set_cas_after_reset_max_cas < poisoned_cas,
+             'For {0} CAS has not decreased. Current CAS {1} poisoned CAS {2}'.format('key-after-resetting cas', set_cas_after_reset_max_cas, poisoned_cas))
+
+
+        # do a bunch of sets and verify the CAS is small - this is really only one set, need to do more
+
+
+        gen_load  = BlobGenerator('key-for-cas-test-after-cas-is-reset', 'value-for-cas-test-', self.value_size, end=1000)
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+
+        gen_load.reset()
+        while gen_load.has_next():
+            key, value = gen_load.next()
+            print 'getting the key', key
+            #try:
+            rc = mc_client.get( key )
+            #rc = sdk_client.get(key)
+            print '\n\n\n**** the rc is', rc
+            cas = rc[1]
+            self.assertTrue( cas < poisoned_cas, 'For key {0} CAS has not decreased. Current CAS {1} poisoned CAS {2}'.format(key, cas, poisoned_cas))
+            #except:
+            #self.log.info('get error with {0}'.format(key))
+
+
+        _, better_cas, _ = sdk_client.set('key3', 'val1')
+        self.log.info('The better CAS is {)}'.format(better_cas))
+
+        self.assertTrue( better_cas < poisoned_cas, 'The CAS was not improved')
+
+
+
+
+
+
+
+        # set the clock way ahead - remote_util_OS.py (new)
+        # do a bunch of mutations - not really needed
+        # do the fix command - cbepctl, the existing way (remote util)
+
+        # do some mutations, verify they conform to the new CAS - build on the CAS code,
+        #     where to iterate over the keys and get the CAS?
+        """
+                    use the SDK client
+                    while gen.has_next():
+                        key, value = gen.next()
+                        get the cas for these
+                        also do the vbucket stats
+
+
+        """
+        # also can be checked in the vbucket stats somewhere
+        # revert the clock
+
+
+    def test_drift_stats(self, password='password'):
+
+
+        self.log.info('starting test_drift_stats')
+
+        """
+        do the meta commands, these must be the mcbin client
+        set the CAS relative to the current time to trigger the threshold counter
+        query the threshold counter
+
+        1. Do some set with meta based on the current time
+        2. Verify the stat does not increase
+
+        """
+
+        sdk_client = SDKClient(scheme='couchbase',hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
+        mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
+        shell = RemoteMachineShellConnection(self.servers[0])
+
+
+        #def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
+              #        adjusted_time=0, conflict_resolution_mode=0, skipCR=False):
+
+        cas = 1477032530608129
+
+        test_key = 'test-set-with-meta'
+
+        rc = mc_client.set_with_meta(test_key, 0, 0, 0, cas, 'test-value')
+
+
+        vbId = (((zlib.crc32(test_key)) >> 16) & 0x7fff) & (self.vbuckets- 1)
+
+        print 'the set with meta rc is', rc
+        print 'the key vbucket id is', vbId
+        import pdb;pdb.set_trace()
+
+
+        # set and get meta pair, mess with the clock
+        # mess with the clock and verify the stats are correct, incremented or not, depending on the clock skew
+        # cas reset is valuable for this
+        # revert the clock
+
+
+    def test_logical_clock_ticks(self, password='password'):
+
+
+        self.log.info('starting test_logical_clock_ticks')
+        # put the clock back, do mutations, the HCL and the tick counter should increment
+        # will it wrap?
+
+
+
+
