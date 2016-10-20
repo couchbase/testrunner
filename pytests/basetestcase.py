@@ -136,6 +136,7 @@ class BaseTestCase(unittest.TestCase):
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
             self.bucket_size = self.input.param("bucket_size", None)
+            self.conflict_resolution = self.input.param("conflict_resolution", 'seqno')
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
@@ -427,7 +428,8 @@ class BaseTestCase(unittest.TestCase):
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
                                                enable_replica_index=self.enable_replica_index,
-                                               eviction_policy=self.eviction_policy)
+                                               eviction_policy=self.eviction_policy,
+                                               conflict_resolution=self.conflict_resolution)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size,
                                        eviction_policy=self.eviction_policy))

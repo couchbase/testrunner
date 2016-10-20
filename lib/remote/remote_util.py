@@ -3623,6 +3623,28 @@ class RemoteMachineShellConnection:
                                      '"http://{0}:{1}@{2}:8091/query"'\
                                   .format(rest_username, rest_password,server.ip))
 
+    def change_system_time(self, time_change_in_seconds):
+
+        # note that time change may be positive or negative
+
+
+        # need to support Windows too
+        output, error = self.execute_command("date +%s")
+        if len(error) > 0:
+            return False
+        curr_time = int(output[-1])
+        new_time = curr_time + time_change_in_seconds
+
+        output, error = self.execute_command("date --date @" + str(new_time))
+        if len(error) > 0:
+            return False
+
+        output, error = self.execute_command("date --set='" + output[-1] + "'")
+        if len(error) > 0:
+            return False
+        else:
+            return True
+
 
 class RemoteUtilHelper(object):
 
