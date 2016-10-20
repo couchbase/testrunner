@@ -87,6 +87,21 @@ class DateTimeFunctionClass(QueryTests):
                     if msg not in str(ex):
                         raise
 
+    def test_date_format_str(self):
+        local_formats = ["2006-01-02T15:04:05.999",
+           "2006-01-02T15:04:05",
+           "2006-01-02 15:04:05.999",
+           "2006-01-02 15:04:05",
+           "2006-01-02"]
+        for expression in local_formats:
+            for expected_format in FORMATS:
+                query = self._generate_date_format_str_query(expression, expected_format)
+                actual_result = self.run_cbq_query(query)
+                query = 'SELECT MILLIS_TO_STR(MILLIS("{0}"), "{1}")'.format(expression, expected_format)
+                expected_result = self.run_cbq_query(query)
+                self.assertEqual(actual_result["results"][0]["$1"], expected_result["results"][0]["$1"],
+                         "Resulting format {0} doesn't match with expected {1}".format(actual_result["results"][0]["$1"], expected_result["results"][0]["$1"]))
+
     def _generate_date_part_millis_query(self, expression, part, timezone=None):
         if not timezone:
             query = 'SELECT DATE_PART_MILLIS({0}, "{1}")'.format(expression, part)
@@ -113,7 +128,12 @@ class DateTimeFunctionClass(QueryTests):
         return local_parts
 
     def _generate_date_format_str_query(self, expression, format):
-        pass
+        query = 'SELECT DATE_FORMAT_STR("{0}", "{1}")'.format(expression, format)
+        return query
 
     def _generate_array_date_range_query(self, initial_date, final_date, part, increment=None):
-        pass
+        if not increment:
+            query = 'SELECT ARRAY_DATE_RANGE("{0}", "{1}", "{2}")'.format(initial_date, final_date, part)
+        else:
+            query = 'SELECT ARRAY_DATE_RANGE("{0}", "{1}", "{2}", {3})'.format(initial_date, final_date, part, increment)
+        return query
