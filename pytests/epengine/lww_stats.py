@@ -16,6 +16,8 @@ class LWWStatsTests(BaseTestCase):
     # The stats related epctl vbucket commands actually apply to the whole bucket but we need a vbucket parameter,
     # (which is apparently ignore)
     DUMMY_VBUCKET = ' 123'    # the leading space is needed
+    DEFAULT_THRESHOLD = 5000000
+    ONE_HOUR_IN_SECONDS = 3600
 
     def setUp(self):
 
@@ -28,8 +30,8 @@ class LWWStatsTests(BaseTestCase):
         super(LWWStatsTests, self).tearDown()
 
 
-    def test_time_sync_threshold_setting(self, password='password'):
-        DEFAULT_THRESHOLD = 5000000
+    def test_time_sync_threshold_setting(self):
+
 
 
         self.log.info('starting test_time_sync_threshold_setting')
@@ -58,14 +60,14 @@ class LWWStatsTests(BaseTestCase):
 
 
 
-    def test_poisoned_cas(self, password='password'):
+    def test_poisoned_cas(self):
 
 
         #import pdb;pdb.set_trace()
 
         self.log.info('starting test_poisoned_cas')
 
-        ONE_HOUR_IN_SECONDS = 3600
+
 
         """
         - set the clock ahead
@@ -89,7 +91,7 @@ class LWWStatsTests(BaseTestCase):
 
         # move the system clock ahead to poison the CAS
         shell = RemoteMachineShellConnection(self.servers[0])
-        self.assertTrue(  shell.change_system_time( ONE_HOUR_IN_SECONDS ), 'Failed to advance the clock')
+        self.assertTrue(  shell.change_system_time( LWWStatsTests.ONE_HOUR_IN_SECONDS ), 'Failed to advance the clock')
 
 
         output,error = shell.execute_command('date')
@@ -113,7 +115,7 @@ class LWWStatsTests(BaseTestCase):
 
 
         # move the clock back again and verify the CAS stays large
-        self.assertTrue(  shell.change_system_time( -ONE_HOUR_IN_SECONDS ), 'Failed to change the clock')
+        self.assertTrue(  shell.change_system_time( -LWWStatsTests.ONE_HOUR_IN_SECONDS ), 'Failed to change the clock')
         output, error = shell.execute_command('date')
         self.log.info('Date after is set backwards {0}'.format( output))
 
@@ -212,54 +214,89 @@ class LWWStatsTests(BaseTestCase):
         # revert the clock
 
 
-    def test_drift_stats(self, password='password'):
+    def test_drift_stats(self):
 
 
         self.log.info('starting test_drift_stats')
 
-        """
-        do the meta commands, these must be the mcbin client
-        set the CAS relative to the current time to trigger the threshold counter
-        query the threshold counter
-
-        1. Do some set with meta based on the current time
-        2. Verify the stat does not increase
-
-        """
 
         sdk_client = SDKClient(scheme='couchbase',hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
         shell = RemoteMachineShellConnection(self.servers[0])
 
 
-        #def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
-              #        adjusted_time=0, conflict_resolution_mode=0, skipCR=False):
 
-        cas = 1477032530608129
-
-        test_key = 'test-set-with-meta'
-
-        rc = mc_client.set_with_meta(test_key, 0, 0, 0, cas, 'test-value')
-
-
+        rc = sdk_client.set('key1', 'val1')
+        current_time_cas = rc.cas
+        test_key = 'test-set-with-metaxxxx'
         vbId = (((zlib.crc32(test_key)) >> 16) & 0x7fff) & (self.vbuckets- 1)
 
-        print 'the set with meta rc is', rc
-        print 'the key vbucket id is', vbId
-        import pdb;pdb.set_trace()
+
+        # do the inbounds case for set with meta
+
+        rc = mc_client.setWithMetaConflictResolution(test_key, 'test-value', 0, 0, current_time_cas)
+
+        vbucket_stats = mc_client.stats('vbucket-details')
+        ahead_exceeded  = int( mc_client.stats('vbucket-details')['vb_' + str(vbId) + ':drift_ahead_threshold_exceeded'] )
+        self.assertTrue( ahead_exceeded == 0, 'Ahead exceeded expected is 0 but is {0}'.format( ahead_exceeded))
 
 
-        # set and get meta pair, mess with the clock
-        # mess with the clock and verify the stats are correct, incremented or not, depending on the clock skew
-        # cas reset is valuable for this
-        # revert the clock
+        behind_exceeded  = int( mc_client.stats('vbucket-details')['vb_' + str(vbId) + ':drift_behind_threshold_exceeded'] )
+        self.assertTrue( behind_exceeded == 0, 'Behind exceeded expected is 0 but is {0}'.format( behind_exceeded))
 
 
-    def test_logical_clock_ticks(self, password='password'):
+
+
+        # do the ahead set with meta case
+
+        rc = mc_client.setWithMetaConflictResolution(test_key, 'test-value', 0, 0,
+                                                     current_time_cas + 50 * LWWStatsTests.DEFAULT_THRESHOLD)
+
+        vbucket_stats = mc_client.stats('vbucket-details')
+        drift_counter_stat = 'vb_' + str(vbId) + ':drift_ahead_threshold_exceeded'
+        ahead_exceeded  = int( mc_client.stats('vbucket-details')[drift_counter_stat] )
+        self.assertTrue( ahead_exceeded == 1, 'Ahead exceeded expected is 1 but is {0}'.format( ahead_exceeded))
+
+
+
+
+
+    def test_logical_clock_ticks(self):
 
 
         self.log.info('starting test_logical_clock_ticks')
-        # put the clock back, do mutations, the HCL and the tick counter should increment
+
+
+
+        sdk_client = SDKClient(scheme='couchbase',hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
+        mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
+        shell = RemoteMachineShellConnection(self.servers[0])
+
+
+        # do a bunch of mutations to set the max cas
+        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=1000)
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+
+
+
+
+        # move the system clock back so the logical counter part of HLC is used and the logical clock ticks
+        # stat is incremented
+        self.assertTrue(  shell.change_system_time( -LWWStatsTests.ONE_HOUR_IN_SECONDS ), 'Failed to advance the clock')
+
+        # do more mutations
+        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=1000)
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+
+        #vbucket_stats = mc_client.stats('vbucket-details')
+        logical_clock_ticks = vbucket_stats['vb_' + str(i) + ':logical_clock_ticks']
+        import pdb;pdb.set_trace()
+        for i in range(self.vbuckets):
+            print vbucket_stats['vb_' + str(i) + ':logical_clock_ticks']
+
+
+        # put the clock back, do mutations, the HLC and the tick counter should increment
+        #LWWStatsTests
         # will it wrap?
 
 
