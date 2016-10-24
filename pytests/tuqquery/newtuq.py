@@ -106,18 +106,18 @@ class QueryTests(BaseTestCase):
 
 
     def setup_analytics(self):
-        data = ""
-        for bucket in self.buckets:
-                data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
-                data += 'connect bucket {0};'.format(bucket.name) + "\n"
-        filename = "file.txt"
-        f = open(filename,'w')
-        f.write(data)
-        f.close()
-        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
-        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
-        os.system(cmd)
-        os.remove(filename)
+        #data = ""
+        # for bucket in self.buckets:
+        #         data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
+        #         data += 'connect bucket {0};'.format(bucket.name) + "\n"
+        # filename = "file.txt"
+        # f = open(filename,'w')
+        # f.write(data)
+        # f.close()
+        # url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        # cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+        # os.system(cmd)
+        # os.remove(filename)
         data = 'use Default;' + "\n"
         for bucket in self.buckets:
             data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
