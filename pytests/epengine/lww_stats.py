@@ -285,12 +285,12 @@ class LWWStatsTests(BaseTestCase):
         self.assertTrue(  shell.change_system_time( -LWWStatsTests.ONE_HOUR_IN_SECONDS ), 'Failed to advance the clock')
 
         # do more mutations
-        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=1000)
+        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=10000)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
         #vbucket_stats = mc_client.stats('vbucket-details')
-        logical_clock_ticks = vbucket_stats['vb_' + str(i) + ':logical_clock_ticks']
-        import pdb;pdb.set_trace()
+        vbucket_stats = mc_client.stats('vbucket-details')
+        #import pdb;pdb.set_trace()
         for i in range(self.vbuckets):
             print vbucket_stats['vb_' + str(i) + ':logical_clock_ticks']
 
