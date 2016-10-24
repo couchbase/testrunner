@@ -37,8 +37,10 @@ class Lww(XDCRNewBaseTest):
         if not self.skip_ntp:
             self._disable_ntp()
 
-    def _enable_ntp_and_sync(self, ntp_server="0.north-america.pool.ntp.org"):
-        for node in self._input.servers:
+    def _enable_ntp_and_sync(self, nodes=[], ntp_server="0.north-america.pool.ntp.org"):
+        if not nodes:
+            nodes = self._input.servers
+        for node in nodes:
             conn = RemoteMachineShellConnection(node)
             output, error = conn.execute_command("chkconfig ntpd on")
             conn.log_command_output(output, error)
@@ -149,6 +151,24 @@ class Lww(XDCRNewBaseTest):
         shell = RemoteMachineShellConnection(node)
         shell.start_couchbase()
         shell.disconnect()
+
+    def _get_max_cas(self, node, bucket, vbucket_id=0):
+        max_cas = 0
+        conn = RemoteMachineShellConnection(node)
+        command = "/opt/couchbase/bin/cbstats " + node.ip + ":11210 vbucket-details " + str(vbucket_id) + " -b " + bucket
+        output, error = conn.execute_command(command)
+        conn.log_command_output(output, error)
+        for line in output:
+            if "max_cas" in line:
+                max_cas = line.split()[1]
+        return long(max_cas)
+
+    def _get_vbucket_id(self, node, bucket, key):
+        conn = RemoteMachineShellConnection(node)
+        command = "curl -s http://" + node.ip + ":8091/pools/default/buckets/" + bucket + " | /opt/couchbase/bin/tools/vbuckettool - " + key
+        output, error = conn.execute_command(command)
+        conn.log_command_output(output, error)
+        return output[0].split()[5]
 
     def test_lww_enable(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -2358,3 +2378,409 @@ class Lww(XDCRNewBaseTest):
         conn1.start_couchbase()
         conn2.start_couchbase()
         conn3.start_couchbase()
+
+    def test_hlc_active_and_replica(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+
+        vbucket_id = self._get_vbucket_id(self.c1_cluster.get_master_node(), 'default', 'lww-0')
+        max_cas_active = self._get_max_cas(node=self.c1_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        vbucket_id = self._get_vbucket_id(self._input.servers[1], 'default', 'lww-0')
+        max_cas_replica = self._get_max_cas(node=self._input.servers[1], bucket='default', vbucket_id=vbucket_id)
+
+        self.log.info("max_cas_active: " + str(max_cas_active))
+        self.log.info("max_cas_replica: " + str(max_cas_replica))
+        self.assertTrue(not (max_cas_active ^ max_cas_replica), "HLC of active is not equal to replica")
+        self.log.info("HLC of active is equal to replica")
+
+    def test_hlc(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
+
+        max_cas_c1 = self._get_max_cas(node=self.c1_cluster.get_master_node(), bucket='default')
+        max_cas_c2 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default')
+        self.log.info("max_cas C1: " + str(max_cas_c1))
+        self.log.info("max_cas C2: " + str(max_cas_c2))
+        self.assertTrue(not (max_cas_c1 ^ max_cas_c2), "HLC of C1 is not equal to C2")
+        self.log.info("HLC of C1 is equal to C2")
+
+    def test_hlc_target_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c2_cluster, offset_secs=900)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        self.c1_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
+
+        max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+
+        obj = dest_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        self.log.info("Target doc won using LWW as expected")
+
+        self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
+        self.log.info("max_cas_c2_after: " + str(max_cas_c2_after))
+        self.assertTrue(not (max_cas_c2_before ^ max_cas_c2_after), "HLC of C2 changed after replication")
+        self.log.info("HLC of C2 did not change after replication as expected")
+
+        conn = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
+        conn.stop_couchbase()
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+        conn.start_couchbase()
+
+    def test_hlc_source_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c1_cluster, offset_secs=900)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        self.c1_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+
+        max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+
+        obj = dest_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        self.log.info("Src doc won using LWW as expected")
+
+        self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
+        self.log.info("max_cas_c2_after: " + str(max_cas_c2_after))
+        self.assertTrue(not ((max_cas_c2_after + (~max_cas_c2_before +1)) >> 63 & 1), "HLC of C2 is not greater than before replication")
+        self.log.info("HLC of C2 is greater than before replication as expected")
+
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn.stop_couchbase()
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+        conn.start_couchbase()
+
+    def test_hlc_within_cluster_target_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c2_cluster, offset_secs=900)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        self.c1_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
+
+        max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+
+        obj = dest_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        self.log.info("Target doc won using LWW as expected")
+
+        self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
+        self.log.info("max_cas_c2_after: " + str(max_cas_c2_after))
+        self.assertTrue(not (max_cas_c2_before ^ max_cas_c2_after), "HLC of C2 changed after replication")
+        self.log.info("HLC of C2 did not change after replication as expected")
+
+        self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key1', new_key='key3', new_val='key3')
+        max_cas_c2_after_new_mutation = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+        self.log.info("max_cas_c2_after_new_mutation: " + str(max_cas_c2_after_new_mutation))
+        self.assertTrue(not ((max_cas_c2_after_new_mutation + (~max_cas_c2_after +1)) >> 63 & 1), "HLC of C2 is not greater after new mutation")
+        self.log.info("HLC of C2 is greater after new mutation as expected")
+
+        conn = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
+        conn.stop_couchbase()
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+        conn.start_couchbase()
+
+    def test_hlc_within_cluster_source_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c1_cluster, offset_secs=900)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        self.c1_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+
+        self.c1_cluster.resume_all_replications()
+
+        max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+
+        obj = dest_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        self.log.info("Src doc won using LWW as expected")
+
+        self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
+        self.log.info("max_cas_c2_after: " + str(max_cas_c2_after))
+        self.assertTrue(not ((max_cas_c2_after + (~max_cas_c2_before +1)) >> 63 & 1), "HLC of C2 is not greater than before replication")
+        self.log.info("HLC of C2 is greater than before replication as expected")
+
+        self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key2', new_key='key3', new_val='key3')
+        max_cas_c2_after_new_mutation = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+        self.log.info("max_cas_c2_after_new_mutation: " + str(max_cas_c2_after_new_mutation))
+        self.assertTrue(not ((max_cas_c2_after_new_mutation + (~max_cas_c2_after +1)) >> 63 & 1), "HLC of C2 is not greater after new mutation")
+        self.log.info("HLC of C2 is greater after new mutation as expected")
+
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn.stop_couchbase()
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+        conn.start_couchbase()
+
+    def test_hlc_ordering_with_delay_source_faster(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self._offset_wall_clock(self.c1_cluster, offset_secs=900)
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+
+        self.c1_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
+        self.c1_cluster.load_all_buckets_from_generator(gen)
+
+        vbucket_id = self._get_vbucket_id(self.c1_cluster.get_master_node(), 'default', 'lww-0')
+        hlc_c1 = self._get_max_cas(node=self.c1_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        self.sleep(timeout=1200)
+
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
+        self.c2_cluster.load_all_buckets_from_generator(gen)
+
+        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        hlc_c2_1 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        self.c1_cluster.resume_all_replications()
+
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        self.sleep(10)
+
+        obj = dest_lww.get(key='lww-0')
+        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
+        self.log.info("Target doc won using LWW as expected")
+
+        hlc_c2_2 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
+
+        self.log.info("hlc_c1: " + str(hlc_c1))
+        self.log.info("hlc_c2_1: " + str(hlc_c2_1))
+        self.log.info("hlc_c2_2: " + str(hlc_c2_2))
+        self.assertTrue(not (hlc_c2_1 ^ hlc_c2_2), "HLC of C2 changed after replication")
+        self.log.info("HLC of C2 did not change after replication as expected")
+
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        conn.stop_couchbase()
+
+        self._enable_ntp_and_sync()
+        self._disable_ntp()
+
+        conn.start_couchbase()
+
+    def test_lww_with_two_ntp_pools(self):
+        self._enable_ntp_and_sync(nodes=self.c1_cluster.get_nodes(), ntp_server="0.north-america.pool.ntp.org")
+        self._enable_ntp_and_sync(nodes=self.c2_cluster.get_nodes(), ntp_server="3.north-america.pool.ntp.org")
+
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+        dest_conn = RestConnection(self.c2_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
+        self.log.info("LWW enabled on dest bucket as expected")
+
+        self.setup_xdcr()
+        self.merge_all_buckets()
+        self.c1_cluster.pause_all_replications()
+
+        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
+        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen2)
+
+        self.c1_cluster.resume_all_replications()
+
+        self.verify_results()
+
+    def test_conflict_resolution_after_warmup(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+
+        NodeHelper.wait_warmup_completed([self.c1_cluster.warmup_node(master=True)])
+
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket after warmup")
+        self.log.info("LWW enabled on source bucket after warmup as expected")
+
+    def test_conflict_resolution_mode_with_bucket_delete_and_recreate(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+
+        self.c1_cluster.delete_bucket(bucket_name='default')
+        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, skip_dst=True)
+
+        self.assertFalse(src_conn.is_lww_enabled(), "LWW enabled on source bucket after recreate")
+        self.log.info("LWW not enabled on source bucket after recreation as expected")
+
+    def test_conflict_resolution_mode_edit(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+
+        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
+        command = "curl -X POST -u Administrator:password " + self.c1_cluster.get_master_node().ip + \
+                  ":8091/pools/default/buckets/default -d name=default -d conflictResolutionType=seqno " + \
+                  "-d authType=none -d proxyPort=11212 -d ramQuotaMB=100"
+        output, error = conn.execute_command(command)
+        conn.log_command_output(output, error)
+        self.assertTrue("Conflict resolution type not allowed in update bucket" in str(output),
+                        "Expected error message not found on editing conflict resolution type")
+        self.log.info("Expected error message found on editing conflict resolution type")
+
+    def test_conflict_resolution_mode_after_swap_rebalance(self):
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+
+        self._create_buckets(bucket='default', ramQuotaMB=100, skip_dst=True)
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
+        self.log.info("LWW enabled on source bucket as expected")
+
+        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+        self.c1_cluster.load_all_buckets_from_generator(gen1)
+
+        self.c1_cluster.swap_rebalance_master()
+
+        src_conn = RestConnection(self.c1_cluster.get_master_node())
+
+        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket after swap rebalance")
+        self.log.info("LWW enabled on source bucket after swap rebalance as expected")
