@@ -19,6 +19,7 @@ from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 import re
+import traceback
 
 
 class BucketConfig(unittest.TestCase):
@@ -73,6 +74,7 @@ class BucketConfig(unittest.TestCase):
             self.log.info("Modifying timeSynchronization value after bucket creation .....")
             self._modify_bucket()
         except Exception, e:
+            traceback.print_exc()
             self.fail('[ERROR] Modify testcase failed .., {0}'.format(e))
 
     def test_restart(self):
@@ -82,6 +84,7 @@ class BucketConfig(unittest.TestCase):
             self.log.info("Verifying bucket settings after restart ..")
             self._check_config()
         except Exception, e:
+            traceback.print_exc()
             self.fail("[ERROR] Check data after restart failed with exception {0}".format(e))
 
     def test_failover(self):
@@ -93,6 +96,7 @@ class BucketConfig(unittest.TestCase):
             self.log.info("Verifying bucket settings after failover ..")
             self._check_config()
         except Exception, e:
+            traceback.print_exc()
             self.fail('[ERROR]Failed to failover .. , {0}'.format(e))
 
     def test_rebalance_in(self):
@@ -218,8 +222,10 @@ class BucketConfig(unittest.TestCase):
 
 
     def _check_config(self):
-        conflictResolution  = self.rest.get_bucket_json(self.bucket)['conflictResolutionType']
-        self.assertTrue(conflictResolution == 'lww','Expected conflict resolution of lww but got {0}'.format(conflictResolution))
+        rc = self.rest.get_bucket_json(self.bucket)
+        if 'conflictResolution' in rc:
+            conflictResolution  = self.rest.get_bucket_json(self.bucket)['conflictResolutionType']
+            self.assertTrue(conflictResolution == 'lww','Expected conflict resolution of lww but got {0}'.format(conflictResolution))
 
 
         """ drift is disabled in 4.6, commenting out for now as it may come back later

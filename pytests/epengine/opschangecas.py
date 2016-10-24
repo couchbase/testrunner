@@ -218,7 +218,7 @@ class OpsChangeCasTests(BucketConfig):
         self.log.info(' Starting test-sets')
         self._load_ops(ops='set', mutations=20)
         time.sleep(60)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
     ''' Test Incremental updates on cas and max cas values for keys
     '''
@@ -228,7 +228,7 @@ class OpsChangeCasTests(BucketConfig):
         #self._load_ops(ops='add')
         self._load_ops(ops='replace',mutations=20)
         #self._load_ops(ops='delete')
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
     ''' Test Incremental deletes on cas and max cas values for keys
     '''
@@ -238,7 +238,7 @@ class OpsChangeCasTests(BucketConfig):
         #self._load_ops(ops='add')
         self._load_ops(ops='replace',mutations=20)
         self._load_ops(ops='delete')
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
     ''' Test expiry on cas and max cas values for keys
     '''
@@ -248,7 +248,7 @@ class OpsChangeCasTests(BucketConfig):
         #self._load_ops(ops='add')
         #self._load_ops(ops='replace',mutations=20)
         self._load_ops(ops='expiry')
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
         self._check_expiry()
 
     ''' Test touch on cas and max cas values for keys
@@ -259,26 +259,26 @@ class OpsChangeCasTests(BucketConfig):
         #self._load_ops(ops='add')
         #self._load_ops(ops='replace',mutations=20)
         self._load_ops(ops='touch')
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
     ''' Test getMeta on cas and max cas values for keys
     '''
     def test_cas_getMeta(self):
         self.log.info(' Starting test-getMeta')
         self._load_ops(ops='set', mutations=20)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
         #self._load_ops(ops='add')
         self._load_ops(ops='replace',mutations=20)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
         self._load_ops(ops='delete')
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
     def test_cas_setMeta_lower(self):
 
         self.log.info(' Starting test-getMeta')
         self._load_ops(ops='set', mutations=20)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
         k=0
         # Select arbit key
@@ -332,7 +332,7 @@ class OpsChangeCasTests(BucketConfig):
 
         self.log.info(' Starting test-getMeta')
         self._load_ops(ops='set', mutations=20)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
         k=0
 
@@ -391,7 +391,7 @@ class OpsChangeCasTests(BucketConfig):
         self.log.info(' Starting test-deleteMeta')
         self._load_ops(ops='set', mutations=20)
         time.sleep(60)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
         k=0
 
@@ -448,7 +448,7 @@ class OpsChangeCasTests(BucketConfig):
 
         self.log.info(' Starting test_cas_skip_conflict_resolution ..')
         self._load_ops(ops='set', mutations=20)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
         k=0
 
@@ -492,7 +492,7 @@ class OpsChangeCasTests(BucketConfig):
 
         self.log.info(' Starting test_cas_revid_conflict_resolution ..')
         self._load_ops(ops='set', mutations=20)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
         k=0
 
@@ -535,7 +535,7 @@ class OpsChangeCasTests(BucketConfig):
 
         self.log.info(' Starting test_cas_conflict_resolution ..')
         self._load_ops(ops='set', mutations=20)
-        self._check_cas(check_conflict_resolution=True)
+        self._check_cas(check_conflict_resolution=False)
 
         k=0
 
@@ -843,7 +843,7 @@ class OpsChangeCasTests(BucketConfig):
             shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
             print 'Done with restore'
         finally:
-            self._check_cas(check_conflict_resolution=True)
+            self._check_cas(check_conflict_resolution=False)
 
     ''' Common function to verify the expected values on cas
     '''

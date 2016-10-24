@@ -274,7 +274,7 @@ class LWWStatsTests(BaseTestCase):
 
 
         # do a bunch of mutations to set the max cas
-        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=1000)
+        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=10000)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
 
@@ -291,8 +291,13 @@ class LWWStatsTests(BaseTestCase):
         #vbucket_stats = mc_client.stats('vbucket-details')
         vbucket_stats = mc_client.stats('vbucket-details')
         #import pdb;pdb.set_trace()
+        total_logical_clock_ticks = 0
         for i in range(self.vbuckets):
             print vbucket_stats['vb_' + str(i) + ':logical_clock_ticks']
+            total_logical_clock_ticks = total_logical_clock_ticks + int(vbucket_stats['vb_' + str(i) + ':logical_clock_ticks'])
+
+
+        self.log.info('The total logical clock ticks is {0}'.format( total_logical_clock_ticks))
 
 
         # put the clock back, do mutations, the HLC and the tick counter should increment

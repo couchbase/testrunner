@@ -18,7 +18,7 @@ class Cluster(object):
         self.task_manager.start()
 
     def async_create_default_bucket(self, server, size, replicas=1, enable_replica_index=1, eviction_policy='valueOnly',
-                                    bucket_priority = None,conflict_resolution='seqno'):
+                                    bucket_priority = None,lww=False):
         """Asynchronously creates the default bucket
 
         Parameters:
@@ -31,7 +31,7 @@ class Cluster(object):
 
         _task = BucketCreateTask(server, 'default', replicas, size,
                                  enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
-                                 bucket_priority=bucket_priority,conflict_resolution=conflict_resolution)
+                                 bucket_priority=bucket_priority,lww=lww)
         self.task_manager.schedule(_task)
         return _task
 
@@ -266,7 +266,7 @@ class Cluster(object):
 
     def create_default_bucket(self, server, size, replicas=1, timeout=600,
                               enable_replica_index=1, eviction_policy='valueOnly',
-                              bucket_priority = None,conflict_resolution='seqno'):
+                              bucket_priority = None,lww=False):
         """Synchronously creates the default bucket
 
         Parameters:
@@ -281,7 +281,7 @@ class Cluster(object):
                                                  enable_replica_index=enable_replica_index,
                                                  eviction_policy=eviction_policy,
                                                  bucket_priority = bucket_priority,
-                                                 conflict_resolution=conflict_resolution)
+                                                 lww=lww)
         return _task.result(timeout)
 
     def create_sasl_bucket(self, server, name, password, size, replicas, timeout=None, bucket_priority=None):
