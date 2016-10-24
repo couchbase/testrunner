@@ -216,6 +216,8 @@ class LWWStatsTests(BaseTestCase):
 
     def test_drift_stats(self):
 
+        # ahead, behind, bucket, vbucket
+
 
         self.log.info('starting test_drift_stats')
 
@@ -277,6 +279,13 @@ class LWWStatsTests(BaseTestCase):
         gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=10000)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
+        vbucket_stats = mc_client.stats('vbucket-details')
+        base_total_logical_clock_ticks = 0
+        for i in range(self.vbuckets):
+            #print vbucket_stats['vb_' + str(i) + ':logical_clock_ticks']
+            base_total_logical_clock_ticks = base_total_logical_clock_ticks + int(vbucket_stats['vb_' + str(i) + ':logical_clock_ticks'])
+        self.log.info('The base total logical clock ticks is {0}'.format( base_total_logical_clock_ticks))
+
 
 
 
@@ -285,19 +294,21 @@ class LWWStatsTests(BaseTestCase):
         self.assertTrue(  shell.change_system_time( -LWWStatsTests.ONE_HOUR_IN_SECONDS ), 'Failed to advance the clock')
 
         # do more mutations
-        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=10000)
+        NUMBER_OF_MUTATIONS = 10000
+        gen_load  = BlobGenerator('key-for-cas-test-logical-ticks', 'value-for-cas-test-', self.value_size, end=NUMBER_OF_MUTATIONS)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
-        #vbucket_stats = mc_client.stats('vbucket-details')
         vbucket_stats = mc_client.stats('vbucket-details')
-        #import pdb;pdb.set_trace()
         total_logical_clock_ticks = 0
         for i in range(self.vbuckets):
-            print vbucket_stats['vb_' + str(i) + ':logical_clock_ticks']
             total_logical_clock_ticks = total_logical_clock_ticks + int(vbucket_stats['vb_' + str(i) + ':logical_clock_ticks'])
 
 
         self.log.info('The total logical clock ticks is {0}'.format( total_logical_clock_ticks))
+
+        self.assertTrue( total_logical_clock_ticks - base_total_logical_clock_ticks == NUMBER_OF_MUTATIONS,
+                         'Expected clock tick {0} actual {1}'.format(NUMBER_OF_MUTATIONS,
+                                                    total_logical_clock_ticks- base_total_logical_clock_ticks  ))
 
 
         # put the clock back, do mutations, the HLC and the tick counter should increment
