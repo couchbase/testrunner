@@ -5754,9 +5754,9 @@ class QueriesIndexTests(QueryTests):
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx2)
 
-                self.query = 'EXPLAIN select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower"}) satisfies v = 2016 END ' % (
+                self.query = 'EXPLAIN select name from %s where any v in tokens(%s.join_yr,{"case":"lower"}) satisfies v = 2016 END ' % (
                 bucket.name, bucket.name) + \
-                             'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND (ANY x IN tokens(%s.VMs,{"names":true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
                              'AND  NOT (department = "Manager") ORDER BY name limit 10'
                 actual_result = self.run_cbq_query()
 
@@ -5767,13 +5767,13 @@ class QueriesIndexTests(QueryTests):
                 result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
                 self.assertTrue(result1 == idx2 or result1 == idx)
                 self.assertTrue(result2 == idx or result2 == idx2)
-                self.query = 'select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower"}) satisfies v = 2016 END ' % (
+                self.query = 'select name from %s where any v in tokens(%s.join_yr,{"case":"lower"}) satisfies v = 2016 END ' % (
                 bucket.name, bucket.name) + \
-                             'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND (ANY x IN tokens(%s.VMs,{"names":true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
                              'AND  NOT (department = "Manager") ORDER BY name limit 10'
                 actual_result = self.run_cbq_query()
 
-                self.query = 'select name from %s use index (`#primary`) where any v in tokens(%s.join_yr,{\'"case"\':"lower"}) satisfies v = 2016 END ' % (
+                self.query = 'select name from %s use index (`#primary`) where any v in tokens(%s.join_yr,{"case":"lower"}) satisfies v = 2016 END ' % (
                 bucket.name, bucket.name) + \
                              'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
                              'AND  NOT (department = "Manager") ORDER BY name limit 10'
@@ -5813,9 +5813,9 @@ class QueriesIndexTests(QueryTests):
 
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
 
-                self.query = 'EXPLAIN select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower",\'"names"\':true}) satisfies v = 2016 END ' % (
+                self.query = 'EXPLAIN select name from %s where any v in tokens(%s.join_yr,{"case":"lower","names":true}) satisfies v = 2016 END ' % (
                 bucket.name, bucket.name) + \
-                             'AND (ANY x IN tokens(%s.VMs,{\'"names"\':true,\'"case"\':"lower"}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
+                             'AND (ANY x IN tokens(%s.VMs,{"names":true,"case":"lower"}) SATISFIES x.RAM between 1 and 5 END) ' % (bucket.name) + \
                              'AND  NOT (department = "Manager") ORDER BY name limit 10'
                 actual_result_within = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result_within)
@@ -5883,7 +5883,7 @@ class QueriesIndexTests(QueryTests):
                 # actual_result_within = self.run_cbq_query()
                 # self.assertTrue("Object member has no value" in actual_result_within)
 
-                self.query = 'select name from %s where any v in tokens(%s.join_yr,{\'"case"\':"lower",\'"names"\':true,\'"specials"\':false}) satisfies v = 2016 END ' % (
+                self.query = 'select name from %s where any v in tokens(%s.join_yr,{"case":"lower","names":true,"specials":false}) satisfies v = 2016 END ' % (
                 bucket.name, bucket.name) + \
                              'AND (ANY x within tokens(%s.VMs,{"specials":false}) SATISFIES x.RAM between 1 and 5  END ) ' % (bucket.name) + \
                              'AND  NOT (department = "Manager") order by name limit 10'
@@ -5955,18 +5955,18 @@ class QueriesIndexTests(QueryTests):
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
-                self.query = 'EXPLAIN select name from %s WHERE department = "Support" and (ANY i IN tokens(%s.hobbies.hobby,{\'"names"\':true}) SATISFIES  i = "art" END) ' % (
+                self.query = 'EXPLAIN select name from %s WHERE department = "Support" and (ANY i IN tokens(%s.hobbies.hobby,{"names":true}) SATISFIES  i = "art" END) ' % (
                 bucket.name,bucket.name) + \
                              'order BY name limit 10'
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
-                self.query = 'select name from %s WHERE department = "Support" and ( ANY i IN tokens(%s.hobbies.hobby,{\'"names"\':true} ) SATISFIES i = "art" END) ' % (bucket.name,bucket.name) + \
+                self.query = 'select name from %s WHERE department = "Support" and ( ANY i IN tokens(%s.hobbies.hobby,{"names":true} ) SATISFIES i = "art" END) ' % (bucket.name,bucket.name) + \
                              "order BY name limit 10"
 
                 actual_result = self.run_cbq_query()
                 actual_result = sorted(actual_result['results'])
-                self.query = 'select name from %s use index (`#primary`) WHERE department = "Support" and (ANY i IN tokens(%s.hobbies.hobby,{\'"names"\':true}) SATISFIES i = "art" END) ' % (
+                self.query = 'select name from %s use index (`#primary`) WHERE department = "Support" and (ANY i IN tokens(%s.hobbies.hobby,{"names":true}) SATISFIES i = "art" END) ' % (
                 bucket.name,bucket.name) + \
                              'order BY name limit 10'
                 expected_result = self.run_cbq_query()
