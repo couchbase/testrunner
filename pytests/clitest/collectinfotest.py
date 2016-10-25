@@ -1,3 +1,5 @@
+import subprocess, time, os
+from subprocess import call
 from clitest.cli_base import CliBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
@@ -92,6 +94,25 @@ class CollectinfoTests(CliBaseTest):
                 self.shell.start_server()
                 self.sleep(self.wait_timeout)
 
+    def test_cbcollectinfo_detect_container(self):
+        """ this test only runs inside docker host and
+            detect if a node is a docker container.
+            It should run with param skip_init_check_cbserver=true """
+        docker_id = None
+        if "." in self.ip:
+            self.fail("This test only run in docker host")
+        elif self.ip is not None:
+            docker_id = self.ip
+            os.system("docker exec %s %scbcollect_info testlog.zip"
+                                        % (docker_id, self.cli_command_path))
+            os.system("docker cp %s:/testlog.zip ." % (docker_id))
+            os.system("unzip testlog.zip")
+            output = call("cd cbcollect_info_*; grep 'docker' ./* ")
+            if output and "docker" in output:
+                self.log.info("cbcollect log detected docker container")
+            else:
+                self.fail("cbcollect info could not detect docker container")
+        os.system("docker exec %s rm testlog.zip" % (docker_id))
 
     @staticmethod
     def verify_results(self, output_file_name):

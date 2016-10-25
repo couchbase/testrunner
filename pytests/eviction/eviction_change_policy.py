@@ -23,7 +23,7 @@ class EvictionChangePolicy(EvictionBase):
         remote = RemoteMachineShellConnection(self.master)
         for bucket in self.buckets:
             output, _ = remote.execute_couchbase_cli(cli_command='bucket-edit',
-                                                         cluster_host="localhost",
+                                                         cluster_host="localhost:8091",
                                                          user=self.master.rest_username,
                                                          password=self.master.rest_password,
                                                          options='--bucket=%s --bucket-eviction-policy=valueOnly' % bucket.name)
@@ -69,7 +69,7 @@ class EvictionChangePolicy(EvictionBase):
         remote = RemoteMachineShellConnection(self.master)
         for bucket in self.buckets:
             output, _ = remote.execute_couchbase_cli(cli_command='bucket-edit',
-                                                         cluster_host="localhost",
+                                                         cluster_host="localhost:8091",
                                                          user=self.master.rest_username,
                                                          password=self.master.rest_password,
                                                          options='--bucket=%s --bucket-eviction-policy=valueOnly' % bucket.name)

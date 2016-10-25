@@ -43,17 +43,18 @@ class CommunityBaseTest(BaseTestCase):
             self._load_all_buckets(self.servers[0], self.gen_load, "create", 0)
         else:
             self._load_doc_data_all_buckets()
-        shell = RemoteMachineShellConnection(self.master)
-        type = shell.extract_remote_info().distribution_type
-        shell.disconnect()
+        self.remote = RemoteMachineShellConnection(self.master)
+        type = self.remote.extract_remote_info().distribution_type
         self.backup_location = LINUX_BACKUP_PATH
         self.backup_c_location = LINUX_BACKUP_PATH
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        self.file_extension = ""
         if type.lower() == 'windows':
             self.is_linux = False
             self.backup_location = WIN_BACKUP_PATH
             self.backup_c_location = WIN_BACKUP_C_PATH
             self.bin_path = WIN_COUCHBASE_BIN_PATH
+            self.file_extension = ".exe"
         else:
             self.is_linux = True
 

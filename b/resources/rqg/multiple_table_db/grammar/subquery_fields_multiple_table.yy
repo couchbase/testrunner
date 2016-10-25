@@ -3,7 +3,8 @@ query:
 
 select:
 #	SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_fields_comparisons |
-    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists ;
+    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists |
+    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists_limit_offset limit 2 offset 1;
 	#SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_agg_exists |
     #SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME  WHERE subquery_in;
 
@@ -12,6 +13,9 @@ subquery_fields_comparisons:
 
 subquery_condition_exists:
 	exists_operator_type START_EXISTS_SUBQUERY ( rule_subquery_exists ) END_EXISTS_SUBQUERY ;
+
+subquery_condition_exists_limit_offset:
+	exists_operator_type START_EXISTS_SUBQUERY ( rule_subquery_exists_limit_offset ) END_EXISTS_SUBQUERY ;
 
 subquery_agg_exists:
 	INNER_SUBQUERY_AGG_FIELD comparison_operator START_AGG_SUBQUERY ( rule_subquery_agg_exists ) END_AGG_SUBQUERY ;
@@ -31,8 +35,12 @@ use_key_conditions:
 rule_subquery_exists:
 	SELECT * FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON  MYSQL_OPEN_PAR subquery_where_condition MYSQL_CLOSED_PAR;
 
+rule_subquery_exists_limit_offset:
+    SELECT * FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON  MYSQL_OPEN_PAR subquery_where_condition MYSQL_CLOSED_PAR limit 10 offset 0 ;
+
+
 rule_subquery_fields_comparisons:
-	SELECT OUTER_SUBQUERY_FIELDS FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON complex_condition LIMIT 1;
+	SELECT OUTER_SUBQUERY_FIELDS FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON complex_condition ;
 
 rule_subquery_in:
 	SELECT RAW OUTER_SUBQUERY_IN_FIELD FROM BUCKET_NAME use_key_conditions WHERE AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON subquery_where_condition ;

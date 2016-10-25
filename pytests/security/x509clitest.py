@@ -44,7 +44,7 @@ class X509clitest(x509tests):
 
     def _copy_root_crt(self):
         x509main(self.master)._create_inbox_folder(self.master)
-        src_chain_file = "/tmp/newcerts/"+ x509main.CACERTFILE
+        src_chain_file = x509main.CACERTFILEPATH + x509main.CACERTFILE
         dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/root.crt"
         x509main(self.master)._copy_node_key_chain_cert(self.master, src_chain_file, dest_chain_file)
 
@@ -64,11 +64,11 @@ class X509clitest(x509tests):
 
     def _setup_cluster_nodes(self,host):
         x509main(host)._create_inbox_folder(self.master)
-        src_chain_file = "/tmp/newcerts/long_chain" + host.ip + ".pem"
+        src_chain_file = x509main.CACERTFILEPATH + "long_chain" + host.ip + ".pem"
         print src_chain_file
         dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.CHAINCERTFILE
         print dest_chain_file
-        src_node_key = "/tmp/newcerts/" + host.ip + ".key"
+        src_node_key = x509main.CACERTFILEPATH + host.ip + ".key"
         print src_node_key
         dest_node_key = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.NODECAKEYFILE
         print dest_node_key

@@ -2,7 +2,6 @@ import logger
 import time
 import unittest
 import os
-import urllib2
 import commands
 import types
 import datetime
@@ -10,17 +9,15 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from threading import Thread
 import ConfigParser
-from TestInput import TestInputSingleton,TestInputParser, TestInputServer
+from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-
 
 """
 *** IMPORTANT! NEED TO READ BEFORE RUN UI TEST ***
@@ -57,19 +54,20 @@ screenshots:logs/screens
 
 """
 
+
 class BaseUITestCase(unittest.TestCase):
     # selenium thread
     def _start_selenium(self):
         host = self.machine.ip
         if host in ['localhost', '127.0.0.1']:
-             os.system("java -jar %sselenium-server-standalone*.jar "
-                       "-Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
-                                 % (self.input.ui_conf['selenium_path'],\
-                                      self.input.ui_conf['chrome_path']))
+            os.system("java -jar %sselenium-server-standalone*.jar "
+                      "-Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
+                      % (self.input.ui_conf['selenium_path'], \
+                         self.input.ui_conf['chrome_path']))
         else:
             """ go to remote server with better video driver to display browser """
-            self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &'\
-                                           .format(self.input.ui_conf['selenium_path']))
+            self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &' \
+                                       .format(self.input.ui_conf['selenium_path']))
 
     def _kill_old_drivers(self):
         if self.shell.extract_remote_info().type.lower() == 'windows':
@@ -92,8 +90,8 @@ class BaseUITestCase(unittest.TestCase):
 
     def _start_selenium_thread(self):
         self.t = Thread(target=self._start_selenium,
-                       name="selenium",
-                       args=())
+                        name="selenium",
+                        args=())
         self.t.start()
 
     def _is_selenium_running(self):
@@ -107,12 +105,12 @@ class BaseUITestCase(unittest.TestCase):
                 return True
         else:
             """need to add code to go either windows or linux """
-            #cmd = "ssh {0}@{1} 'bash -s' < 'tasklist |grep selenium-server'"
-            #.format(self.input.servers[0].ssh_username,
+            # cmd = "ssh {0}@{1} 'bash -s' < 'tasklist |grep selenium-server'"
+            # .format(self.input.servers[0].ssh_username,
             #                                                           host)
             cmd = "tasklist | grep java"
             o, r = self.shell.execute_command(cmd)
-            #cmd = "ssh {0}@{1} 'bash -s' < 'ps -ef|grep selenium-server'"
+            # cmd = "ssh {0}@{1} 'bash -s' < 'ps -ef|grep selenium-server'"
             if str(o).find('java') > -1:
                 self.log.info("selenium is running")
                 return True
@@ -124,18 +122,18 @@ class BaseUITestCase(unittest.TestCase):
             self.input = TestInputSingleton.input
             self.servers = self.input.servers
             self.browser = self.input.ui_conf['browser']
-            self.replica  = self.input.param("replica", 1)
+            self.replica = self.input.param("replica", 1)
             self.case_number = self.input.param("case_number", 0)
             self.machine = self.input.ui_conf['server']
             self.driver = None
             self.shell = RemoteMachineShellConnection(self.machine)
-            #avoid clean up if the previous test has been tear down
+            # avoid clean up if the previous test has been tear down
             if not self.input.param("skip_cleanup", True) \
-                                            or self.case_number == 1:
+                    or self.case_number == 1:
                 self.tearDown()
             self._log_start(self)
             self._kill_old_drivers()
-            #thread for selenium server
+            # thread for selenium server
             if not self._is_selenium_running():
                 self.log.info('start selenium')
                 self._start_selenium_thread()
@@ -144,15 +142,16 @@ class BaseUITestCase(unittest.TestCase):
             if self.browser == 'firefox':
                 self.log.info("Test Couchbase Server UI in Firefox")
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
-                                                               .format(self.machine.ip,
-                                                                    self.machine.port),
-                                     desired_capabilities=DesiredCapabilities.FIREFOX)
+                                               .format(self.machine.ip,
+                                                       self.machine.port),
+                                               desired_capabilities=DesiredCapabilities.FIREFOX)
             elif self.browser == 'chrome':
                 self.log.info("Test Couchbase Server UI in Chrome")
+
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
-                                                               .format(self.machine.ip,
-                                                                    self.machine.port),
-                                      desired_capabilities=DesiredCapabilities.CHROME)
+                                               .format(self.machine.ip,
+                                                       self.machine.port),
+                                               desired_capabilities=DesiredCapabilities.CHROME)
             """ need to add support test on Internet Explorer """
 
             self.log.info('*** selenium started ***')
@@ -212,6 +211,7 @@ class BaseUITestCase(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
+
 class Control():
     def __init__(self, selenium, by=None, web_element=None):
         self.selenium = selenium
@@ -232,8 +232,8 @@ class Control():
         if self.by:
             self.selenium.execute_script("document.evaluate(\"{0}\",document,null,\
                            XPathResult.ANY_TYPE, null).iterateNext().setAttribute(\
-                                              'style','background-color:yellow');"\
-                                                                  .format(self.by))
+                                              'style','background-color:yellow');" \
+                                         .format(self.by))
 
     def type_native(self, text):
         # In OS X, Ctrl-A doesn't work to select all, instead Command+A has to be used.
@@ -301,15 +301,21 @@ class Control():
     def get_attribute(self, atr):
         return self.web_element.get_attribute(atr)
 
-    def select(self, label):
+    def select(self, label=None, value=None):
         element = Select(self.web_element)
-        element.select_by_visible_text(label)
+        if label:
+            element.select_by_visible_text(label)
+            return
+        if value:
+            element.select_by_value(value)
+            return
 
     def mouse_over(self):
         ActionChains(self.selenium).move_to_element(self.web_element).perform()
 
     def get_inner_html(self):
         return self.web_element.get_attribute("outerHTML")
+
 
 class ControlsHelper():
     def __init__(self, driver):
@@ -322,7 +328,7 @@ class ControlsHelper():
     def find_control(self, section, locator, parent_locator=None, text=None):
         by = self._find_by(section, locator, parent_locator)
         if text:
-           by = by.format(text)
+            by = by.format(text)
         return Control(self.driver, by=by)
 
     def find_controls(self, section, locator, parent_locator=None):
@@ -337,7 +343,6 @@ class ControlsHelper():
         by = self._find_by(section, locator, parent_locator)
         if text:
             by = by.format(text)
-        controls = []
         elements = self.driver.find_elements_by_xpath(by)
         for element in elements:
             try:
@@ -350,18 +355,20 @@ class ControlsHelper():
     def _find_by(self, section, locator, parent_locator=None):
         if parent_locator:
             return self.locators.get(section, parent_locator) + \
-                    self.locators.get(section, locator)
+                   self.locators.get(section, locator)
         else:
             return self.locators.get(section, locator)
 
+
 class BaseHelperControls():
-     def __init__(self, driver):
+    def __init__(self, driver):
         helper = ControlsHelper(driver)
         self._user_field = helper.find_control('login', 'user_field')
         self._user_password = helper.find_control('login', 'password_field')
         self._login_btn = helper.find_control('login', 'login_btn')
         self._logout_btn = helper.find_control('login', 'logout_btn')
         self.error = helper.find_control('login', 'error')
+
 
 class BaseHelper():
     def __init__(self, tc):
@@ -372,7 +379,7 @@ class BaseHelper():
     def login(self, user=None, password=None):
         self.tc.log.info("Try to login to Couchbase Server in browser")
         if not user:
-            user =  self.tc.input.membase_settings.rest_username
+            user = self.tc.input.membase_settings.rest_username
         if not password:
             password = self.tc.input.membase_settings.rest_password
         self.wait.until(lambda fn: self.controls._user_field.is_displayed(),
@@ -393,3 +400,31 @@ class BaseHelper():
         self.controls._logout_btn.click()
         time.sleep(3)
         self.tc.log.info("You are logged out")
+
+    def is_logged_in(self):
+        self.wait.until(lambda fn: self.controls._logout_btn.is_displayed(),
+                        "Logout Button is not displayed in %d sec" % (self.wait._timeout))
+        return self.controls._logout_btn.is_displayed()
+
+    def wait_for_login_page(self):
+        count = 0
+        while not (self.controls._user_field.is_displayed() or count >= 6):
+            self.tc.log.info("Login page not yet displayed.. sleeping for 10 secs")
+            time.sleep(10)
+            count += 1
+
+    def loadSampleBucket(self, node, bucketName):
+        self.tc.log.info("Loading sample bucket %s", bucketName)
+        shell = RemoteMachineShellConnection(node)
+        username = self.tc.input.membase_settings.rest_username
+        password = self.tc.input.membase_settings.rest_password
+
+        sample_bucket_path = "/opt/couchbase/samples/%s-sample.zip" % bucketName
+        command = '/opt/couchbase/bin/cbdocloader -n ' + node.ip + ':' + \
+                  node.port + ' -u ' + username + ' -p ' + password + \
+                  ' -b ' + bucketName + ' -s 100 ' + sample_bucket_path
+
+        self.tc.log.info('Command: %s ', command)
+        o, r = shell.execute_command(command)
+        shell.log_command_output(o, r)
+        self.tc.log.info("Done loading sample bucket %s", bucketName)

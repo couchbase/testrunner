@@ -52,6 +52,7 @@ class ReadOnlyUserTests(QueryTests):
         self._kill_all_processes_cbq()
         self._start_command_line_query(self.master, user=self.username, password=self.password)
         for bucket in self.buckets:
+            self.analytics = False
             self.query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, 'key1', 1)
             self.run_cbq_query()
 

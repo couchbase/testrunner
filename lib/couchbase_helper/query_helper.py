@@ -70,7 +70,7 @@ class QueryHelper(object):
 
         return map
 
-    def _gen_query_with_subquery(self, sql = "", table_map = {}):
+    def _gen_query_with_subquery(self, sql = "", table_map = {},count1 = 0):
         outer_table_map = {}
         outer_table_maps = {}
         count = 0
@@ -104,11 +104,14 @@ class QueryHelper(object):
                 n1ql_template = self._gen_sql_to_nql(sql_template)
                 table_name = random.choice(new_table_map.keys())
                 inner_table_alias = new_table_map[table_name]["alias_name"]
+
+                #print "inner_table_alias is {0}".format(inner_table_alias)
                 if "USE KEYS" in sql_template:
                     sql_template = sql_template.replace("USE KEYS","")
                     if "OUTER_PRIMARY_KEY" in sql_template:
                         table_name = random.choice(outer_table_map.keys())
                         outer_table_alias = alias_name
+                        #print "outer_table_alias 1 is {0}".format(outer_table_alias)
                         primary_key_field = outer_table_map[table_name]["primary_key_field"]
                         sql_template = sql_template.replace("OUTER_PRIMARY_KEY","")
                         n1ql_template = n1ql_template.replace("OUTER_PRIMARY_KEY",alias_name+"."+primary_key_field)
@@ -121,6 +124,7 @@ class QueryHelper(object):
                     elif "OUTER_BUCKET_ALIAS" in sql_template:
                         table_name = random.choice(outer_table_map.keys())
                         outer_table_alias = outer_table_map[table_name]["alias_name"]
+                        #print "outer_table_alias 2 is {0}".format(outer_table_alias)
                         sql_template = sql_template.replace("META(OUTER_BUCKET_ALIAS).id","")
                         n1ql_template = n1ql_template.replace("OUTER_BUCKET_ALIAS",alias_name)
                 outer_table_maps.update(new_table_map)
@@ -128,9 +132,11 @@ class QueryHelper(object):
                     outer_table_map.update(new_table_map)
                     table_name_1 = random.choice(outer_table_map.keys())
                     alias_name = outer_table_map[table_name_1]["alias_name"]
+                    #print "alias name in outer table map is {0}".format(alias_name)
                 else:
                     table_name_1 = random.choice(outer_table_map.keys())
                     outer_table_alias = outer_table_map[table_name_1]["alias_name"]
+                    #print "outer_table_alias 3 is {0}".format(outer_table_alias)
                     outer_table_map ={}
                     outer_table_map.update(new_table_map)
                 if "AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON" in sql_template :
@@ -216,8 +222,10 @@ class QueryHelper(object):
                 new_sql = new_sql.replace("MYSQL_CLOSED_PAR",")")
                 new_n1ql = new_n1ql.replace("MYSQL_CLOSED_PAR"," ")
         #print "new sql is {0}".format(new_sql)
-        for x in range(0,randint(0,5)):
-            alias_name = "tb_"+self._random_char()
+        for x in xrange(0,randint(0,5)):
+            #import pdb;pdb.set_trace()
+            alias_name = "tb_"+self._random_char() + str(count1)
+            #print "alias name is {0}".format(alias_name)
             new_n1ql = "SELECT {0}.* FROM ({1}) {0}".format(alias_name,new_n1ql)
         new_sql = new_sql.replace("NOT_EQUALS"," NOT IN ")
         new_sql = new_sql.replace("EQUALS"," = ")
@@ -225,6 +233,9 @@ class QueryHelper(object):
         new_n1ql = new_n1ql.replace("EQUALS"," IN ")
         new_sql = new_sql.replace("RAW","")
         new_n1ql = new_n1ql.replace("AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON","")
+        #print "new n1ql is %s"%(new_n1ql)
+        #print "new sql is %s"%(new_sql)
+
         return {"sql":new_sql, "n1ql":new_n1ql},outer_table_map
 
 
@@ -478,7 +489,7 @@ class QueryHelper(object):
                 return hint
 
     def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key = ""):
-        print "generate json from results with primary key"
+        #print "generate json from results with primary key"
         primary_key_index = 0
         count = 0
         dict = {}
@@ -737,9 +748,11 @@ class QueryHelper(object):
         return new_sql
 
     def _convert_sql_template_to_value_with_subqueries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
-        map, table_map = self._gen_query_with_subquery(sql =n1ql_template, table_map = table_map)
+        count = self._random_int()
+        map, table_map = self._gen_query_with_subquery(sql =n1ql_template, table_map = table_map,count1 = count+1)
         sql = map["sql"]
         n1ql = map["n1ql"]
+
         map = {
                 "n1ql":n1ql,
                 "sql":sql,
@@ -747,6 +760,7 @@ class QueryHelper(object):
                 "expected_result":None,
                 "indexes":{}
                     }
+        #print "map is %s" %(map)
         return map
 
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):

@@ -12,6 +12,10 @@ from couchbase.exceptions import CouchbaseError,BucketNotFoundError
 from mc_bin_client import MemcachedError
 from couchbase.n1ql import N1QLQuery, N1QLRequest
 
+import couchbase
+import json
+
+
 class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
@@ -26,6 +30,7 @@ class SDKClient(object):
         self.transcoder = transcoder
         self.default_timeout = 0
         self._createConn()
+        couchbase.set_json_converters(json.dumps, json.loads)
 
     def _createString(self, scheme ="couchbase", bucket = None, hosts = ["localhost"], certpath = None, uhm_options = ""):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ",""))
@@ -229,11 +234,11 @@ class SDKClient(object):
 
     def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0):
         try:
-            self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
+            return self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
         except CouchbaseError as e:
             try:
                 time.sleep(10)
-                self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
+                return self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
             except CouchbaseError as e:
                 raise
 
@@ -557,7 +562,7 @@ class SDKSmartClient(object):
         return self.client
 
       def set(self, key, exp, flags, value, format = FMT_AUTO):
-        return self.client.set(key, value, ttl = exp, format = format)
+        rc =  self.client.set(key, value, ttl = exp, format = format)
 
       def append(self, key, value, format = FMT_AUTO):
           return self.client.set(key, value, format = format)

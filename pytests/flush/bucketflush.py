@@ -39,7 +39,7 @@ class BucketFlushTests(BaseTestCase):
     def persist_and_verify(self):
 
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
-        self._verify_all_buckets(self.master, max_verify=self.max_verify)
+        self._verify_all_buckets(self.master, max_verify=self.max_verify,timeout=360)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
 
     """Basic test for bucket flush functionality. Test loads data in bucket and then calls Flush. Verify curr_items=0 after flush.
@@ -87,6 +87,12 @@ class BucketFlushTests(BaseTestCase):
     """Test case to check client behavior with bucket flush while loading/updating/deleting data via Moxi client(ascii,non-ascii)"""
     def bucketflush_with_data_ops_moxi(self):
 
+        version = self._get_version()
+
+        if version >= 4.7:   # moxi is discontinued in 4.7
+            return
+        self.err = None
+
         thread = Thread(target=self.data_ops_with_moxi, args=(self.master, self.data_op, self.buckets, self.num_items, self.use_ascii))
         thread.start()
 
@@ -94,6 +100,8 @@ class BucketFlushTests(BaseTestCase):
             self.cluster.bucket_flush(self.master, bucket)
 
         thread.join()
+        if self.err is not None:
+            self.fail(self.err)
 
     def data_ops_with_moxi(self, server, data_op, buckets, items, use_ascii):
 
@@ -101,7 +109,7 @@ class BucketFlushTests(BaseTestCase):
             try:
                 client = MemcachedClientHelper.proxy_client(server, bucket.name, force_ascii=use_ascii)
             except Exception as ex:
-                self.log.error("unable to create memcached client due to {0}..".format(ex))
+                self.err = "unable to create memcached client due to {0}..".format(ex)
         try:
             for itr in xrange(items):
                 key = 'bucketflush' + str(itr)
@@ -111,10 +119,11 @@ class BucketFlushTests(BaseTestCase):
                 elif data_op == "delete":
                     client.delete(key)
         except MemcachedError as exp:
-               self.assertEqual(exp.status, 134, msg="Unexpected Exception - {0}".format(exp))
-               self.log.info("Expected Exception Caught - {0}".format(exp))
+               if exp.status != 134:
+                  self.log.info("Unexpected Exception Caught - {0}".format(exp))
+                  self.err = "Expected Exception Caught - {0}".format(exp)
         except Exception as exp:
-               self.log.info("Unxpected Exception Caught - {0}".format(exp))
-               self.fail("Unexpected exception caught- {0}".format(exp))
+               self.log.info("Unexpected Exception Caught - {0}".format(exp))
+               self.err = "Unexpected exception caught- {0}".format(exp)
         else:
-               self.fail("All buckets may not have been flushed")
+               self.err = "All buckets may not have been flushed"

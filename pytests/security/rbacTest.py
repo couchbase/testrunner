@@ -8,6 +8,9 @@ from newupgradebasetest import NewUpgradeBaseTest
 from security.auditmain import audit
 import commands
 import socket
+import fileinput
+import sys
+from subprocess import Popen, PIPE
 
 class ServerInfo():
     def __init__(self,
@@ -27,18 +30,10 @@ class ServerInfo():
 
 class rbacTest(ldaptest):
 
-
-    def setupLDAPSettings (self,rest):
-        api = rest.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
-        status, content, header = rest._http_request(api, 'POST', params)
-        return status, content, header
-
-
     def setUp(self):
         super(rbacTest, self).setUp()
         rest = RestConnection(self.master)
-        self.setupLDAPSettings(rest)
+        self.auth_type = self.input.param('auth_type','ldap')
         self.user_id = self.input.param("user_id",None)
         self.user_role = self.input.param("user_role",None)
         self.bucket_name = self.input.param("bucket_name",'default')
@@ -49,8 +44,14 @@ class rbacTest(ldaptest):
         self.no_bucket_access = self.input.param("no_bucket_access",False)
         self.no_access_bucket_name = self.input.param("no_access_bucket_name",None)
         self.ldap_users = rbacmain().returnUserList(self.user_id)
-        self._removeLdapUserRemote(self.ldap_users)
-        self._createLDAPUser(self.ldap_users)
+        if self.auth_type == 'ldap':
+            rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
+            self._removeLdapUserRemote(self.ldap_users)
+            self._createLDAPUser(self.ldap_users)
+        else:
+            rbacmain().setup_auth_mechanism(self.servers,'pam', rest)
+            rbacmain().add_remove_local_user(self.servers, self.ldap_users, 'deluser')
+            rbacmain().add_remove_local_user(self.servers, self.ldap_users,'adduser')
         self.ldap_server = ServerInfo(self.ldapHost, self.ldapPort, 'root', 'couchbase')
         rbacmain()._delete_user_from_roles(self.master)
         self.ipAddress = self.getLocalIPAddress()
@@ -60,6 +61,7 @@ class rbacTest(ldaptest):
         super(rbacTest, self).tearDown()
 
     def getLocalIPAddress(self):
+        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -68,7 +70,6 @@ class rbacTest(ldaptest):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
-        '''
 
     def test_compare_orig_roles(self):
         status, content, header = rbacmain(self.master)._retrive_all_user_role(self.user_id)
@@ -98,7 +99,6 @@ class rbacTest(ldaptest):
     def test_role_assign_check_end_to_end(self):
         user_name = self.input.param("user_name")
         final_user_id = rbacmain().returnUserList(self.user_id)
-        print final_user_id
         final_roles = rbacmain()._return_roles(self.user_role)
         payload = "name=" + user_name + "&roles=" + final_roles
         if len(final_user_id) == 1:
@@ -285,7 +285,6 @@ class rbacTest(ldaptest):
         rbacmain(self.master)._check_role_permission_validate_multiple(self.user_id,self.user_role,self.bucket_name,self.role_map)
         user_name = rbacmain().returnUserList(self.user_id)
         self._removeLdapUserRemote(user_name)
-        print user_name
         status, content, header = rbacmain(self.master)._check_user_permission(user_name[0][0],user_name[0][1],self.user_role)
         self.assertFalse(status,"Not getting 401 for users that are deleted in LDAP")
 
@@ -314,7 +313,6 @@ class rbacTest(ldaptest):
         for i in range(len(user_list)):
             self._changeLdapPassRemote(user_list[i][0], 'password1')
             temp_id = str(user_list[i][0]) + ":" + str('password1?')
-        print temp_id
         result = rbacmain(self.master)._check_role_permission_validate_multiple(temp_id[:-1],self.user_role,self.bucket_name,self.role_map)
         self.assertTrue(result,"Issue with role assignment and comparision with permission set")
 
@@ -358,7 +356,6 @@ class rbacTest(ldaptest):
         fieldVerification, valueVerification = Audit.validateEvents(expectedResults)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
-
 
 class rbac_upgrade(NewUpgradeBaseTest,ldaptest):
 
@@ -415,4 +412,6 @@ class rbac_upgrade(NewUpgradeBaseTest,ldaptest):
         for server in serv_upgrade:
             status, content, header = rbacmain(server)._retrieve_user_roles()
             self.assertFalse(status,"Incorrect status for rbac cluster in mixed cluster {0} - {1} - {2}".format(status,content,header))
+
+
 

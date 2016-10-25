@@ -18,7 +18,7 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 from TestInput import TestInputSingleton
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
@@ -30,6 +30,8 @@ from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from membase.helper.cluster_helper import ClusterOperationHelper
+
+from couchbase_cli import CouchbaseCLI
 import testconstants
 
 
@@ -39,6 +41,7 @@ class BaseTestCase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.primary_index_created = False
         self.use_sdk_client =  self.input.param("use_sdk_client",False)
+        self.analytics = self.input.param("analytics",False)
         if self.input.param("log_level", None):
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
@@ -133,10 +136,19 @@ class BaseTestCase(unittest.TestCase):
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
             self.bucket_size = self.input.param("bucket_size", None)
+            self.lww = self.input.param("lww", False) # only applies to LWW but is here because the bucket is created here
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
             if not self.skip_init_check_cbserver:
+                self.cb_version = None
+                if RestHelper(RestConnection(self.master)).is_ns_server_running():
+                    """ since every new couchbase version, there will be new features
+                        that test code will not work on previous release.  So we need
+                        to get couchbase version to filter out those tests. """
+                    self.cb_version = RestConnection(self.master).get_nodes_version()
+                else:
+                    self.log.info("couchbase server does not run yet")
                 self.protocol = self.get_protocol_type()
             self.services_map = None
             if self.sasl_bucket_priority != None:
@@ -151,6 +163,7 @@ class BaseTestCase(unittest.TestCase):
             # avoid any cluster operations in setup for new upgrade & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
                             str(self.__class__).find('upgradeXDCR') != -1 or \
+                            str(self.__class__).find('Upgrade_EpTests') != -1 or \
                             hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                 self.log.info("any cluster operation in setup will be skipped")
                 self.primary_index_created = True
@@ -261,7 +274,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             if not self.skip_init_check_cbserver:
                 self._log_start(self)
-            self.sleep(10)
+                self.sleep(10)
         except Exception, e:
             traceback.print_exc()
             self.cluster.shutdown(force=True)
@@ -412,10 +425,11 @@ class BaseTestCase(unittest.TestCase):
         return quota
 
     def _bucket_creation(self):
-        if (self.default_bucket==True):
+        if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
                                                enable_replica_index=self.enable_replica_index,
-                                               eviction_policy=self.eviction_policy)
+                                               eviction_policy=self.eviction_policy,
+                                               lww=self.lww)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size,
                                        eviction_policy=self.eviction_policy))
@@ -1107,17 +1121,16 @@ class BaseTestCase(unittest.TestCase):
 
     def change_password(self, new_password="new_password"):
         nodes = RestConnection(self.master).node_statuses()
-        remote_client = RemoteMachineShellConnection(self.master)
-        options = "--cluster-init-password=%s" % new_password
-        cli_command = "cluster-edit"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
-                                                            cluster_host="localhost:8091",
-                                                            user=self.master.rest_username,
-                                                            password=self.master.rest_password)
+
+
+        cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password  )
+        output, err, result = cli.setting_cluster(data_ramsize=False, index_ramsize=False, fts_ramsize=False, cluster_name=None,
+                         cluster_username=None, cluster_password=new_password, cluster_port=False)
+
         self.log.info(output)
         # MB-10136 & MB-9991
-        if error:
-            raise Exception("Password didn't change! %s" % error)
+        if not result:
+            raise Exception("Password didn't change!")
         self.log.info("new password '%s' on nodes: %s" % (new_password, [node.ip for node in nodes]))
         for node in nodes:
             for server in self.servers:
@@ -1443,7 +1456,7 @@ class BaseTestCase(unittest.TestCase):
                                " % (cbstat_command, node, command, "default", saslpassword)
                     output, error = shell.execute_command(commands)
                 elif versions[0][:5] in testconstants.COUCHBASE_VERSION_3 or \
-                                versions[0][:5] in testconstants.SHERLOCK_VERSION:
+                                versions[0][:5] in testconstants.COUCHBASE_FROM_VERSION_4:
                     command = "dcp"
                     if not info == 'windows':
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \
@@ -2261,3 +2274,11 @@ class BaseTestCase(unittest.TestCase):
         status, ipAddress = commands.getstatusoutput(
             "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
+
+
+    # get the dot version e.g. x.y
+    def _get_version(self):
+        rest = RestConnection(self.master)
+        version = rest.get_nodes_self().version
+        return float(version[:3])
+

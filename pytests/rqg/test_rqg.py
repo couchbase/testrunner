@@ -16,6 +16,7 @@ from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from remote.remote_util import RemoteMachineShellConnection
+from lib.membase.helper.bucket_helper import BucketOperationHelper
 
 
 class RQGTests(BaseTestCase):
@@ -29,6 +30,7 @@ class RQGTests(BaseTestCase):
         self.check_covering_index = self.input.param("check_covering_index",True)
         self.skip_setup_cleanup = True
         self.remove_alias = self.input.param("remove_alias",True)
+        self.skip_cleanup = self.input.param("skip_cleanup",False)
         self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
         self.number_of_buckets = self.input.param("number_of_buckets",5)
         self.crud_type = self.input.param("crud_type","update")
@@ -43,7 +45,9 @@ class RQGTests(BaseTestCase):
         self.merge_operation= self.input.param("merge_operation",False)
         self.load_copy_table= self.input.param("load_copy_table",False)
         self.user_id= self.input.param("user_id","root")
+        self.user_cluster = self.input.param("user_cluster","Administrator")
         self.password= self.input.param("password","")
+        self.password_cluster = self.input.param("password_cluster","password")
         self.generate_input_only = self.input.param("generate_input_only",False)
         self.using_gsi= self.input.param("using_gsi",True)
         self.reset_database = self.input.param("reset_database",True)
@@ -69,6 +73,9 @@ class RQGTests(BaseTestCase):
         self.build_index_batch_size= self.input.param("build_index_batch_size",1000)
         self.query_count= 0
         self.use_rest = self.input.param("use_rest",True)
+        self.ram_quota = self.input.param("ram_quota",512)
+        self.drop_index = self.input.param("drop_index",False)
+        self.drop_bucket = self.input.param("drop_bucket",False)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -77,6 +84,7 @@ class RQGTests(BaseTestCase):
         self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
         self._initialize_n1ql_helper()
         self.rest = RestConnection(self.master)
+        self.indexer_memQuota = self.input.param("indexer_memQuota",1024)
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
         if not(self.use_rest):
@@ -93,67 +101,12 @@ class RQGTests(BaseTestCase):
     def tearDown(self):
         super(RQGTests, self).tearDown()
         if hasattr(self, 'reset_database'):
-            self.skip_cleanup= self.input.param("skip_cleanup",False)
+            print "cleanup is %s" %(self.skip_cleanup)
             if self.use_mysql and self.reset_database and (not self.skip_cleanup):
                 try:
                     self.client.drop_database(self.database)
                 except Exception, ex:
                     self.log.info(ex)
-
-    def test_rqg_concurrent_with_predefined_input(self):
-        check = True
-        failure_map = {}
-        batches = []
-        batch = []
-        test_case_number = 1
-        count = 1
-        inserted_count = 0
-        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
-        with open(self.test_file_path) as f:
-            n1ql_query_list = f.readlines()
-        if self.total_queries  == None:
-            self.total_queries = len(n1ql_query_list)
-        for n1ql_query_info in n1ql_query_list:
-            data = json.loads(n1ql_query_info)
-            batch.append({str(test_case_number):data})
-            if count == self.concurreny_count:
-                inserted_count += len(batch)
-                batches.append(batch)
-                count = 1
-                batch = []
-            else:
-                count +=1
-            test_case_number += 1
-            if test_case_number >= self.total_queries:
-                break
-        if inserted_count != len(n1ql_query_list):
-            batches.append(batch)
-        result_queue = Queue.Queue()
-        for test_batch in batches:
-            # Build all required secondary Indexes
-            list = [data[data.keys()[0]] for data in test_batch]
-            if self.use_secondary_index:
-                self._generate_secondary_indexes_in_batches(list)
-            thread_list = []
-            # Create threads and run the batch
-            for test_case in test_batch:
-                test_case_number = test_case.keys()[0]
-                data = test_case[test_case_number]
-                t = threading.Thread(target=self._run_basic_test, args = (data, test_case_number, result_queue))
-                t.daemon = True
-                t.start()
-                thread_list.append(t)
-            # Capture the results when done
-            check = False
-            for t in thread_list:
-                t.join()
-            # Drop all the secondary Indexes
-            if self.use_secondary_index:
-                self._drop_secondary_indexes_in_batches(list)
-        # Analyze the results for the failure and assert on the run
-        success, summary, result = self._test_result_analysis(result_queue)
-        self.log.info(result)
-        self.assertTrue(success, summary)
 
     def test_rqg_concurrent_with_predefined_input(self):
         check = True
@@ -336,6 +289,28 @@ class RQGTests(BaseTestCase):
                 self._drop_secondary_indexes_in_batches(list)
         for t in thread_list:
             t.join()
+
+        if self.drop_index:
+            query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
+            actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+            #print actual_result['results']
+            index_names = []
+            keyspaces = []
+            for indexes in actual_result['results']:
+                index_names.append(indexes['indexes']['name'])
+                keyspaces.append(indexes['indexes']['keyspace_id'])
+            i=0
+            for name in index_names:
+                keyspace = keyspaces[i]
+                if (name =='#primary'):
+                    query = 'drop primary index on {0}'.format(keyspace)
+                else:
+                    query = 'drop index {0}.{1}'.format(keyspace,name)
+                i+=1
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'})
+        if self.drop_bucket:
+            for bucket in self.buckets:
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.n1ql_server,bucket=bucket)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -409,6 +384,28 @@ class RQGTests(BaseTestCase):
             # Drop all the secondary Indexes
         for t in thread_list:
             t.join()
+
+        if self.drop_index == True:
+            query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
+            actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+            #print actual_result['results']
+            index_names = []
+            keyspaces = []
+            for indexes in actual_result['results']:
+                index_names.append(indexes['indexes']['name'])
+                keyspaces.append(indexes['indexes']['keyspace_id'])
+            i=0
+            for name in index_names:
+                keyspace = keyspaces[i]
+                if (name =='#primary'):
+                    query = 'drop primary index on {0}'.format(keyspace)
+                else:
+                    query = 'drop index {0}.{1}'.format(keyspace,name)
+                i+=1
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'})
+        if self.drop_bucket == True:
+            for bucket in self.buckets:
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -572,10 +569,16 @@ class RQGTests(BaseTestCase):
         # for info in list_info:
         #     info.replace("simple_table",self.database)
         map = {table_name:table_map[table_name]}
+
         list_info = self.client._convert_template_query_info(
                     table_map = map,
                     n1ql_queries = list_info,
                     define_gsi_index = self.use_secondary_index)
+
+        for info in list_info:
+            info["n1ql"] = info['n1ql'].replace("simple_table",self.database+"_"+"simple_table")
+
+        print list_info
         if self.use_secondary_index:
                 self._generate_secondary_indexes_in_batches(list_info)
         thread_list = []
@@ -609,13 +612,13 @@ class RQGTests(BaseTestCase):
                             n1ql_queries = data_info)
             elif self.crud_type == "merge_update":
                 data_info = self.client_map[table_name]._convert_update_template_query_info_with_merge(
-                            source_table = "copy_simple_table",
+                            source_table = self.database+"_"+"copy_simple_table",
                             target_table = table_name,
                             table_map = map,
                             n1ql_queries = data_info)
             elif self.crud_type == "merge_delete":
                 data_info = self.client_map[table_name]._convert_delete_template_query_info_with_merge(
-                            source_table = "copy_simple_table",
+                            source_table = self.database+"_"+"copy_simple_table",
                             target_table = table_name,
                             table_map = map,
                             n1ql_queries = data_info)
@@ -628,7 +631,7 @@ class RQGTests(BaseTestCase):
         data = test_data
         n1ql_query = data["n1ql"]
 
-        if (n1ql_query.find("simple_table")>0):
+        if (n1ql_query.find("simple_table")>0) and ((self.database+"_"+"simple_table") not in n1ql_query):
             n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
 
         sql_query = data["sql"]
@@ -645,7 +648,7 @@ class RQGTests(BaseTestCase):
             query_index_run = self._run_queries_and_verify(n1ql_query = result_limit , sql_query = sql_query, expected_result = expected_result)
             result_run["run_query_with_limit"] = query_index_run
         if  expected_result == None:
-            expected_result = self._gen_expected_result(sql_query)
+            expected_result = self._gen_expected_result(sql_query,test_case_number)
             data["expected_result"] = expected_result
         query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
         result_run["run_query_without_index_hint"] = query_index_run
@@ -688,7 +691,19 @@ class RQGTests(BaseTestCase):
             client = self.client
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
-        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+        if (n1ql_query.find("copy_simple_table")>0):
+             n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+             #print ("n1ql query before copy replace {0}").format(n1ql_query)
+             n1ql_query = n1ql_query.replace("copy_"+self.database+"_"+"simple_table","copy_simple_table")
+             #print ("n1ql query after copy replace {0}").format(n1ql_query)
+             n1ql_query = n1ql_query.replace("ON KEY copy_simple_table","ON KEY "+ self.database+"_"+"copy_simple_table")
+             #print ("n1ql query after on key replace {0}").format(n1ql_query)
+        else :
+            #print ("n1ql query before simple replace {0}").format(n1ql_query)
+            n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+            #print ("n1ql query after simple replace {0}").format(n1ql_query)
+
+        test_data["n1ql_query"] = n1ql_query
         sql_query = test_data["sql_query"]
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
@@ -848,12 +863,16 @@ class RQGTests(BaseTestCase):
         # Run n1ql query
         actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
 
-    def _gen_expected_result(self, sql = ""):
+    def _gen_expected_result(self, sql = "",test = 49):
         sql_result = []
         try:
             client = MySQLClient(database = self.database, host = self.mysql_url,
             user_id = self.user_id, password = self.password)
-            columns, rows = client._execute_query(query = sql)
+            if (test == 51):
+                 columns = []
+                 rows = []
+            else:
+                columns, rows = client._execute_query(query = sql)
             sql_result = self.client._gen_json_from_results(columns, rows)
             client._close_mysql_connection()
             client = None
@@ -898,6 +917,10 @@ class RQGTests(BaseTestCase):
         result_run = {}
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
+
+        for i,item in enumerate(hints):
+            if "simple_table" in item:
+                hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
@@ -913,8 +936,9 @@ class RQGTests(BaseTestCase):
 
             if(len(n1ql_result)!=len(sql_result)):
                 self.log.info("number of results returned from sql and n1ql are different")
-                if len(sql_result) == 0 or len(n1ql_result) == 1000:
+                if (len(sql_result) == 0 and len(n1ql_result) ==1) or (len(n1ql_result) == 0 and len(sql_result) == 1):
                         return {"success":True, "result": "Pass"}
+                return {"success":False, "result": str("different results")}
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
@@ -927,6 +951,7 @@ class RQGTests(BaseTestCase):
     def _run_queries_and_verify_crud(self, n1ql_query = None, sql_query = None, expected_result = None, table_name = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
         result_run = {}
         if table_name != None:
             client = self.client_map[table_name]
@@ -934,6 +959,9 @@ class RQGTests(BaseTestCase):
             client = self.client
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
+        for i,item in enumerate(hints):
+            if "simple_table" in item:
+                hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
@@ -1065,9 +1093,16 @@ class RQGTests(BaseTestCase):
         self._initialize_n1ql_helper()
         #create copy of simple table if this is a merge operation
         self.sleep(10)
+        if self.gsi_type ==  "memory_optimized":
+            os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip,self.indexer_memQuota))
+            self.sleep(10)
+
+            # self.log.info("Increasing Indexer Memory Quota to {0}".format(self.indexer_memQuota))
+            # self.rest.set_indexer_memoryQuota(indexMemoryQuota=self.indexer_memQuota)
+            # self.sleep(120)
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
-            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=15 http://{2}:{3}/internalSettings".format(self.user_id,self.password,self.master,self.port))
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
             self.sleep(10,"Updating maxBucket count to 15")
         self._build_indexes()
 
@@ -1154,7 +1189,7 @@ class RQGTests(BaseTestCase):
             use_rest = True, max_verify = self.max_verify,
             buckets = self.buckets, item_flag = None,
             n1ql_port = self.n1ql_server.n1ql_port, full_docs_list = [],
-            log = self.log, input = self.input, master = self.master)
+            log = self.log, input = self.input, master = self.master,database = self.database)
 
     def _initialize_mysql_client(self):
         if self.reset_database:
@@ -1258,7 +1293,8 @@ class RQGTests(BaseTestCase):
                 self.log.info(" Running Query {0} ".format(query))
                 try:
                     actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
-                    check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_" + table_name, index_name,
+                    table_name = self.database+"_" + table_name
+                    check = self.n1ql_helper.is_index_online_and_in_list(table_name, index_name,
                         server = self.n1ql_server, timeout = 240)
                 except Exception, ex:
                     self.log.info(ex)
@@ -1378,15 +1414,17 @@ class RQGTests(BaseTestCase):
         build_index_list = []
         for info in batches:
             table_name = info["bucket"]
+            n1ql = info["n1ql"]
             batch_index_definitions.update(info["indexes"])
         for index_name in batch_index_definitions.keys():
             fail_index_name = index_name
             query = "{0} WITH {1}".format(
                 batch_index_definitions[index_name]["definition"],
                 defer_mode)
-            query.replace("simple_table",self.database+"_"+"simple_table")
+            query = query.replace("ON simple_table","ON "+self.database+"_"+"simple_table")
             self.log.info(" Running Query {0} ".format(query))
             try:
+                print index_name
                 actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
                 build_index_list.append(index_name)
             except Exception, ex:
@@ -1406,6 +1444,7 @@ class RQGTests(BaseTestCase):
             try:
                 for info in batches:
                     table_name = info["bucket"]
+                    table_name = self.database+"_"+table_name
                     for index_name in info["indexes"]:
                         if index_name in build_index_list:
                             tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
@@ -1424,20 +1463,22 @@ class RQGTests(BaseTestCase):
     def _drop_secondary_indexes_in_batches(self, batches):
         for info in batches:
             table_name = info["bucket"]
+            table_name =self.database+"_"+table_name
             for index_name in info["indexes"].keys():
                 query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, info["indexes"][index_name]["type"])
                 try:
-                    self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                    self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'},timeout = '900s')
                     self.sleep(10,"Sleep to make sure index dropped properly")
                 except Exception, ex:
                     self.log.info(ex)
 
     def _drop_secondary_indexes_with_index_map(self, index_map = {}, table_name = "simple_table"):
+        table_name = self.database + "_" +"simple_table"
         self.log.info(" Dropping Secondary Indexes for Bucket {0}".format(table_name))
         for index_name in index_map.keys():
             query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, index_map[index_name]["type"])
             try:
-                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server,query_params={'timeout' : '900s'},timeout = '900s')
 
             except Exception, ex:
                 self.log.info(ex)
@@ -1570,27 +1611,33 @@ class RQGTests(BaseTestCase):
             for bucket in self.buckets:
                 self.rest.delete_bucket(bucket.name)
         self.buckets = []
+        if self.change_bucket_properties or self.gsi_type == "memory_optimized":
+            bucket_size = 100
+        else:
+            bucket_size = None
+
+        if self.change_bucket_properties:
+            shell = RemoteMachineShellConnection(self.master)
+            #print "master is {0}".format(self.master)
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
+            self.sleep(10,"Updating maxBucket count to 25")
         # Pull information about tables from mysql database and interpret them as no-sql dbs
         table_key_map = self.client._get_primary_key_map_for_tables()
         # Make a list of buckets that we want to create for querying
         bucket_list = table_key_map.keys()
         print "database used is {0}".format(self.database)
         new_bucket_list =[]
-        print "database used is {0}".format(self.database)
         for bucket in bucket_list:
             if (bucket.find("copy_simple_table")>0):
-                new_bucket_list.append("copy_"+self.database + "_" + bucket)
+                new_bucket_list.append(self.database+"_"+"copy_simple_table")
             else:
                 new_bucket_list.append(self.database + "_" + bucket)
 
 
-        if self.change_bucket_properties:
-            bucket_size = 100
-        else:
-            bucket_size = None
         # Create New Buckets
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
         print "buckets created"
+
         # Wait till the buckets are up
         self.sleep(5)
         self.buckets = self.rest.get_buckets()
@@ -1609,6 +1656,7 @@ class RQGTests(BaseTestCase):
             self.record_db[bucket_name] = self.client._gen_json_from_results_with_primary_key(columns, rows,
                 primary_key = table_key_map[bucket_name])
             for bucket in self.newbuckets:
+                if bucket.name == self.database+"_"+bucket_name:
                     self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
     def _populate_delta_buckets(self, table_name = "simple_table"):
@@ -1618,16 +1666,13 @@ class RQGTests(BaseTestCase):
             client = self.client
         query = "delete from {0}".format(table_name)
         client._insert_execute_query(query = query)
-        table_name = self.database+"_"+table_name
-        query = "delete from {0}".format(table_name)
+        query = "delete from {0}".format(self.database+"_"+table_name)
         self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose=True)
-        insert_sql= "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from copy_simple_table b".format(table_name)
+        insert_sql= "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from {1} b".format(self.database+"_"+table_name,self.database+"_"+"copy_simple_table")
         try:
-            self.log.info(insert_sql)
-            insert_sql.replace("simple_table",self.database+"_"+"simple_table")
+            self.log.info("n1ql query is {0}".format(insert_sql))
             self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=True)
             insert_sql= "INSERT INTO {0} SELECT * FROM copy_simple_table".format(table_name)
-            self.log.info(insert_sql)
             client._insert_execute_query(insert_sql)
         except Exception, ex:
             self.log.info(ex)

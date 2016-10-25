@@ -49,20 +49,138 @@ FULL_FIELD_NAMES = {
     'username': 'revision_contributor_username'
 }
 
+CUSTOM_ANALYZER_TEMPLATE = {
+    "analyzers": {},
+    "token_filters": {
+        "back_edge_ngram": {
+            "back":True,
+            "max": 5,
+            "min": 3,
+            "type": "edge_ngram"
+        },
+        "dict_compound_en": {
+            "dict_token_map": "stop_en",
+            "type": "dict_compound"
+        },
+        "dict_compound_fr": {
+            "dict_token_map": "articles_fr",
+            "type": "dict_compound"
+        },
+        "front_edge_ngram": {
+            "back":False,
+            "max": 5,
+            "min": 3,
+            "type": "edge_ngram"
+        },
+        "keyword_marker": {
+            "keywords_token_map": "stopwords",
+            "type": "keyword_marker"
+        },
+        "stopwords": {
+            "stop_token_map": "stopwords",
+            "type": "stop_tokens"
+        },
+        "length": {
+            "max": 5,
+            "min": 3,
+            "type": "length"
+        },
+        "ngram": {
+            "max": 5,
+            "min": 3,
+            "type": "ngram"
+        },
+        "shingle": {
+            "filler": "",
+            "max": 5,
+            "min": 2,
+            "output_original": "false",
+            "separator": "",
+            "type": "shingle"
+        },
+        "truncate": {
+            "length": 10,
+            "type": "truncate_token"
+        }
+    },
+    "token_maps": {
+        "stopwords": {
+            "tokens": ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
+                 'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him',
+                 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its',
+                 'itself', 'they', 'them', 'their', 'theirs', 'themselves',
+                 'what', 'which', 'who', 'whom', 'this', 'that', 'these',
+                 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been',
+                 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did',
+                 'doing', 'would', 'should', 'could', 'ought', "i'm", "you're",
+                 "he's", "she's", "it's", "we're", "they're", "i've", "you've",
+                 "we've", "they've", "i'd", "you'd", "he'd", "she'd", "we'd",
+                 "they'd", "i'll", "you'll", "he'll", "she'll", "we'll",
+                 "they'll", "isn't", "aren't", "wasn't", "weren't", "hasn't",
+                 "haven't", "hadn't", "doesn't", "don't", "didn't", "won't",
+                 "wouldn't", "shan't", "shouldn't", "can't", 'cannot',
+                 "couldn't", "mustn't", "let's", "that's", "who's", "what's",
+                 "here's", "there's", "when's", "where's", "why's", "how's",
+                 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as',
+                 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about',
+                 'against', 'between', 'into', 'through', 'during', 'before',
+                 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in',
+                 'out', 'on', 'off', 'over', 'under', 'again', 'further',
+                 'then', 'once', 'here', 'there', 'when', 'where', 'why',
+                 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most',
+                 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
+                 'same', 'so', 'than', 'too', 'very'],
+            "type": "custom"
+        }
+    },
+    "char_filters": {
+        "mapping": {
+            "regexp": "[f]",
+            "replace": "ph",
+            "type": "regexp"
+        }
+    },
+    "tokenizers": {
+        "alphanumeric": {
+            "regexp": "[0-9a-zA-Z_]*",
+            "type": "regexp"
+        }
+    }
+}
+
 ANALYZERS = ["standard", "simple", "keyword", "en"]
 
 LANG_ANALYZERS = ["ar", "cjk", "fr", "fa", "hi", "it", "pt", "en", "web"]
+
+CHAR_FILTERS = ["html","mapping"]
+
+TOKENIZERS = ["letter","single","unicode","web","whitespace","alphanumeric"]
+
+TOKEN_FILTERS = ["apostrophe","elision_fr","to_lower","ngram",
+                 "front_edge_ngram","back_edge_ngram","shingle",
+                 "truncate","stemmer_porter","length","keyword_marker",
+                 "stopwords","cjk_bigram","stemmer_it_light",
+                 "stemmer_fr_light","stemmer_fr_min","stemmer_pt_light"]
 
 class CustomMapGenerator:
     """
     # Generates an FTS and equivalent ES custom map for emp/wiki datasets
     """
-    def __init__(self, seed=0, dataset="emp"):
+    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False):
         random.seed(seed)
         self.fts_map = {"types": {}}
         self.es_map = {}
         self.num_field_maps = random.randint(1, 10)
         self.queryable_fields = {}
+        self.num_custom_analyzers = num_custom_analyzers
+        # Holds the list of custom analyzers created by
+        # build_custom_analyzer method
+        self.custom_analyzers=[]
+        self.multiple_filters = multiple_filters
+
+        for n in range(0,self.num_custom_analyzers,1):
+            self.custom_analyzers.append("customAnalyzer"+str(n+1))
+
         if dataset == "emp":
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
@@ -241,7 +359,10 @@ class CustomMapGenerator:
         fts_field_map['name'] = field
         fts_field_map['store'] = False
         fts_field_map['type'] = field_type
-        analyzer = self.get_random_value(ANALYZERS)
+        if self.num_custom_analyzers:
+            analyzer = self.get_random_value(self.custom_analyzers)
+        else:
+            analyzer = self.get_random_value(ANALYZERS)
         if field_type == "text":
             fts_field_map['analyzer'] = analyzer
         else:
@@ -261,6 +382,7 @@ class CustomMapGenerator:
         if field_type == "text":
             es_field_map['type'] = "string"
             es_field_map['term_vector'] = "yes"
+
             es_field_map['analyzer'] = analyzer
             if analyzer == "en":
                 es_field_map['analyzer'] = "english"
@@ -281,6 +403,39 @@ class CustomMapGenerator:
         if nested_field in self.nested_fields.iterkeys():
             return self.get_random_field_name_and_type(
                 self.nested_fields[nested_field])
+
+    def build_custom_analyzer(self):
+        analyzer_map = {}
+        if self.multiple_filters:
+            num_token_filters = random.randint(1,min(3,len(TOKEN_FILTERS)))
+            num_char_filters = random.randint(1, min(3,len(CHAR_FILTERS)))
+        else:
+            num_token_filters = 1
+            num_char_filters = 1
+
+        for custom_analyzer in self.custom_analyzers:
+            analyzer_map[custom_analyzer] = {}
+            analyzer_map[custom_analyzer]["char_filters"] = []
+            analyzer_map[custom_analyzer]["token_filters"] = []
+            analyzer_map[custom_analyzer]["tokenizer"] = ""
+
+            for num in range(0,num_char_filters, 1):
+                char_filter = self.get_random_value(CHAR_FILTERS)
+                if not analyzer_map[custom_analyzer]["char_filters"].count(char_filter):
+                    analyzer_map[custom_analyzer]["char_filters"].append(char_filter)
+
+            tokenizer = self.get_random_value(TOKENIZERS)
+            analyzer_map[custom_analyzer]["tokenizer"] = tokenizer
+
+            for num in range(0, num_token_filters, 1):
+                token_filter = self.get_random_value(TOKEN_FILTERS)
+                if not analyzer_map[custom_analyzer]["token_filters"].count(token_filter):
+                    analyzer_map[custom_analyzer]["token_filters"].append(token_filter)
+            analyzer_map[custom_analyzer]["type"] = "custom"
+
+        analyzer = CUSTOM_ANALYZER_TEMPLATE
+        analyzer["analyzers"]=analyzer_map
+        return analyzer
 
 if __name__ == "__main__":
     import json

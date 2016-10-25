@@ -14,6 +14,7 @@ from testconstants import COUCHBASE_FROM_VERSION_4
 
 import httplib2
 import logger
+import traceback
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -362,7 +363,14 @@ class RestConnection(object):
             http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
             if http_res == u'unknown pool':
                 return False
-            versions = list(set([node["version"][:1] for node in http_res["nodes"]]))
+            try:
+                versions = list(set([node["version"][:1] for node in http_res["nodes"]]))
+            except:
+                log.error('Error while processing cluster info {0}'.format(http_res))
+                # not really clear what to return but False see to be a good start until we figure what is happening
+                return False
+
+
             if '1' in versions and '2' in versions:
                  return True
             return False
@@ -894,6 +902,15 @@ class RestConnection(object):
                                  ftsMemoryQuota=256):
         api = self.baseUrl + 'pools/default'
         params = urllib.urlencode({'ftsMemoryQuota': ftsMemoryQuota})
+        log.info('pools/default params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
+    def set_cluster_name(self, name):
+        api = self.baseUrl + 'pools/default'
+        if name is None:
+            name = ""
+        params = urllib.urlencode({'clusterName': name})
         log.info('pools/default params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
@@ -1557,9 +1574,12 @@ class RestConnection(object):
             parsed = json_parsed
         return parsed
 
-    def get_pools_default(self, timeout=30):
+    def get_pools_default(self, query='', timeout=30):
         parsed = {}
         api = self.baseUrl + 'pools/default'
+        if query:
+            api += "?" + query
+
         status, content, header = self._http_request(api, timeout=timeout)
         json_parsed = json.loads(content)
         if status:
@@ -1802,7 +1822,7 @@ class RestConnection(object):
     def is_lww_enabled(self, bucket='default'):
         bucket_info = self.get_bucket_json(bucket=bucket)
         try:
-            if bucket_info['timeSynchronization'] == 'enabledWithoutDrift':
+            if bucket_info['conflictResolutionType'] == 'lww':
                 return True
         except KeyError:
             return False
@@ -1853,8 +1873,7 @@ class RestConnection(object):
                       threadsNumber=3,
                       flushEnabled=1,
                       evictionPolicy='valueOnly',
-                      lww=False,
-                      drift=False):
+                      lww=False):
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
@@ -1897,10 +1916,7 @@ class RestConnection(object):
                            'flushEnabled': flushEnabled,
                            'evictionPolicy': evictionPolicy}
         if lww:
-            if drift:
-                init_params['timeSynchronization'] = 'enabledWithDrift'
-            else:
-                init_params['timeSynchronization'] = 'enabledWithoutDrift'
+            init_params['conflictResolutionType'] = 'lww'
         params = urllib.urlencode(init_params)
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
@@ -2360,6 +2376,24 @@ class RestConnection(object):
             return content['total_hits'], content['hits'], content['took'], \
                    content['status']
 
+    def run_fts_query_with_facets(self, index_name, query_json):
+        """Method run an FTS query through rest api"""
+        api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        headers = self._create_capi_headers_with_auth(
+            self.username,
+            self.password)
+        status, content, header = self._http_request(
+            api,
+            "POST",
+            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
+            headers,
+            timeout=70)
+
+        if status:
+            content = json.loads(content)
+            return content['total_hits'], content['hits'], content['took'], \
+                   content['status'], content['facets']
+
 
     """ End of FTS rest APIs """
 
@@ -2543,6 +2577,13 @@ class RestConnection(object):
         log.info('Indexer {0} set to {1}'.format(parameter, val))
         return status
 
+    def get_global_index_settings(self):
+        api = self.baseUrl + "settings/indexes"
+        status, content, header = self._http_request(api)
+        if status:
+            return json.loads(content)
+        return None
+
     def set_couchdb_option(self, section, option, value):
         """Dynamic settings changes"""
 
@@ -2669,6 +2710,56 @@ class RestConnection(object):
             if verbose:
                 log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
+        status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
+        try:
+            return json.loads(content)
+        except ValueError:
+            return content
+
+    def analytics_tool(self, query, port=8095, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
+                   verbose = True, encoded_plan=None, servers=None):
+        key = 'prepared' if is_prepared else 'statement'
+        headers = None
+        content=""
+        prepared = json.dumps(query)
+        if is_prepared:
+            if named_prepare and encoded_plan:
+                http = httplib2.Http()
+                if len(servers)>1:
+                    url = "http://%s:%s/query/service" % (servers[1].ip, port)
+                else:
+                    url = "http://%s:%s/query/service" % (self.ip, port)
+
+                headers = {'Content-type': 'application/json'}
+                body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
+
+                response, content = http.request(url, 'POST', headers=headers, body=json.dumps(body))
+
+                return eval(content)
+
+            elif named_prepare and not encoded_plan:
+                params = 'prepared=' + urllib.quote(prepared, '~()')
+                params = 'prepared="%s"'% named_prepare
+            else:
+                prepared = json.dumps(query)
+                prepared = str(prepared.encode('utf-8'))
+                params = 'prepared=' + urllib.quote(prepared, '~()')
+            if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
+            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
+            log.info("%s"%api)
+        else:
+            params = {key : query}
+            if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
+                del query_params['creds']
+            params.update(query_params)
+            params = urllib.urlencode(params)
+            if verbose:
+                log.info('query params : {0}'.format(params))
+            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:
             return json.loads(content)

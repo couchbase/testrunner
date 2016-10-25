@@ -5,11 +5,18 @@ import logger
 log = logger.Logger.get_logger()
 import base64
 from security.rbacPermissionList import rbacPermissionList
+from remote.remote_util import RemoteMachineShellConnection
+import commands
+import urllib
 
 class rbacmain:
     AUDIT_ROLE_ASSIGN=8232
     AUDIT_ROLE_UPDATE=8232
     AUDIT_REMOVE_ROLE=8194
+    PATH_SASLAUTHD = '/etc/sysconfig/'
+    FILE_SASLAUTHD = 'saslauthd'
+    PATH_SASLAUTHD_LOCAL = '/tmp/'
+    FILE_SASLAUTHD_LOCAL = 'saslauth'
 
     def __init__(self,
                 master_ip=None,
@@ -329,3 +336,110 @@ class rbacmain:
                 final_result = False
 
         return final_result
+
+
+    def getRemoteFile(self, host):
+        commands.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
+        shell = RemoteMachineShellConnection(host)
+        try:
+            sftp = shell._ssh_client.open_sftp()
+            tempfile = str(self.PATH_SASLAUTHD + self.FILE_SASLAUTHD)
+            tmpfile = self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD
+            sftp.get('{0}'.format(tempfile), '{0}'.format(tmpfile))
+            sftp.close()
+        except Exception, e:
+            log.info (" Value of e is {0}".format(e))
+        finally:
+            shell.disconnect()
+
+
+    def writeFile(self, host):
+        shell = RemoteMachineShellConnection(host)
+        try:
+            result = shell.copy_file_local_to_remote(self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD, \
+                                                     self.PATH_SASLAUTHD + self.FILE_SASLAUTHD)
+        finally:
+            shell.disconnect()
+
+    '''
+    Update saslauth file with mechanism
+
+    Parameters -
+        mech_value - mechanism value to change
+
+    Returns - None
+    '''
+
+    def update_file_inline(self,mech_value='ldap'):
+        commands.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL)
+        f1 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD,'r')
+        f2 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL,'w')
+        for line in f1:
+            line = line.rstrip('\n')
+            if line=='MECH=ldap' and mech_value == 'pam':
+                f2.write(line.replace('MECH=ldap', 'MECH=pam'))
+                f2.write("\n")
+                f2.write("\n")
+            elif line=='MECH=pam' and mech_value == 'ldap':
+                f2.write(line.replace('MECH=pam', 'MECH=ldap'))
+                f2.write("\n")
+                f2.write("\n")
+            else:
+                f2.write(line + "\n")
+        f1.close()
+        f2.close()
+        commands.getstatusoutput("mv " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL + " " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
+
+
+    def restart_saslauth(self,host):
+        shell = RemoteMachineShellConnection(host)
+        shell.execute_command('service saslauthd restart')
+        shell.disconnect()
+
+    '''
+    Setup auth mechanism - pam or auth
+
+    Parameters -
+        servers - list of servers that need user creation
+        type - Mechanism type
+        rest - Rest connection object
+
+    Returns - status, content and header of the rest command executed for saslauthd
+    '''
+    def setup_auth_mechanism(self, servers, type, rest):
+        for server in servers:
+            self.getRemoteFile(server)
+            self.update_file_inline(mech_value=type)
+            self.writeFile(server)
+            self.restart_saslauth(server)
+        api = rest.baseUrl + 'settings/saslauthdAuth'
+        params = urllib.urlencode({"enabled": 'true', "admins": [], "roAdmins": []})
+        status, content, header = rest._http_request(api, 'POST', params)
+        return status, content, header
+
+    '''
+    Add/remove load unix users
+    Parameters -
+        servers - list of servers that need user creation
+        operation - deluser and adduser operations
+
+    Returns - None
+    '''
+    def add_remove_local_user(self,servers,user_list,operation):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            try:
+                for user in user_list:
+                    print user
+                    if (user[0] != ''):
+                        if (operation == "deluser"):
+                            user_command = "userdel -r " + user[0]
+
+                        elif (operation == 'adduser'):
+                            user_command = "openssl passwd -crypt " + user[1]
+                            o, r = shell.execute_command(user_command)
+                            user_command = "useradd -p " + o[0] + " " + user[0]
+                        o, r = shell.execute_command(user_command)
+                        shell.log_command_output(o, r)
+            finally:
+                shell.disconnect()

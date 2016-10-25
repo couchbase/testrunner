@@ -8,6 +8,7 @@ from uibasetest import *
 from uisampletests import Bucket, NavigationHelper, BucketHelper
 from selenium.common.exceptions import StaleElementReferenceException
 from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 
 class XDCRTests(BaseUITestCase):
@@ -15,6 +16,18 @@ class XDCRTests(BaseUITestCase):
         super(XDCRTests, self).setUp()
         self.bucket = Bucket()
         self._initialize_nodes()
+        self.master = self.servers[0]
+        for server in self.servers:
+            rest=RestConnection(server)
+            cluster_status = rest.cluster_status()
+            self.log.info("Initial status of {0} cluster is {1}".format(server.ip,
+                                                                        cluster_status['nodes'][0]['status']))
+            while cluster_status['nodes'][0]['status'] == 'warmup':
+                self.log.info("Waiting for cluster to become healthy")
+                self.sleep(5)
+                cluster_status = rest.cluster_status()
+            self.log.info("current status of {0}  is {1}".format(server.ip,
+                                                                 cluster_status['nodes'][0]['status']))
         # Delete all buckets before creating new buckets
         self.log.info("Deleting all existing buckets")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
@@ -25,9 +38,9 @@ class XDCRTests(BaseUITestCase):
             RestConnection(self.servers[0]).create_bucket(bucket='default', ramQuotaMB=500)
         if dest_bucket:
             RestConnection(self.servers[1]).create_bucket(bucket='default', ramQuotaMB=500)
-        self.driver.refresh()
         helper = BaseHelper(self)
         helper.login()
+
 
     def tearDown(self):
         super(XDCRTests, self).tearDown()
@@ -36,13 +49,14 @@ class XDCRTests(BaseUITestCase):
             self._initialize_nodes()
 
     def _deinitialize_api(self):
+        self.log.info("Cleaning up replications and remote clusters")
         for server in self.servers:
-            try:
-                rest = RestConnection(server)
-                rest.force_eject_node()
-                time.sleep(10)
-            except BaseException, e:
-                self.fail(e)
+            rest = RestConnection(server)
+            rest.remove_all_replications()
+            rest.remove_all_remote_clusters()
+        self.log.info("Sleeping for 30 seconds after cleaning up replications and remote clusters")
+        time.sleep(30)
+        ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
 
     def _initialize_nodes(self):
         for server in self.servers:
@@ -182,11 +196,15 @@ class XDCRControls():
     def advanced_settings(self):
         self.max_replication = self.helper.find_control('xdcr_advanced_settings', 'max_replication')
         self.version = self.helper.find_control('xdcr_advanced_settings', 'version')
+        self.source_nozzle_per_node = self.helper.find_control('xdcr_advanced_settings', 'source_nozzle_per_node')
+        self.target_nozzle_per_node = self.helper.find_control('xdcr_advanced_settings', 'target_nozzle_per_node')
         self.checkpoint_interval = self.helper.find_control('xdcr_advanced_settings', 'checkpoint_interval')
         self.batch_count = self.helper.find_control('xdcr_advanced_settings', 'batch_count')
         self.batch_size = self.helper.find_control('xdcr_advanced_settings', 'batch_size')
         self.retry_interval = self.helper.find_control('xdcr_advanced_settings', 'retry_interval')
         self.replication_threshold = self.helper.find_control('xdcr_advanced_settings', 'replication_threshold')
+        self.collection_interval = self.helper.find_control('xdcr_advanced_settings', 'collection_interval')
+        self.logging = self.helper.find_control('xdcr_advanced_settings', 'logging')
         return self
 
     def errors_advanced_settings(self):
@@ -226,6 +244,8 @@ class XDCRHelper():
             self.wait.until(lambda fn: self.controls.error_reference().get_text() != '',
                         "text didn't appear in %d sec" % (self.wait._timeout))
             raise Exception('Reference is not created: %s' % self.controls.error_reference().get_text())
+        else:
+            self.tc.log.info("Reference has been created")
 
     def _cluster_reference_pop_up_reaction(self):
         try:
@@ -255,7 +275,11 @@ class XDCRHelper():
         if advanced_settings:
             self.controls.create_replication_pop_up().advanced_settings_link.click()
             if 'version' in advanced_settings:
-                self.controls.advanced_settings().version.select(advanced_settings['version'])
+                self.controls.advanced_settings().version.select(value=advanced_settings['version'])
+            if 'source_nozzle_per_node' in advanced_settings:
+                self.controls.advanced_settings().source_nozzle_per_node.type(advanced_settings['source_nozzle_per_node'])
+            if 'target_nozzle_per_node' in advanced_settings:
+                self.controls.advanced_settings().target_nozzle_per_node.type(advanced_settings['target_nozzle_per_node'])
             if 'max_replication' in advanced_settings:
                 self.controls.advanced_settings().max_replication.type(advanced_settings['max_replication'])
             if 'checkpoint_interval' in advanced_settings:
@@ -268,6 +292,10 @@ class XDCRHelper():
                 self.controls.advanced_settings().retry_interval.type(advanced_settings['retry_interval'])
             if 'replication_threshold' in advanced_settings:
                 self.controls.advanced_settings().replication_threshold.type(advanced_settings['replication_threshold'])
+            if 'collection_interval' in advanced_settings:
+                self.controls.advanced_settings().collection_interval.type(advanced_settings['collection_interval'])
+            if 'logging' in advanced_settings:
+                self.controls.advanced_settings().logging.select(value=advanced_settings['logging'])
             if len([el for el in self.controls.errors_advanced_settings() if el.is_displayed() and el.get_text() != '']) > 0:
                 raise Exception('Advanced setting error: %s' % str([el.get_text() for el in self.controls.errors_advanced_settings()
                                                                     if el.is_displayed() and el.get_text() != '']))
@@ -276,11 +304,14 @@ class XDCRHelper():
         else:
             self.controls.create_replication_pop_up().cancel_btn.click()
         all_errors = self.controls.error_replica()
-        if all_errors:
-            for error in all_errors:
-                if error.is_present():
+        try:
+            if all_errors:
+                for error in all_errors:
                     if error.is_displayed():
-                        raise Exception('Reference is not created: %s' % error.get_text())
+                        raise Exception('Replication is not created: %s' % error.get_text())
+        except StaleElementReferenceException as e:
+            self.tc.log.info ("No error displayed while creating/cancelling a Replication")
+
         self.wait.until(lambda fn: self._cluster_replication_pop_up_reaction(),
                         "there is no reaction in %d sec" % (self.wait._timeout))
 
@@ -296,6 +327,8 @@ class XDCRHelper():
     def is_cluster_reference_created(self, name, ip):
         all_ref = self.controls._all_cluster_references()
         for reference in all_ref:
+            self.wait.until(lambda fn: reference.is_displayed(),
+                            "Reference not found")
             if reference.get_text().find(name) != -1 and reference.get_text().find(ip) != -1:
                 return True
         return False
@@ -303,6 +336,8 @@ class XDCRHelper():
     def is_replication_created(self, bucket_name, name_remote, bucket_name_remote):
         all_rep = self.controls._all_ongoing_replications()
         for rep in all_rep:
+            self.wait.until(lambda fn: rep.is_displayed(),
+                            "Replication not found")
             if rep.get_text().find(bucket_name) != -1 and rep.get_text().find(name_remote) != -1 and rep.get_text().find(bucket_name_remote) != -1:
                 return True
         return False

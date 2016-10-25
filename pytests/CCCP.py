@@ -5,6 +5,7 @@ from basetestcase import BaseTestCase
 from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import COUCHBASE_FROM_VERSION_4
 
 
 class CCCP(BaseTestCase):
@@ -39,6 +40,8 @@ class CCCP(BaseTestCase):
     def test_get_config_rest(self):
         tasks = self.run_ops()
         for task in tasks:
+            if not task:
+                self.fail("no task to run")
             task.result()
         for bucket in self.buckets:
             config = RestConnection(self.master).get_bucket_CCCP(bucket)
@@ -85,7 +88,12 @@ class CCCP(BaseTestCase):
             self.assertTrue(param in config_json, "No %s in config" % param)
         self.assertTrue("name" in config_json and config_json["name"] == bucket.name,
                         "No bucket name in config")
-        self.assertTrue(len(config_json["nodes"]) == self.nodes_init,
+        if self.cb_version[:5] in COUCHBASE_FROM_VERSION_4:
+            self.assertTrue(len(config_json["nodesExt"]) == self.nodes_init,
+                        "Number of nodes expected %s, actual %s" % (
+                                        self.nodes_init, len(config_json["nodesExt"])))
+        else:
+            self.assertTrue(len(config_json["nodes"]) == self.nodes_init,
                         "Number of nodes expected %s, actual %s" % (
                                         self.nodes_init, len(config_json["nodes"])))
         for node in config_json["nodes"]:

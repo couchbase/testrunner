@@ -8,6 +8,7 @@ from memcached.helper.data_helper import LoadWithMcsoda
 from xdcrnewbasetests import XDCRNewBaseTest
 from xdcrnewbasetests import NodeHelper
 from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
+from scripts.install import InstallerJob
 
 
 # Assumption that at least 2 nodes on every cluster
@@ -638,4 +639,140 @@ class unidirectional(XDCRNewBaseTest):
         if not passed:
             self.fail("No attempts were made to repair connections on %s before"
                       " restarting pipeline" % self.src_cluster.get_nodes())
+        self.verify_results()
+
+    def test_verify_mb19802_1(self):
+        load_tasks = self.setup_xdcr_async_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+
+        conn = RemoteMachineShellConnection(self.dest_cluster.get_master_node())
+        conn.stop_couchbase()
+
+        for task in load_tasks:
+            task.result()
+
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                            node,
+                            "batchGetMeta timed out",
+                            goxdcr_log)
+            self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
+            self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
+
+        conn.start_couchbase()
+        self.verify_results()
+
+    def test_verify_mb19802_2(self):
+        load_tasks = self.setup_xdcr_async_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+
+        self.dest_cluster.failover_and_rebalance_master()
+
+        for task in load_tasks:
+            task.result()
+
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                            node,
+                            "batchGetMeta timed out",
+                            goxdcr_log)
+            self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
+            self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
+
+        self.verify_results()
+
+    def test_verify_mb19697(self):
+        self.setup_xdcr_and_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+
+        self.src_cluster.pause_all_replications()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=100000)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        self.src_cluster.resume_all_replications()
+        self._wait_for_replication_to_catchup()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=100000)
+        load_tasks = self.src_cluster.async_load_all_buckets_from_generator(gen)
+
+        self.src_cluster.rebalance_out()
+
+        for task in load_tasks:
+            task.result()
+
+        self._wait_for_replication_to_catchup()
+
+        self.src_cluster.rebalance_in()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=100000)
+        load_tasks = self.src_cluster.async_load_all_buckets_from_generator(gen)
+
+        self.src_cluster.failover_and_rebalance_master()
+
+        for task in load_tasks:
+            task.result()
+
+        self._wait_for_replication_to_catchup()
+
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                            node,
+                            "counter .+ goes backward, maybe due to the pipeline is restarted",
+                            goxdcr_log)
+            self.assertEqual(count, 0, "counter goes backward, maybe due to the pipeline is restarted "
+                                        "error message found in " + str(node.ip))
+            self.log.info("counter goes backward, maybe due to the pipeline is restarted "
+                                        "error message not found in " + str(node.ip))
+
+        self.verify_results()
+
+    def test_verify_mb20463(self):
+        src_version = NodeHelper.get_cb_version(self.src_cluster.get_master_node())
+        if float(src_version[:3]) != 4.5:
+            self.log.info("Source cluster has to be at 4.5 for this test")
+            return
+
+        servs = self._input.servers[2:4]
+        params = {}
+        params['num_nodes'] = len(servs)
+        params['product'] = 'cb'
+        params['version'] = '4.1.2-6088'
+        params['vbuckets'] = [1024]
+        self.log.info("will install {0} on {1}".format('4.1.2-6088', [s.ip for s in servs]))
+        InstallerJob().parallel_install(servs, params)
+
+        if params['product'] in ["couchbase", "couchbase-server", "cb"]:
+            success = True
+            for server in servs:
+                success &= RemoteMachineShellConnection(server).is_couchbase_installed()
+                if not success:
+                    self.fail("some nodes were not installed successfully on target cluster!")
+
+        self.log.info("4.1.2 installed successfully on target cluster")
+
+        conn = RestConnection(self.dest_cluster.get_master_node())
+        conn.add_node(user=self._input.servers[3].rest_username, password=self._input.servers[3].rest_password,
+                      remoteIp=self._input.servers[3].ip)
+        self.sleep(30)
+        conn.rebalance(otpNodes=[node.id for node in conn.node_statuses()])
+        self.sleep(30)
+        conn.create_bucket(bucket='default', ramQuotaMB=512)
+
+        tasks = self.setup_xdcr_async_load()
+
+        self.sleep(30)
+
+        NodeHelper.enable_firewall(self.dest_master)
+        self.sleep(30)
+        NodeHelper.disable_firewall(self.dest_master)
+
+        for task in tasks:
+            task.result()
+
+        self._wait_for_replication_to_catchup(timeout=600)
+
         self.verify_results()

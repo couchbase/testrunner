@@ -125,7 +125,7 @@ class PauseResumeTest(XDCRNewBaseTest):
         except Exception as e:
             self.log.info(e)
 
-        self._wait_for_replication_to_catchup()
+        self._wait_for_replication_to_catchup(timeout=500)
         self.pause_xdcr()
         self.perform_update_delete()
         self.resume_xdcr()

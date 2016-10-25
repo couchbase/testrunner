@@ -6,6 +6,7 @@ import uuid
 import copy
 import math
 import re
+import os
 
 import testconstants
 import datetime
@@ -38,6 +39,7 @@ class QueryTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
+        self.analytics = self.input.param("analytics",False)
         self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.index_type = self.input.param("index_type", 'GSI')
@@ -60,7 +62,11 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
-        self.create_primary_index_for_3_0_and_greater()
+        if (self.analytics == False):
+                self.create_primary_index_for_3_0_and_greater()
+        if (self.analytics):
+            self.setup_analytics()
+            self.sleep(30,'wait for analytics setup')
 
     def suite_setUp(self):
         try:
@@ -75,6 +81,20 @@ class QueryTests(BaseTestCase):
     def tearDown(self):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
+        if self.analytics:
+            data = 'use Default ;' + "\n"
+            for bucket in self.buckets:
+                data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
+                data += 'drop dataset {0}'.format(bucket.name) + "_shadow ;" + "\n"
+                data += 'drop bucket {0} ;'.format(bucket.name) + "\n"
+            filename = "file.txt"
+            f = open(filename,'w')
+            f.write(data)
+            f.close()
+            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+            os.system(cmd)
+            os.remove(filename)
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
@@ -84,6 +104,33 @@ class QueryTests(BaseTestCase):
                 self.shell.execute_command("killall tuqtng")
                 self.shell.disconnect()
 
+
+    def setup_analytics(self):
+        #data = ""
+        # for bucket in self.buckets:
+        #         data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
+        #         data += 'connect bucket {0};'.format(bucket.name) + "\n"
+        # filename = "file.txt"
+        # f = open(filename,'w')
+        # f.write(data)
+        # f.close()
+        # url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        # cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+        # os.system(cmd)
+        # os.remove(filename)
+        data = 'use Default;' + "\n"
+        for bucket in self.buckets:
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
+            data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
+        filename = "file.txt"
+        f = open(filename,'w')
+        f.write(data)
+        f.close()
+        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+        os.system(cmd)
+        os.remove(filename)
 
 ##############################################################################################
 #
@@ -265,6 +312,8 @@ class QueryTests(BaseTestCase):
                 t5 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
                 t5.start()
             query_template = 'SELECT COUNT($str0) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
+            if self.analytics:
+                query_template = 'SELECT COUNT(`$str0`) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self.assertEquals(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
@@ -297,6 +346,12 @@ class QueryTests(BaseTestCase):
                    ' ORDER BY points',
                    'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' +\
                    'GROUP BY test.$obj0.$_obj0_int0 ORDER BY points']
+        # if self.analytics:
+        #      queries_templates = ['SELECT test.$obj0.$_obj0_int0 AS points FROM %s AS test ORDER BY test.points',
+        #            'SELECT test.$obj0.$_obj0_int0 AS points FROM %s AS test WHERE test.$int0 >0'  +\
+        #            ' ORDER BY test.points',
+        #            'SELECT test.$obj0.$_obj0_int0 AS points FROM %s AS test ' +\
+        #            'GROUP BY test.$obj0.$_obj0_int0 ORDER BY test.points']
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
@@ -334,6 +389,9 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'SELECT $str0 AS name_new FROM %s AS test ORDER BY name_new ASC' %(
                                                                                 bucket.name)
+            if self.analytics:
+                query_template = 'SELECT `$str0` AS name_new FROM %s AS test ORDER BY name_new ASC' %(
+                                                                                bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
 
@@ -344,6 +402,9 @@ class QueryTests(BaseTestCase):
                 t8 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
                 t8.start()
             query_template = 'SELECT COUNT(TEST.$str0) from %s AS TEST' %(bucket.name)
+            if self.analytics:
+                 query_template = 'SELECT COUNT(TEST.`$str0`) from %s AS TEST' %(bucket.name)
+
             actual_result, expected_result = self.run_query_from_template(query_template)
             if self.monitoring:
                     e.set()
@@ -407,6 +468,13 @@ class QueryTests(BaseTestCase):
             ' BY $str1 ORDER BY MIN($int1), $str1'
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
+
+            if self.analytics:
+                self.query = 'SELECT d.email AS TITLE, min(d.join_day) day FROM %s d GROUP'  % (bucket.name) +\
+            ' BY d.$str1 ORDER BY MIN(d.join_day), d.$str1'
+                actual_result1 = self.run_cbq_query()
+                self._verify_results(actual_result1['results'], actual_result['results'])
+
 
     def test_order_by_precedence(self):
         for bucket in self.buckets:
@@ -568,7 +636,17 @@ class QueryTests(BaseTestCase):
         if self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
             self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
+
+            if self.analytics:
+                query = query + ";"
+                for bucket in self.buckets:
+                    query = query.replace(bucket.name,bucket.name+"_shadow")
+                result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params)
+
+            else :
+                result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
+
+
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\

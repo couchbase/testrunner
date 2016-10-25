@@ -16,7 +16,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
 from testconstants import SHERLOCK_VERSION
-from testconstants import WATSON_VERSION
+from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK
 
 
 
@@ -124,7 +124,7 @@ class CommunityTests(CommunityBaseTest):
                                                            .format(self.services))
             else:
                 self.fail("Failed to set kv, index and query services on CE")
-        elif self.version in WATSON_VERSION:
+        elif self.version[:5] in COUCHBASE_FROM_WATSON:
             if self.services == "fts,index,kv":
                 if status:
                     self.fail("CE does not support fts, index and kv on same node")
@@ -166,10 +166,10 @@ class CommunityTests(CommunityBaseTest):
             if e:
                 print e
         if not status:
-            if self.version not in WATSON_VERSION and \
+            if self.version not in COUCHBASE_FROM_WATSON and \
                          self.start_node_services not in sherlock_services_in_ce:
                 self.log.info("initial services setting enforced in Sherlock CE")
-            elif self.version in WATSON_VERSION and \
+            elif self.version in COUCHBASE_FROM_WATSON and \
                          self.start_node_services not in watson_services_in_ce:
                 self.log.info("initial services setting enforced in Watson CE")
 
@@ -197,7 +197,7 @@ class CommunityTests(CommunityBaseTest):
                         .format(map[self.master.ip], self.start_node_services, \
                          map[self.servers[1].ip], self.add_node_services))
             else:
-                if self.version not in WATSON_VERSION:
+                if self.version not in COUCHBASE_FROM_WATSON:
                     if self.start_node_services in ["kv", "index,kv,n1ql"] and \
                           self.add_node_services not in ["kv", "index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
@@ -205,7 +205,7 @@ class CommunityTests(CommunityBaseTest):
                         self.log.info("services are enforced in CE")
                     else:
                         self.fail("maybe bug in add node")
-                elif self.version in WATSON_VERSION:
+                elif self.version in COUCHBASE_FROM_WATSON:
                     if self.start_node_services in ["kv", "index,kv,n1ql",
                          "index,kv,n1ql,fts"] and self.add_node_services not in \
                                     ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]:
@@ -222,43 +222,43 @@ class CommunityTests(CommunityBaseTest):
         """ for windows vm, ask IT to put uniq.exe at
             /cygdrive/c/Program Files (x86)/ICW/bin directory """
 
-        shell = RemoteMachineShellConnection(self.master)
+        self.remote = RemoteMachineShellConnection(self.master)
         """ put params items=0 in test param so that init items = 0 """
-        shell.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000"
+        self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000"
                                             .format(self.bin_path, self.master.ip))
         """ delete backup location before run backup """
-        shell.execute_command("rm -rf {0}*".format(self.backup_location))
-        output, error = shell.execute_command("ls -lh {0}"
+        self.remote.execute_command("rm -rf {0}*".format(self.backup_location))
+        output, error = self.remote.execute_command("ls -lh {0}"
                                                      .format(self.backup_location))
-        shell.log_command_output(output, error)
+        self.remote.log_command_output(output, error)
 
         """ first full backup """
-        shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m full"
+        self.remote.execute_command("{0}cbbackup http://{1}:8091 {2} -m full"
                 .format(self.bin_path, self.master.ip, self.backup_c_location))
-        output, error = shell.execute_command("ls -lh {0}*/"
+        output, error = self.remote.execute_command("ls -lh {0}*/"
                                         .format(self.backup_location))
-        shell.log_command_output(output, error)
-        output, error = shell.execute_command("{0}cbtransfer {1}*/*-full/ stdout: \
+        self.remote.log_command_output(output, error)
+        output, error = self.remote.execute_command("{0}cbtransfer {1}*/*-full/ stdout: \
                                                          | grep set | uniq | wc -l"
                                     .format(self.bin_path, self.backup_c_location))
-        shell.log_command_output(output, error)
+        self.remote.log_command_output(output, error)
         if int(output[0]) != 1000:
             self.fail("full backup did not work in CE. "
                       "Expected 1000, actual: {0}".format(output[0]))
-        shell.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 --prefix=t_"
+        self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 --prefix=t_"
                                             .format(self.bin_path, self.master.ip))
         """ do different backup mode """
-        shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m {3}"
+        self.remote.execute_command("{0}cbbackup http://{1}:8091 {2} -m {3}"
                        .format(self.bin_path, self.master.ip, self.backup_c_location,
                                                                self.backup_option))
-        output, error = shell.execute_command("ls -lh {0}"
+        output, error = self.remote.execute_command("ls -lh {0}"
                                                      .format(self.backup_location))
-        shell.log_command_output(output, error)
-        output, error = shell.execute_command("{0}cbtransfer {1}*/*-{2}/ stdout: \
+        self.remote.log_command_output(output, error)
+        output, error = self.remote.execute_command("{0}cbtransfer {1}*/*-{2}/ stdout: \
                                                          | grep set | uniq | wc -l"
                                        .format(self.bin_path, self.backup_c_location,
                                                                self.backup_option))
-        shell.log_command_output(output, error)
+        self.remote.log_command_output(output, error)
         if int(output[0]) == 2000:
             self.log.info("backup option 'diff' is enforced in CE")
         elif int(output[0]) == 1000:
@@ -266,18 +266,20 @@ class CommunityTests(CommunityBaseTest):
                       "Expected 2000, actual: {0}".format(output[0]))
         else:
             self.fail("backup failed to backup correct items")
+        self.remote.disconnect()
 
     def check_ent_backup(self):
         """ for CE version from Watson, cbbackupmgr exe file should not in bin """
         command = "cbbackupmgr"
-        shell = RemoteMachineShellConnection(self.master)
+        self.remote = RemoteMachineShellConnection(self.master)
         self.log.info("check if {0} in {1} directory".format(command, self.bin_path))
-        found = shell.file_exists(self.bin_path, command)
+        found = self.remote.file_exists(self.bin_path, command)
         if found:
             self.log.info("found {0} in {1} directory".format(command, self.bin_path))
             self.fail("CE from Watson should not contain {0}".format(command))
         elif not found:
             self.log.info("Ent. backup in CE is enforced, not in bin!")
+        self.remote.disconnect()
 
     def check_memory_optimized_storage_mode(self):
         """ from Watson, CE should not have option 'memory_optimized' to set """
@@ -396,6 +398,19 @@ class CommunityTests(CommunityBaseTest):
     def check_auto_complete(self):
         """ this feature has not complete to block in CE """
 
+    """ Check new features from spock start here """
+    def check_cbbackupmgr(self):
+        """ cbbackupmgr should not available in CE from spock """
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+            file_name = "cbbackupmgr" + self.file_extension
+            self.log.info("check if cbbackupmgr in bin dir in CE")
+            result = self.remote.file_exists(self.bin_path, file_name)
+            if result:
+                self.fail("cbbackupmgr should not in bin dir of CE")
+            else:
+                self.log.info("cbbackupmgr is enforced in CE")
+        self.remote.disconnect()
+
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
@@ -409,8 +424,8 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
         serverInfo = self._servers[0]
         self.rest = RestConnection(serverInfo)
         self.rest.remove_all_replications()
-        shell = RemoteMachineShellConnection(serverInfo)
-        output, error = shell.execute_command('curl -X POST '
+        self.remote = RemoteMachineShellConnection(serverInfo)
+        output, error = self.remote.execute_command('curl -X POST '
                                          '-u Administrator:password '
                      ' http://{0}:8091/controller/createReplication '
                      '-d fromBucket="default" '
@@ -424,3 +439,4 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
         if output and "default" in output[0]:
             self.fail("XDCR Filter feature should not available in "
                       "Community Edition")
+        self.remote.disconnect()

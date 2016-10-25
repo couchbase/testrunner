@@ -19,6 +19,7 @@ from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 import re
+import traceback
 
 
 class BucketConfig(unittest.TestCase):
@@ -73,6 +74,7 @@ class BucketConfig(unittest.TestCase):
             self.log.info("Modifying timeSynchronization value after bucket creation .....")
             self._modify_bucket()
         except Exception, e:
+            traceback.print_exc()
             self.fail('[ERROR] Modify testcase failed .., {0}'.format(e))
 
     def test_restart(self):
@@ -82,7 +84,8 @@ class BucketConfig(unittest.TestCase):
             self.log.info("Verifying bucket settings after restart ..")
             self._check_config()
         except Exception, e:
-            self.fail("[ERROR] Restart failed with exception {0}".format(e))
+            traceback.print_exc()
+            self.fail("[ERROR] Check data after restart failed with exception {0}".format(e))
 
     def test_failover(self):
         num_nodes=1
@@ -93,6 +96,7 @@ class BucketConfig(unittest.TestCase):
             self.log.info("Verifying bucket settings after failover ..")
             self._check_config()
         except Exception, e:
+            traceback.print_exc()
             self.fail('[ERROR]Failed to failover .. , {0}'.format(e))
 
     def test_rebalance_in(self):
@@ -143,8 +147,9 @@ class BucketConfig(unittest.TestCase):
 
     ''' Helper functions for above testcases
     '''
-    #create a bucket if it doesn't exist
+    #create a bucket if it doesn't exist. The drift parameter is currently unused
     def _create_bucket(self, lww=True, drift=False, name=None):
+
         if lww:
             self.lww=lww
 
@@ -157,7 +162,7 @@ class BucketConfig(unittest.TestCase):
                 self.servers)
             info = self.rest.get_nodes_self()
             self.rest.create_bucket(bucket=self.bucket,
-                ramQuotaMB=512,authType='sasl',lww=self.lww,drift=self.drift)
+                ramQuotaMB=512,authType='sasl',lww=self.lww)
             try:
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
@@ -214,8 +219,16 @@ class BucketConfig(unittest.TestCase):
             self.log.info("Warming-up servers ..")
             time.sleep(100)
 
+
+
     def _check_config(self):
-        result = self.rest.get_bucket_json(self.bucket)["timeSynchronization"]
+        rc = self.rest.get_bucket_json(self.bucket)
+        if 'conflictResolution' in rc:
+            conflictResolution  = self.rest.get_bucket_json(self.bucket)['conflictResolutionType']
+            self.assertTrue(conflictResolution == 'lww','Expected conflict resolution of lww but got {0}'.format(conflictResolution))
+
+
+        """ drift is disabled in 4.6, commenting out for now as it may come back later
         if self.lww and not self.drift:
             time_sync = 'enabledWithoutDrift'
         elif self.lww and self.drift:
@@ -225,3 +238,6 @@ class BucketConfig(unittest.TestCase):
         self.assertEqual(result,time_sync, msg='ERROR, Mismatch on expected time synchronization values, ' \
                                                'expected {0} but got {1}'.format(time_sync, result))
         self.log.info("Verified results")
+        """
+
+

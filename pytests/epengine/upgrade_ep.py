@@ -11,7 +11,10 @@ from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 import json
-
+from membase.helper.bucket_helper import BucketOperationHelper
+import json
+from membase.helper.cluster_helper import ClusterOperationHelper
+from TestInput import TestInput, TestInputSingleton
 
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -32,7 +35,14 @@ class Upgrade_EpTests(UpgradeTests):
 
 
     def tearDown(self):
-        super(Upgrade_EpTests, self).tearDown()
+        #super(Upgrade_EpTests, self).tearDown()
+        self.testcase = '2'
+        if not "skip_cleanup" in TestInputSingleton.input.test_params:
+            BucketOperationHelper.delete_all_buckets_or_assert(
+                self.servers, self.testcase)
+            ClusterOperationHelper.cleanup_cluster(self.servers)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(
+                self.servers, self.testcase)
 
     def test_upgrade(self):
         self.log.info('Starting upgrade tests...')

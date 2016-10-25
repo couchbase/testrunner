@@ -108,11 +108,11 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         self._run_tasks(kv_ops)
 
     def test_set_compaction_end_time_abort(self):
-        kv_ops = self._run_kvops_tasks()
-        date = datetime.now()
         servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
+        kv_ops = self._run_kvops_tasks()
+        date = datetime.now()
         #Trust Me this works
         dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
@@ -122,7 +122,7 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
                                               indexToMinute=(date.minute+3)%60,
                                               abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
-        self.sleep(180)
+        self.sleep(300)
         final_index_map = rest.get_index_stats()
         self.check_compaction_number(initial_index_map, final_index_map)
         self._validate_compaction_for_abort_or_complete()
@@ -274,9 +274,12 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
 
     def change_system_date(self, servers, date):
         for server in servers:
+            log.info("Changing system time on {0}".format(server.ip))
             remote = RemoteMachineShellConnection(server)
+            remote.stop_couchbase()
             cmd = "date -s '{0}'".format(date)
-            remote.execute_command(cmd)
+            success, error = remote.execute_command(cmd)
+            remote.start_couchbase()
         self.change_indexer_time = True
 
     def check_compaction_number(self, initial_map, final_map, buckets=None):

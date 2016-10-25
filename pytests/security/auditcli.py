@@ -195,7 +195,7 @@ class auditcli(BaseTestCase):
                                'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":self.source, \
-                               "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
+                               "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
         self.checkConfig(8201, self.master, expectedResults)
         remote_client.disconnect()
 

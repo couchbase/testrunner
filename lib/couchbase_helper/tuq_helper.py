@@ -16,7 +16,7 @@ from membase.api.rest_client import RestConnection
 
 class N1QLHelper():
     def __init__(self, version = None, master = None, shell = None, use_rest = None, max_verify = 0, buckets = [],
-        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None):
+        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None,database = None):
         self.version = version
         self.shell = shell
         self.max_verify = max_verify
@@ -28,6 +28,7 @@ class N1QLHelper():
         self.use_rest = True
         self.full_docs_list = full_docs_list
         self.master = master
+        self.database = database
         if self.full_docs_list and len(self.full_docs_list) > 0:
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
 
@@ -147,7 +148,7 @@ class N1QLHelper():
             new_data.append(sorted(data))
         return new_data
 
-    def _verify_results_crud_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+    def _verify_results_crud_rqg(self, n1ql_result = [], sql_result = [], hints = ["primary_key_id"]):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -167,8 +168,8 @@ class N1QLHelper():
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
                                             len(actual_result), len(expected_result), extra_msg))
-        msg = "The number of rows match but the results mismatch, please check"
         if not self._result_comparison_analysis(actual_result,expected_result) :
+            msg = "The number of rows match but the results mismatch, please check"
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception(msg+"\n "+extra_msg)
 
@@ -407,7 +408,6 @@ class N1QLHelper():
     def create_primary_index(self, using_gsi = True, server = None):
         if server == None:
             server = self.master
-        print "number of buckets {0}".format(len(self.buckets))
         for bucket in self.buckets:
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             if using_gsi:
@@ -416,11 +416,10 @@ class N1QLHelper():
                 #     self.query += " WITH {'index_type': 'memdb'}"
             if not using_gsi:
                 self.query += " USING VIEW "
-            self.log.info(self.query)
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if not check:
-                    self.run_cbq_query(server = server)
+                    self.run_cbq_query(server = server,query_params={'timeout' : '900s'})
                     check = self.is_index_online_and_in_list(bucket.name, "#primary", server = server)
                     if not check:
                         raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))

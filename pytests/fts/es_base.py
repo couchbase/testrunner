@@ -43,6 +43,130 @@ class BLEVE:
         }
     }
 
+    CUSTOM_ANALYZER = {
+        "settings": {
+            "analysis": {
+                "analyzer": {
+                },
+                "char_filter": {
+                    "mapping": {
+                        "type": "mapping",
+                        "mappings": [
+                            "f => ph"
+                        ]
+                    }
+                },
+                "tokenizer":{
+                    "alphanumeric":{
+                        "type":"pattern",
+                        "pattern":"[^a-zA-Z0-9_]"
+                    }
+                },
+                "filter": {
+                    "back_edge_ngram": {
+                        "type":"edgeNGram",
+                        "min_gram":3,
+                        "max_gram":5,
+                        "side":"back"
+                    },
+                    "front_edge_ngram": {
+                        "type": "edgeNGram",
+                        "min_gram": 3,
+                        "max_gram": 5,
+                        "side": "front"
+                    },
+                    "ngram": {
+                        "type": "nGram",
+                        "min_gram": 3,
+                        "max_gram": 5,
+                        "side": "front"
+                    },
+                    "keyword_marker": {
+                        "type":"keyword_marker",
+                        "keywords":STOPWORDS
+                    },
+                    "stopwords": {
+                        "type":"stop",
+                        "stopwords":STOPWORDS
+                    },
+                    "length": {
+                        "type":"length",
+                        "min":3,
+                        "max":5
+                    },
+                    "shingle": {
+                        "type":"shingle",
+                        "max_shingle_size":5,
+                        "min_shingle_size":2,
+                        "output_unigrams":"false",
+                        "output_unigrams_if_no_shingles":"false",
+                        "token_separator":"",
+                        "filler_token":""
+                    },
+                    "truncate": {
+                        "length": 10,
+                        "type": "truncate"
+                    },
+                    "cjk_bigram": {
+                        "type": "cjk_bigram"
+                    },
+                    "stemmer_it_light": {
+                        "type": "stemmer",
+                        "name": "light_italian"
+                    },
+                    "stemmer_fr_light": {
+                        "type": "stemmer",
+                        "name": "light_french"
+                    },
+                    "stemmer_fr_min": {
+                        "type": "stemmer",
+                        "name": "minimal_french"
+                    },
+                    "stemmer_pt_light": {
+                        "type": "stemmer",
+                        "name": "light_portuguese"
+                    }
+                }
+            }
+        }
+    }
+
+    FTS_ES_ANALYZER_MAPPING = {
+        "char_filters" : {
+            "html":"html_strip",
+            "zero_width_spaces":"html_strip",
+            "mapping":"mapping"
+        },
+        "token_filters": {
+            "apostrophe":"apostrophe",
+            "elision_fr":"elision",
+            "to_lower":"lowercase",
+            "ngram":"ngram",
+            "back_edge_ngram":"back_edge_ngram",
+            "front_edge_ngram": "front_edge_ngram",
+            "length":"length",
+            "shingle":"shingle",
+            "stemmer_porter":"porter_stem",
+            "truncate":"truncate",
+            "keyword_marker":"keyword_marker",
+            "stopwords":"stopwords",
+            "cjk_width":"cjk_width",
+            "cjk_bigram":"cjk_bigram",
+            "stemmer_it_light":"stemmer_it_light",
+            "stemmer_fr_light":"stemmer_fr_light",
+            "stemmer_fr_min": "stemmer_fr_min",
+            "stemmer_pt_light": "stemmer_pt_light"
+        },
+        "tokenizers": {
+            "letter":"letter",
+            "web":"uax_url_email",
+            "whitespace":"whitespace",
+            "unicode":"standard",
+            "single":"keyword",
+            "alphanumeric":"alphanumeric"
+        }
+    }
+
 class ElasticSearchBase(object):
 
     def __init__(self, host, logger):
@@ -160,15 +284,26 @@ class ElasticSearchBase(object):
             raise Exception("Could not create index with ES std analyzer : %s"
                             % e)
 
-    def create_index_mapping(self, index_name, mapping):
+    def create_index_mapping(self, index_name, es_mapping, fts_mapping=None):
         """
         Creates a new default index, with the given mapping
         """
         self.delete_index(index_name)
-        map = {"mappings": mapping, "settings": BLEVE.STD_ANALYZER['settings']}
+
+        if not fts_mapping:
+            map = {"mappings": es_mapping, "settings": BLEVE.STD_ANALYZER['settings']}
+        else :
+            # Find the ES equivalent char_filter, token_filter and tokenizer
+            es_settings = self.populate_es_settings(fts_mapping['params']
+                                                    ['mapping']['analysis']['analyzers'])
+
+            # Create an ES custom index definition
+            map = {"mappings": es_mapping, "settings": es_settings['settings']}
+
+        # Create ES index
         try:
             self.__log.info("Creating %s with mapping %s"
-                            % (index_name, json.dumps(mapping, indent=3)))
+                            % (index_name, json.dumps(map, indent=3)))
             status, content, _ = self._http_request(
                 self.__connection_url + index_name,
                 'PUT',
@@ -179,6 +314,46 @@ class ElasticSearchBase(object):
                 raise Exception("Could not create ES index")
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
+
+    def populate_es_settings(self, fts_custom_analyzers_def):
+        """
+        Populates the custom analyzer defintion of the ES Index Definition.
+        Refers to the FTS Custom Analyzers definition and creates an
+            equivalent definition for each ES custom analyzer
+        :param fts_custom_analyzers_def: FTS Custom Analyzer Definition
+        :return:
+        """
+
+        num_custom_analyzers = len(fts_custom_analyzers_def)
+        n = 1
+        analyzer_map = {}
+        while n <= num_custom_analyzers:
+            customAnalyzerName = fts_custom_analyzers_def.keys()[n-1]
+            fts_char_filters = fts_custom_analyzers_def[customAnalyzerName]["char_filters"]
+            fts_tokenizer = fts_custom_analyzers_def[customAnalyzerName]["tokenizer"]
+            fts_token_filters = fts_custom_analyzers_def[customAnalyzerName]["token_filters"]
+
+            analyzer_map[customAnalyzerName] = {}
+            analyzer_map[customAnalyzerName]["char_filter"] = []
+            analyzer_map[customAnalyzerName]["filter"] = []
+            analyzer_map[customAnalyzerName]["tokenizer"] = ""
+
+            for fts_char_filter in fts_char_filters:
+                analyzer_map[customAnalyzerName]['char_filter'].append( \
+                    BLEVE.FTS_ES_ANALYZER_MAPPING['char_filters'][fts_char_filter])
+
+            analyzer_map[customAnalyzerName]['tokenizer'] = \
+                BLEVE.FTS_ES_ANALYZER_MAPPING['tokenizers'][fts_tokenizer]
+
+            for fts_token_filter in fts_token_filters:
+                analyzer_map[customAnalyzerName]['filter'].append( \
+                    BLEVE.FTS_ES_ANALYZER_MAPPING['token_filters'][fts_token_filter])
+
+            n += 1
+
+        analyzer = BLEVE.CUSTOM_ANALYZER
+        analyzer['settings']['analysis']['analyzer'] = analyzer_map
+        return analyzer
 
     def create_alias(self, name, indexes):
         """

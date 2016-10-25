@@ -14,6 +14,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.document import DesignDocument, View
+from testconstants import STANDARD_BUCKET_PORT
 
 class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def setUp(self):
@@ -236,6 +237,48 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
+        if float(self.upgrade_versions[0][:3]) == 4.6:
+            self.log.info("##### Testing LWW as we are upgrading to 4.6 #####")
+            if "src" in upgrade_nodes:
+                src_conn = RestConnection(self.src_master)
+                src_conn.delete_bucket(bucket='default')
+                src_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                                    proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
+                                    flushEnabled=1, lww=True)
+                self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
+                self.log.info("LWW enabled on source bucket as expected")
+
+            if "dest" in upgrade_nodes:
+                dest_conn = RestConnection(self.dest_master)
+                dest_conn.delete_bucket(bucket='default')
+                dest_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                                    proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
+                                    flushEnabled=1, lww=True)
+                self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
+                self.log.info("LWW enabled on dest bucket as expected")
+
+        if float(self.initial_version[:3]) == 3.1 and float(self.upgrade_versions[0][:3]) == 4.1:
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+            for node in self.src_cluster.get_nodes():
+                count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "Failed to repair connections to target cluster",
+                            goxdcr_log)
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
+                                        "error message found in " + str(node.ip))
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))
+
     def is_goxdcr_migration_successful(self, server):
         count = NodeHelper.check_goxdcr_log(server,
                                 "Starting to migrate xdcr metadata")
@@ -252,7 +295,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
     def is_ssl_over_memcached(self, master):
         if not NodeHelper.check_goxdcr_log(master,
-                    "Try to create a ssl over memcached connection"):
+                    "Trying to create a ssl over memcached connection"):
             if NodeHelper.check_goxdcr_log(master,
                     "Get or create ssl over proxy connection"):
                 self.log.error("SSL still uses ns_proxy connection!")
@@ -354,6 +397,48 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
+        if float(self.upgrade_versions[0][:3]) == 4.6:
+            self.log.info("##### Testing LWW as we are upgrading to 4.6 #####")
+            src_conn = RestConnection(self.src_master)
+            dest_conn = RestConnection(self.dest_master)
+
+            src_conn.delete_bucket(bucket='default')
+            dest_conn.delete_bucket(bucket='default')
+
+            src_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                                    proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
+                                    flushEnabled=1, lww=True)
+            dest_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
+                                    proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='membase', replica_index=1, threadsNumber=3,
+                                    flushEnabled=1, lww=True)
+
+            self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
+            self.log.info("LWW enabled on source bucket as expected")
+            self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
+            self.log.info("LWW enabled on dest bucket as expected")
+
+        if float(self.initial_version[:3]) == 3.1 and float(self.upgrade_versions[0][:3]) == 4.1:
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+            for node in self.src_cluster.get_nodes():
+                count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "Failed to repair connections to target cluster",
+                            goxdcr_log)
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
+                                        "error message found in " + str(node.ip))
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))
+
     def incremental_offline_upgrade(self):
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
         self._install(self.servers[:self.src_init + self.dest_init ])
@@ -397,7 +482,27 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.merge_all_buckets()
         self.verify_results()
         self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
-
+        if float(self.initial_version[:3]) == 3.1 and float(self.upgrade_versions[0][:3]) == 4.1:
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+            for node in self.src_cluster.get_nodes():
+                count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "Failed to repair connections to target cluster",
+                            goxdcr_log)
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
+                                        "error message found in " + str(node.ip))
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))
     def _operations(self):
         # TODO: there are not tests with views
         if self.ddocs_num_src:
@@ -571,3 +676,24 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._post_upgrade_ops()
         self.sleep(60)
         self.verify_results()
+        if float(self.initial_version[:3]) == 3.1 and float(self.upgrade_versions[0][:3]) == 4.1:
+            goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+            for node in self.src_cluster.get_nodes():
+                count1 =  NodeHelper.check_goxdcr_log(
+                            node,
+                            "Received error response from memcached in target cluster",
+                            goxdcr_log)
+                count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "EINVAL",
+                            goxdcr_log)
+                count3 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "Failed to repair connections to target cluster",
+                            goxdcr_log)
+                if count1 > 0 or count2 > 0:
+                    self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
+                                        "error message found in " + str(node.ip))
+                    self.log.info("Failed to repair connections to target cluster "
+                                        "error message not found as expected in " + str(node.ip))

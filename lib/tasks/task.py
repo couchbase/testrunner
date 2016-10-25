@@ -203,7 +203,7 @@ class NodeInitializeTask(Task):
 
 class BucketCreateTask(Task):
     def __init__(self, server, bucket='default', replicas=1, size=0, port=11211, password=None, bucket_type='membase',
-                 enable_replica_index=1, eviction_policy='valueOnly', bucket_priority=None):
+                 enable_replica_index=1, eviction_policy='valueOnly', bucket_priority=None,lww=False):
         Task.__init__(self, "bucket_create_task")
         self.server = server
         self.bucket = bucket
@@ -215,6 +215,7 @@ class BucketCreateTask(Task):
         self.enable_replica_index = enable_replica_index
         self.eviction_policy = eviction_policy
         self.bucket_priority = None
+        self.lww = lww
         if bucket_priority is not None:
             self.bucket_priority = 8
 
@@ -256,7 +257,9 @@ class BucketCreateTask(Task):
                                bucketType=self.bucket_type,
                                replica_index=self.enable_replica_index,
                                evictionPolicy=self.eviction_policy,
-                               threadsNumber=self.bucket_priority)
+                               threadsNumber=self.bucket_priority,
+                               lww=self.lww
+                               )
             else:
                 rest.create_bucket(bucket=self.bucket,
                                ramQuotaMB=self.size,
@@ -266,7 +269,8 @@ class BucketCreateTask(Task):
                                saslPassword=self.password,
                                bucketType=self.bucket_type,
                                replica_index=self.enable_replica_index,
-                               evictionPolicy=self.eviction_policy)
+                               evictionPolicy=self.eviction_policy,
+                               lww=self.lww)
             self.state = CHECKING
             task_manager.schedule(self)
 
