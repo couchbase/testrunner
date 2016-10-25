@@ -170,7 +170,7 @@ class OpsChangeCasTests(BucketConfig):
         #print 'post ext meta {0}'.format(get_meta_resp)
 
         self.assertTrue(cas_pre == cas_post, 'cas mismatch active: {0} replica {1}'.format(cas_pre, cas_post))
-        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+        # extended meta is not supported self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_hard_restart(self):
         KEY_NAME = 'key2'
@@ -210,7 +210,7 @@ class OpsChangeCasTests(BucketConfig):
         #print 'post ext meta {0}'.format(get_meta_resp)
 
         self.assertTrue(cas_pre == cas_post, 'cas mismatch active: {0} replica {1}'.format(cas_pre, cas_post))
-        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+        # extended meta is not supported self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     ''' Test Incremental sets on cas and max cas values for keys
     '''
@@ -389,6 +389,9 @@ class OpsChangeCasTests(BucketConfig):
     def test_cas_deleteMeta(self):
 
         self.log.info(' Starting test-deleteMeta')
+
+
+        # load 20 kvs and check the CAS
         self._load_ops(ops='set', mutations=20)
         time.sleep(60)
         self._check_cas(check_conflict_resolution=False)
@@ -408,8 +411,12 @@ class OpsChangeCasTests(BucketConfig):
             TEST_SEQNO = 123
             TEST_CAS = 456
 
+
+            # get the meta data
             cas = mc_active.getMeta(key)[4]
+
             set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, '123456789',vbucket_id)
+
             cas_post_meta = mc_active.getMeta(key)[4]
 
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
