@@ -661,9 +661,9 @@ class Lww(XDCRNewBaseTest):
         try:
             self.setup_xdcr()
         except Exception as e:
-            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
-                            "TimeSynchronization mismatch message not thrown as expected")
-            self.log.info("TimeSynchronization mismatch message thrown as expected")
+            self.assertTrue("Replication between buckets with different ConflictResolutionType setting is not allowed" in str(e),
+                            "ConflictResolutionType mismatch message not thrown as expected")
+            self.log.info("ConflictResolutionType mismatch message thrown as expected")
 
     def test_seq_upd_on_uni_with_lww_disabled_source_and_target_wins(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -678,9 +678,9 @@ class Lww(XDCRNewBaseTest):
         try:
             self.setup_xdcr()
         except Exception as e:
-            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
-                            "TimeSynchronization mismatch message not thrown as expected")
-            self.log.info("TimeSynchronization mismatch message thrown as expected")
+            self.assertTrue("Replication between buckets with different ConflictResolutionType setting is not allowed" in str(e),
+                            "ConflictResolutionType mismatch message not thrown as expected")
+            self.log.info("ConflictResolutionType mismatch message thrown as expected")
 
     def test_seq_upd_on_bi_with_lww_disabled_on_both_clusters(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -1684,9 +1684,9 @@ class Lww(XDCRNewBaseTest):
         try:
             self.setup_xdcr()
         except Exception as e:
-            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
-                            "TimeSynchronization mismatch message not thrown as expected")
-            self.log.info("TimeSynchronization mismatch message thrown as expected")
+            self.assertTrue("Replication between buckets with different ConflictResolutionType setting is not allowed" in str(e),
+                            "ConflictResolutionType mismatch message not thrown as expected")
+            self.log.info("ConflictResolutionType mismatch message thrown as expected")
 
     def test_lww_with_nodes_reshuffle(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -2302,9 +2302,9 @@ class Lww(XDCRNewBaseTest):
         try:
             self.setup_xdcr()
         except Exception as e:
-            self.assertTrue("Replication between buckets with different TimeSynchronization setting is not allowed" in str(e),
-                            "TimeSynchronization mismatch message not thrown as expected")
-            self.log.info("TimeSynchronization mismatch message thrown as expected")
+            self.assertTrue("Replication between buckets with different ConflictResolutionType setting is not allowed" in str(e),
+                            "ConflictResolutionType mismatch message not thrown as expected")
+            self.log.info("ConflictResolutionType mismatch message thrown as expected")
 
     def test_v_topology_with_clocks_out_of_sync(self):
         self.c3_cluster = self.get_cb_cluster_by_name('C3')
