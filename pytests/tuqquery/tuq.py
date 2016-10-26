@@ -518,6 +518,11 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc['name']} for doc in self.full_list
                                if not (doc["job_title"].endswith('ales') and\
                                len(doc["job_title"]) == 5)]
+            self.query = "SELECT name FROM {0} WHERE reverse(job_title) NOT LIKE 'sela_' ORDER BY name".format(
+                                                                            bucket.name)
+            actual_result1 = self.run_cbq_query()
+
+            self.assertEqual(actual_result1['results'],actual_result['results'] )
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
 
@@ -525,6 +530,10 @@ class QueryTests(BaseTestCase):
         queries_errors = {"SELECT tasks_points FROM {0} WHERE tasks_points.* LIKE '_1%'" :
                            ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
+        queries_errors = {"SELECT tasks_points FROM {0} WHERE REVERSE(tasks_points.*) LIKE '%1_'" :
+                           ('syntax error', 3000)}
+        self.negative_common_body(queries_errors)
+
 
     def test_like_any(self):
         for bucket in self.buckets:
@@ -567,6 +576,10 @@ class QueryTests(BaseTestCase):
             self.query = "select name AS NAME from %s " % (bucket.name) +\
             "AS EMPLOYEE where EMPLOYEE.name LIKE '_mpl%' ORDER BY name"
             actual_result = self.run_cbq_query()
+            self.query = "select name AS NAME from %s " % (bucket.name) +\
+            "AS EMPLOYEE where reverse(EMPLOYEE.name) LIKE '%lpm_' ORDER BY name"
+            actual_result1 = self.run_cbq_query()
+            self.assertEqual(actual_result['results'],actual_result1['results'])
             expected_result = [{"NAME" : doc['name']} for doc in self.full_list
                                if doc["name"].find('mpl') == 1]
             expected_result = sorted(expected_result, key=lambda doc: (doc['NAME']))
@@ -577,6 +590,10 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
                          "LIKE '%@%.%' ORDER BY email"
             actual_result = self.run_cbq_query()
+            self.query = "SELECT email FROM %s WHERE reverse(email) " % (bucket.name) +\
+                         "LIKE '%.%@%' ORDER BY email"
+            actual_result1 = self.run_cbq_query()
+            self.assertEqual(actual_result['results'],actual_result1['results'])
 
             expected_result = [{"email" : doc['email']} for doc in self.full_list
                                if re.match(r'.*@.*\..*', doc['email'])]
@@ -735,8 +752,10 @@ class QueryTests(BaseTestCase):
 
             if self.analytics:
                 self.query = "SELECT d.job_title, AVG(d.test_rate) as avg_rate FROM %s d " % (bucket.name) +\
-                         "WHERE (ANY skill IN skills SATISFIES skill = 'skill2010' ) " +\
-                         "AND (ANY vm IN VMs SATISFIES vm.RAM = 5) " +\
+                         "WHERE (ANY skill IN skills SATISFIES skill = 'skill2010' end) " % (
+                                                                      bucket.name) +\
+                         "AND (ANY vm IN VMs SATISFIES vm.RAM = 5 end) "  % (
+                                                                      bucket.name) +\
                          "GROUP BY d.job_title ORDER BY d.job_title"
 
             actual_result = self.run_cbq_query()
@@ -1034,6 +1053,9 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "select name, SUBSTR(email, 7) as DOMAIN from %s" % (bucket.name)
             actual_result = self.run_cbq_query()
+            self.query = "select name, reverse(SUBSTR(email, 7)) as REV_DOMAIN from %s" % (bucket.name)
+            actual_result1 = self.run_cbq_query()
+            self.assertEqual(actual_result['results'],actual_result1['results'])
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['name'], doc['DOMAIN']))
 
@@ -1858,6 +1880,9 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
             actual_result = self.run_cbq_query()
+            self.query = "select name from %s where REVERSE(job_title) in ['selaS', 'troppuS']" % (bucket.name)
+            actual_result1 = self.run_cbq_query()
+            self.assertEqual(actual_result['results'],actual_result1['results'])
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
 
@@ -2727,9 +2752,15 @@ class QueryTests(BaseTestCase):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
 
+            self.query = "SELECT REVERSE(TOSTR(join_mo)) rev_month FROM %s" % bucket.name
+            actual_result1 = self.run_cbq_query()
+            actual_result2 = sorted(actual_result1['results'])
             expected_result = [{"month" : str(doc['join_mo'])} for doc in self.full_list]
             expected_result = sorted(expected_result)
+            expected_result2 = [{"month" : str(doc['join_mo'])} for doc in self.full_list]
+            expected_result2 = sorted(expected_result2)
             self._verify_results(actual_result, expected_result)
+            self._verify_results(actual_result2, expected_result2)
 
     def test_to_bool(self):
         self.query = 'SELECT tobool("true") as boo'
@@ -2763,7 +2794,14 @@ class QueryTests(BaseTestCase):
             " FROM %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
+            self.query = "SELECT reverse(name) || \" \" || reverse(job_title) as rev_employee" +\
+            " FROM %s" % (bucket.name)
+
+            actual_list1 = self.run_cbq_query()
             actual_result = sorted(actual_list['results'], key=lambda doc: (doc['employee']))
+            actual_result1 = sorted(actual_list1['results'], key=lambda doc: (doc['rev_employee']))
+
+            self.assertEqual(actual_result1,actual_result)
             expected_result = [{"employee" : doc["name"] + " " + doc["job_title"]}
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['employee']))
@@ -2775,12 +2813,20 @@ class QueryTests(BaseTestCase):
             ' FROM %s WHERE skills[0]=("skill" || "2010")' % (bucket.name)
 
             actual_list = self.run_cbq_query()
+
+            self.query = 'SELECT name, skills' +\
+            ' FROM %s WHERE reverse(skills[0])=("0102" || "lliks")' % (bucket.name)
+
+            actual_list1 = self.run_cbq_query()
+
             actual_result = sorted(actual_list['results'])
+            actual_result2 = sorted(actual_list1['results'])
             expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
                                for doc in self.full_list
                                if doc["skills"][0] == 'skill2010']
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+            self._verify_results(actual_result, actual_result2)
 ##############################################################################################
 #
 #   SPLIT
@@ -3015,7 +3061,7 @@ class QueryTests(BaseTestCase):
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.assertEqual(actual_result,sorted(expected_list['results']))
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -3058,6 +3104,27 @@ class QueryTests(BaseTestCase):
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
             #self.assertTrue(actual_result == expected_result)
+
+    def test_meta_ambiguity(self):
+         for bucket in self.buckets:
+             self.query = "create index idx on %s(META())" %(bucket.name)
+             self.run_cbq_query()
+             self.query = "create index idx2 on {0}(META({0}))".format(bucket.name)
+             self.query = "SELECT  META() as meta_c FROM %s  ORDER BY meta_c limit 10" %(bucket.name)
+             actual_result = self.run_cbq_query()
+             self.assertTrue(actual_result['status']=="success")
+             self.query = "SELECT  META(test) as meta_c FROM %s as test  ORDER BY meta_c limit 10" %(bucket.name)
+             actual_result = self.run_cbq_query()
+             self.assertTrue(actual_result['status']=="success")
+             queries_errors = {'SELECT META().id as id FROM default t1 JOIN default t2 ON KEYS t1.id;' : ('syntax error', 4310)}
+             self.negative_common_body(queries_errors)
+             self.assertTrue("META() in query with multiple FROM terms requires an argument" in actual_result)
+             self.query = "SELECT META(t1).id as id FROM default t1 JOIN default t2 ON KEYS t1.id;"
+             self.assertTrue(actual_result['status']=="success")
+
+
+
+
 
     def test_meta_where_greater_than(self):
         created_indexes = []
@@ -3355,9 +3422,14 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
+            self.query = "select raw reverse(reverse(name)) from %s " % (bucket.name)
+            actual_list1 = self.run_cbq_query()
+            actual_result1 = sorted(actual_list1['results'])
+
             expected_result = [doc["name"] for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+            self._verify_results(actual_result, actual_result1)
 
     def test_raw_limit(self):
         for bucket in self.buckets:
@@ -3530,6 +3602,11 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
+
+            self.query = "select name from %s where contains(reverse(job_title), reverse('Sale'))" % (bucket.name)
+            actual_list1= self.run_cbq_query()
+            actual_result1 = sorted(actual_list1['results'])
+            self.assertEqual(actual_result1, actual_result)
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list
                                if doc['job_title'].find('Sale') != -1]
@@ -3553,10 +3630,19 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
+            self.query = "select TITLE(REVERSE(VMs[0].os)) as rev_os from %s" % (bucket.name)
+
+            actual_list1 = self.run_cbq_query()
+            actual_result1 = sorted(actual_list1['results'])
+
+
             expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
                                for doc in self.full_list]
+            expected_result1 = [{"rev_os" : (doc["VMs"][0]["os"][::-1][0].upper() + doc["VMs"][0]["os"][::-1][1:])} for doc in self.full_list]
             expected_result = sorted(expected_result)
+            expected_result1 = sorted(expected_result1)
             self._verify_results(actual_result, expected_result)
+            self._verify_results(actual_result1, expected_result1)
 
     def test_prepared_title(self):
         for bucket in self.buckets:
@@ -3587,6 +3673,12 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
+            self.query = "select email from %s where REGEXP_CONTAINS(reverse(email), 'l..m-')" % (bucket.name)
+            actual_list1 = self.run_cbq_query()
+            actual_result1 = sorted(actual_list1['results'])
+            self.assertEquals(actual_result,actual_result1)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
             expected_result = [{"email" : doc["email"]}
                                for doc in self.full_list
                                if len(re.compile('-m..l').findall(doc['email'])) > 0]
@@ -3599,6 +3691,7 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
+
             expected_result = [{"email" : doc["email"]}
                                for doc in self.full_list
                                if re.compile('.*-mail.*').search(doc['email'])]
@@ -3611,6 +3704,9 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
+            self.query = "select email from %s where REGEXP_POSITION(REVERSE(email), '*l..m-') = 10" % (bucket.name)
+            #actual_list1 = self.run_cbq_query()
+            #actual_result1 = sorted(actual_list1['results'])
             expected_result = [{"email" : doc["email"]}
                                for doc in self.full_list
                                if doc['email'].find('-m') == 10]
@@ -3688,11 +3784,21 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
+            self.query = "select name, join_date date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) " % (bucket.name)
+
+            actual_list2 = self.run_cbq_query()
+            actual_result2 = sorted(actual_list2['results'])
             expected_result = [{"name" : doc["name"],
                                 "date" : '%s-%s' % (doc['join_yr'], doc['join_mo'])}
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
+            expected_result2 = [{"name" : doc["name"],
+                                "date" : '%s-%s' % (str(doc['join_yr'])[::-1], str(doc['join_mo']))[::-1]}
+                               for doc in self.full_list]
+
+            expected_result2 = sorted(expected_result2)
             self._verify_results(actual_result, expected_result)
+            self._verify_results(actual_result2,expected_result2)
 
     def test_letting(self):
         for bucket in self.buckets:
@@ -3701,7 +3807,6 @@ class QueryTests(BaseTestCase):
                     self.query = "SELECT d.join_mo, sum_test from %s d WHERE d.join_mo>7 group by d.join_mo letting sum_test = sum(d.tasks_points.task1)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-
             actual_result = sorted(actual_list['results'])
             tmp_groups = set([doc['join_mo'] for doc in self.full_list if doc['join_mo']>7])
             expected_result = [{"join_mo" : group,
