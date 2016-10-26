@@ -728,7 +728,7 @@ class FTSIndex:
         if not self.index_definition['params'].has_key('mapping'):
             map['default_mapping'] = {}
             map['default_mapping']['properties'] = {}
-            map['default_mapping']['dynamic'] = False
+            map['default_mapping']['dynamic'] = True
             map['default_mapping']['enabled'] = True
             map['default_mapping']['properties'][fields.pop()] = field_maps.pop()
             self.index_definition['params']['mapping'] = map
@@ -891,7 +891,8 @@ class FTSIndex:
         return rest.get_fts_index_uuid(self.name)
 
     def construct_cbft_query_json(self, query, fields=None, timeout=None,
-                                                            facets=False):
+                                                          facets=False,
+                                                          sort_fields=None):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = QUERY.JSON
         # query is a unicode dict
@@ -905,6 +906,8 @@ class FTSIndex:
             query_json['fields'] = fields
         if facets:
             query_json['facets'] = self.construct_facets_definition()
+        if sort_fields:
+            query_json['sort'] = sort_fields
         return query_json
 
     def construct_facets_definition(self):
@@ -963,11 +966,12 @@ class FTSIndex:
         return facet_definition
 
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
-                      return_raw_hits=False):
+                                      return_raw_hits=False, sort_fields=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
-        query_dict = self.construct_cbft_query_json(query)
+        query_dict = self.construct_cbft_query_json(query,
+                                                    sort_fields=sort_fields)
         hits = -1
         matches = []
         doc_ids = []
@@ -1181,6 +1185,62 @@ class FTSIndex:
             return False
         else:
             return True
+
+    def validate_sorted_results(self, raw_hits, sort_fields):
+        """
+        Validate if the docs returned in the search result match the expected values
+        """
+        result = False
+        expected_docs = TestInputSingleton.input.param("expected", None).split(
+            ',')
+        docs = []
+        # Fetch the Doc IDs from raw_hits
+        for doc in raw_hits:
+            docs.append(doc['id'])
+
+        # Compare docs with the expected values.
+        if docs == expected_docs:
+            result = True
+        else:
+            # Sometimes, if there are two docs with same field value, their rank
+            # may be interchanged. To handle this, if the actual doc order
+            # doesn't match the expected value, swap the two such docs and then
+            # try to match
+            tolerance = TestInputSingleton.input.param("tolerance", None)
+            if tolerance:
+                tolerance = tolerance.split(',')
+                index1, index2 = expected_docs.index(
+                    tolerance[0]), expected_docs.index(tolerance[1])
+                expected_docs[index1], expected_docs[index2] = expected_docs[
+                                                                   index2], \
+                                                               expected_docs[
+                                                                   index1]
+                if docs == expected_docs:
+                    result = True
+                else:
+                    self.__log.info("Actual docs returned : %s", docs)
+                    self.__log.info("Expected docs : %s", expected_docs)
+                    return False
+            else:
+                self.__log.info("Actual docs returned : %s", docs)
+                self.__log.info("Expected docs : %s", expected_docs)
+                return False
+
+        # Validate the sort fields in the result
+        for doc in raw_hits:
+            if 'sort' in doc.keys():
+                if len(doc['sort']) == len(sort_fields):
+                    result &= True
+                elif not sort_fields and len(doc['sort']) == 1:
+                    result &= True
+                else:
+                    self.__log.info("Sort fields do not match for the following document - ")
+                    self.__log.info(doc)
+                    return False
+
+        return result
+
+
 
     def get_score_from_query_result_content(self, contents, doc_id):
         for content in contents:
@@ -2668,7 +2728,9 @@ class FTSBaseTest(unittest.TestCase):
         self.create_gen = None
         self.update_gen = None
         self.delete_gen = None
-
+        self.sort_fields = self._input.param("sort_fields", None)
+        if self.sort_fields:
+            self.sort_fields = self.sort_fields.split(',')
         self.__fail_on_errors = self._input.param("fail-on-errors", True)
 
     def __initialize_error_count_dict(self):
