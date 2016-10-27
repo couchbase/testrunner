@@ -477,8 +477,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         operation_map = self.generate_operation_map(phase)
         self.log.info("=== {0}: {1} ===".format(phase.upper(), operation_map))
         nodes_out = []
-        for service in self.nodes_out_dist.split("-"):
-            nodes_out.append(service.split(":")[0])
+        if isinstance(self.nodes_out_dist, str):
+            for service in self.nodes_out_dist.split("-"):
+                    nodes_out.append(service.split(":")[0])
         if operation_map:
             try:
                 if "create_index" in operation_map:

@@ -209,6 +209,46 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._verify_bucket_count_with_index_count()
         self.multi_query_using_index(self.buckets, self.query_definitions)
 
+    def test_online_upgrade_with_two_query_nodes(self):
+        query_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        upgrade_node = query_nodes[0]
+        self.assertGreater(len(query_nodes), 1, "Test requires more than 1 Query Node")
+        before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
+        self._run_tasks([before_tasks])
+        in_between_tasks = self.async_run_operations(buckets=self.buckets, phase="in_between")
+        kv_ops = self.kv_mutations()
+        log.info("Upgrading servers to {0}...".format(self.upgrade_to))
+        self.n1ql_node = query_nodes[1]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [upgrade_node])
+        rebalance.result()
+        self.upgrade_servers = self.nodes_out_list
+        upgrade_th = self._async_update(self.upgrade_to, [upgrade_node])
+        for th in upgrade_th:
+            th.join()
+        log.info("==== Upgrade Complete ====")
+        node_version = RestConnection(upgrade_node).get_nodes_versions()
+        services_in = ["n1ql"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [upgrade_node], [],
+                                                 services=services_in)
+        rebalance.result()
+        self._run_tasks([kv_ops, in_between_tasks])
+        self.sleep(60)
+        log.info("Upgraded to: {0}".format(node_version))
+        for node in query_nodes:
+            if node == upgrade_node:
+                self.n1ql_node = node
+                try:
+                    self._verify_bucket_count_with_index_count()
+                    after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
+                    self._run_tasks([after_tasks])
+                except Exception, ex:
+                    log.info(str(ex))
+                else:
+                    self._verify_bucket_count_with_index_count()
+                    after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
+                    self._run_tasks([after_tasks])
+
     def kv_mutations(self, docs=None):
         if not docs:
             docs = self.docs_per_day
