@@ -216,10 +216,17 @@ class LWWStatsTests(BaseTestCase):
 
     def test_drift_stats(self):
 
-        # ahead, behind, bucket, vbucket
+        # An exercise in filling out the matrix with the right amount of code,
+        # we want to test (ahead,behind) and (setwithmeta, deleteWithmeta) and (active,replica).
+        # So for now let's do the set/del in sequences
 
 
         self.log.info('starting test_drift_stats')
+
+
+        check_ahead_threshold = self.input.param("check_ahead_threshold",True)
+
+        self.log.info('Checking the ahead threshold? {0}'.format(check_ahead_threshold))
 
 
         sdk_client = SDKClient(scheme='couchbase',hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
@@ -228,36 +235,88 @@ class LWWStatsTests(BaseTestCase):
 
 
 
+        # get the current time
         rc = sdk_client.set('key1', 'val1')
         current_time_cas = rc.cas
+
+
+
         test_key = 'test-set-with-metaxxxx'
         vbId = (((zlib.crc32(test_key)) >> 16) & 0x7fff) & (self.vbuckets- 1)
 
 
-        # do the inbounds case for set with meta
-
-        rc = mc_client.setWithMetaConflictResolution(test_key, 'test-value', 0, 0, current_time_cas)
+        # verifying the case where we are within the threshold, do a set and del, neither should trigger
+        rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, current_time_cas)
+        rc = mc_client.delWithMetaLWW(test_key, 0, 0, current_time_cas)
 
         vbucket_stats = mc_client.stats('vbucket-details')
-        ahead_exceeded  = int( mc_client.stats('vbucket-details')['vb_' + str(vbId) + ':drift_ahead_threshold_exceeded'] )
+        ahead_exceeded  = int( vbucket_stats['vb_' + str(vbId) + ':drift_ahead_threshold_exceeded'] )
         self.assertTrue( ahead_exceeded == 0, 'Ahead exceeded expected is 0 but is {0}'.format( ahead_exceeded))
 
 
-        behind_exceeded  = int( mc_client.stats('vbucket-details')['vb_' + str(vbId) + ':drift_behind_threshold_exceeded'] )
+        behind_exceeded  = int( vbucket_stats['vb_' + str(vbId) + ':drift_behind_threshold_exceeded'] )
         self.assertTrue( behind_exceeded == 0, 'Behind exceeded expected is 0 but is {0}'.format( behind_exceeded))
 
 
+        # out of curiousity, log the total counts
+        self.log.info('Total stats: total abs drift {0} and total abs drift count {1}'.
+                      format(vbucket_stats['vb_' + str(vbId) + ':total_abs_drift'],
+                             vbucket_stats['vb_' + str(vbId) + ':total_abs_drift_count']))
 
 
-        # do the ahead set with meta case
 
-        rc = mc_client.setWithMetaConflictResolution(test_key, 'test-value', 0, 0,
-                                                     current_time_cas + 50 * LWWStatsTests.DEFAULT_THRESHOLD)
 
+
+
+        # do the ahead set with meta case - verify: ahead threshold exceeded, total_abs_drift count and abs_drift
+        if check_ahead_threshold:
+            stat_descriptor = 'ahead'
+            cas = current_time_cas + 5 * LWWStatsTests.DEFAULT_THRESHOLD
+
+        else:
+            stat_descriptor = 'behind'
+            cas = current_time_cas -5 * LWWStatsTests.DEFAULT_THRESHOLD
+
+
+        rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, cas)
+        rc = mc_client.delWithMetaLWW(test_key, 0, 0, cas)
+
+
+
+
+
+        # verify the vbucket stats
         vbucket_stats = mc_client.stats('vbucket-details')
-        drift_counter_stat = 'vb_' + str(vbId) + ':drift_ahead_threshold_exceeded'
-        ahead_exceeded  = int( mc_client.stats('vbucket-details')[drift_counter_stat] )
-        self.assertTrue( ahead_exceeded == 1, 'Ahead exceeded expected is 1 but is {0}'.format( ahead_exceeded))
+        drift_counter_stat = 'vb_' + str(vbId) + ':drift_' + stat_descriptor + '_threshold_exceeded'
+        threshold_exceeded  = int( mc_client.stats('vbucket-details')[drift_counter_stat] )
+        # MB-21450 self.assertTrue( ahead_exceeded == 2, '{0} exceeded expected is 1 but is {1}'.
+        # format( stat_descriptor, threshold_exceeded))
+
+        self.log.info('Total stats: total abs drift {0} and total abs drift count {1}'.
+                      format(vbucket_stats['vb_' + str(vbId) + ':total_abs_drift'],
+                             vbucket_stats['vb_' + str(vbId) + ':total_abs_drift_count']))
+
+
+        # and verify the bucket stats: ep_active_hlc_drift_count, ep_clock_cas_drift_threshold_exceeded,
+        # ep_active_hlc_drift
+        bucket_stats = mc_client.stats()
+        ep_active_hlc_drift_count = int(bucket_stats['ep_active_hlc_drift_count'])
+        ep_clock_cas_drift_threshold_exceeded = int(bucket_stats['ep_clock_cas_drift_threshold_exceeded'])
+        ep_active_hlc_drift = int(bucket_stats['ep_active_hlc_drift'])
+
+        # Drift count appears to be the number of mutations
+        self.assertTrue( ep_active_hlc_drift_count > 0, 'ep_active_hlc_drift_count is 0, expected a positive value')
+
+
+        # drift itself is the sum of the absolute values of all drifts, so check that it is greater than 0
+        self.assertTrue( ep_active_hlc_drift > 0, 'ep_active_hlc_drift is 0, expected a positive value')
+
+        # the actual drift count is a little more granular
+        expected_drift_threshold_exceed_count = 2
+        self.assertTrue( expected_drift_threshold_exceed_count == ep_clock_cas_drift_threshold_exceeded,
+                         'ep_clock_cas_drift_threshold_exceeded is incorrect. Expected {0}, actual {1}'.
+                             format(expected_drift_threshold_exceed_count,
+                                    ep_clock_cas_drift_threshold_exceeded) )
 
 
 

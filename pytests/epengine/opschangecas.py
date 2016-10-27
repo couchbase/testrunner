@@ -75,7 +75,7 @@ class OpsChangeCasTests(BucketConfig):
         #print 'active cas {0}'.format(active_CAS)
 
         self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
-        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+        # not supported in 4.6 self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_failover(self):
         KEY_NAME = 'key2'

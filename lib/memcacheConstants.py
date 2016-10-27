@@ -197,7 +197,7 @@ SUBDOC_FLAGS_MKDIR_P = 0x01
 
 # Flags, expiration
 SET_PKT_FMT = ">II"
-META_CMD_FMT = '>IIQQ'
+META_CMD_FMT = '>IIQQ'  # flags (4 bytes), expiration (4), seqno (8), CAS (8), metalen (2)
 
 META_CMD_FMT = '>IIQQ'
 EXTENDED_META_CMD_FMT = '>IIQQH'
@@ -239,6 +239,10 @@ INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT = ">QQQ"
 
 # Time bomb
 FLUSH_PKT_FMT = ">I"
+
+
+# Meta LWW extras
+META_EXTRA_FMT = '>IIQQH'
 
 # Touch commands
 # expiration

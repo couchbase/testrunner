@@ -253,12 +253,11 @@ class MemcachedClient(object):
                                key, value, 0, exp, flags, seqno, remote_cas)
 
     # set with meta using the LWW conflict resolution CAS
-    def setWithMetaConflictResolution(self, key, value, exp, flags,cas):
+    def setWithMetaLWW(self, key, value, exp, flags,cas):
         """Set a value and its meta data in the memcached server.
         The format is described here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/set_with_meta.md,
         the first CAS will be 0 because that is the traditional CAS, and the CAS in the "extras" will be populated.
         The sequence number will be 0 because as to the best of my understanding it is not used with LWW.
-
 
         """
         #
@@ -267,7 +266,23 @@ class MemcachedClient(object):
         SEQNO = 0
 
         return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, value,
-                struct.pack(SET_META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+
+
+    # set with meta using the LWW conflict resolution CAS
+    def delWithMetaLWW(self, key, exp, flags,cas):
+        """Set a value and its meta data in the memcached server.
+        The format is described here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/del_with_meta.md,
+        the first CAS will be 0 because that is the traditional CAS, and the CAS in the "extras" will be populated.
+        The sequence number will be 0 because as to the best of my understanding it is not used with LWW.
+
+        """
+
+        META_LEN = 0
+        SEQNO = 0
+
+        return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
 
 
     # hope to remove this and migrate existing calls to the aboce
