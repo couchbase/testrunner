@@ -3116,9 +3116,6 @@ class QueryTests(BaseTestCase):
              self.query = "SELECT  META(test) as meta_c FROM %s as test  ORDER BY meta_c limit 10" %(bucket.name)
              actual_result = self.run_cbq_query()
              self.assertTrue(actual_result['status']=="success")
-             queries_errors = {'SELECT META().id as id FROM default t1 JOIN default t2 ON KEYS t1.id;' : ('syntax error', 4310)}
-             self.negative_common_body(queries_errors)
-             self.assertTrue("META() in query with multiple FROM terms requires an argument" in actual_result)
              self.query = "SELECT META(t1).id as id FROM default t1 JOIN default t2 ON KEYS t1.id;"
              self.assertTrue(actual_result['status']=="success")
 
