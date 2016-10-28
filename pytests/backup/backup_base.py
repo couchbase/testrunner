@@ -117,10 +117,9 @@ class BackupBaseTest(BaseTestCase):
                 for key in valid_keys:
                     matchObj = re.search(key_name, key, re.M | re.S) #use regex match to find out keys we need to verify
                     if matchObj is None:
-                        part = bucket.kvs[kv_store].acquire_partition(key)
-                        with Synchronized(dict(part)) as partition:
-                            partition.delete(key)  #we delete keys whose prefix does not match the value assigned to -k in KVStore
-
+                        partition = bucket.kvs[kv_store].acquire_partition(key)
+                        partition.delete(key)  #we delete keys whose prefix does not match the value assigned to -k in KVStore
+                        bucket.kvs[kv_store].release_partition(key)
         if single_node_flag is False:
             self._verify_all_buckets(server, kv_store, self.wait_timeout * 50, self.max_verify, True, 1)
         else:
@@ -150,8 +149,8 @@ class BackupBaseTest(BaseTestCase):
                 sub = which_server.find(":")
                 which_server_ip = which_server[:sub]
                 if which_server_ip != server.ip:
-                    part = bucket.kvs[kv_store].acquire_partition(key)
-                    with Synchronized(dict(part)) as partition:
-                        partition.delete(key)
+                    partition = bucket.kvs[kv_store].acquire_partition(key)
+                    partition.delete(key)
+                    bucket.kvs[kv_store].release_partition(key)
 
         self._verify_all_buckets(server, kv_store, self.wait_timeout * 50, self.max_verify, True, 1)

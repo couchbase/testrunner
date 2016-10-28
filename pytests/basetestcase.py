@@ -137,7 +137,6 @@ class BaseTestCase(unittest.TestCase):
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
             self.bucket_size = self.input.param("bucket_size", None)
             self.lww = self.input.param("lww", False) # only applies to LWW but is here because the bucket is created here
-            self.kv_store_required = self.input.param("kv_store_required", 1)
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
@@ -612,7 +611,7 @@ class BaseTestCase(unittest.TestCase):
             master = self.master
         servers = self.get_kv_nodes(servers, master)
         for bucket in self.buckets:
-            items = sum([len(kv_store) if kv_store else 0 for kv_store in bucket.kvs.values()])
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             if bucket.type == 'memcached':
                 items_actual = 0
                 for server in servers:
@@ -668,7 +667,6 @@ class BaseTestCase(unittest.TestCase):
                                 only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30,
                                 proxy_client=None):
         tasks = []
-        kv_store = 1 if self.kv_store_required == 1 else 0
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
             if bucket.type != 'memcached':

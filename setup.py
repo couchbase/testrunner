@@ -1,51 +1,40 @@
-from setuptools import setup, find_packages
+from distutils.core import setup
+
 
 def get_version():
-    return "2.0.0"
+    return "1.0.0"
 
 setup(
-    name="testrunner",
+    name="cbtestlib",
     version=get_version(),
     description="Couchbase test library",
+    long_description="Couchbase test library",
     author="Couchbase Inc",
     author_email="build@couchbase.com",
-    install_requires=["couchbase",
-        "decorator",
-        "ecdsa",
-        "Fabric",
-        "iniparse",
-        "mercurial",
-        "paramiko",
-        "pycrypto",
-        "pycurl",
-        "pygpgme",
-        "urlgrabber",
-        "yum-metadata-parser",
-        "httplib2",
-        "boto",
-        "fabric",
-        "futures",
-        "gevent",
-        "greenlet",
-        "btrc",
-        "urllib3"
-    ],
-    packages =find_packages(),
-    include_package_data=True,
-    package_data={
-          'lib': [
-              '*.py'],
-    },
-    entry_points={
-        'console_scripts': [
-            'testrunner = testrunner.__main__:main'
-       ]
-    }, 
+    install_requires=["paramiko",
+                      "pymongo",],
+    packages=["cbtestlib",
+              "cbtestlib.builds",
+              "cbtestlib.cbkarma",
+              "cbtestlib.couchbase",
+              "cbtestlib.couchdb",
+              "cbtestlib.membase",
+              "cbtestlib.membase.api.httplib2",
+              "cbtestlib.membase.api",
+              "cbtestlib.membase.helper",
+              "cbtestlib.membase.performance",
+              "cbtestlib.memcached",
+              "cbtestlib.memcached.helper",
+              "cbtestlib.tasks",
+              "cbtestlib.remote",
+              "cbtestlib.perf_engines",
+              "cbtestlib.perf_engines.libobserve",
+              "cbtestlib.perf_engines.libstats",],
     url="http://www.couchbase.com/",
     keywords=["encoding", "i18n", "xml"],
     classifiers=[
         "Programming Language :: Python",
-        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 2.6",
         "Development Status :: 5 - Production/Stable",
         "Environment :: Other Environment",
         "Intended Audience :: Developers",
@@ -54,4 +43,3 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
 )
-

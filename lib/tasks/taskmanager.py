@@ -2,7 +2,6 @@ import time
 import Queue
 
 from threading import Thread
-
 from tasks.task import Task
 
 class TaskManager(Thread):
