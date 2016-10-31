@@ -397,6 +397,7 @@ class OpsChangeCasTests(BucketConfig):
         self._check_cas(check_conflict_resolution=False)
 
         k=0
+        test_cas = 456
 
         while k<1:
 
@@ -409,13 +410,13 @@ class OpsChangeCasTests(BucketConfig):
             mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
 
             TEST_SEQNO = 123
-            TEST_CAS = 456
+            test_cas = test_cas + 1
 
 
             # get the meta data
             cas = mc_active.getMeta(key)[4]
 
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, '123456789',vbucket_id)
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, TEST_SEQNO, test_cas, '123456789',vbucket_id)
 
             cas_post_meta = mc_active.getMeta(key)[4]
 

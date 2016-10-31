@@ -247,7 +247,7 @@ class LWWStatsTests(BaseTestCase):
 
         # verifying the case where we are within the threshold, do a set and del, neither should trigger
         rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, current_time_cas)
-        rc = mc_client.delWithMetaLWW(test_key, 0, 0, current_time_cas)
+        rc = mc_client.delWithMetaLWW(test_key, 0, 0, current_time_cas+1)
 
         vbucket_stats = mc_client.stats('vbucket-details')
         ahead_exceeded  = int( vbucket_stats['vb_' + str(vbId) + ':drift_ahead_threshold_exceeded'] )
@@ -279,7 +279,7 @@ class LWWStatsTests(BaseTestCase):
 
 
         rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, cas)
-        rc = mc_client.delWithMetaLWW(test_key, 0, 0, cas)
+        rc = mc_client.delWithMetaLWW(test_key, 0, 0, cas+1)
 
 
 
