@@ -265,6 +265,8 @@ class MemcachedClient(object):
         META_LEN = 0
         SEQNO = 0
 
+        self._set_vbucket(key, -1)
+
         return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, value,
                 struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
 
@@ -280,6 +282,9 @@ class MemcachedClient(object):
 
         META_LEN = 0
         SEQNO = 0
+
+
+        self._set_vbucket(key, -1)
 
         return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
                 struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
