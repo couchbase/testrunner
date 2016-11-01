@@ -8,6 +8,7 @@ from sdk_client import SDKClient
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BlobGenerator
+from membase.api.rest_client import RestConnection, RestHelper
 
 import zlib
 
@@ -32,8 +33,6 @@ class LWWStatsTests(BaseTestCase):
 
     def test_time_sync_threshold_setting(self):
 
-
-
         self.log.info('starting test_time_sync_threshold_setting')
 
         # bucket is created with lww in base test case using the LWW parameter
@@ -41,23 +40,52 @@ class LWWStatsTests(BaseTestCase):
         # get the stats
         client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
         ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
-        self.assertTrue(ahead_threshold == DEFAULT_THRESHOLD,
-                        'Ahead threshold mismatch expected: {0} actual {1}'.format(DEFAULT_THRESHOLD, ahead_threshold))
+        self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD,
+                        'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD, ahead_threshold))
         # change the setting and verify it is per the new setting - this may or may not be supported
 
         shell = RemoteMachineShellConnection(self.servers[0])
         output, error = shell.execute_cbepctl(self.buckets[0], "", "set vbucket_param",
-                              "hlc_drift_ahead_threshold_us ", str(DEFAULT_THRESHOLD/2) + DUMMY_VBUCKET)
+                              "hlc_drift_ahead_threshold_us ", str(LWWStatsTests.DEFAULT_THRESHOLD/2) + LWWStatsTests.DUMMY_VBUCKET)
         if len(error) > 0:
             self.fail('Failed to set the drift counter threshold, please check the logs.')
 
         ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
-        self.assertTrue(ahead_threshold == DEFAULT_THRESHOLD/2,
-                        'Ahead threshold mismatch expected: {0} actual {1}'.format(DEFAULT_THRESHOLD/2, ahead_threshold))
+        self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD/2,
+                        'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD/2, ahead_threshold))
 
 
         # generally need to fill out a matrix here behind/ahead - big and small
 
+
+
+    def test_time_sync_threshold_setting_rest_call(self):
+
+        self.log.info('starting test_time_sync_threshold_setting_rest_call')
+
+        # bucket is created with lww in base test case using the LWW parameter
+
+
+        client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
+
+
+        rest = RestConnection(self.master)
+        self.assertTrue( rest.set_cas_drift_threshold( self.buckets[0], 10000, 20000), 'Unable to set the CAS drift threshold')
+        time.sleep(15)           # take a few seconds for the stats to settle in
+        stats = client.stats()
+
+        import pdb;pdb.set_trace()
+
+
+        self.assertTrue( int(stats['ep_hlc_ahead_threshold_us']) == 10000 * 1000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(10000 * 1000 , stats['ep_hlc_ahead_threshold_us']))
+
+        self.assertTrue( int(stats['ep_hlc_behind_threshold_us']) == 20000 * 1000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(20000 * 1000, stats['ep_hlc_behind_threshold_us']))
+
+
+
+        # generally need to fill out a matrix here behind/ahead - big and small
 
 
     def test_poisoned_cas(self):
@@ -157,7 +185,6 @@ class LWWStatsTests(BaseTestCase):
 
         rc1 = sdk_client.set('key-after-resetting cas', 'val1')
         rc2 = mc_client.get('key-after-resetting cas' )
-        #import pdb;pdb.set_trace()
         set_cas_after_reset_max_cas = rc2[1]
         self.log.info('The later CAS is {0}'.format(set_cas_after_reset_max_cas))
         self.assertTrue( set_cas_after_reset_max_cas < poisoned_cas,
@@ -173,19 +200,19 @@ class LWWStatsTests(BaseTestCase):
         gen_load.reset()
         while gen_load.has_next():
             key, value = gen_load.next()
-            print 'getting the key', key
-            #try:
-            rc = mc_client.get( key )
-            #rc = sdk_client.get(key)
-            print '\n\n\n**** the rc is', rc
-            cas = rc[1]
-            self.assertTrue( cas < poisoned_cas, 'For key {0} CAS has not decreased. Current CAS {1} poisoned CAS {2}'.format(key, cas, poisoned_cas))
-            #except:
-            #self.log.info('get error with {0}'.format(key))
+            try:
+                rc = mc_client.get( key )
+                #rc = sdk_client.get(key)
+                cas = rc[1]
+                self.assertTrue( cas < poisoned_cas, 'For key {0} CAS has not decreased. Current CAS {1} poisoned CAS {2}'.format(key, cas, poisoned_cas))
+            except:
+                self.log.info('get error with {0}'.format(key))
 
 
-        _, better_cas, _ = sdk_client.set('key3', 'val1')
-        self.log.info('The better CAS is {)}'.format(better_cas))
+        rc = sdk_client.set('key3', 'val1')
+        better_cas = rc.cas
+
+        self.log.info('The better CAS is {0}'.format(better_cas))
 
         self.assertTrue( better_cas < poisoned_cas, 'The CAS was not improved')
 
