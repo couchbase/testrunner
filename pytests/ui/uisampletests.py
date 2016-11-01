@@ -120,7 +120,8 @@ class InitializeTest(BaseUITestCase):
         try:
             super(InitializeTest, self).tearDown()
         finally:
-            self.cluster.shutdown()
+            if hasattr(self, 'cluster'):
+                self.cluster.shutdown()
 
     def test_initialize(self):
         try:
@@ -1785,7 +1786,7 @@ class NodeInitializeHelper():
     def _fill_2_step(self, input):
         if input.param("sample", None):
             self.controls.step_2_sample(input.param("sample", None)).check()
-            #TODO successfull loading?
+            #TODO successful loading?
 
     def _fill_3_step(self, input):
         BucketHelper(self.tc).fill_bucket_info(Bucket(parse_bucket=input),

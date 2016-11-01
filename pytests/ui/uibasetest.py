@@ -184,13 +184,19 @@ class BaseUITestCase(unittest.TestCase):
 
     def tearDown(self):
         try:
-            if self.driver:
+            test_failed = len(self._resultForDoCleanups.errors)
+            if self.driver and test_failed:
                 path_screen = self.input.ui_conf['screenshots'] or 'logs/screens'
                 full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
                 self.log.info('screenshot is available: %s' % full_path)
                 if not os.path.exists(path_screen):
                     os.mkdir(path_screen)
                 self.driver.get_screenshot_as_file(os.path.abspath(full_path))
+            if self.driver:
+                self.driver.close()
+            if test_failed and TestInputSingleton.input.param("stop-on-failure", False):
+                print "test fails, teardown will be skipped!!!"
+                return
             rest = RestConnection(self.servers[0])
             if rest._rebalance_progress_status() == 'running':
                 stopped = rest.stop_rebalance()
@@ -199,8 +205,6 @@ class BaseUITestCase(unittest.TestCase):
             for server in self.servers:
                 ClusterOperationHelper.cleanup_cluster([server])
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-            if self.driver:
-                self.driver.close()
         except Exception as e:
             raise e
         finally:
