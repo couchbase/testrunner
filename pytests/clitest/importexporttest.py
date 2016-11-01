@@ -23,6 +23,7 @@ class ImportExportTests(CliBaseTest):
 
     def tearDown(self):
         super(ImportExportTests, self).tearDown()
+        self.import_back = self.input.param("import_back", False)
         if self.import_back:
             self.info("clean up server in import back tests")
             imp_servers = copy.deepcopy(self.servers[2:])
@@ -43,12 +44,52 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": True, "docs":"10"}
         return self._common_imex_test("export", options)
 
+    def test_import_from_zip_file(self):
+        options = {"load_doc": False}
+        return self._common_imex_test("import", options)
+
+    def test_import_invalid_folder_structure(self):
+        options = {"load_doc": False}
+        return self._common_imex_test("import", options)
+
+    """ /opt/couchbase/bin/cbimport json -c 12.11.10.130:8091
+       -u Administrator -p password  -b travel-sample
+       -d /opt/couchbase/samples/travel-sample.zip -f sample """
+    def test_import_invalid_json_sample(self):
+        options = {"load_doc": False}
+        return self._common_imex_test("import", options)
+
+    def test_import_json_sample(self):
+        options = {"load_doc": False}
+        return self._common_imex_test("import", options)
+
+    """ imex_type=json,format_type=list,import_file=json_list_1000_lines
+                                  =lines,.... """
+    def test_import_json_file(self):
+        options = {"load_doc": False}
+        self.import_file = self.input.param("import_file", None)
+        return self._common_imex_test("import", options)
+
+    def test_import_json_generate_keys(self):
+        options = {"load_doc": False}
+        self.import_file = self.input.param("import_file", None)
+        return self._common_imex_test("import", options)
+
+    """ not in 4.6 """
+    def test_import_json_with_limit_first_10_lines(self):
+        options = {"load_doc": False}
+        return self._common_imex_test("import", options)
+
     def _common_imex_test(self, cmd, options):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         path = self.input.param("path", None)
         self.imex_type = self.input.param("imex_type", None)
         self.format_type = self.input.param("format_type", None)
+        self.short_flag = self.input.param("short_flag", True)
+        import_method = self.input.param("import_method", "file://")
+        if "url" in import_method:
+            import_method = ""
         self.ex_path = self.tmp_path + "export/"
         master = self.servers[0]
         server = copy.deepcopy(master)
@@ -79,7 +120,7 @@ class ImportExportTests(CliBaseTest):
                 in windows: /cygdrive/c/tmp/export """
             self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
-            """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator 
+            """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
             if len(self.buckets) >= 1:
                 for bucket in self.buckets:
@@ -102,7 +143,6 @@ class ImportExportTests(CliBaseTest):
                 status = False
                 info = imp_rest.get_nodes_self()
                 if info.memoryQuota and int(info.memoryQuota) > 0:
-                    print "info  ", info.memoryQuota
                     self.quota = info.memoryQuota
                 imp_rest.init_node()
                 self.cluster.rebalance(import_servers[2:], [import_servers[3]], [])
@@ -116,7 +156,51 @@ class ImportExportTests(CliBaseTest):
                 output, error = self.import_shell.execute_command(imp_cmd_str)
                 if self._check_output("error", output):
                     self.fail("Fail to run import back to bucket")
-                
+        elif "import" in cmd:
+            cmd = "cbimport"
+            if import_method != "":
+                self.im_path = self.tmp_path + "import/"
+                self.log.info("copy import file from local to remote")
+                output, error = self.shell.execute_command("ls %s " % self.tmp_path)
+                if self._check_output("import", output):
+                    self.log.info("remove %simport directory" % self.tmp_path)
+                    self.shell.execute_command("rm -rf  %simport " % self.tmp_path)
+                    output, error = self.shell.execute_command("ls %s " % self.tmp_path)
+                    if self._check_output("import", output):
+                        self.fail("fail to delete import dir ")
+                self.shell.execute_command("mkdir  %simport " % self.tmp_path)
+                if self.import_file is not None:
+                    src_file = "resources/imex/"+ self.import_file
+                else:
+                    self.fail("Need import_file param")
+                des_file = self.im_path + self.import_file
+                self.shell.copy_file_local_to_remote(src_file, des_file)
+            else:
+                des_file = self.import_file
+
+            if len(self.buckets) >= 1:
+                if self.imex_type == "json":
+                    for bucket in self.buckets:
+                        key_gen = "%index%"
+                        """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
+                        -b default -d file:///tmp/export/default -f list -g %index%  """
+                        imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s -f %s -g %s"\
+                             % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
+                                          server.ip, username, password, bucket.name,
+                                                             import_method, des_file,
+                                                           self.format_type, key_gen)
+                        output, error = self.shell.execute_command(imp_cmd_str)
+                        self.log.info("Output from execute command %s " % output)
+                        """ Json `file:///root/json_list` imported to `http://12.11.10.130:8091` successfully """
+                        json_loaded = False
+                        if "invalid" in self.import_file:
+                            if self._check_output("Json import failed:", output):
+                                json_loaded = True
+                        elif self._check_output("successfully", output):
+                            json_loaded = True
+                        if not json_loaded:
+                            self.fail("Failed to execute command")
+                    #self.sleep(200)
 
     def _verify_export_file(self, export_file_name, options):
         if not options["load_doc"]:
@@ -161,8 +245,7 @@ class ImportExportTests(CliBaseTest):
                     exports = export_file.read()
                     exports = ast.literal_eval(exports)
                     exports.sort(key=lambda k: k['name'])
-                    print "sample  ", samples
-                    print "export  ", exports
+
                     if samples == exports:
                         self.log.info("export and sample json files are matched")
                     else:
