@@ -74,8 +74,6 @@ class LWWStatsTests(BaseTestCase):
         time.sleep(15)           # take a few seconds for the stats to settle in
         stats = client.stats()
 
-        import pdb;pdb.set_trace()
-
 
         self.assertTrue( int(stats['ep_hlc_ahead_threshold_us']) == 10000 * 1000,
              'Ahead threshold incorrect. Expected {0} actual {1}'.format(10000 * 1000 , stats['ep_hlc_ahead_threshold_us']))
@@ -90,8 +88,6 @@ class LWWStatsTests(BaseTestCase):
 
     def test_poisoned_cas(self):
 
-
-        #import pdb;pdb.set_trace()
 
         self.log.info('starting test_poisoned_cas')
 
