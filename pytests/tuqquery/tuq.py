@@ -2757,7 +2757,7 @@ class QueryTests(BaseTestCase):
             actual_result2 = sorted(actual_result1['results'])
             expected_result = [{"month" : str(doc['join_mo'])} for doc in self.full_list]
             expected_result = sorted(expected_result)
-            expected_result2 = [{"month" : str(doc['join_mo'])} for doc in self.full_list]
+            expected_result2 = [{"rev_month" : str(doc['join_mo'])[::-1]} for doc in self.full_list]
             expected_result2 = sorted(expected_result2)
             self._verify_results(actual_result, expected_result)
             self._verify_results(actual_result2, expected_result2)

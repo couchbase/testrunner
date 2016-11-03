@@ -32,7 +32,6 @@ class AdvancedQueryTests(QueryTests):
                     self.assertTrue('status:FAIL' in o)
                     o = shell.execute_commands_inside('%s/cbq  -u=Administrator http://localhost:8091:' % (self.path),'','','','','','')
                     self.assertTrue('status:FAIL' in o)
-                    o = shell.execute_commands_inside('%s/cbq  -u=Administrator -p=password http://localhost:80961' % (self.path),'','','','','','')
                 finally:
                     shell.disconnect()
 
@@ -65,7 +64,6 @@ class AdvancedQueryTests(QueryTests):
                 finally:
                     shell.disconnect()
 
-
     def test_engine_ne(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -79,7 +77,7 @@ class AdvancedQueryTests(QueryTests):
                         self.query = '\SET'
                         o = self.run_cbq_query()
                         print o
-                    self.assertTrue("NamedParameters:UserDefinedSessionParameters:PredefinedSessionParameters:Parametername:histfileValue" in o)
+                    self.assertTrue("histfileValue" in o)
                 finally:
                     shell.disconnect()
 
