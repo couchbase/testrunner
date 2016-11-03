@@ -25,7 +25,7 @@ class ImportExportTests(CliBaseTest):
         super(ImportExportTests, self).tearDown()
         self.import_back = self.input.param("import_back", False)
         if self.import_back:
-            self.info("clean up server in import back tests")
+            self.log.info("clean up server in import back tests")
             imp_servers = copy.deepcopy(self.servers[2:])
             BucketOperationHelper.delete_all_buckets_or_assert(imp_servers, self)
             ClusterOperationHelper.cleanup_cluster(self.servers, imp_servers[0])
