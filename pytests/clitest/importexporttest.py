@@ -60,8 +60,28 @@ class ImportExportTests(CliBaseTest):
         return self._common_imex_test("import", options)
 
     def test_import_json_sample(self):
-        options = {"load_doc": False}
-        return self._common_imex_test("import", options)
+        """ test_import_json_sample
+           -p default_bucket=False,imex_type=json,sample_file=travel-sample """
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        self.sample_file = self.input.param("sample_file", None)
+        self.imex_type = self.input.param("imex_type", None)
+        sample_file_path = self.sample_files_path + self.sample_file + ".zip"
+        server = copy.deepcopy(self.servers[0])
+        if username is None:
+            username = server.rest_username
+        if password is None:
+            password = server.rest_password
+        if self.sample_file is not None:
+            cmd = "cbimport"
+            imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s -f sample"\
+                             % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
+                                         server.ip, username, password, self.sample_file,
+                                                                      sample_file_path)
+            output, error = self.shell.execute_command(imp_cmd_str)
+            if not self._check_output("SUCCESS", output):
+                self.log.info("Output from command %s" % output)
+                self.fail("Failed to load sample file %s" % self.sample_file)
 
     """ imex_type=json,format_type=list,import_file=json_list_1000_lines
                                   =lines,.... """
@@ -200,7 +220,6 @@ class ImportExportTests(CliBaseTest):
                             json_loaded = True
                         if not json_loaded:
                             self.fail("Failed to execute command")
-                    #self.sleep(200)
 
     def _verify_export_file(self, export_file_name, options):
         if not options["load_doc"]:
