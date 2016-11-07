@@ -37,7 +37,7 @@ class TokenTests(BaseTestCase):
         shell.execute_command("""curl -v -u Administrator:password \
                              -X POST http://{0}:8091/sampleBuckets/install \
                           -d '["{1}"]'""".format(server.ip, bucketName))
-        self.sleep(20)
+        self.sleep(30)
 
         shell.disconnect()
 
