@@ -27,6 +27,10 @@ class CliBaseTest(BaseTestCase):
         if self.import_back:
             if len(self.servers) < 3:
                 self.fail("This test needs minimum of 3 vms to run ")
+        self.test_type = self.input.param("test_type", "import")
+        self.import_file = self.input.param("import_file", None)
+        self.imex_type = self.input.param("imex_type", "json")
+        self.format_type = self.input.param("format_type", None)
         self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
         info = self.shell.extract_remote_info()
@@ -42,6 +46,8 @@ class CliBaseTest(BaseTestCase):
         self.cmd_backup_path = LINUX_BACKUP_PATH
         self.backup_path = LINUX_BACKUP_PATH
         self.cmd_ext = ""
+        self.src_file = ""
+        self.des_file = ""
         self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
         self.log_path = LINUX_COUCHBASE_LOGS_PATH
         if type == 'windows':
@@ -62,6 +68,12 @@ class CliBaseTest(BaseTestCase):
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
         self.cb_login_info = "%s:%s" % (self.couchbase_usrname,
                                         self.couchbase_password)
+        self.path_type = self.input.param("path_type", None)
+        if self.path_type is None:
+            self.log.info("Test command with absolute path ")
+        elif self.path_type == "local":
+            self.log.info("Test command at %s dir " % self.cli_command_path)
+            self.cli_command_path = "cd %s; ./" % self.cli_command_path
         self.cli_command = self.input.param("cli_command", None)
         self.command_options = self.input.param("command_options", None)
         if self.command_options is not None:

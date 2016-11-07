@@ -44,11 +44,301 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": True, "docs":"10"}
         return self._common_imex_test("export", options)
 
-    def test_import_from_zip_file(self):
-        options = {"load_doc": False}
-        return self._common_imex_test("import", options)
+    def test_imex_non_default_port(self):
+        server = copy.deepcopy(self.servers[0])
+        import_method = self.input.param("import_method", "file://")
+        default_port = 8091
+        new_port = 9000
+        port_changed = False
+        try:
+            """ change default port from 8091 to 9000 """
+            # couchbase-cli cluster-edit -c 12.11.10.130:8091 -u Administrator -p password --cluster-port=9000
+            port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
+                                    % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
+                                          "cluster-edit", server.ip, default_port, new_port)
+            output, error = self.shell.execute_command(port_cmd)
+            if self._check_output("SUCCESS", output):
+                self.log.info("Port was changed from 8091 to 9000")
+                port_changed = True
+            else:
+                self.fail("Fail to change port 8091 to 9000")
+            if self.test_type == "import":
+                self.test_type = "cbimport"
+                self._remote_copy_import_file(self.import_file)
+                if len(self.buckets) >= 1:
+                    if self.imex_type == "json":
+                        for bucket in self.buckets:
+                            key_gen = "%index%"
+                            """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
+                        -b default -d file:///tmp/export/default -f list -g %index%  """
+                            imp_cmd_str = "%s%s%s %s -c %s:%s -u Administrator -p password "\
+                                                                 "-b %s -d %s%s -f %s -g %s"\
+                                     % (self.cli_command_path, self.test_type, self.cmd_ext,
+                                           self.imex_type, server.ip, new_port, bucket.name,
+                                    import_method, self.des_file, self.format_type, key_gen)
+                            output, error = self.shell.execute_command(imp_cmd_str)
+                            self.log.info("Output from execute command %s " % output)
+        except Exception, e:
+            if e:
+                print e
+        finally:
+            if port_changed:
+                self.log.info("change port back to default port 8091")
+                port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
+                        % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
+                           "cluster-edit", server.ip, new_port, default_port)
+                output, error = self.shell.execute_command(port_cmd)
+
+    def test_imex_flags(self):
+        """ imex_type     = json
+            cluster_flag  = -c
+            user_flag     = -u
+            password_flag = -p
+            bucket_flag   = -b
+            dataset_flag  = -d
+            format_flag   = -f
+            generate_flag = -g
+            format_type = list/lines
+            import_file = json_list_1000_lines
+                                  =lines,....
+            ./cbimport json -c 12.11.10.132 -u Administrator -p password
+                        -b default -d file:///tmp/export/default -f list -g %index% """
+        server = copy.deepcopy(self.servers[0])
+        self.sample_file = self.input.param("sample_file", None)
+        self.cluster_flag = self.input.param("cluster_flag", "-c")
+        self.user_flag = self.input.param("user_flag", "-u")
+        self.password_flag = self.input.param("password_flag", "-p")
+        self.bucket_flag = self.input.param("bucket_flag", "-b")
+        self.dataset_flag = self.input.param("dataset_flag", "-d")
+        self.format_flag = self.input.param("format_flag", "-f")
+        self.generate_flag = self.input.param("generate_flag", "-g")
+        if self.test_type == "import":
+            self.test_type = "cbimport"
+            cmd_str = "%s%s%s %s %s %s %s Administrator %s password %s default %s "\
+                                      "file://%sdefault  %s lines %s %%index%%"\
+                       % (self.cli_command_path, self.test_type, self.cmd_ext,
+                           self.imex_type, self.cluster_flag, server.ip,
+                           self.user_flag, self.password_flag, self.bucket_flag,
+                           self.dataset_flag, self.tmp_path, self.format_flag,
+                           self.generate_flag)
+            output, error = self.shell.execute_command(cmd_str)
+            if self.imex_type == "":
+                if "Unknown flag: -c" in output:
+                    self.log.info("%s detects missing 'json' option " % self.test_type)
+                else:
+                    self.fail("%s could not detect missing 'json' option"
+                                                             % self.test_type)
+            if self.cluster_flag == "":
+                if "Invalid subcommand `%s`" % server.ip in output \
+                                  and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-c or --clusger' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-c or --cluster' flag"
+                                                              % self.test_type)
+            if self.user_flag == "":
+                if "Expected flag: Administrator" in output \
+                                 and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-u or --username' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-u or --username' flag"
+                                                              % self.test_type)
+            if self.password_flag == "":
+                if "Expected flag: password" in output \
+                                 and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-p or --password' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-p or --password' flag"
+                                                              % self.test_type)
+            if self.bucket_flag == "":
+                if "Expected flag: default" in output \
+                                 and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-b or --bucket' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-b or --bucket' flag"
+                                                              % self.test_type)
+            if self.dataset_flag == "":
+                if "Expected flag: file://%sdefault" % self.tmp_path in output \
+                                 and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-d or --dataset' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-d or --dataset' flag"
+                                                              % self.test_type)
+            if self.format_flag == "":
+                if "Expected flag: lines" in output \
+                                     and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-f or --format' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-f or --format' flag"
+                                                              % self.test_type)
+            if self.generate_flag == "":
+                if "Expected flag: %index%" in output \
+                                 and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-g or --generate' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-g or --generate' flag"
+                                                              % self.test_type)
+            if self.threads_flag == "-t":
+                if "Expected flag: %index%" in output \
+                                 and "Required Flags:" in output:
+                    self.log.info("%s detected missing '-g or --generate' flag"
+                                                              % self.test_type)
+                else:
+                    self.fail("%s could not detect missing '-g or --generate' flag"
+                                                              % self.test_type)
+        self.log.info("Output from execute command %s " % output)
+
+    def test_imex_optional_flags(self):
+        """ imex_type     = json
+            threads_flag   = -t
+            errors_flag    = -e
+            logs_flag      = -l """
+        server = copy.deepcopy(self.servers[0])
+        self.threads_flag = self.input.param("threads_flag", "")
+        self.errors_flag = self.input.param("errors_flag", "")
+        self.logs_flag = self.input.param("logs_flag", "")
+        self.import_file = self.input.param("import_file", None)
+        self.format_type = self.input.param("format_type", None)
+        import_method = self.input.param("import_method", "file://")
+        threads_flag = ""
+        if self.threads_flag != "":
+            threads_flag = "-t"
+        errors_flag = ""
+        errors_path = ""
+        if self.errors_flag != "":
+            errors_flag = "-e"
+            self.shell.execute_command("rm -rf %serrors" % self.tmp_path)
+            self.shell.execute_command("mkdir %serrors" % self.tmp_path)
+            if self.errors_flag == "empty":
+                errors_path = ""
+            elif self.errors_flag == "error":
+                errors_path = self.errors_flag
+                self.shell.execute_command("rm -rf %serror" % self.cli_command_path)
+            elif self.errors_flag == "relative_path":
+                errors_path = "~/error"
+                self.shell.execute_command("rm -rf ~/error")
+            elif self.errors_flag == "absolute_path":
+                errors_path = self.tmp_path + "errors/" + self.errors_flag
+        logs_flag = ""
+        logs_path = ""
+        if self.logs_flag != "":
+            logs_flag = "-l"
+            self.shell.execute_command("rm -rf %slogs" % self.tmp_path)
+            self.shell.execute_command("mkdir %slogs" % self.tmp_path)
+            if self.logs_flag == "empty":
+                logs_path = ""
+            elif self.logs_flag == "log":
+                logs_path = self.logs_flag
+                self.shell.execute_command("rm -rf %slog" % self.cli_command_path)
+            elif self.logs_flag == "relative_path":
+                logs_path = "~/log"
+                self.shell.execute_command("rm -rf ~/log")
+            elif self.logs_flag == "absolute_path":
+                logs_path = self.tmp_path + "logs/" + self.logs_flag
+        error_check = True
+        if self.test_type == "import":
+            self.test_cmd = "cbimport"
+            self._remote_copy_import_file(self.import_file)
+            if self.imex_type == "json":
+                for bucket in self.buckets:
+                    key_gen = "%index%"
+                    """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
+                        -b default -d file:///tmp/export/default -f list -g %index%  """
+                    imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
+                                  "-d %s%s -f %s -g %%index%% %s %s %s %s %s %s"\
+                             % (self.cli_command_path, self.test_cmd, self.cmd_ext,
+                                            self.imex_type, server.ip, bucket.name,
+                                    import_method, self.des_file, self.format_type,
+                                                   threads_flag, self.threads_flag,
+                                                          errors_flag, errors_path,
+                                                              logs_flag, logs_path)
+                    self.log.info("command to run %s " % imp_cmd_str)
+                    output, error = self.shell.execute_command(imp_cmd_str)
+                    self.log.info("Output from execute command %s " % output)
+                    if  self.threads_flag == "empty":
+                        error_check = False
+                        if "Expected argument for option: -t" in output:
+                            self.log.info("%s detected empty value of threads argument"
+                                                                      % self.test_type)
+                        else:
+                            self.fail("%s could not detect empty value of argument"
+                                                                  % self.test_type)
+                    elif self.threads_flag == "notnumber":
+                        error_check = False
+                        if "Unable to process value for flag: -t" in output:
+                            self.log.info("%s detected incorrect value of threads argument"
+                                                                          % self.test_type)
+                        else:
+                            self.fail("%s could not detect incorrect value of argument"
+                                                                      % self.test_type)
+                    if self.errors_flag == "empty":
+                        error_check = False
+                        if "Expected argument for option: -e" in output:
+                            self.log.info("%s detected empty value of error argument"
+                                                                    % self.test_type)
+                        else:
+                            self.fail("%s could not detect empty value of argument"
+                                                                  % self.test_type)
+                    elif self.errors_flag == "relative_path":
+                        output, error = self.shell.execute_command("ls %s " % self.root_path)
+                        if self._check_output(errors_path[2:], output):
+                            error_check = False
+                            self.log.info("%s error file created" % self.test_type)
+                        else:
+                            self.fail("%s failed to create error file in log flag"
+                                                                 % self.test_type)
+                    elif self.errors_flag == "absolute_path":
+                        output, error = self.shell.execute_command("ls %s " % self.cli_command_path)
+                        if self._check_output("error", output):
+                            error_check = False
+                            self.log.info("%s error file created" % self.test_type)
+                        else:
+                            self.fail("%s failed to create error file in log flag"
+                                                                 % self.test_type)
+                    elif self.errors_flag != "":
+                        output, error = self.shell.execute_command("ls %s " % errors_path)
+                        if self._check_output(errors_path, output):
+                            error_check = False
+                            self.log.info("%s error file created" % self.test_type)
+                        else:
+                            self.fail("%s failed to create error file in error flag"
+                                                                   % self.test_type)
+                    if self.logs_flag == "empty":
+                        error_check = False
+                        if "Expected argument for option: -l" in output:
+                            self.log.info("%s detected empty value of log argument"
+                                                                  % self.test_type)
+                        else:
+                            self.fail("%s could not detect empty value of logs argument"
+                                                                       % self.test_type)
+                    elif self.logs_flag == "relative_path":
+                        output, error = self.shell.execute_command("ls %s " % self.root_path)
+                        if self._check_output(logs_path[2:], output):
+                            error_check = False
+                            self.log.info("%s log file created" % self.test_type)
+                        else:
+                            self.fail("%s failed to create log file in log flag"
+                                                                 % self.test_type)
+                    elif self.logs_flag == "absolute_path":
+                        output, error = self.shell.execute_command("ls %s " % self.cli_command_path)
+                        if self._check_output("log", output):
+                            error_check = False
+                            self.log.info("%s log file created" % self.test_type)
+                        else:
+                            self.fail("%s failed to create log file in log flag"
+                                                                 % self.test_type)
+
+                    if error_check and not self._check_output("successfully", output):
+                        self.fail("failed to run optional flags")
 
     def test_import_invalid_folder_structure(self):
+        """ not in 4.6 """
         options = {"load_doc": False}
         return self._common_imex_test("import", options)
 
@@ -104,8 +394,6 @@ class ImportExportTests(CliBaseTest):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         path = self.input.param("path", None)
-        self.imex_type = self.input.param("imex_type", None)
-        self.format_type = self.input.param("format_type", None)
         self.short_flag = self.input.param("short_flag", True)
         import_method = self.input.param("import_method", "file://")
         if "url" in import_method:
@@ -282,4 +570,29 @@ class ImportExportTests(CliBaseTest):
                 if word_check.lower() in x.lower():
                     self.log.info("Found \"%s\" in CLI output" % word_check)
                     found = True
+                    break
         return found
+
+    def _remote_copy_import_file(self, import_file):
+        import_method = self.input.param("import_method", "file://")
+        if "url" in import_method:
+            import_method = ""
+        if import_method != "":
+            self.im_path = self.tmp_path + "import/"
+            self.log.info("copy import file from local to remote")
+            output, error = self.shell.execute_command("ls %s " % self.tmp_path)
+            if self._check_output("import", output):
+                self.log.info("remove %simport directory" % self.tmp_path)
+                self.shell.execute_command("rm -rf  %simport " % self.tmp_path)
+                output, error = self.shell.execute_command("ls %s " % self.tmp_path)
+                if self._check_output("import", output):
+                    self.fail("fail to delete import dir ")
+            self.shell.execute_command("mkdir  %simport " % self.tmp_path)
+            if import_file is not None:
+                self.src_file = "resources/imex/"+ import_file
+            else:
+                self.fail("Need import_file param")
+            self.des_file = self.im_path + import_file
+            self.shell.copy_file_local_to_remote(self.src_file, self.des_file)
+        else:
+            self.des_file = self.import_file
