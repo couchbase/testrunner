@@ -317,9 +317,6 @@ class Control():
     def mouse_over(self):
         ActionChains(self.selenium).move_to_element(self.web_element).perform()
 
-    def get_inner_html(self):
-        return self.web_element.get_attribute("outerHTML")
-
 
 class ControlsHelper():
     def __init__(self, driver):
@@ -372,6 +369,7 @@ class BaseHelperControls():
         self._login_btn = helper.find_control('login', 'login_btn')
         self._logout_btn = helper.find_control('login', 'logout_btn')
         self.error = helper.find_control('login', 'error')
+        self.ajax_spinner = helper.find_control('login', 'ajax_spinner')
 
 
 class BaseHelper():
@@ -379,6 +377,13 @@ class BaseHelper():
         self.tc = tc
         self.controls = BaseHelperControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=100)
+
+    def wait_ajax_loaded(self):
+        try:
+            self.wait.until_not(lambda fn:  self.controls.ajax_spinner.is_displayed(),
+                                "Page is still loaded")
+        except StaleElementReferenceException:
+            pass
 
     def login(self, user=None, password=None):
         self.tc.log.info("Try to login to Couchbase Server in browser")
