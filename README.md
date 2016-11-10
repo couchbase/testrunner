@@ -3,7 +3,7 @@ Prerequisites
 
 * Python 2.6 or 2.7
 * pip or easy_install
-
+ 
 Dependencies
 ------------
 
