@@ -3444,47 +3444,7 @@ class RemoteMachineShellConnection:
                                     o, r = self.execute_command("dpkg --get-selections | grep libssl")
                                     log.info("package {0} should not appear below".format(s[:11]))
                                     self.log_command_output(o, r)
-            if self.info.deliverable_type == "rpm" and \
-                            "SUSE" not in self.info.distribution_type:
-                centos_version = ["6.4"]
-                o, r = self.execute_command("cat /etc/redhat-release")
-                self.log_command_output(o, r)
-                if o[0] != "":
-                    o = o[0].split(" ")
-                    if o[2] in centos_version and "1" in openssl:
-                        o, r = self.execute_command("rpm -qa | grep openssl")
-                        self.log_command_output(o, r)
-                        for s in o:
-                            if "openssl098e" in s:
-                                o, r = self.execute_command("yum remove -y {0}".format(s))
-                                self.log_command_output(o, r)
-                                o, r = self.execute_command("rpm -qa | grep openssl")
-                                log.info("package {0} should not appear below".format(s))
-                                self.log_command_output(o, r)
-                            elif "openssl-1.0.0" not in s:
-                                o, r = self.execute_command("yum install -y openssl")
-                                self.log_command_output(o, r)
-                        o, r = self.execute_command("rpm -qa | grep openssl")
-                        log.info("openssl-1.0.0 should appear below".format(s))
-                        self.log_command_output(o, r)
-                    elif openssl == "":
-                        o, r = self.execute_command("rpm -qa | grep openssl")
-                        self.log_command_output(o, r)
-                        if not o:
-                            o, r = self.execute_command("yum install -y openssl098e")
-                            self.log_command_output(o, r)
-                            o, r = self.execute_command("rpm -qa | grep openssl")
-                            log.info("package openssl098e should appear below")
-                            self.log_command_output(o, r)
-                        elif o:
-                            for s in o:
-                                if "openssl098e" not in s:
-                                    o, r = self.execute_command("yum install -y openssl098e")
-                                    self.log_command_output(o, r)
-                                    o, r = self.execute_command("rpm -qa | grep openssl")
-                                    log.info("package openssl098e should appear below")
-                                    self.log_command_output(o, r)
-
+           
     def check_pkgconfig(self, deliverable_type, openssl):
         if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
