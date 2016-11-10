@@ -803,23 +803,46 @@ class FTSIndex:
 
         self.index_definition['params']['mapping']['default_mapping'] \
                                                         ['enabled'] = False
-        self.index_definition['params']['mapping']['types'] = type_map
+        if not self.index_definition['params']['mapping'].has_key('types'):
+            self.index_definition['params']['mapping']['types'] = {}
+            self.index_definition['params']['mapping']['types'] = type_map
+        else:
+            self.index_definition['params']['mapping']['types'][type] = type_map[type]
+
 
     def add_doc_config_to_index_definition(self, mode):
         """
         Add Document Type Configuration to Index Definition
         """
         doc_config = {}
-        doc_config['mode']=mode
 
-        if mode=='docid_regexp':
+        if mode == 'docid_regexp1':
+            doc_config['mode'] = 'docid_regexp'
             doc_config['docid_regexp'] = "([^_]*)"
 
+        if mode == 'docid_regexp2':
+            doc_config['mode'] = 'docid_regexp'
+            doc_config['docid_regexp'] = "\\b[a-z]{6,}"
+
+        if mode == 'docid_regexp_neg1':
+            doc_config['mode'] = 'docid_regexp'
+            doc_config['docid_regexp'] = "\\b[a-z]{8,}"
+
         if mode == 'docid_prefix':
+            doc_config['mode'] = 'docid_prefix'
+            doc_config['docid_prefix_delim'] = "_"
+
+        if mode == 'docid_prefix_neg1':
+            doc_config['mode'] = 'docid_prefix'
             doc_config['docid_prefix_delim'] = "-"
 
-        if mode == "type_field":
+        if mode == 'type_field':
+            doc_config['mode'] = 'type_field'
             doc_config['type_field'] = "type"
+
+        if mode == 'type_field_neg1':
+            doc_config['mode'] = 'type_field'
+            doc_config['type_field'] = "newtype"
 
         self.index_definition['params']['doc_config'] = {}
         self.index_definition['params']['doc_config'] = doc_config

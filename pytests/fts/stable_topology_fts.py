@@ -610,7 +610,9 @@ class StableTopFTS(FTSBaseTest):
         # Add Type Mapping
         index.add_type_mapping_to_index_definition(type="airport",
                                                    analyzer="en")
-        mode = self._input.param("doc_config_mode", "type_field")
+        index.add_type_mapping_to_index_definition(type="hotel",
+                                                   analyzer="en")
+        mode = self._input.param("mode", "type_field")
         index.add_doc_config_to_index_definition(mode=mode)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
@@ -621,11 +623,15 @@ class StableTopFTS(FTSBaseTest):
 
         # Run Query
         expected_hits = int(self._input.param("expected_hits", 0))
+        if not expected_hits:
+            zero_results_ok = True
+        else:
+            zero_results_ok = False
         query = eval(self._input.param("query", str(self.sample_query)))
         try:
             for index in self._cb_cluster.get_indexes():
                 hits, _, _, _ = index.execute_query(query,
-                                                zero_results_ok=False,
+                                                zero_results_ok=zero_results_ok,
                                                 expected_hits=expected_hits)
                 self.log.info("Hits: %s" % hits)
         except Exception as err:
