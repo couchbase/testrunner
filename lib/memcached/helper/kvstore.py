@@ -9,6 +9,7 @@ class KVStore(object):
     def __init__(self, num_locks=16):
         self.num_locks = num_locks
         self.reset()
+        self.acquire_lock = threading.Lock()     # needed for deadlocks where different threads grab some of the partitions
 
     def reset(self):
         self.cache = {}
@@ -22,6 +23,7 @@ class KVStore(object):
         return partition["partition"]
 
     def acquire_partitions(self, keys):
+        self.acquire_lock.acquire()
         part_obj_keys = {}
         for key in keys:
             partition = self.cache[self._hash(key)]
@@ -30,6 +32,7 @@ class KVStore(object):
                 partition["lock"].acquire()
                 part_obj_keys[partition_obj] = []
             part_obj_keys[partition_obj].append(key)
+        self.acquire_lock.release()
         return part_obj_keys
 
     def release_partitions(self, partition_objs):
