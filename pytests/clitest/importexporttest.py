@@ -52,7 +52,6 @@ class ImportExportTests(CliBaseTest):
         port_changed = False
         try:
             """ change default port from 8091 to 9000 """
-            # couchbase-cli cluster-edit -c 12.11.10.130:8091 -u Administrator -p password --cluster-port=9000
             port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
                                     % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
                                           "cluster-edit", server.ip, default_port, new_port)
@@ -177,14 +176,6 @@ class ImportExportTests(CliBaseTest):
                     self.fail("%s could not detect missing '-f or --format' flag"
                                                               % self.test_type)
             if self.generate_flag == "":
-                if "Expected flag: %index%" in output \
-                                 and "Required Flags:" in output:
-                    self.log.info("%s detected missing '-g or --generate' flag"
-                                                              % self.test_type)
-                else:
-                    self.fail("%s could not detect missing '-g or --generate' flag"
-                                                              % self.test_type)
-            if self.threads_flag == "-t":
                 if "Expected flag: %index%" in output \
                                  and "Required Flags:" in output:
                     self.log.info("%s detected missing '-g or --generate' flag"
@@ -461,7 +452,7 @@ class ImportExportTests(CliBaseTest):
                               % (self.cli_command_path, "cbimport", self.cmd_ext, self.imex_type,
                                  import_servers[2].ip, username, password, "default",
                                  import_file, self.format_type, "index")
-                output, error = self.import_shell.execute_command(imp_cmd_str)
+                output, error = import_shell.execute_command(imp_cmd_str)
                 if self._check_output("error", output):
                     self.fail("Fail to run import back to bucket")
         elif "import" in cmd:
