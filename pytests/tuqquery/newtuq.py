@@ -84,9 +84,9 @@ class QueryTests(BaseTestCase):
         if self.analytics:
             data = 'use Default ;' + "\n"
             for bucket in self.buckets:
-                data += 'disconnect bucket {0} ;'.format(bucket.name) + "\n"
-                data += 'drop dataset {0}'.format(bucket.name) + "_shadow ;" + "\n"
-                data += 'drop bucket {0} ;'.format(bucket.name) + "\n"
+                data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
+                data += 'drop dataset {0} if exists'.format(bucket.name) + "_shadow ;" + "\n"
+                data += 'drop bucket {0} if exists;'.format(bucket.name) + "\n"
             filename = "file.txt"
             f = open(filename,'w')
             f.write(data)
@@ -320,6 +320,7 @@ class QueryTests(BaseTestCase):
                                         actual_result['results'], expected_result))
 
             query_template = 'SELECT COUNT(*) + 1 AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
+            import pdb;pdb.set_trace()
             actual_result, expected_result = self.run_query_from_template(query_template)
             if self.monitoring:
                 e.set()
