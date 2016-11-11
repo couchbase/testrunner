@@ -28,7 +28,7 @@ class ImportExportTests(CliBaseTest):
             self.log.info("clean up server in import back tests")
             imp_servers = copy.deepcopy(self.servers[2:])
             BucketOperationHelper.delete_all_buckets_or_assert(imp_servers, self)
-            ClusterOperationHelper.cleanup_cluster(self.servers, imp_servers[0])
+            ClusterOperationHelper.cleanup_cluster(imp_servers, imp_servers[0])
             ClusterOperationHelper.wait_for_ns_servers_or_assert(imp_servers, self)
 
 
@@ -44,12 +44,24 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": True, "docs":"10"}
         return self._common_imex_test("export", options)
 
+    def test_imex_during_rebalance(self):
+        server = copy.deepcopy(self.servers[0])
+        if self.test_type == "import":
+            self.test_type = "cbimport"
+            self._remote_copy_import_file(self.import_file)
+            if len(self.buckets) >= 1:
+                if self.imex_type == "json":
+                    for bucket in self.buckets:
+                        key_gen = "%index%"
+
     def test_imex_non_default_port(self):
+        options = {"load_doc": True, "docs":"10"}
         server = copy.deepcopy(self.servers[0])
         import_method = self.input.param("import_method", "file://")
         default_port = 8091
         new_port = 9000
         port_changed = False
+        test_failed = False
         try:
             """ change default port from 8091 to 9000 """
             port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
@@ -77,9 +89,36 @@ class ImportExportTests(CliBaseTest):
                                     import_method, self.des_file, self.format_type, key_gen)
                             output, error = self.shell.execute_command(imp_cmd_str)
                             self.log.info("Output from execute command %s " % output)
+            elif self.test_type == "export":
+                self.test_type = "cbexport"
+                self.ex_path = self.tmp_path + "export/"
+                if len(self.buckets) >= 1:
+                    for bucket in self.buckets:
+                        self.log.info("load json to bucket %s " % bucket.name)
+                        load_cmd = "%s%s%s -n %s:%s -u Administrator -p password "\
+                                                                 "-j -i %s -b %s "\
+                            % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
+                               server.ip, new_port, options["docs"], bucket.name)
+                        self.shell.execute_command(load_cmd)
+                self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
+                self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+                """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
+                              -p password -b default -f list -o /tmp/test4.zip """
+                if len(self.buckets) >= 1:
+                    for bucket in self.buckets:
+                        export_file = self.ex_path + bucket.name
+                        exe_cmd_str = "%s%s%s %s -c %s:%s -u Administrator "\
+                                             "-p password -b %s -f %s -o %s"\
+                                    % (self.cli_command_path, self.test_type,
+                                       self.cmd_ext, self.imex_type, server.ip,
+                                       new_port, bucket.name, self.format_type,
+                                                                   export_file)
+                        self.shell.execute_command(exe_cmd_str)
+                        self._verify_export_file(bucket.name, options)
         except Exception, e:
             if e:
-                print e
+                print "Exception throw: ", e
+            test_failed = True
         finally:
             if port_changed:
                 self.log.info("change port back to default port 8091")
@@ -87,6 +126,8 @@ class ImportExportTests(CliBaseTest):
                         % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
                            "cluster-edit", server.ip, new_port, default_port)
                 output, error = self.shell.execute_command(port_cmd)
+            if test_failed:
+                self.fail("Test failed.  Check exception throw above.")
 
     def test_imex_flags(self):
         """ imex_type     = json
