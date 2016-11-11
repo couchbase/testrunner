@@ -292,23 +292,27 @@ class MemcachedClient(object):
 
     # hope to remove this and migrate existing calls to the aboce
     def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
-                      adjusted_time=0, conflict_resolution_mode=0, skipCR=False):
+                      adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
 
-        if skipCR:
-            return self._doCmd(memcacheConstants.CMD_SET_WITH_META,
-                key,
-                val,
-                struct.pack(memcacheConstants.SKIP_META_CMD_FMT,
-                    flags,
-                    exp,
-                    seqno,
-                    cas,
-                    memcacheConstants.CR
-                ))
+
+        return self._doCmd(memcacheConstants.CMD_SET_WITH_META,
+            key,
+            val,
+            struct.pack(memcacheConstants.SKIP_META_CMD_FMT,
+                flags,
+                exp,
+                seqno,
+                cas,
+                memcacheConstants.CR
+            ))
 
 
+        # Extended meta data was a 4.0 and 4.5 era construct, and not supported in 4.6 Not sure if will ever be needed
+        # but leaving the code visible in case it is
+
+        """
         if add_extended_meta_data:
             extended_meta_data =  self.pack_the_extended_meta_data( adjusted_time, conflict_resolution_mode)
             return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
@@ -317,6 +321,7 @@ class MemcachedClient(object):
         else:
             return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
                    struct.pack(META_CMD_FMT, flags, exp, seqno, cas) )
+        """
 
 
 

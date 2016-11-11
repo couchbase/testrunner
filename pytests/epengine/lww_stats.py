@@ -161,8 +161,8 @@ class LWWStatsTests(BaseTestCase):
         # 2. Set the clock back 1 hour, set the CAS back 2 hours, the clock should be use
 
 
-        # do case 1, set the CAS back 30 minutes.  Calculation below assumes the CAS is in microseconds
-        earlier_max_cas = poisoned_cas - 30 * 60 * 1000000
+        # do case 1, set the CAS back 30 minutes.  Calculation below assumes the CAS is in nanseconds
+        earlier_max_cas = poisoned_cas - 30 * 60 * 1000000000
         for i in range(self.vbuckets):
             output, error = shell.execute_cbepctl(self.buckets[0], "", "set_vbucket_param",
                               "max_cas ", str(i) + ' ' + str(earlier_max_cas)  )
