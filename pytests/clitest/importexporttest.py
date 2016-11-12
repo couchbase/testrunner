@@ -20,6 +20,7 @@ from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
 class ImportExportTests(CliBaseTest):
     def setUp(self):
         super(ImportExportTests, self).setUp()
+        self.ex_path = self.tmp_path + "export/"
 
     def tearDown(self):
         super(ImportExportTests, self).tearDown()
@@ -45,14 +46,45 @@ class ImportExportTests(CliBaseTest):
         return self._common_imex_test("export", options)
 
     def test_imex_during_rebalance(self):
-        server = copy.deepcopy(self.servers[0])
-        if self.test_type == "import":
-            self.test_type = "cbimport"
-            self._remote_copy_import_file(self.import_file)
+        """ During rebalance, the test will execute the import/export command.
+            Tests will execute in both path, absolute and bin path.
+        """
+        self._load_doc_data_all_buckets()
+        task_reb = self.cluster.async_rebalance(self.servers, [self.servers[2]], [])
+        while task_reb.state != "FINISHED":
             if len(self.buckets) >= 1:
-                if self.imex_type == "json":
-                    for bucket in self.buckets:
-                        key_gen = "%index%"
+                for bucket in self.buckets:
+                    if self.test_type == "import":
+                        self.test_type = "cbimport"
+                        self._remote_copy_import_file(self.import_file)
+                        if self.imex_type == "json":
+                            key_gen = "%index%"
+                            imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
+                                                            " -b %s -d %s%s -f %s -g %s"\
+                                  % (self.cli_command_path, self.test_type, self.cmd_ext,
+                                         self.imex_type, self.servers[0].ip, bucket.name,
+                                                       self.import_method, self.des_file,
+                                                               self.format_type, key_gen)
+                            output, error = self.shell.execute_command(imp_cmd_str)
+                            self.log.info("Output from execute command %s " % output)
+                            if not self._check_output("successfully", output):
+                                self.fail("Fail to import json file")
+                    elif self.test_type == "export":
+                        self.test_type = "cbexport"
+                        self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
+                        self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+                        export_file = self.ex_path + bucket.name
+                        if self.imex_type == "json":
+                            exp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
+                                                            " -b %s -f %s -o %s"\
+                                  % (self.cli_command_path, self.test_type, self.cmd_ext,
+                                         self.imex_type, self.servers[0].ip, bucket.name,
+                                                               self.format_type, export_file)
+                            output, error = self.shell.execute_command(exp_cmd_str)
+                            self.log.info("Output from execute command %s " % output)
+                            if not self._check_output("successfully", output):
+                                self.fail("Fail to import json file")
+        task_reb.result()
 
     def test_imex_non_default_port(self):
         options = {"load_doc": True, "docs":"10"}
@@ -91,7 +123,6 @@ class ImportExportTests(CliBaseTest):
                             self.log.info("Output from execute command %s " % output)
             elif self.test_type == "export":
                 self.test_type = "cbexport"
-                self.ex_path = self.tmp_path + "export/"
                 if len(self.buckets) >= 1:
                     for bucket in self.buckets:
                         self.log.info("load json to bucket %s " % bucket.name)
@@ -241,6 +272,8 @@ class ImportExportTests(CliBaseTest):
         threads_flag = ""
         if self.threads_flag != "":
             threads_flag = "-t"
+            if self.threads_flag == "empty":
+                self.threads_flag = ""
         errors_flag = ""
         errors_path = ""
         if self.errors_flag != "":
@@ -293,7 +326,7 @@ class ImportExportTests(CliBaseTest):
                     self.log.info("command to run %s " % imp_cmd_str)
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
-                    if  self.threads_flag == "empty":
+                    if  self.input.param("threads_flag", "") == "empty":
                         error_check = False
                         if "Expected argument for option: -t" in output:
                             self.log.info("%s detected empty value of threads argument"

@@ -31,6 +31,7 @@ class CliBaseTest(BaseTestCase):
         self.import_file = self.input.param("import_file", None)
         self.imex_type = self.input.param("imex_type", "json")
         self.format_type = self.input.param("format_type", None)
+        self.import_method = self.input.param("import_method", "file://")
         self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
         info = self.shell.extract_remote_info()
