@@ -1956,7 +1956,6 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             number_of_docs= self.docs_per_day*2016
             self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
-            import pdb;pdb.set_trace()
             self.query = 'delete from {0} where meta().id = select to_string(name)|| UUID() as k'
             self.run_cbq_query()
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
