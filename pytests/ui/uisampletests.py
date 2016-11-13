@@ -1837,7 +1837,7 @@ class DdocViewHelper():
         self.tc.log.info('trying create a view %s' % view_name)
         BaseHelper(self.tc).wait_ajax_loaded()
         self.wait.until(lambda fn:
-                        self.controls.view_btn().create_view_btn,
+                        self.controls.view_btn().create_view_btn.is_displayed(),
                         "Create View button is not displayed")
         self.controls.view_btn().create_view_btn.click()
         self.wait.until(lambda fn:

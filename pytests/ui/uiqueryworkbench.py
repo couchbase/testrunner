@@ -18,20 +18,24 @@ class QueryWorkbenchTests(BaseUITestCase):
         self.queryHelper = QueryWorkbenchHelper(self)
         self.baseHelper.login()
         self.baseHelper.loadSampleBucket(self.servers[0], self.bucketname)
-        rest = RestConnection(self.servers[0])
-        rest.set_indexer_storage_mode()
-        rest.query_tool("DROP INDEX `beer`.`beer_index_sec` USING GSI;")
+        self.rest = RestConnection(self.servers[0])
+        self.rest.set_indexer_storage_mode()
+        self.rest.query_tool("DROP INDEX `beer`.`beer_index_sec` USING GSI;")
 
     def tearDown(self):
         super(QueryWorkbenchTests, self).tearDown()
 
     def test_create_indexes(self):
-        expected_result = self.input.param('expected_result', None)
-        if expected_result is not None:
-            expected_result = expected_result.replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')
+        expected_results = self.input.param('expected_result', None)
+        if expected_results is not None:
+            expected_results = expected_results.replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')\
+                .split('|')  # 4.7 vs 4.6 versions
         summary_result = self.input.param('summary_result', '')
         summary_result = summary_result.replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')
         result_mode = self.input.param('mode', 'JSON')
+        if self.rest.get_nodes()[0].version >= '4.7' and result_mode in ['Plan Text', 'Plan']:
+            self.log.info("skipp 'Plan Text', 'Plan' modes in version < 4.7")
+            return
         init_query = self.input.param('init_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode(
             'unicode_escape')
         check_query = self.input.param('check_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode(
@@ -44,8 +48,8 @@ class QueryWorkbenchTests(BaseUITestCase):
             self.assertEqual('{"no_data_yet": "hit execute to run query"}',
                              self.queryHelper.controls.query_results_box().result_json_mode.get_text())
         self.queryHelper.execute_query(check_query)
-        if expected_result is not None:
-            self.queryHelper.check_result(expected_result, mode=result_mode)
+        if expected_results is not None:
+            self.queryHelper.check_result(expected_results, mode=result_mode)
         if summary_result:
             self.queryHelper.check_summary_result(summary_result, mode=result_mode)
         if init_query:
@@ -56,7 +60,7 @@ class QueryWorkbenchTests(BaseUITestCase):
         init_analysis = self.input.param('init_analysis', None)
         expected_analysis = self.input.param('expected_analysis', None)
         init_analysis = init_analysis.replace('_STAR_', '*').replace('_SEM_', ';').decode(
-            'unicode_escape')
+            'unicode_escape').split('|')  # 4.7 vs 4.6
         expected_analysis = expected_analysis.replace('_STAR_', '*').replace('_SEM_', ';').decode(
             'unicode_escape')
         check_query = self.input.param('check_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode(
@@ -138,7 +142,7 @@ class QueryWorkbenchHelper(TestCase):
                         self.controls.query_top_screen().execute_button.is_displayed(),
                         "Query is still running?")
 
-    def check_result(self, expected_result, mode='JSON'):
+    def check_result(self, expected_results, mode='JSON'):
         self.select_result_mode(mode)
         if mode == 'JSON':
             result = self.controls.query_results_box().result_json_mode.get_text()
@@ -150,7 +154,11 @@ class QueryWorkbenchHelper(TestCase):
             result = self.controls.query_results_box().result_plan_mode.get_text()
         elif mode == 'Plan Text':
             result = self.controls.query_results_box().result_plan_text_mode.get_text()
-        search_obj = re.search(expected_result, result, re.M | re.I)
+        search_obj = None
+        for expected_result in expected_results:
+            search_obj = re.search(expected_result, result, re.M | re.I)
+            if search_obj:
+                break
         self.assertTrue(search_obj, msg='Incorrect query result: %s' % result)
 
     def check_summary_result(self, expected_result, mode='JSON'):
@@ -173,9 +181,13 @@ class QueryWorkbenchHelper(TestCase):
             elif mode == 'Plan Text':
                 self.controls.query_results_box().result_select_plan_text_mode.click()
 
-    def check_bucket_analysis_result(self, expected_result):
+    def check_bucket_analysis_result(self, expected_results):
         result = self.controls.query_bucket_analysis().sidebar_body.get_text()
-        search_obj = re.search(expected_result, result, re.M | re.I)
+        search_obj = None
+        for expected_result in expected_results:
+            search_obj = re.search(expected_result, result, re.M | re.I)
+            if search_obj:
+                break
         self.assertTrue(search_obj, msg='Incorrect bucket analysis result: %s' % result)
 
     def save_query(self, path):
