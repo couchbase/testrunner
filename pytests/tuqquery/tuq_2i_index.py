@@ -1950,12 +1950,15 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
             self.assertTrue(actual_result['results']==expected_result)
-            # self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0}'.format(bucket.name)
-            # self.run_cbq_query()
-            # self.query = 'select * from {0}'.format(bucket.name)
-            # actual_result = self.run_cbq_query()
-            # number_of_docs= self.docs_per_day*2016
-            # self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
+            self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0}'.format(bucket.name)
+            self.run_cbq_query()
+            self.query = 'select * from {0}'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            number_of_docs= self.docs_per_day*2016
+            self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
+            import pdb;pdb.set_trace()
+            self.query = 'delete from {0} where meta().id = select to_string(name)|| UUID() as k'
+            self.run_cbq_query()
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -5661,7 +5664,6 @@ class QueriesIndexTests(QueryTests):
                 self.query = "explain SELECT emp.name FROM %s emp  UNNEST emp.tasks as i UNNEST tokens(i.Marketing) as j where j.region1 = 'South'" % (bucket.name)
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
-                print plan
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
