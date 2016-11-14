@@ -1,11 +1,6 @@
-import logger
-import time
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection
 from uibasetest import *
-from uisampletests import Bucket, NavigationHelper, BucketHelper
+from uisampletests import Bucket, NavigationHelper
 from selenium.common.exceptions import StaleElementReferenceException
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -106,7 +101,7 @@ class XDCRTests(BaseUITestCase):
         XDCRHelper(self).create_cluster_reference(name, ip, user, passwd)
         self.sleep(3)
         try:
-            XDCRHelper(self).create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
+           XDCRHelper(self).create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
         except Exception, ex:
             self.log.error(str(ex))
             if error:
@@ -214,9 +209,8 @@ class XDCRControls():
 class XDCRHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=100)
+        self.wait = WebDriverWait(tc.driver, timeout=50)
         self.controls = XDCRControls(tc.driver)
-
 
     def create_cluster_reference(self, cluster_name, ip, username, password, cancel=False):
         self.wait.until(lambda fn: self.controls.create_cluster_reference_btn.is_displayed(),
@@ -224,8 +218,9 @@ class XDCRHelper():
         time.sleep(3)
         self.tc.log.info("try to create cluster reference with name=%s, ip=%s" % (cluster_name, ip))
         self.controls.create_cluster_reference_btn.click()
+        BaseHelper(self.tc).wait_ajax_loaded()
         self.wait.until(lambda fn: self.controls.create_reference_pop_up().pop_up.is_displayed(),
-                        "create_cluster_reference_ popup is not displayed in %d sec" % (self.wait._timeout))
+                        "create_cluster_reference_ popup is not displayed in %d sec" % self.wait._timeout)
         if cluster_name:
             self.controls.create_reference_pop_up().name.type(cluster_name)
         if ip:
@@ -238,14 +233,13 @@ class XDCRHelper():
             self.controls.create_reference_pop_up().create_btn.click()
         else:
             self.controls.create_reference_pop_up().cancel_btn.click()
+        time.sleep(2)
+        BaseHelper(self.tc).wait_ajax_loaded()
         self.wait.until(lambda fn: self._cluster_reference_pop_up_reaction(),
-                        "there is no reaction in %d sec" % (self.wait._timeout))
+                        "there is no reaction in %d sec" % self.wait._timeout)
         if self.controls.error_reference().is_displayed():
-            self.wait.until(lambda fn: self.controls.error_reference().get_text() != '',
-                        "text didn't appear in %d sec" % (self.wait._timeout))
-            raise Exception('Reference is not created: %s' % self.controls.error_reference().get_text())
-        else:
-            self.tc.log.info("Reference has been created")
+            raise Exception("Error found:" + self.controls.error_reference().get_text())
+        self.tc.log.info("Reference has been created")
 
     def _cluster_reference_pop_up_reaction(self):
         try:
@@ -253,7 +247,7 @@ class XDCRHelper():
                 return not self.controls.create_reference_pop_up().pop_up.is_displayed()
             else:
                 return self.controls.error_reference().is_displayed()
-        except StaleElementReferenceException as e:
+        except StaleElementReferenceException:
             return False
 
     def _get_error(self):
@@ -296,13 +290,20 @@ class XDCRHelper():
                 self.controls.advanced_settings().collection_interval.type(advanced_settings['collection_interval'])
             if 'logging' in advanced_settings:
                 self.controls.advanced_settings().logging.select(value=advanced_settings['logging'])
-            if len([el for el in self.controls.errors_advanced_settings() if el.is_displayed() and el.get_text() != '']) > 0:
-                raise Exception('Advanced setting error: %s' % str([el.get_text() for el in self.controls.errors_advanced_settings()
-                                                                    if el.is_displayed() and el.get_text() != '']))
+            time.sleep(3)
+            try:
+                errors = [el.get_text() for el in self.controls.errors_advanced_settings() if el.is_displayed() and el.get_text() != '']
+            except Exception as e:
+                self.tc.log.info("exception when tried to get errors", e)
+                errors = [el.get_text() for el in self.controls.errors_advanced_settings() if
+                          el.is_displayed() and el.get_text() != '']
+            if len(errors):
+                raise Exception('Advanced setting error: %s' % str(errors))
         if not cancel:
             self.controls.create_replication_pop_up().replicate_btn.click()
         else:
             self.controls.create_replication_pop_up().cancel_btn.click()
+        BaseHelper(self.tc).wait_ajax_loaded()
         all_errors = self.controls.error_replica()
         try:
             if all_errors:
@@ -310,10 +311,10 @@ class XDCRHelper():
                     if error.is_displayed():
                         raise Exception('Replication is not created: %s' % error.get_text())
         except StaleElementReferenceException as e:
-            self.tc.log.info ("No error displayed while creating/cancelling a Replication")
+            self.tc.log.info("No error displayed while creating/cancelling a Replication")
 
         self.wait.until(lambda fn: self._cluster_replication_pop_up_reaction(),
-                        "there is no reaction in %d sec" % (self.wait._timeout))
+                        "there is no reaction in %d sec" % self.wait._timeout)
 
     def _cluster_replication_pop_up_reaction(self):
         try:

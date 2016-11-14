@@ -27,8 +27,11 @@ from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
-from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4
+from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
+                          CB_RELEASE_BUILDS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
+from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
+from testconstants import WIN_COUCHBASE_PORT_CONFIG_PATH, WIN_COUCHBASE_OLD_CONFIG_PATH
 import TestInput
 
 
@@ -44,17 +47,18 @@ Options:
  -i <file>        Path to .ini file containing cluster information.
 
 Available keys:
- product=cb|mb           Used to specify couchbase or membase.
- version=SHORT_VERSION   Example: "2.0.0r-71".
- parallel=false          Useful when you're installing a cluster.
- toy=                    Install a toy build
- init_nodes=False        Initialize nodes
- vbuckets=               The number of vbuckets in the server installation.
- sync_threads=True       Sync or acync threads(+S or +A)
- erlang_threads=         Number of erlang threads (default=16:16 for +S type)
- upr=True                Enable UPR replication
- xdcr_upr=               Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
- fts_query_limit=1000000 Set a limit for the max results to be returned by fts for any query
+ product=cb|mb              Used to specify couchbase or membase.
+ version=SHORT_VERSION      Example: "2.0.0r-71".
+ parallel=false             Useful when you're installing a cluster.
+ toy=                       Install a toy build
+ init_nodes=False           Initialize nodes
+ vbuckets=                  The number of vbuckets in the server installation.
+ sync_threads=True          Sync or acync threads(+S or +A)
+ erlang_threads=            Number of erlang threads (default=16:16 for +S type)
+ upr=True                   Enable UPR replication
+ xdcr_upr=                  Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
+ fts_query_limit=1000000    Set a limit for the max results to be returned by fts for any query
+ change_indexer_ports=false Sets indexer ports values to non-default ports
 
 
 Examples:
@@ -224,7 +228,8 @@ class Installer(object):
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
                                     "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2",
-                                    "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.5"]
+                                    "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.5","3.1.6",
+                                    "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0"]
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = CB_REPO
@@ -236,11 +241,13 @@ class Installer(object):
                     sys.exit("version is not support yet")
             for name in names:
                 if version[:5] in releases_version:
-                    build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
-                                                                     os_architecture=info.architecture_type,
-                                                                     build_version=version,
-                                                                     product='membase-server-enterprise')
-                elif version[:5] in cb_releases_version:
+                    build = BuildQuery().find_membase_release_build(
+                                             deliverable_type=info.deliverable_type,
+                                             os_architecture=info.architecture_type,
+                                             build_version=version,
+                                             product='membase-server-enterprise')
+                elif len(version) > 6 and version[6:].replace("-rel", "") == \
+                                                    CB_RELEASE_BUILDS[version[:5]]:
                     build = BuildQuery().find_couchbase_release_build(
                                             deliverable_type=info.deliverable_type,
                                             os_architecture=info.architecture_type,
@@ -248,19 +255,20 @@ class Installer(object):
                                             product=name,
                                             os_version = info.distribution_version)
                 else:
-                    builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout, \
-                                      direct_build_url=direct_build_url, \
-                                      deliverable_type=info.deliverable_type, \
-                                      architecture_type=info.architecture_type, \
-                                      edition_type=name, \
-                                      repo=build_repo, toy=toy, \
-                                      distribution_version=info.distribution_version.lower(), \
+                    builds, changes = BuildQuery().get_all_builds(version=version,
+                                      timeout=timeout,
+                                      direct_build_url=direct_build_url,
+                                      deliverable_type=info.deliverable_type,
+                                      architecture_type=info.architecture_type,
+                                      edition_type=name,
+                                      repo=build_repo, toy=toy,
+                                      distribution_version=info.distribution_version.lower(),
                                       distribution_type=info.distribution_type.lower())
-                    build = BuildQuery().find_build(builds, name, info.deliverable_type, \
-                                                    info.architecture_type, version, toy=toy, \
-                                                    openssl=openssl, direct_build_url=direct_build_url, \
-                                                    distribution_version=info.distribution_version.lower(), \
-                                                    distribution_type=info.distribution_type.lower())
+                    build = BuildQuery().find_build(builds, name, info.deliverable_type,
+                                               info.architecture_type, version, toy=toy,
+                                     openssl=openssl, direct_build_url=direct_build_url,
+                                 distribution_version=info.distribution_version.lower(),
+                                       distribution_type=info.distribution_type.lower())
 
                 if build:
                     if 'amazon' in params:
@@ -1008,6 +1016,45 @@ def check_build(input):
 params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
+def change_couchbase_indexer_ports(input):
+    params = {"indexer_admin_port": 9110,
+            "indexer_scan_port": 9111,
+            "indexer_http_port": 9112,
+            "indexer_stream_init_port": 9113,
+            "indexer_stream_catchup_port": 9114,
+            "indexer_stream_maint_port": 9115}
+    remote_client = RemoteMachineShellConnection(input.servers[0])
+    info = remote_client.extract_remote_info()
+    remote_client.disconnect()
+    type = info.type.lower()
+    if type == "windows":
+        port_config_path = WIN_COUCHBASE_PORT_CONFIG_PATH
+        old_config_path = WIN_COUCHBASE_OLD_CONFIG_PATH
+    else:
+        port_config_path = LINUX_COUCHBASE_PORT_CONFIG_PATH
+        old_config_path = LINUX_COUCHBASE_OLD_CONFIG_PATH
+    filename = "static_config"
+    for node in input.servers:
+        output_lines = ''
+        remote = RemoteMachineShellConnection(node)
+        remote.stop_server()
+        lines = remote.read_remote_file(port_config_path, filename)
+        for line in lines:
+            for key in params.keys():
+                if key in line:
+                    line = ""
+                    break
+            output_lines += "{0}".format(line)
+        for key in params.keys():
+            line = "{" + str(key) + ", " + str(params[key]) + "}."
+            output_lines += "{0}\n".format(line)
+        output_lines = output_lines.replace(r'"', r'\"')
+        remote.write_remote_file(port_config_path, filename, output_lines)
+        remote.delete_file(old_config_path, "/config.dat")
+    for node in input.servers:
+        remote = RemoteMachineShellConnection(node)
+        remote.start_server()
+
 def main():
     log.info('*****Starting the complete install process ****')
     log_install_failed = "some nodes were not install successfully!"
@@ -1055,6 +1102,9 @@ def main():
             success &= RemoteMachineShellConnection(server).is_moxi_installed()
         if not success:
             sys.exit(log_install_failed)
+    if "change_indexer_ports" in input.test_params and input.test_params["change_indexer_ports"].lower() == 'true'\
+            and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
+        change_couchbase_indexer_ports(input)
 
 if __name__ == "__main__":
     main()

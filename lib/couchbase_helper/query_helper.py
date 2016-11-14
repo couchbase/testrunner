@@ -233,6 +233,9 @@ class QueryHelper(object):
         new_n1ql = new_n1ql.replace("EQUALS"," IN ")
         new_sql = new_sql.replace("RAW","")
         new_n1ql = new_n1ql.replace("AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON","")
+        #print "new n1ql is %s"%(new_n1ql)
+        #print "new sql is %s"%(new_sql)
+
         return {"sql":new_sql, "n1ql":new_n1ql},outer_table_map
 
 
@@ -486,7 +489,7 @@ class QueryHelper(object):
                 return hint
 
     def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key = ""):
-        print "generate json from results with primary key"
+        #print "generate json from results with primary key"
         primary_key_index = 0
         count = 0
         dict = {}
@@ -757,6 +760,7 @@ class QueryHelper(object):
                 "expected_result":None,
                 "indexes":{}
                     }
+        #print "map is %s" %(map)
         return map
 
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):

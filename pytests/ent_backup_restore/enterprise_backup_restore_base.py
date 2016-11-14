@@ -180,7 +180,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info(msg)
 
     def backup_cluster(self):
-        args = "backup --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5}". \
+        args = "backup --archive {0} --repo {1} --cluster http://{2}:{3} --username {4} --password {5}". \
             format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
                    self.backupset.cluster_host_password)

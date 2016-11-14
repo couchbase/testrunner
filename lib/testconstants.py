@@ -10,13 +10,17 @@ COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.
                       "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3",
                       "3.1.4", "3.1.5", "3.1.6", "3.5.0", "4.0.0", "4.0.1", "4.1.0",
                       "4.1.1", "4.1.2", "4.5.0", "4.5.1", "4.6.0", "4.7.0"]
+CB_RELEASE_BUILDS = {"2.1.1":"764", "2.2.0":"821", "2.5.2":"1154",
+                     "3.0.3":"1716", "3.1.5":"1859","3.1.6":"1904",
+                     "4.0.0":"4051", "4.1.0":"5005", "4.1.1":"5914", "4.1.2":"6088",
+                     "4.5.0":"2061", "4.5.1":"0000", "4.6.0":"0000", "4.7.0":"0000"}
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1",
                             "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.5.0",
                             "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
                             "4.5.1", "4.6.0", "4.7.0"]
 COUCHBASE_RELEASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0",
                                     "3.1.1", "3.1.2", "3.1.3", "3.1.5", "4.0.0",
-                                    "4.1.0", "4.1.1"]
+                                    "4.1.0", "4.1.1", "4.1.2", "4.5.0"]
 COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
                             "4.5.1", "4.6.0", "4.7.0"]
 COUCHBASE_FROM_SHERLOCK = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
@@ -103,12 +107,16 @@ MIN_KV_QUOTA = 250
 INDEX_QUOTA = 512
 FTS_QUOTA = 256
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
+LINUX_COUCHBASE_PORT_CONFIG_PATH = "/opt/couchbase/etc/couchbase"
+LINUX_COUCHBASE_OLD_CONFIG_PATH = "/opt/couchbase/var/lib/couchbase/config/"
 LINUX_COUCHBASE_SAMPLE_PATH = "/opt/couchbase/samples/"
 LINUX_BACKUP_PATH = "/tmp/backup/"
 LINUX_ROOT_PATH = "/root/"
 WIN_COUCHBASE_BIN_PATH = "/cygdrive/c/Program\ Files/Couchbase/Server/bin/"
 WIN_COUCHBASE_SAMPLE_PATH = "/cygdrive/c/Program\ Files/Couchbase/Server/samples/"
 WIN_COUCHBASE_BIN_PATH_RAW = 'C:/Program\ Files/Couchbase/Server/bin/'
+WIN_COUCHBASE_PORT_CONFIG_PATH = "/cygdrive/c/Program\ Files/couchbase/Server/etc/couchbase"
+WIN_COUCHBASE_OLD_CONFIG_PATH = "/cygdrive/c/Program\ Files/couchbase/Server/var/lib/couchbase/config"
 WIN_TMP_PATH = '/cygdrive/c/tmp/'
 WIN_TMP_PATH_RAW = 'C:/tmp/'
 WIN_BACKUP_C_PATH = "c:/tmp/backup/"

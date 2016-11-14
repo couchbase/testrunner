@@ -71,11 +71,13 @@ class BucketTests(BaseUITestCase):
         NavigationHelper(self).navigate('Data Buckets')
         BucketHelper(self).create(self.bucket)
 
-        NavigationHelper(self).navigate('Views')
+        NavigationHelper(self).navigate('Indexes')
+        DdocViewHelper(self).click_view_tab(text='Views')
         view_name = 'test_view_ui'
         DdocViewHelper(self).create_view(view_name, view_name)
 
         NavigationHelper(self).navigate('Data Buckets')
+        BaseHelper(self).wait_ajax_loaded()
         BucketHelper(self).open_stats(self.bucket)
         total_views_st = BucketHelper(self).get_stat("views total disk size")
         view_st = BucketHelper(self).get_stat("disk size", block="view")
@@ -120,7 +122,8 @@ class InitializeTest(BaseUITestCase):
         try:
             super(InitializeTest, self).tearDown()
         finally:
-            self.cluster.shutdown()
+            if hasattr(self, 'cluster'):
+                self.cluster.shutdown()
 
     def test_initialize(self):
         try:
@@ -388,6 +391,7 @@ class ROuserTests(BaseUITestCase):
             self.assertFalse(btn.is_displayed(), "There is remove btn")
         self.log.info("Bucket check")
         navigator.navigate('Data Buckets')
+        BaseHelper(self).wait_ajax_loaded()
         BucketHelper(self).controls.bucket_info(bucket.name).arrow.click()
         self.assertFalse(BucketHelper(self).controls.edit_btn().is_displayed(),
                          "Bucket can be edited")
@@ -438,12 +442,12 @@ class ExternalUserTests(BaseUITestCase):
         if not expected_error:
             SettingsHelper(self).delete_external_user(username)
 
-
 class  RebalanceProgressTests(BaseUITestCase):
     def setUp(self):
         super(RebalanceProgressTests, self).setUp()
         self.helper = ServerHelper(self)
-        BaseHelper(self).login()
+        self.baseHelper = BaseHelper(self)
+        self.baseHelper.login()
         num_buckets = self.input.param("num_buckets", 1)
         self.buckets = []
         NavigationHelper(self).navigate('Data Buckets')
@@ -453,33 +457,30 @@ class  RebalanceProgressTests(BaseUITestCase):
                                                           saslPassword=bucket.sasl_password,
                                                            proxyPort=STANDARD_BUCKET_PORT + i + 1)
             self.buckets.append(bucket)
+        self.baseHelper.loadSampleBucket(self.servers[0], 'beer')
 
     def tearDown(self):
         super(RebalanceProgressTests, self).tearDown()
 
     def test_rebalance_in(self):
+        self.baseHelper = BaseHelper(self)
         NavigationHelper(self).navigate('Server Nodes')
         ServerHelper(self).add(self.input)
         ServerHelper(self).start_rebalancing()
         transfer_out_stat = ServerHelper(self).get_server_rebalance_progress(self.servers[0], 'out')
         transfer_in_stat = ServerHelper(self).get_server_rebalance_progress(self.servers[1], 'in')
-        self.verify_stats(transfer_out_stat)
-        self.verify_stats(transfer_in_stat)
+        self._verify_stats(transfer_out_stat)
+        self._verify_stats(transfer_in_stat)
 
-    def verify_stats(self, stats):
-        bucket_presence = False
-        for bucket in self.buckets:
-            bucket_presence = re.match(r'.*Bucket\:.*{0}.*(1 out of 1)*'.format(self.buckets[0].name),
-                                 stats["bucket"]) is not None
-            if bucket_presence:
-                break
-        self.assertTrue(bucket_presence, "Bucket in stats %s has incorrect format" % stats)
-        self.assertTrue(int(stats["total_transfer"].split(':')[1].strip()) >= int(stats["estimated_transfer"].split(':')[1].strip()),
+    def _verify_stats(self, stats):
+        self.assertTrue(int(stats["total_transfer"]) >= int(stats["estimated_transfer"]),
                         "total_transfer should be greater than estimated  in stats %s" % stats)
-        self.assertTrue(re.match(r'.*Number of Active# vBuckets and Replica# vBuckets to transfer:.*Active#-.*Replica#-.*',
-                                 stats["vbuckets"]) is not None, "VBuckets in stats %s has incorrect format" % stats)
+        self.assertTrue(re.match(r'.*Active#-.*Replica#-.*',str(stats["vbuckets"])),
+                        "VBuckets in stats %s has incorrect format" % stats)
 
-class  GracefullFailoverTests(BaseUITestCase):
+
+
+class GracefullFailoverTests(BaseUITestCase):
     def setUp(self):
         super(GracefullFailoverTests, self).setUp()
         self.master=self.servers[0]
@@ -576,11 +577,11 @@ class  GracefullFailoverTests(BaseUITestCase):
             RestConnection(self.servers[0]).monitorRebalance()
         self.log.info("Recovery checked")
 
+
 class ViewsTests(BaseUITestCase):
     def setUp(self):
         super(ViewsTests, self).setUp()
         self._initialize_nodes()
-        #RestConnection(self.servers[0]).create_bucket(bucket='default', ramQuotaMB=500)
         num_buckets = self.input.param("num_buckets", 1)
         self.ddoc_name = self.input.param("ddoc_name", "ddoc1")
         self.view_name = self.input.param("view_name", "view1")
@@ -773,13 +774,9 @@ class ServerTestControls():
                                                      text=server_ip)
         return self
 
-    def server_info_rebalance_progress(self, server_ip, direction):
-        if direction == 'in':
-            parent = 'rebalance_progress_in'
-        else:
-            parent = 'rebalance_progress_out'
-        return self.helper.find_control('server_info', 'rebalance_progress',
-                                                  text=server_ip)
+    def server_info_rebalance_progress(self, server_ip):
+        return self.helper.find_control('server_info', 'rebalance_progress')
+
     def rebalance_progress_bar(self, server_ip):
         return self.helper.find_control('server_info', 'rebalance_bar',
                                                      parent_locator='server_row',
@@ -1240,6 +1237,7 @@ class NavigationHelper():
         self.controls._navigation_tab_link(tab).click()
         self.wait.until(lambda fn: self._is_tab_selected(tab),
                         "tab '%s' is not selected in %d sec" % (tab, self.wait._timeout))
+        BaseHelper(self.tc).wait_ajax_loaded()
         self.tc.log.info("tab '%s' is selected" % tab)
 
 class ServerHelper():
@@ -1361,7 +1359,7 @@ class ServerHelper():
 
     def close_server_stats(self, server):
         self.tc.log.info("Close stats for server % s" % server.ip)
-        for i in [1,2,3]:
+        for i in xrange(3):
             try:
                 self.controls.server_info(server.ip).server_arrow_opened.click()
                 break
@@ -1377,16 +1375,15 @@ class ServerHelper():
     def get_server_rebalance_progress(self, server, direction):
         if not self.is_server_stats_opened(server):
             self.open_server_stats(server)
-        src = self.controls.server_info_rebalance_progress(server.ip, direction).get_inner_html()
+        BaseHelper(self.tc).wait_ajax_loaded()
+        src = self.controls.server_info_rebalance_progress(server.ip).get_text()
         src = src.split("Data being transferred %s" % direction)[1]
+        src = src.split('\n')
+        self.tc.log.info("Stats for %s: %s" % (server, src))
         stats = {}
-        stats["bucket"] = "Bucket:%s" % src.split("<span>Bucket:</span>")[1].split("</p>")[0].replace('\n',' ')
-        stats["total_transfer"] = "Total number of keys to be transferred:%s" %\
-                        src.split("Total number of keys to be transferred:</span>")[1].split("</p>")[0].replace('\n',' ')
-        stats["estimated_transfer"] = "Estimated number of keys transferred:%s" %\
-                        src.split("Estimated number of keys transferred:</span>")[1].split("</p>")[0].replace('\n',' ')
-        stats["vbuckets"] = "Number of Active# vBuckets and Replica# vBuckets to transfer:%s" %\
-                         src.split("vBuckets to transfer:")[1].split("</p>")[0].replace('\n',' ').replace('</span>', ' ')
+        stats["total_transfer"] = src[1].replace("Total number of keys to be transferred:", "")
+        stats["estimated_transfer"] = src[2].replace("Estimated number of keys transferred:", "")
+        stats["vbuckets"] = src[3].replace("Number of Active# vBuckets and Replica# vBuckets to transfer:","")
         self.close_server_stats(server)
         return stats
 
@@ -1433,6 +1430,7 @@ class ServerHelper():
         return opened
 
     def confirm_failover(self, confirm=True, is_graceful=None, confirm_failover_check=False):
+        time.sleep(1)
         if is_graceful:
             self.controls.failover_confirmation().failover_conf_gracefull_option.check()
             self.tc.log.info("Graceful Failover Enabled")
@@ -1542,6 +1540,7 @@ class ServerHelper():
                         "Recovery btn is not displayed in %d sec" % (self.wait._timeout))
         self.tc.log.info("Recovery checked")
 
+
 class BucketHelper():
     def __init__(self, tc):
         self.tc = tc
@@ -1560,13 +1559,14 @@ class BucketHelper():
                             "Warning 'Cluster Memory Fully Allocated' appeared")
         self.fill_bucket_info(bucket)
         self.controls.bucket_pop_up().create_btn.click()
+        BaseHelper(self.tc).wait_ajax_loaded()
         self.tc.log.info("created bucket '%s'" % bucket.name)
         if self.controls.bucket_pop_up().create_bucket_pop_up.is_present():
-            self.wait.until_not(lambda fn:
-                            self.controls.bucket_pop_up().create_bucket_pop_up.is_displayed(),
-                            "create new bucket pop up is not closed in %d sec" % self.wait._timeout)
+             self.wait.until_not(lambda fn:
+                                 self.controls.bucket_pop_up().create_bucket_pop_up.is_displayed(),
+                                 "create new bucket pop up is not closed in %d sec" % self.wait._timeout)
         self.wait.until(lambda fn: self.is_bucket_present(bucket),
-                         "Bucket '%s' is not displayed" % bucket)
+                        "Bucket '%s' is not displayed" % bucket)
         self.tc.log.info("bucket '%s' is displayed" % bucket)
         #self.wait.until(lambda fn: self.is_bucket_helthy(bucket),
         #                "Bucket '%s' is not  in healthy state" % bucket)
@@ -1681,7 +1681,7 @@ class BucketHelper():
             try:
                 self.controls.bucket_info(bucket.name).documents.click()
                 break
-            except StaleElementReferenceException:
+            except AttributeError:
                 pass
 
     def open_stats(self, bucket):
@@ -1785,7 +1785,7 @@ class NodeInitializeHelper():
     def _fill_2_step(self, input):
         if input.param("sample", None):
             self.controls.step_2_sample(input.param("sample", None)).check()
-            #TODO successfull loading?
+            #TODO successful loading?
 
     def _fill_3_step(self, input):
         BucketHelper(self.tc).fill_bucket_info(Bucket(parse_bucket=input),
@@ -1835,6 +1835,10 @@ class DdocViewHelper():
 
     def create_view(self, ddoc_name, view_name, dev_view=True):
         self.tc.log.info('trying create a view %s' % view_name)
+        BaseHelper(self.tc).wait_ajax_loaded()
+        self.wait.until(lambda fn:
+                        self.controls.view_btn().create_view_btn.is_displayed(),
+                        "Create View button is not displayed")
         self.controls.view_btn().create_view_btn.click()
         self.wait.until(lambda fn:
                         self.controls.create_pop_up().pop_up.is_displayed(),
@@ -1957,6 +1961,7 @@ class DdocViewHelper():
 
     def verify_view_results(self, view_set, reduce_fn, value=0):
         self.tc.log.info('Verify View Results')
+        BaseHelper(self.tc).wait_ajax_loaded()
         if view_set == 'dev':
             self.wait.until(lambda fn:
                             self.controls.view_results_container().dev_subset.is_displayed,
@@ -2283,6 +2288,7 @@ class SettingsHelper():
         self.controls.user_create_info().password.type(pwd, is_pwd=True)
         self.controls.user_create_info().verify_password.type(verify_pwd, is_pwd=True)
         self.controls.user_create_info().create_btn.click()
+        BaseHelper(self.tc).wait_ajax_loaded()
         self.wait.until(lambda fn: self.is_user_created() or self.is_error_present(),
                         "No reaction for create btn in %d sec" % (self.wait._timeout))
         if self.is_error_present():

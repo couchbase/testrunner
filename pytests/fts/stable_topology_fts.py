@@ -3,6 +3,7 @@ from fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from TestInput import TestInputSingleton
+import copy
 
 class StableTopFTS(FTSBaseTest):
 
@@ -300,13 +301,7 @@ class StableTopFTS(FTSBaseTest):
         #delete default bucket
         self._cb_cluster.delete_bucket("default")
         master = self._cb_cluster.get_master_node()
-        from lib.remote.remote_util import RemoteMachineShellConnection
-        shell = RemoteMachineShellConnection(master)
-        shell.execute_command("""curl -v -u Administrator:password \
-                         -X POST http://{0}:8091/sampleBuckets/install \
-                      -d '["beer-sample"]'""".format(master.ip))
-        shell.disconnect()
-        self.sleep(20)
+        self.load_sample_buckets(server=master, bucketName="beer-sample")
         bucket = self._cb_cluster.get_bucket_by_name("beer-sample")
         index = self.create_index(bucket, "beer-index")
         self.wait_for_indexing_complete()
@@ -468,18 +463,15 @@ class StableTopFTS(FTSBaseTest):
         """
         Test the Searchable As property in field mapping
         """
-        field_name = self._input.param("field_name", "")
-        field_type = self._input.param("field_type", "")
-        field_alias = self._input.param("field_alias", "")
-
         self.load_data()
 
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         self.wait_for_indexing_complete()
-        index.add_child_field_to_default_mapping(field_name=field_name, field_type=field_type,
-                                                 field_alias=field_alias)
+        index.add_child_field_to_default_mapping(field_name=self.field_name,
+                                                 field_type=self.field_type,
+                                                 field_alias=self.field_alias)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         self.sleep(5)
@@ -497,3 +489,383 @@ class StableTopFTS(FTSBaseTest):
                                                 zero_results_ok=zero_results_ok,
                                                 expected_hits=expected_hits)
             self.log.info("Hits: %s" % hits)
+
+    def test_one_field_multiple_analyzer(self):
+        """
+        1. Create an default FTS index on wiki dataset
+        2. Update it to add a field mapping for revision.text.#text field with 'en' analyzer
+        3. Should get 0 search results for a query
+        4. Update it to add another field mapping for the same field, with 'fr' analyzer
+        5. Same query should yield more results now.
+
+        """
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_child_field_to_default_mapping(field_name=self.field_name,
+                                                 field_type=self.field_type,
+                                                 field_alias=self.field_alias,
+                                                 analyzer="en")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits1", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+            self.log.info("Hits: %s" % hits)
+
+        index.add_analyzer_to_existing_field_map(field_name=self.field_name,
+                                                 field_type=self.field_type,
+                                                 field_alias=self.field_alias,
+                                                 analyzer="fr")
+
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits2", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+            self.log.info("Hits: %s" % hits)
+
+    def test_facets(self):
+        field_indexed = self._input.param("field_indexed",True)
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_child_field_to_default_mapping(field_name="type",
+                                                 field_type="text",
+                                                 field_alias="type",
+                                                 analyzer="keyword")
+        if field_indexed:
+            index.add_child_field_to_default_mapping(field_name="dept",
+                                                 field_type="text",
+                                                 field_alias="dept",
+                                                 analyzer="keyword")
+            index.add_child_field_to_default_mapping(field_name="salary",
+                                                 field_type="number",
+                                                 field_alias="salary")
+            index.add_child_field_to_default_mapping(field_name="join_date",
+                                                 field_type="datetime",
+                                                 field_alias="join_date")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, _, _, _, facets = index.execute_query_with_facets(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=expected_hits)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Facets: %s" % facets)
+                index.validate_facets_in_search_results(no_of_hits=hits,
+                                                        facets_returned=facets)
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: "+ err.message)
+
+    def test_doc_config(self):
+        # delete default bucket
+        self._cb_cluster.delete_bucket("default")
+        master = self._cb_cluster.get_master_node()
+
+        # Load Travel Sample bucket and create an index
+        self.load_sample_buckets(server=master, bucketName="travel-sample")
+        bucket = self._cb_cluster.get_bucket_by_name("travel-sample")
+        index = self.create_index(bucket, "travel-index")
+        self.sleep(10)
+
+        # Add Type Mapping
+        index.add_type_mapping_to_index_definition(type="airport",
+                                                   analyzer="en")
+        mode = self._input.param("doc_config_mode", "type_field")
+        index.add_doc_config_to_index_definition(mode=mode)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(15)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True,
+                                  zero_rows_ok=False)
+
+        # Run Query
+        expected_hits = int(self._input.param("expected_hits", 0))
+        query = eval(self._input.param("query", str(self.sample_query)))
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=False,
+                                                expected_hits=expected_hits)
+                self.log.info("Hits: %s" % hits)
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    def test_boost_query_type(self):
+        # Create bucket, create index
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_type_mapping_to_index_definition(type="emp",
+                                                   analyzer="keyword")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(15)
+        self.wait_for_indexing_complete()
+        zero_results_ok = False
+        expected_hits = 3
+
+        # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
+        # emp10000042. Should be the same
+        query = {"disjuncts": [{"match": "Safiya", "field": "name"},
+                               {"match": "Palmer", "field": "name"}]}
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Contents: %s" % contents)
+                score_before_boosting_doc1 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000071')
+                score_before_boosting_doc2 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000042')
+
+                self.log.info("Scores before boosting:")
+                self.log.info("")
+                self.log.info("emp10000071: %s", score_before_boosting_doc1)
+                self.log.info("emp10000042: %s", score_before_boosting_doc2)
+
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+        if not score_before_boosting_doc1 == score_before_boosting_doc2:
+            self.fail("Testcase failed: Scores for emp10000071 & emp10000042 "
+                      "are not equal before boosting")
+
+        # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
+        # emp10000042. emp10000071 score should have improved w.r.t. emp10000042
+        query = {"disjuncts": [{"match": "Safiya^2", "field": "name"},
+                               {"match": "Palmer", "field": "name"}]}
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Contents: %s" % contents)
+                score_after_boosting_doc1 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000071')
+                score_after_boosting_doc2 = index.get_score_from_query_result_content(
+                    contents=contents, doc_id=u'emp10000042')
+
+                self.log.info("Scores after boosting:")
+                self.log.info("")
+                self.log.info("emp10000071: %s", score_after_boosting_doc1)
+                self.log.info("emp10000042: %s", score_after_boosting_doc2)
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+        if not score_after_boosting_doc1 > score_after_boosting_doc2:
+            self.fail("Testcase failed: Boosting didn't improve score for emp10000071 w.r.t emp10000042")
+
+    def test_doc_id_query_type(self):
+        # Create bucket, create index
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_type_mapping_to_index_definition(type="emp",
+                                                   analyzer="keyword")
+
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(15)
+        self.wait_for_indexing_complete()
+
+        expected_hits = int(self._input.param("expected_hits", 0))
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        # From the Query string, fetch the Doc IDs
+        doc_ids = copy.deepcopy(query['ids'])
+
+        # If invalid_doc_id param is passed, add this to the query['ids']
+        invalid_doc_id = self._input.param("invalid_doc_id",0)
+        if invalid_doc_id:
+            query['ids'].append(invalid_doc_id)
+
+        # If disjuncts_query is passed, join query and disjuncts_query
+        # to form a new query string
+        disjuncts_query = self._input.param("disjuncts_query", None)
+        if disjuncts_query:
+            if isinstance(disjuncts_query, str):
+                disjuncts_query = json.loads(disjuncts_query)
+            new_query = {}
+            new_query['disjuncts'] = []
+            new_query['disjuncts'].append(disjuncts_query)
+            new_query['disjuncts'].append(query)
+            query = new_query
+
+        # Execute Query
+        zero_results_ok = False
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query,
+                                            zero_results_ok=zero_results_ok,
+                                            expected_hits=expected_hits,
+                                            return_raw_hits=True)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Contents: %s" % contents)
+                # For each doc id passed in the query, validate the
+                # presence in the search results
+                for doc_id in doc_ids:
+                    self.assertTrue(index.is_doc_present_in_query_result_content
+                                    (contents=contents, doc_id=doc_id),"Doc ID "
+                                    "%s is not present in Search results"
+                                    % doc_id)
+                    score = index.get_score_from_query_result_content\
+                        (contents=contents, doc_id=doc_id)
+                    self.log.info ("Score for Doc ID {0} is {1}".
+                                   format(doc_id,score))
+                if invalid_doc_id:
+                    # Validate if invalid doc id was passed, it should
+                    # not be present in the search results
+                    self.assertFalse(index.is_doc_present_in_query_result_content
+                                     (contents=contents, doc_id=invalid_doc_id),
+                                     "Doc ID %s is present in Search results"
+                                     % invalid_doc_id)
+
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    def test_sorting_of_results(self):
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"disjuncts": [{"match": "Safiya", "field": "name"},
+                               {"match": "Palmer", "field": "name"}]}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, raw_hits, _, _ = index.execute_query(query = query,
+                                                        zero_results_ok=zero_results_ok,
+                                                        expected_hits=expected_hits,
+                                                        sort_fields=self.sort_fields,
+                                                        return_raw_hits=True)
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Doc IDs: %s" % raw_hits)
+                if hits:
+                    result = index.validate_sorted_results(raw_hits,
+                                                           self.sort_fields)
+                    if not result:
+                        self.fail(
+                            "Testcase failed. Actual results do not match expected.")
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    def test_sorting_of_results_custom_map(self):
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        index.add_child_field_to_default_mapping(field_name="name",
+                                                 field_type="text",
+                                                 field_alias="name",
+                                                 analyzer="en")
+        index.add_child_field_to_default_mapping(field_name="join_date",
+                                                 field_type="datetime",
+                                                 field_alias="join_date")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5)
+        self.wait_for_indexing_complete()
+
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"disjuncts": [{"match": "Safiya", "field": "name"},
+                                       {"match": "Palmer", "field": "name"}]}
+
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, raw_hits, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           sort_fields=self.sort_fields,
+                                                           return_raw_hits=True)
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Doc IDs: %s" % raw_hits)
+                if hits:
+                    result = index.validate_sorted_results(raw_hits,
+                                                       self.sort_fields)
+                    if not result:
+                        self.fail(
+                            "Testcase failed. Actual results do not match expected.")
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)

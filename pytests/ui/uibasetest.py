@@ -2,7 +2,6 @@ import logger
 import time
 import unittest
 import os
-import urllib2
 import commands
 import types
 import datetime
@@ -10,12 +9,11 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from threading import Thread
 import ConfigParser
-from TestInput import TestInputSingleton, TestInputParser, TestInputServer
+from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -149,6 +147,7 @@ class BaseUITestCase(unittest.TestCase):
                                                desired_capabilities=DesiredCapabilities.FIREFOX)
             elif self.browser == 'chrome':
                 self.log.info("Test Couchbase Server UI in Chrome")
+
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
                                                .format(self.machine.ip,
                                                        self.machine.port),
@@ -185,13 +184,19 @@ class BaseUITestCase(unittest.TestCase):
 
     def tearDown(self):
         try:
-            if self.driver:
+            test_failed = len(self._resultForDoCleanups.errors)
+            if self.driver and test_failed:
                 path_screen = self.input.ui_conf['screenshots'] or 'logs/screens'
                 full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
                 self.log.info('screenshot is available: %s' % full_path)
                 if not os.path.exists(path_screen):
                     os.mkdir(path_screen)
                 self.driver.get_screenshot_as_file(os.path.abspath(full_path))
+            if self.driver:
+                self.driver.close()
+            if test_failed and TestInputSingleton.input.param("stop-on-failure", False):
+                print "test fails, teardown will be skipped!!!"
+                return
             rest = RestConnection(self.servers[0])
             if rest._rebalance_progress_status() == 'running':
                 stopped = rest.stop_rebalance()
@@ -200,8 +205,6 @@ class BaseUITestCase(unittest.TestCase):
             for server in self.servers:
                 ClusterOperationHelper.cleanup_cluster([server])
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-            if self.driver:
-                self.driver.close()
         except Exception as e:
             raise e
         finally:
@@ -314,9 +317,6 @@ class Control():
     def mouse_over(self):
         ActionChains(self.selenium).move_to_element(self.web_element).perform()
 
-    def get_inner_html(self):
-        return self.web_element.get_attribute("outerHTML")
-
 
 class ControlsHelper():
     def __init__(self, driver):
@@ -344,7 +344,6 @@ class ControlsHelper():
         by = self._find_by(section, locator, parent_locator)
         if text:
             by = by.format(text)
-        controls = []
         elements = self.driver.find_elements_by_xpath(by)
         for element in elements:
             try:
@@ -370,6 +369,7 @@ class BaseHelperControls():
         self._login_btn = helper.find_control('login', 'login_btn')
         self._logout_btn = helper.find_control('login', 'logout_btn')
         self.error = helper.find_control('login', 'error')
+        self.ajax_spinner = helper.find_control('login', 'ajax_spinner')
 
 
 class BaseHelper():
@@ -377,6 +377,13 @@ class BaseHelper():
         self.tc = tc
         self.controls = BaseHelperControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=100)
+
+    def wait_ajax_loaded(self):
+        try:
+            self.wait.until_not(lambda fn:  self.controls.ajax_spinner.is_displayed(),
+                                "Page is still loaded")
+        except StaleElementReferenceException:
+            pass
 
     def login(self, user=None, password=None):
         self.tc.log.info("Try to login to Couchbase Server in browser")
@@ -421,18 +428,12 @@ class BaseHelper():
         username = self.tc.input.membase_settings.rest_username
         password = self.tc.input.membase_settings.rest_password
 
-        sample_bucket_path = {"beer":"/opt/couchbase/samples/beer-sample.zip",
-                              "game-sim":"/opt/couchbase/samples/gamesim-sample.zip",
-                              "travel":"/opt/couchbase/samples/travel-sample.zip"}
+        sample_bucket_path = "/opt/couchbase/samples/%s-sample.zip" % bucketName
         command = '/opt/couchbase/bin/cbdocloader -n ' + node.ip + ':' + \
                   node.port + ' -u ' + username + ' -p ' + password + \
-                  ' -b ' + bucketName + ' -s 100 ' + \
-                  sample_bucket_path[bucketName]
+                  ' -b ' + bucketName + ' -s 100 ' + sample_bucket_path
 
-        self.tc.log.info('Command : '+command)
-
-        o,r = shell.execute_command(command)
-
-        shell.log_command_output(o,r)
-
+        self.tc.log.info('Command: %s ', command)
+        o, r = shell.execute_command(command)
+        shell.log_command_output(o, r)
         self.tc.log.info("Done loading sample bucket %s", bucketName)

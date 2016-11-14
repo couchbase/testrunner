@@ -4,7 +4,9 @@ from membase.api.rest_client import RestConnection
 from testconstants import LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
-from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH
+from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH,\
+                          WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
+                          WIN_COUCHBASE_LOGS_PATH
 import logger
 import random
 import time
@@ -21,6 +23,14 @@ class CliBaseTest(BaseTestCase):
         self.vbucket_count = 1024
         self.shell = RemoteMachineShellConnection(self.master)
         self.rest = RestConnection(self.master)
+        self.import_back = self.input.param("import_back", False)
+        if self.import_back:
+            if len(self.servers) < 3:
+                self.fail("This test needs minimum of 3 vms to run ")
+        self.test_type = self.input.param("test_type", "import")
+        self.import_file = self.input.param("import_file", None)
+        self.imex_type = self.input.param("imex_type", "json")
+        self.format_type = self.input.param("format_type", None)
         self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
         info = self.shell.extract_remote_info()
@@ -33,26 +43,45 @@ class CliBaseTest(BaseTestCase):
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         self.root_path = LINUX_ROOT_PATH
         self.tmp_path = "/tmp/"
+        self.cmd_backup_path = LINUX_BACKUP_PATH
+        self.backup_path = LINUX_BACKUP_PATH
+        self.cmd_ext = ""
+        self.src_file = ""
+        self.des_file = ""
         self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
+        self.log_path = LINUX_COUCHBASE_LOGS_PATH
         if type == 'windows':
             self.os = 'windows'
+            self.cmd_ext = ".exe"
             self.root_path = WIN_ROOT_PATH
             self.tmp_path = WIN_TMP_PATH
+            self.cmd_backup_path = WIN_BACKUP_C_PATH
+            self.backup_path = WIN_BACKUP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
             self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH
+            self.log_path = WIN_COUCHBASE_LOGS_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
             self.cli_command_path = MAC_COUCHBASE_BIN_PATH
         self.full_v, self.short_v, self.build_number = self.shell.get_cbversion(type)
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
+        self.cb_login_info = "%s:%s" % (self.couchbase_usrname,
+                                        self.couchbase_password)
+        self.path_type = self.input.param("path_type", None)
+        if self.path_type is None:
+            self.log.info("Test command with absolute path ")
+        elif self.path_type == "local":
+            self.log.info("Test command at %s dir " % self.cli_command_path)
+            self.cli_command_path = "cd %s; ./" % self.cli_command_path
         self.cli_command = self.input.param("cli_command", None)
         self.command_options = self.input.param("command_options", None)
         if self.command_options is not None:
             self.command_options = self.command_options.split(";")
         if str(self.__class__).find('couchbase_clitest.CouchbaseCliTest') == -1:
-            servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
-            self.cluster.rebalance(self.servers[:1], servers_in, [])
+            if len(self.servers) > 1 and int(self.nodes_init) == 1:
+                servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
+                self.cluster.rebalance(self.servers[:1], servers_in, [])
 
     def tearDown(self):
         if not self.input.param("skip_cleanup", True):
@@ -118,6 +147,7 @@ class CliBaseTest(BaseTestCase):
         rest = RestConnection(server)
         hostname = "%s:%s" % (server.ip, server.port)
         expected_services = expected_services.replace("data", "kv")
+        expected_services = expected_services.replace("query", "n1ql")
         expected_services = expected_services.split(",")
 
         nodes_services = rest.get_nodes_services()
@@ -136,38 +166,6 @@ class CliBaseTest(BaseTestCase):
 
         log.info("Services on %s not found, the server may not exist", hostname)
         return False
-
-
-    def verifyIndexStorageMode(self, server, storage_mode):
-        """Verifies that the index storage mode was set properly
-
-            Options:
-            server - A TestInputServer object of the server to connect to
-            storage_mode - A string containing the expected storage mode
-
-            Returns a boolean corresponding to whether or not the expected index storage mode was set.
-            """
-        # TODO - The ports for services should be inferred by the rest client
-        server.index_port = 9102
-        rest = RestConnection(server)
-        settings = rest.get_index_settings()
-
-        if storage_mode == "default":
-            storage_mode = "forestdb"
-        elif storage_mode == "memopt":
-            storage_mode = "memory_optimized"
-
-        if "indexer.settings.storage_mode" in settings:
-            if settings["indexer.settings.storage_mode"] == storage_mode:
-                return True
-            else:
-                log.info("Index storage mode does not match expected (`%s` vs `%s`)",
-                         settings["indexer.settings.storage_mode"], storage_mode)
-        else:
-            log.info("Index storage mode not found in settings")
-
-        return False
-
 
     def verifyRamQuotas(self, server, data, index, fts):
         """Verifies that the RAM quotas for each service are set properly
@@ -314,6 +312,406 @@ class CliBaseTest(BaseTestCase):
         if enabled:
             return True
         return False
+
+    def verifyIndexSettings(self, server, max_rollbacks, stable_snap_interval, mem_snap_interval,
+                                                     storage_mode, threads, log_level):
+        rest = RestConnection(server)
+        settings = rest.get_global_index_settings()
+
+        if storage_mode == "default":
+            storage_mode = "forestdb"
+        elif storage_mode == "memopt":
+            storage_mode = "memory_optimized"
+
+        if max_rollbacks and str(settings["maxRollbackPoints"]) != str(max_rollbacks):
+            log.info("Max rollbacks does not match (%s vs. %s)", str(settings["maxRollbackPoints"]), str(max_rollbacks))
+            return False
+        if stable_snap_interval and str(settings["stableSnapshotInterval"]) != str(stable_snap_interval):
+            log.info("Stable snapshot interval does not match (%s vs. %s)", str(settings["stableSnapshotInterval"]),
+                     str(stable_snap_interval))
+            return False
+        if mem_snap_interval and str(settings["memorySnapshotInterval"]) != str(mem_snap_interval):
+            log.info("Memory snapshot interval does not match (%s vs. %s)", str(settings["memorySnapshotInterval"]),
+                     str(mem_snap_interval))
+            return False
+        if storage_mode and str(settings["storageMode"]) != str(storage_mode):
+            log.info("Storage mode does not match (%s vs. %s)", str(settings["storageMode"]), str(storage_mode))
+            return False
+        if threads and str(settings["indexerThreads"]) != str(threads):
+            log.info("Threads does not match (%s vs. %s)", str(settings["indexerThreads"]), str(threads))
+            return False
+        if log_level and str(settings["logLevel"]) != str(log_level):
+            log.info("Log level does not match (%s vs. %s)", str(settings["logLevel"]), str(log_level))
+            return False
+
+        return True
+
+    def verifyAutofailoverSettings(self, server, enabled, timeout):
+        rest = RestConnection(server)
+        settings = rest.get_autofailover_settings()
+
+        if enabled and not ((str(enabled) == "1" and settings.enabled) or (str(enabled) == "0" and not settings.enabled)):
+            log.info("Enabled does not match (%s vs. %s)", str(enabled), str(settings.enabled))
+            return False
+        if timeout and str(settings.timeout) != str(timeout):
+            log.info("Timeout does not match (%s vs. %s)", str(timeout), str(settings.timeout))
+            return False
+
+        return True
+
+    def verifyAuditSettings(self, server, enabled, log_path, rotate_interval):
+        rest = RestConnection(server)
+        settings = rest.getAuditSettings()
+
+        if enabled and not ((str(enabled) == "1" and settings["auditdEnabled"]) or (str(enabled) == "0" and not settings["auditdEnabled"])):
+            log.info("Enabled does not match (%s vs. %s)", str(enabled), str(settings["auditdEnabled"]))
+            return False
+        if log_path and str(str(settings["logPath"])) != str(log_path):
+            log.info("Log path does not match (%s vs. %s)", str(log_path), str(settings["logPath"]))
+            return False
+
+        if rotate_interval and str(str(settings["rotateInterval"])) != str(rotate_interval):
+            log.info("Rotate interval does not match (%s vs. %s)", str(rotate_interval), str(settings["rotateInterval"]))
+            return False
+
+        return True
+
+    def verifyPendingServer(self, server, server_to_add, group_name, services):
+        rest = RestConnection(server)
+        settings = rest.get_all_zones_info()
+        if not settings or "groups" not in settings:
+            log.info("Group settings payload appears to be invalid")
+            return False
+
+        expected_services = services.replace("data", "kv")
+        expected_services = expected_services.replace("query", "n1ql")
+        expected_services = expected_services.split(",")
+
+        for group in settings["groups"]:
+            for node in group["nodes"]:
+                if node["hostname"] == server_to_add:
+                    if node["clusterMembership"] != "inactiveAdded":
+                        log.info("Node `%s` not in pending status", server_to_add)
+                        return False
+
+                    if group["name"] != group_name:
+                        log.info("Node `%s` not in correct group (%s vs %s)", node["hostname"], group_name,
+                                 group["name"])
+                        return False
+
+                    if len(node["services"]) != len(expected_services):
+                        log.info("Services do not match on %s (%s vs %s) ", node["hostname"], services,
+                                 ",".join(node["services"]))
+                        return False
+
+                    for service in node["services"]:
+                        if service not in expected_services:
+                            log.info("Services do not match on %s (%s vs %s) ", node["hostname"], services,
+                                     ",".join(node["services"]))
+                            return False
+                    return True
+
+        log.info("Node `%s` not found in nodes list", server_to_add)
+        return False
+
+    def verifyPendingServerDoesNotExist(self, server, server_to_add):
+        rest = RestConnection(server)
+        settings = rest.get_all_zones_info()
+        if not settings or "groups" not in settings:
+            log.info("Group settings payload appears to be invalid")
+            return False
+
+        for group in settings["groups"]:
+            for node in group["nodes"]:
+                if node["hostname"] == server_to_add:
+                    return False
+
+        log.info("Node `%s` not found in nodes list", server_to_add)
+        return True
+
+    def verifyActiveServers(self, server, expected_num_servers):
+        return self._verifyServersByStatus(server, expected_num_servers, "active")
+
+    def verifyFailedServers(self, server, expected_num_servers):
+        return self._verifyServersByStatus(server, expected_num_servers, "inactiveFailed")
+
+    def _verifyServersByStatus(self, server, expected_num_servers, status):
+        rest = RestConnection(server)
+        settings = rest.get_pools_default()
+
+        count = 0
+        for node in settings["nodes"]:
+            if node["clusterMembership"] == status:
+                count += 1
+
+        return count == expected_num_servers
+
+    def verifyRecoveryType(self, server, recovery_servers, recovery_type):
+        rest = RestConnection(server)
+        settings = rest.get_all_zones_info()
+        if not settings or "groups" not in settings:
+            log.info("Group settings payload appears to be invalid")
+            return False
+
+        if not recovery_servers:
+            return True
+
+        num_found = 0
+        recovery_servers = recovery_servers.split(",")
+        for group in settings["groups"]:
+            for node in group["nodes"]:
+                for rs in recovery_servers:
+                    if node["hostname"] == rs:
+                        if node["recoveryType"] != recovery_type:
+                            log.info("Node %s doesn't contain recovery type %s ", rs, recovery_type)
+                            return False
+                        else:
+                            num_found = num_found + 1
+
+        if num_found == len(recovery_servers):
+            return True
+
+        log.info("Node `%s` not found in nodes list", ",".join(recovery_servers))
+        return False
+
+    def verifyReadOnlyUser(self, server, username):
+        rest = RestConnection(server)
+        ro_user, status = rest.get_ro_user()
+        if not status:
+            log.info("Getting the read only user failed")
+            return False
+
+        if ro_user.startswith('"') and ro_user.endswith('"'):
+            ro_user = ro_user[1:-1]
+
+        if ro_user != username:
+            log.info("Read only user name does not match (%s vs %s)", ro_user, username)
+            return False
+        return True
+
+    def verifyLdapSettings(self, server, admins, ro_admins, default, enabled):
+        rest = RestConnection(server)
+        settings = rest.ldapRestOperationGetResponse()
+
+        if admins is None:
+            admins = []
+        else:
+            admins = admins.split(",")
+
+        if ro_admins is None:
+            ro_admins = []
+        else:
+            ro_admins = ro_admins.split(",")
+
+        if str(enabled) == "0":
+            admins = []
+            ro_admins = []
+
+        if default == "admins" and str(enabled) == "1":
+            if settings["admins"] != "asterisk":
+                log.info("Admins don't match (%s vs asterisk)", settings["admins"])
+                return False
+        elif not self._list_compare(settings["admins"], admins):
+            log.info("Admins don't match (%s vs %s)", settings["admins"], admins)
+            return False
+
+        if default == "roadmins" and str(enabled) == "1":
+            if settings["roAdmins"] != "asterisk":
+                log.info("Read only admins don't match (%s vs asterisk)", settings["roAdmins"])
+                return False
+        elif not self._list_compare(settings["roAdmins"], ro_admins):
+            log.info("Read only admins don't match (%s vs %s)", settings["roAdmins"], ro_admins)
+            return False
+
+        return True
+
+    def verifyAlertSettings(self, server, enabled, email_recipients, email_sender, email_username, email_password, email_host,
+                            email_port, encrypted, alert_af_node, alert_af_max_reached, alert_af_node_down, alert_af_small,
+                            alert_af_disable, alert_ip_changed, alert_disk_space, alert_meta_overhead, alert_meta_oom,
+                            alert_write_failed, alert_audit_dropped):
+        rest = RestConnection(server)
+        settings = rest.get_alerts_settings()
+        print settings
+
+        if not enabled:
+            if not settings["enabled"]:
+                return True
+            else:
+                log.info("Alerts should be disabled")
+                return False
+
+        if encrypted is None or encrypted == "0":
+            encrypted = False
+        else:
+            encrypted = True
+
+        if email_recipients is not None and not self._list_compare(email_recipients.split(","), settings["recipients"]):
+            log.info("Email recipients don't match (%s vs %s)", email_recipients.split(","), settings["recipients"])
+            return False
+
+        if email_sender is not None and email_sender != settings["sender"]:
+            log.info("Email sender does not match (%s vs %s)", email_sender, settings["sender"])
+            return False
+
+        if email_username is not None and email_username != settings["emailServer"]["user"]:
+            log.info("Email username does not match (%s vs %s)", email_username, settings["emailServer"]["user"])
+            return False
+
+        if email_host is not None and email_host != settings["emailServer"]["host"]:
+            log.info("Email host does not match (%s vs %s)", email_host, settings["emailServer"]["host"])
+            return False
+
+        if email_port is not None and email_port != settings["emailServer"]["port"]:
+            log.info("Email port does not match (%s vs %s)", email_port, settings["emailServer"]["port"])
+            return False
+
+        if encrypted is not None and encrypted != settings["emailServer"]["encrypt"]:
+            log.info("Email encryption does not match (%s vs %s)", encrypted, settings["emailServer"]["encrypt"])
+            return False
+
+        alerts = list()
+        if alert_af_node:
+            alerts.append('auto_failover_node')
+        if alert_af_max_reached:
+            alerts.append('auto_failover_maximum_reached')
+        if alert_af_node_down:
+            alerts.append('auto_failover_other_nodes_down')
+        if alert_af_small:
+           alerts.append('auto_failover_cluster_too_small')
+        if alert_af_disable:
+            alerts.append('auto_failover_disabled')
+        if alert_ip_changed:
+            alerts.append('ip')
+        if alert_disk_space:
+            alerts.append('disk')
+        if alert_meta_overhead:
+            alerts.append('overhead')
+        if alert_meta_oom:
+            alerts.append('ep_oom_errors')
+        if alert_write_failed:
+            alerts.append('ep_item_commit_failed')
+        if alert_audit_dropped:
+            alerts.append('audit_dropped_events')
+
+        if not self._list_compare(alerts, settings["alerts"]):
+            log.info("Alerts don't match (%s vs %s)", alerts, settings["alerts"])
+            return False
+
+        return True
+
+    def verify_node_settings(self, server, data_path, index_path, hostname):
+        rest = RestConnection(server)
+        node_settings = rest.get_nodes_self()
+
+        if data_path != node_settings.storage[0].path:
+            log.info("Data path does not match (%s vs %s)", data_path, node_settings.storage[0].path)
+            return False
+        if index_path != node_settings.storage[0].index_path:
+            log.info("Index path does not match (%s vs %s)", index_path, node_settings.storage[0].index_path)
+            return False
+        if hostname is not None:
+            if hostname != node_settings.hostname:
+                log.info("Hostname does not match (%s vs %s)", hostname, node_settings.hostname)
+                return True
+        return True
+
+    def verifyCompactionSettings(self, server, db_frag_perc, db_frag_size, view_frag_perc, view_frag_size, from_period,
+                                 to_period, abort_outside, parallel_compact, purgeInt):
+        rest = RestConnection(server)
+        settings = rest.get_auto_compaction_settings()
+        ac = settings["autoCompactionSettings"]
+
+        if db_frag_perc is not None and str(db_frag_perc) != str(ac["databaseFragmentationThreshold"]["percentage"]):
+            log.info("DB frag perc does not match (%s vs %s)", str(db_frag_perc),
+                     str(ac["databaseFragmentationThreshold"]["percentage"]))
+            return False
+
+        if db_frag_size is not None and str(db_frag_size*1024**2) != str(ac["databaseFragmentationThreshold"]["size"]):
+            log.info("DB frag size does not match (%s vs %s)", str(db_frag_size*1024**2),
+                     str(ac["databaseFragmentationThreshold"]["size"]))
+            return False
+
+        if view_frag_perc is not None and str(view_frag_perc) != str(ac["viewFragmentationThreshold"]["percentage"]):
+            log.info("View frag perc does not match (%s vs %s)", str(view_frag_perc),
+                     str(ac["viewFragmentationThreshold"]["percentage"]))
+            return False
+
+        if view_frag_size is not None and str(view_frag_size*1024**2) != str(ac["viewFragmentationThreshold"]["size"]):
+            log.info("View frag size does not match (%s vs %s)", str(view_frag_size*1024**2),
+                     str(ac["viewFragmentationThreshold"]["size"]))
+            return False
+
+        print from_period, to_period
+        if from_period is not None:
+            fromHour, fromMin = from_period.split(":", 1)
+            if int(fromHour) != int(ac["allowedTimePeriod"]["fromHour"]):
+                log.info("From hour does not match (%s vs %s)", str(fromHour),
+                         str(ac["allowedTimePeriod"]["fromHour"]))
+                return False
+            if int(fromMin) != int(ac["allowedTimePeriod"]["fromMinute"]):
+                log.info("From minute does not match (%s vs %s)", str(fromMin),
+                         str(ac["allowedTimePeriod"]["fromMinute"]))
+                return False
+
+        if to_period is not None:
+            toHour, toMin = to_period.split(":", 1)
+            if int(toHour) != int(ac["allowedTimePeriod"]["toHour"]):
+                log.info("To hour does not match (%s vs %s)", str(toHour),
+                         str(ac["allowedTimePeriod"]["toHour"]))
+                return False
+            if int(toMin) != int(ac["allowedTimePeriod"]["toMinute"]):
+                log.info("To minute does not match (%s vs %s)", str(toMin),
+                         str(ac["allowedTimePeriod"]["toMinute"]))
+                return False
+
+        if str(abort_outside) == "1":
+            abort_outside = True
+        elif str(abort_outside) == "0":
+            abort_outside = False
+
+        if abort_outside is not None and abort_outside != ac["allowedTimePeriod"]["abortOutside"]:
+            log.info("Abort outside does not match (%s vs %s)", abort_outside, ac["allowedTimePeriod"]["abortOutside"])
+            return False
+
+        if str(parallel_compact) == "1":
+            parallel_compact = True
+        elif str(parallel_compact) == "0":
+            parallel_compact = False
+
+        if parallel_compact is not None and parallel_compact != ac["parallelDBAndViewCompaction"]:
+            log.info("Parallel compact does not match (%s vs %s)", str(parallel_compact),
+                     str(ac["parallelDBAndViewCompaction"]))
+            return False
+
+        if purgeInt is not None and str(purgeInt) != str(settings["purgeInterval"]):
+            log.info("Purge interval does not match (%s vs %s)", str(purgeInt), str(settings["purgeInterval"]))
+            return False
+
+        return True
+
+    def verifyGroupExists(self, server, name):
+        rest = RestConnection(server)
+        groups = rest.get_zone_names()
+        print groups
+
+        for gname, _ in groups.iteritems():
+            if name == gname:
+                return True
+
+        return False
+
+    def _list_compare(self, list1, list2):
+        if len(list1) != len(list2):
+            return False
+        for elem1 in list1:
+            found = False
+            for elem2 in list2:
+                if elem1 == elem2:
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
 
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)

@@ -6,7 +6,6 @@ from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
 from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
 import itertools
 
-
 class KVGenerator(object):
     def __init__(self, name, start, end):
         self.name = name
@@ -14,14 +13,6 @@ class KVGenerator(object):
         self.end = end
         self.current = start
         self.itr = start
-
-    def setrange(self, args):
-        self.itr = args['start']
-        self.end = args['end']
-
-    def getrange(self):
-        return self.start, self.end
-
     def has_next(self):
         return self.itr < self.end
 
@@ -89,8 +80,8 @@ class DocumentGenerator(KVGenerator):
             value = arg[seed % len(arg)]
             doc_args.append(value)
             seed /= len(arg)
-
-        json_doc = json.loads(self.template.format(*doc_args).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        doc = self.template.format(*doc_args).replace('\'', '"').replace('True', 'true').replace('False', 'false').replace('\\', '\\\\')
+        json_doc = json.loads(doc)
         json_doc['_id'] = self.name + '-' + str(self.itr)
         json_doc['mutated'] = 0
         self.itr += 1

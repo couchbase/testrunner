@@ -1734,7 +1734,7 @@ class RemoteMachineShellConnection:
         log.error("auto compaction has not ended in {0} sec.".format(str(timeout_in_seconds)))
         return False
 
-    def wait_till_process_ended(self, process_name, timeout_in_seconds=360):
+    def wait_till_process_ended(self, process_name, timeout_in_seconds=600):
         if process_name[-1:] == "-":
             process_name = process_name[:-1]
         end_time = time.time() + float(timeout_in_seconds)
@@ -1756,8 +1756,9 @@ class RemoteMachineShellConnection:
                     log.error("{1}: process {0} may not run" \
                               .format(process_name, self.ip))
         if time.time() >= end_time and not process_ended:
-            log.info("Process {0} on node {1} is still running even"
-                     " after 9 minutes".format(process_name, self.ip))
+            log.info("Process {0} on node {1} is still running"
+                     " after 10 minutes VERSION.txt file was removed"
+                                      .format(process_name, self.ip))
         return process_ended
 
     def terminate_processes(self, info, list):
@@ -2241,7 +2242,6 @@ class RemoteMachineShellConnection:
         filedata = ""
         if not(query==""):
             main_command = main_command + " -s=\"" + query+ '"'
-            print "main_command is %s" %main_command
         elif (self.remote and not(queries=="")):
             sftp = self._ssh_client.open_sftp()
             filein = sftp.open(filename, 'w')
@@ -3020,7 +3020,10 @@ class RemoteMachineShellConnection:
 
         command_options_string = ""
         if command_options is not '':
-            command_options_string = ' '.join(command_options)
+            if "-b" not in command_options:
+                command_options_string = ' '.join(command_options)
+            else:
+                command_options_string = command_options
         cluster_ip = cluster_ip or self.ip
         cluster_port = cluster_port or self.port
 
@@ -3339,7 +3342,9 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_batch_command(self, command):
-        remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
+        remote_command = \
+            "echo \"{0}\" > /tmp/cmd.bat; chmod u=rwx /tmp/cmd.bat; /tmp/cmd.bat"\
+                                                                  .format(command)
         o, r = self.execute_command_raw(remote_command)
         if r and r!=['']:
             log.error("Command didn't run successfully. Error: {0}".format(r))
@@ -3425,11 +3430,12 @@ class RemoteMachineShellConnection:
                         o, r = self.execute_command("dpkg --get-selections | grep libssl")
                         self.log_command_output(o, r)
                         if not o:
-                            o, r = self.execute_command("apt-get install -y libssl0.9.8")
-                            self.log_command_output(o, r)
-                            o, r = self.execute_command("dpkg --get-selections | grep libssl")
-                            log.info("package {0} should not appear below".format(o[:11]))
-                            self.log_command_output(o, r)
+                            pass   # CBQE-36124 - some SSL stuff which is not needed anymore anyway
+                            #o, r = self.execute_command("apt-get install -y libssl0.9.8")
+                            #self.log_command_output(o, r)
+                            #o, r = self.execute_command("dpkg --get-selections | grep libssl")
+                            #log.info("package {0} should not appear below".format(o[:11]))
+                            #self.log_command_output(o, r)
                         elif o:
                             for s in o:
                                 if "libssl0.9.8" not in s:
@@ -3438,47 +3444,7 @@ class RemoteMachineShellConnection:
                                     o, r = self.execute_command("dpkg --get-selections | grep libssl")
                                     log.info("package {0} should not appear below".format(s[:11]))
                                     self.log_command_output(o, r)
-            if self.info.deliverable_type == "rpm" and \
-                            "SUSE" not in self.info.distribution_type:
-                centos_version = ["6.4"]
-                o, r = self.execute_command("cat /etc/redhat-release")
-                self.log_command_output(o, r)
-                if o[0] != "":
-                    o = o[0].split(" ")
-                    if o[2] in centos_version and "1" in openssl:
-                        o, r = self.execute_command("rpm -qa | grep openssl")
-                        self.log_command_output(o, r)
-                        for s in o:
-                            if "openssl098e" in s:
-                                o, r = self.execute_command("yum remove -y {0}".format(s))
-                                self.log_command_output(o, r)
-                                o, r = self.execute_command("rpm -qa | grep openssl")
-                                log.info("package {0} should not appear below".format(s))
-                                self.log_command_output(o, r)
-                            elif "openssl-1.0.0" not in s:
-                                o, r = self.execute_command("yum install -y openssl")
-                                self.log_command_output(o, r)
-                        o, r = self.execute_command("rpm -qa | grep openssl")
-                        log.info("openssl-1.0.0 should appear below".format(s))
-                        self.log_command_output(o, r)
-                    elif openssl == "":
-                        o, r = self.execute_command("rpm -qa | grep openssl")
-                        self.log_command_output(o, r)
-                        if not o:
-                            o, r = self.execute_command("yum install -y openssl098e")
-                            self.log_command_output(o, r)
-                            o, r = self.execute_command("rpm -qa | grep openssl")
-                            log.info("package openssl098e should appear below")
-                            self.log_command_output(o, r)
-                        elif o:
-                            for s in o:
-                                if "openssl098e" not in s:
-                                    o, r = self.execute_command("yum install -y openssl098e")
-                                    self.log_command_output(o, r)
-                                    o, r = self.execute_command("rpm -qa | grep openssl")
-                                    log.info("package openssl098e should appear below")
-                                    self.log_command_output(o, r)
-
+           
     def check_pkgconfig(self, deliverable_type, openssl):
         if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
@@ -3616,6 +3582,28 @@ class RemoteMachineShellConnection:
                 self.execute_command('export CBAUTH_REVRPC_URL='
                                      '"http://{0}:{1}@{2}:8091/query"'\
                                   .format(rest_username, rest_password,server.ip))
+
+    def change_system_time(self, time_change_in_seconds):
+
+        # note that time change may be positive or negative
+
+
+        # need to support Windows too
+        output, error = self.execute_command("date +%s")
+        if len(error) > 0:
+            return False
+        curr_time = int(output[-1])
+        new_time = curr_time + time_change_in_seconds
+
+        output, error = self.execute_command("date --date @" + str(new_time))
+        if len(error) > 0:
+            return False
+
+        output, error = self.execute_command("date --set='" + output[-1] + "'")
+        if len(error) > 0:
+            return False
+        else:
+            return True
 
 
 class RemoteUtilHelper(object):

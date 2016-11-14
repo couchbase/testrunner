@@ -873,8 +873,15 @@ class WarmUpMemcachedTest(unittest.TestCase):
         # to it when it is loaded... disconnect and try again
         # at a later time..
         self.log.info("Waiting for bucket to be loaded again")
-        ready = BucketOperationHelper.wait_for_memcached(self.master, "default")
-        self.assertTrue(ready, "wait_for_memcached failed")
+        for _ in range(5):
+            self.log.info("Waiting for bucket to be loaded again.")
+            try:
+                ready = BucketOperationHelper.wait_for_memcached(self.master, "default")
+                self.assertTrue(ready, "wait_for_memcached failed")
+            except:
+                continue
+            break
+
         while True:
             self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
             stats = self.onenodemc.stats()

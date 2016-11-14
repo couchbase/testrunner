@@ -30,6 +30,8 @@ from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from membase.helper.cluster_helper import ClusterOperationHelper
+
+from couchbase_cli import CouchbaseCLI
 import testconstants
 
 
@@ -39,6 +41,7 @@ class BaseTestCase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.primary_index_created = False
         self.use_sdk_client =  self.input.param("use_sdk_client",False)
+        self.analytics = self.input.param("analytics",False)
         if self.input.param("log_level", None):
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
@@ -133,7 +136,7 @@ class BaseTestCase(unittest.TestCase):
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
             self.bucket_size = self.input.param("bucket_size", None)
-            self.kv_store_required = self.input.param("kv_store_required", 1)
+            self.lww = self.input.param("lww", False) # only applies to LWW but is here because the bucket is created here
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
                 return
@@ -422,10 +425,11 @@ class BaseTestCase(unittest.TestCase):
         return quota
 
     def _bucket_creation(self):
-        if (self.default_bucket==True):
+        if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
                                                enable_replica_index=self.enable_replica_index,
-                                               eviction_policy=self.eviction_policy)
+                                               eviction_policy=self.eviction_policy,
+                                               lww=self.lww)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size,
                                        eviction_policy=self.eviction_policy))
@@ -879,7 +883,7 @@ class BaseTestCase(unittest.TestCase):
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None,
                              timeout=None, check_items=True, only_store_hash=True,
                              replica_to_read=None, batch_size=1000, check_bucket_stats=True,
-                             check_ep_items_remaining=False):
+                             check_ep_items_remaining=False, verify_total_items=True):
         servers = self.get_kv_nodes(servers)
         if servers is None:
             servers = self.servers
@@ -903,11 +907,12 @@ class BaseTestCase(unittest.TestCase):
             if check_bucket_stats:
                 self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
-            verified = True
-            for bucket in self.buckets:
-                verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
-            self.assertTrue(verified, "Lost items!!! Replication was completed but "
-                                      "          sum(curr_items) don't match the curr_items_total")
+            if verify_total_items:
+                verified = True
+                for bucket in self.buckets:
+                    verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
+                self.assertTrue(verified, "Lost items!!! Replication was completed but "
+                                          "          sum(curr_items) don't match the curr_items_total")
         else:
             self.log.warn("verification of items was omitted")
 
@@ -1118,17 +1123,16 @@ class BaseTestCase(unittest.TestCase):
 
     def change_password(self, new_password="new_password"):
         nodes = RestConnection(self.master).node_statuses()
-        remote_client = RemoteMachineShellConnection(self.master)
-        options = "--cluster-init-password=%s" % new_password
-        cli_command = "cluster-edit"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
-                                                            cluster_host="localhost:8091",
-                                                            user=self.master.rest_username,
-                                                            password=self.master.rest_password)
+
+
+        cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password  )
+        output, err, result = cli.setting_cluster(data_ramsize=False, index_ramsize=False, fts_ramsize=False, cluster_name=None,
+                         cluster_username=None, cluster_password=new_password, cluster_port=False)
+
         self.log.info(output)
         # MB-10136 & MB-9991
-        if error:
-            raise Exception("Password didn't change! %s" % error)
+        if not result:
+            raise Exception("Password didn't change!")
         self.log.info("new password '%s' on nodes: %s" % (new_password, [node.ip for node in nodes]))
         for node in nodes:
             for server in self.servers:
