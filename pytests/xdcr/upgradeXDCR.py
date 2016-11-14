@@ -228,13 +228,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
                 bucket = self.src_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
 
         if self.ddocs_dest:
             for bucket_name in self.buckets_on_dest:
                 bucket = self.dest_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
         if float(self.upgrade_versions[0][:3]) == 4.6:
@@ -388,13 +388,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
                 bucket = self.src_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
 
         if self.ddocs_dest:
             for bucket_name in self.buckets_on_dest:
                 bucket = self.dest_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
         if float(self.upgrade_versions[0][:3]) == 4.6:

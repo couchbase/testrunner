@@ -3479,22 +3479,18 @@ class FTSBaseTest(unittest.TestCase):
         """
         from random_query_generator.rand_query_gen import FTSESQueryGenerator
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
-                                        seed=seed, dataset=self.dataset,
-                                        fields=index.smart_query_fields)
+                                            seed=seed, dataset=self.dataset,
+                                            fields=index.smart_query_fields)
+        '''
         for fts_query in query_gen.fts_queries:
             index.fts_queries.append(
                 json.loads(json.dumps(fts_query, ensure_ascii=False)))
+        '''
 
         if self.compare_es:
-            for es_query in query_gen.es_queries:
-                # unlike fts, es queries are not nested before sending to fts
-                # so enclose in query dict here
-                es_query = {'query': es_query}
-                self.es.es_queries.append(
-                    json.loads(json.dumps(es_query, ensure_ascii=False)))
-            return index.fts_queries, self.es.es_queries
+            return query_gen.fts_queries, query_gen.es_queries
 
-        return index.fts_queries
+        return query_gen.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None):
