@@ -291,9 +291,14 @@ class XDCRHelper():
             if 'logging' in advanced_settings:
                 self.controls.advanced_settings().logging.select(value=advanced_settings['logging'])
             time.sleep(3)
-            if len([el for el in self.controls.errors_advanced_settings() if el.is_displayed() and el.get_text() != '']) > 0:
-                raise Exception('Advanced setting error: %s' % str([el.get_text() for el in self.controls.errors_advanced_settings()
-                                                                    if el.is_displayed() and el.get_text() != '']))
+            try:
+                errors = [el.get_text() for el in self.controls.errors_advanced_settings() if el.is_displayed() and el.get_text() != '']
+            except Exception as e:
+                self.tc.log.info("exception when tried to get errors", e)
+                errors = [el.get_text() for el in self.controls.errors_advanced_settings() if
+                          el.is_displayed() and el.get_text() != '']
+            if len(errors):
+                raise Exception('Advanced setting error: %s' % str(errors))
         if not cancel:
             self.controls.create_replication_pop_up().replicate_btn.click()
         else:
@@ -306,7 +311,7 @@ class XDCRHelper():
                     if error.is_displayed():
                         raise Exception('Replication is not created: %s' % error.get_text())
         except StaleElementReferenceException as e:
-            self.tc.log.info ("No error displayed while creating/cancelling a Replication")
+            self.tc.log.info("No error displayed while creating/cancelling a Replication")
 
         self.wait.until(lambda fn: self._cluster_replication_pop_up_reaction(),
                         "there is no reaction in %d sec" % self.wait._timeout)

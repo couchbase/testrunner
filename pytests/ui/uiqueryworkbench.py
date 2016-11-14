@@ -33,7 +33,7 @@ class QueryWorkbenchTests(BaseUITestCase):
         summary_result = self.input.param('summary_result', '')
         summary_result = summary_result.replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')
         result_mode = self.input.param('mode', 'JSON')
-        if self.rest.get_nodes()[0].version >= '4.7' and result_mode in ['Plan Text', 'Plan']:
+        if self.rest.get_nodes()[0].version <= '4.7' and result_mode in ['Plan Text', 'Plan']:
             self.log.info("skipp 'Plan Text', 'Plan' modes in version < 4.7")
             return
         init_query = self.input.param('init_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode(
