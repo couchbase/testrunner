@@ -13,6 +13,14 @@ class KVGenerator(object):
         self.end = end
         self.current = start
         self.itr = start
+
+    def setrange(self, args):
+        self.itr = args['start']
+        self.end = args['end']
+
+    def getrange(self):
+        return self.start, self.end
+
     def has_next(self):
         return self.itr < self.end
 

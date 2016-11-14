@@ -23,16 +23,14 @@ class KVStore(object):
         return partition
 
     def acquire_partitions(self, keys):
-        self.acquire_lock.acquire()
-        part_obj_keys = {}
+        part_obj_keys = collections.defaultdict(list)
         for key in keys:
             partition = self.cache[self._hash(key)]
-            partition_obj = partition["partition"]
-            if partition_obj not in part_obj_keys:
-                partition["lock"].acquire()
-                part_obj_keys[partition_obj] = []
-            part_obj_keys[partition_obj].append(key)
-        self.acquire_lock.release()
+            '''
+            frozenset because dict is mutable , cant be hashed
+            frozenset converts a dict to immutable object
+            '''
+            part_obj_keys[frozenset(partition.items())].append(key)
         return part_obj_keys
 
     def acquire_random_partition(self, has_valid=True):

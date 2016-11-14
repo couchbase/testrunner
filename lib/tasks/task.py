@@ -86,6 +86,8 @@ def parallel(method, *args, **kwargs):
     log = logger.Logger.get_logger()
     workers = []
     num_workers = cpu_count().real
+    if getattr(VBucketAwareMemcached, 'is_mc_bin_client', None):
+        num_workers = 1
     generator = args[1]
     parallelmethod = args[2]
     for value in create_pool(generator, num_workers):
@@ -949,10 +951,8 @@ class LoadDocumentsTask(GenericLoadingTask):
         function += self.op_type
         try:
             if self.op_type == "create":
-                print " the load_kvstore_parallel is before ", self.kv_store, self.load_kvstore_parallel
-                if self.kv_store == None:
+                if not self.kv_store:
                     self.load_kvstore_parallel = None
-                print " the load_kvstore_parallel is", self.kv_store, self.load_kvstore_parallel
                 getattr(self, function)(self.generator, self.load_kvstore_parallel)
             else:
                 while self.has_next():
