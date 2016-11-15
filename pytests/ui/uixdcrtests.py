@@ -101,7 +101,7 @@ class XDCRTests(BaseUITestCase):
         XDCRHelper(self).create_cluster_reference(name, ip, user, passwd)
         self.sleep(3)
         try:
-           XDCRHelper(self).create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
+            XDCRHelper(self).create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
         except Exception, ex:
             self.log.error(str(ex))
             if error:
@@ -299,19 +299,21 @@ class XDCRHelper():
                           el.is_displayed() and el.get_text() != '']
             if len(errors):
                 raise Exception('Advanced setting error: %s' % str(errors))
+        self.tc.log.error("Filled replication popup window")
         if not cancel:
             self.controls.create_replication_pop_up().replicate_btn.click()
         else:
             self.controls.create_replication_pop_up().cancel_btn.click()
         BaseHelper(self.tc).wait_ajax_loaded()
         all_errors = self.controls.error_replica()
+        self.tc.log.info("Found errors on replication popup:", all_errors)
         try:
             if all_errors:
                 for error in all_errors:
                     if error.is_displayed():
                         raise Exception('Replication is not created: %s' % error.get_text())
-        except StaleElementReferenceException as e:
-            self.tc.log.info("No error displayed while creating/cancelling a Replication")
+        except StaleElementReferenceException:
+            self.tc.log.error("No error displayed while creating/cancelling a Replication")
 
         self.wait.until(lambda fn: self._cluster_replication_pop_up_reaction(),
                         "there is no reaction in %d sec" % self.wait._timeout)

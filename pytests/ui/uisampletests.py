@@ -2,7 +2,7 @@ import re
 import logger
 import time
 import unittest
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import StaleElementReferenceException, ElementNotVisibleException
 from lib.testconstants import STANDARD_BUCKET_PORT
 
 from uibasetest import * 
@@ -1681,7 +1681,7 @@ class BucketHelper():
             try:
                 self.controls.bucket_info(bucket.name).documents.click()
                 break
-            except AttributeError:
+            except (ElementNotVisibleException, AttributeError):
                 pass
 
     def open_stats(self, bucket):
