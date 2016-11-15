@@ -95,7 +95,7 @@ class RQGASTERIXTests(BaseTestCase):
         data = 'use Default ;' + "\n"
         for bucket in self.buckets:
                 data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
-                data += 'drop dataset {0} if exists'.format(bucket.name) + "_shadow ;" + "\n"
+                data += 'drop dataset {0} if exists;'.format(bucket.name+"_shadow")  + "\n"
                 data += 'drop bucket {0} if exists;'.format(bucket.name) + "\n"
         filename = "file.txt"
         f = open(filename,'w')

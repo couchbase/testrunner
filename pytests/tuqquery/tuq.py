@@ -139,7 +139,7 @@ class QueryTests(BaseTestCase):
             data = 'use Default ;' + "\n"
             for bucket in self.buckets:
                 data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
-                data += 'drop dataset {0} if exists'.format(bucket.name) + "_shadow ;" + "\n"
+                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow") + "\n"
                 data += 'drop bucket {0} if exists;'.format(bucket.name) + "\n"
             filename = "file.txt"
             f = open(filename,'w')
@@ -418,6 +418,7 @@ class QueryTests(BaseTestCase):
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
 
     def test_arrays_negative(self):
         queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : ('syntax error', 3000),
@@ -1367,6 +1368,15 @@ class QueryTests(BaseTestCase):
                          " FROM %s GROUP BY job_title" % (bucket.name)
 
             self.prepared_common_body()
+
+    def test_array_union_symdiff(self):
+        for bucket in self.buckets:
+            self.query = 'select ARRAY_UNION(["skill1","skill2"],skills) as skills_new from {0}'.format(bucket.name)
+            self.run_cbq_query()
+            import pdb;pdb.set_trace()
+
+
+
 
     def test_array_concat(self):
         for bucket in self.buckets:
