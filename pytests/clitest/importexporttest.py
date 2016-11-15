@@ -309,7 +309,12 @@ class ImportExportTests(CliBaseTest):
                 errors_path = ""
             elif self.errors_flag == "error":
                 errors_path = self.errors_flag
-                self.shell.execute_command("rm -rf %serror" % self.cli_command_path)
+                if "; ./" in self.cli_command_path:
+                    self.shell.execute_command("rm -rf %serror"
+                                % self.cli_command_path.replace("; ./", ""))
+                else:
+                    self.shell.execute_command("rm -rf %serror"
+                                                   % self.cli_command_path)
             elif self.errors_flag == "relative_path":
                 errors_path = "~/error"
                 self.shell.execute_command("rm -rf ~/error")
@@ -325,7 +330,12 @@ class ImportExportTests(CliBaseTest):
                 logs_path = ""
             elif self.logs_flag == "log":
                 logs_path = self.logs_flag
-                self.shell.execute_command("rm -rf %slog" % self.cli_command_path)
+                if "; ./" in self.cli_command_path:
+                    self.shell.execute_command("rm -rf %slog"
+                                % self.cli_command_path.replace("; ./", ""))
+                else:
+                    self.shell.execute_command("rm -rf %slog"
+                                                    % self.cli_command_path)
             elif self.logs_flag == "relative_path":
                 logs_path = "~/log"
                 self.shell.execute_command("rm -rf ~/log")
@@ -350,7 +360,8 @@ class ImportExportTests(CliBaseTest):
                     self.log.info("command to run %s " % imp_cmd_str)
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
-                    error_check = self._check_output_option_flags(output)
+                    error_check = self._check_output_option_flags(output,
+                                                  errors_path, logs_path)
                     if error_check and not self._check_output("successfully", output):
                         self.fail("failed to run optional flags")
         elif self.test_type == "export":
@@ -374,7 +385,8 @@ class ImportExportTests(CliBaseTest):
                            threads_flag, self.threads_flag, logs_flag, logs_path)
                     output, error = self.shell.execute_command(cmd_str)
                     self.log.info("Output from execute command %s " % output)
-                    error_check = self._check_output_option_flags(output)
+                    error_check = self._check_output_option_flags(output,
+                                                              errors_path, logs_path)
                     if error_check and not self._check_output("successfully", output):
                         self.fail("failed to run optional flags")
 
@@ -638,7 +650,7 @@ class ImportExportTests(CliBaseTest):
         else:
             self.des_file = self.import_file
 
-    def _check_output_option_flags(self, output):
+    def _check_output_option_flags(self, output, errors_path, logs_path):
         error_check = True
         if  self.input.param("threads_flag", "") == "empty":
             error_check = False
