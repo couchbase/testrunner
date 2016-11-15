@@ -1836,13 +1836,17 @@ class DdocViewHelper():
     def create_view(self, ddoc_name, view_name, dev_view=True):
         self.tc.log.info('trying create a view %s' % view_name)
         BaseHelper(self.tc).wait_ajax_loaded()
-        self.wait.until(lambda fn:
-                        self.controls.view_btn().create_view_btn.is_displayed(),
-                        "Create View button is not displayed")
-        self.controls.view_btn().create_view_btn.click()
-        self.wait.until(lambda fn:
-                        self.controls.create_pop_up().pop_up.is_displayed(),
-                        "Create pop up is not opened")
+        try:
+            self.wait.until(lambda fn:
+                            self.controls.view_btn().create_view_btn.is_displayed(),
+                            "Create View button is not displayed")
+            self.controls.view_btn().create_view_btn.click()
+            self.wait.until(lambda fn:
+                            self.controls.create_pop_up().pop_up.is_displayed(),
+                            "Create pop up is not opened")
+        except Exception as e:
+            BaseHelper(self.tc).create_screenshot()
+            raise e
         self.controls.create_pop_up().ddoc_name.type(ddoc_name)
         self.controls.create_pop_up().view_name.type(view_name)
         self.controls.create_pop_up().save_btn.click()

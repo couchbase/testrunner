@@ -186,12 +186,7 @@ class BaseUITestCase(unittest.TestCase):
         try:
             test_failed = len(self._resultForDoCleanups.errors)
             if self.driver and test_failed:
-                path_screen = self.input.ui_conf['screenshots'] or 'logs/screens'
-                full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
-                self.log.info('screenshot is available: %s' % full_path)
-                if not os.path.exists(path_screen):
-                    os.mkdir(path_screen)
-                self.driver.get_screenshot_as_file(os.path.abspath(full_path))
+                BaseHelper(self).create_screenshot()
             if self.driver:
                 self.driver.close()
             if test_failed and TestInputSingleton.input.param("stop-on-failure", False):
@@ -385,6 +380,14 @@ class BaseHelper():
         except StaleElementReferenceException:
             pass
 
+    def create_screenshot(self):
+        path_screen = self.tc.input.ui_conf['screenshots'] or 'logs/screens'
+        full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
+        self.tc.log.info('screenshot is available: %s' % full_path)
+        if not os.path.exists(path_screen):
+            os.mkdir(path_screen)
+        self.tc.driver.get_screenshot_as_file(os.path.abspath(full_path))
+
     def login(self, user=None, password=None):
         self.tc.log.info("Try to login to Couchbase Server in browser")
         if not user:
@@ -400,6 +403,7 @@ class BaseHelper():
         self.wait.until(lambda fn: self.controls._login_btn.is_displayed(),
                         "Login Button is not displayed in %d sec" % (self.wait._timeout))
         self.controls._login_btn.click()
+        BaseHelper(self.tc).wait_ajax_loaded()
         self.tc.log.info("user %s is logged in" % user)
 
     def logout(self):
