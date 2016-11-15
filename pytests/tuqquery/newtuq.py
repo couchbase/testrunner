@@ -320,7 +320,6 @@ class QueryTests(BaseTestCase):
                                         actual_result['results'], expected_result))
 
             query_template = 'SELECT COUNT(*) + 1 AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
-            import pdb;pdb.set_trace()
             actual_result, expected_result = self.run_query_from_template(query_template)
             if self.monitoring:
                 e.set()
