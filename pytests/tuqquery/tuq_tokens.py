@@ -43,7 +43,8 @@ class TokenTests(BaseTestCase):
 
     def test_tokens_secondary_indexes(self):
         bucket_name = "beer-sample"
-        self.query = 'create primary index on {0}'.format(bucket_name)
+        self.query = 'create primary index "beer_primary" on {0}'.format(bucket_name)
+        self.run_cbq_query()
         self.query = 'create index idx1 on `beer-sample`(description,name )'
         self.run_cbq_query()
         self.query = 'create index idx2 on `beer-sample`( DISTINCT ARRAY v FOR v in tokens(description) END ,description,name )'
