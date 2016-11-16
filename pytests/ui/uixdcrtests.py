@@ -271,23 +271,23 @@ class XDCRHelper():
             if 'version' in advanced_settings:
                 self.controls.advanced_settings().version.select(value=advanced_settings['version'])
             if 'source_nozzle_per_node' in advanced_settings:
-                self.controls.advanced_settings().source_nozzle_per_node.type(advanced_settings['source_nozzle_per_node'])
+                self.controls.advanced_settings().source_nozzle_per_node.type_native(advanced_settings['source_nozzle_per_node'])
             if 'target_nozzle_per_node' in advanced_settings:
-                self.controls.advanced_settings().target_nozzle_per_node.type(advanced_settings['target_nozzle_per_node'])
+                self.controls.advanced_settings().target_nozzle_per_node.type_native(advanced_settings['target_nozzle_per_node'])
             if 'max_replication' in advanced_settings:
-                self.controls.advanced_settings().max_replication.type(advanced_settings['max_replication'])
+                self.controls.advanced_settings().max_replication.type_native(advanced_settings['max_replication'])
             if 'checkpoint_interval' in advanced_settings:
-                self.controls.advanced_settings().checkpoint_interval.type(advanced_settings['checkpoint_interval'])
+                self.controls.advanced_settings().checkpoint_interval.type_native(advanced_settings['checkpoint_interval'])
             if 'batch_count' in advanced_settings:
-                self.controls.advanced_settings().batch_count.type(advanced_settings['batch_count'])
+                self.controls.advanced_settings().batch_count.type_native(advanced_settings['batch_count'])
             if 'batch_size' in advanced_settings:
-                self.controls.advanced_settings().batch_size.type(advanced_settings['batch_size'])
+                self.controls.advanced_settings().batch_size.type_native(advanced_settings['batch_size'])
             if 'retry_interval' in advanced_settings:
-                self.controls.advanced_settings().retry_interval.type(advanced_settings['retry_interval'])
+                self.controls.advanced_settings().retry_interval.type_native(advanced_settings['retry_interval'])
             if 'replication_threshold' in advanced_settings:
-                self.controls.advanced_settings().replication_threshold.type(advanced_settings['replication_threshold'])
+                self.controls.advanced_settings().replication_threshold.type_native(advanced_settings['replication_threshold'])
             if 'collection_interval' in advanced_settings:
-                self.controls.advanced_settings().collection_interval.type(advanced_settings['collection_interval'])
+                self.controls.advanced_settings().collection_interval.type_native(advanced_settings['collection_interval'])
             if 'logging' in advanced_settings:
                 self.controls.advanced_settings().logging.select(value=advanced_settings['logging'])
             time.sleep(3)
@@ -306,7 +306,7 @@ class XDCRHelper():
             self.controls.create_replication_pop_up().cancel_btn.click()
         BaseHelper(self.tc).wait_ajax_loaded()
         all_errors = self.controls.error_replica()
-        self.tc.log.info("Found errors on replication popup:", all_errors)
+        self.tc.log.info("Found errors on replication popup: ", str(all_errors))
         try:
             if all_errors:
                 for error in all_errors:

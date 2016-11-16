@@ -162,6 +162,7 @@ class DocumentsTest(BaseUITestCase):
         RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                               proxyPort=STANDARD_BUCKET_PORT + 1)
         NavigationHelper(self).navigate('Data Buckets')
+        time.sleep(3)
         BucketHelper(self).open_documents(self.bucket)
 
         doc_name = self.input.param('doc_name', 'test')
@@ -1682,6 +1683,7 @@ class BucketHelper():
                 self.controls.bucket_info(bucket.name).documents.click()
                 break
             except (ElementNotVisibleException, AttributeError):
+                time.sleep(1)
                 pass
 
     def open_stats(self, bucket):
