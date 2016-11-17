@@ -728,7 +728,7 @@ class FTSIndex:
         if not self.index_definition['params'].has_key('mapping'):
             map['default_mapping'] = {}
             map['default_mapping']['properties'] = {}
-            map['default_mapping']['dynamic'] = True
+            map['default_mapping']['dynamic'] = False
             map['default_mapping']['enabled'] = True
             map['default_mapping']['properties'][fields.pop()] = field_maps.pop()
             self.index_definition['params']['mapping'] = map
@@ -1214,47 +1214,53 @@ class FTSIndex:
         Validate if the docs returned in the search result match the expected values
         """
         result = False
-        expected_docs = TestInputSingleton.input.param("expected", None).split(
-            ',')
+
+        expected_docs = TestInputSingleton.input.param("expected", None)
         docs = []
         # Fetch the Doc IDs from raw_hits
         for doc in raw_hits:
             docs.append(doc['id'])
 
-        # Compare docs with the expected values.
-        if docs == expected_docs:
-            result = True
-        else:
-            # Sometimes, if there are two docs with same field value, their rank
-            # may be interchanged. To handle this, if the actual doc order
-            # doesn't match the expected value, swap the two such docs and then
-            # try to match
-            tolerance = TestInputSingleton.input.param("tolerance", None)
-            if tolerance:
-                tolerance = tolerance.split(',')
-                index1, index2 = expected_docs.index(
-                    tolerance[0]), expected_docs.index(tolerance[1])
-                expected_docs[index1], expected_docs[index2] = expected_docs[
-                                                                   index2], \
-                                                               expected_docs[
-                                                                   index1]
-                if docs == expected_docs:
-                    result = True
+        if expected_docs:
+            expected_docs = expected_docs.split(',')
+            # Compare docs with the expected values.
+            if docs == expected_docs:
+                result = True
+            else:
+                # Sometimes, if there are two docs with same field value, their rank
+                # may be interchanged. To handle this, if the actual doc order
+                # doesn't match the expected value, swap the two such docs and then
+                # try to match
+                tolerance = TestInputSingleton.input.param("tolerance", None)
+                if tolerance:
+                    tolerance = tolerance.split(',')
+                    index1, index2 = expected_docs.index(
+                        tolerance[0]), expected_docs.index(tolerance[1])
+                    expected_docs[index1], expected_docs[index2] = expected_docs[
+                                                                       index2], \
+                                                                   expected_docs[
+                                                                       index1]
+                    if docs == expected_docs:
+                        result = True
+                    else:
+                        self.__log.info("Actual docs returned : %s", docs)
+                        self.__log.info("Expected docs : %s", expected_docs)
+                        return False
                 else:
                     self.__log.info("Actual docs returned : %s", docs)
                     self.__log.info("Expected docs : %s", expected_docs)
                     return False
-            else:
-                self.__log.info("Actual docs returned : %s", docs)
-                self.__log.info("Expected docs : %s", expected_docs)
-                return False
+        else :
+            self.__log.info("Expected doc order not specified. It is a negative"
+                            " test, so skipping order validation")
+            result = True
 
         # Validate the sort fields in the result
         for doc in raw_hits:
             if 'sort' in doc.keys():
-                if len(doc['sort']) == len(sort_fields):
+                if not sort_fields and len(doc['sort']) == 1:
                     result &= True
-                elif not sort_fields and len(doc['sort']) == 1:
+                elif len(doc['sort']) == len(sort_fields):
                     result &= True
                 else:
                     self.__log.info("Sort fields do not match for the following document - ")
@@ -2752,8 +2758,14 @@ class FTSBaseTest(unittest.TestCase):
         self.update_gen = None
         self.delete_gen = None
         self.sort_fields = self._input.param("sort_fields", None)
+        self.sort_fields_list = None
         if self.sort_fields:
-            self.sort_fields = self.sort_fields.split(',')
+            self.sort_fields_list = self.sort_fields.split(',')
+        self.advanced_sort = self._input.param("advanced_sort", False)
+        self.sort_by = self._input.param("sort_by", "score")
+        self.sort_missing = self._input.param("sort_missing", "last")
+        self.sort_desc = self._input.param("sort_desc", False)
+        self.sort_mode = self._input.param("sort_mode", "min")
         self.__fail_on_errors = self._input.param("fail-on-errors", True)
 
     def __initialize_error_count_dict(self):
@@ -3593,3 +3605,31 @@ class FTSBaseTest(unittest.TestCase):
         except Exception as ex:
             print ex
             return False
+
+    def build_sort_params(self):
+        """
+        This method builds the value for the sort param that is passed to the
+        query request. It handles simple or advanced sorting based on the
+        inputs passed in the conf file
+        :return: Value for the sort param
+        """
+        # TBD :
+        # Cases where there are multiple sort fields - one advanced, one simple
+        # Cases where there are multiple sort fields - one advanced using by 'field', and another using by 'id' or 'score'
+        sort_params = []
+        if self.advanced_sort or self.sort_fields_list:
+            if self.advanced_sort:
+                for sort_field in self.sort_fields_list:
+                    params = {}
+                    params["by"] = self.sort_by
+                    if self.sort_by == "field":
+                        params["field"] = sort_field
+                    params["mode"] = self.sort_mode
+                    params["desc"] = self.sort_desc
+                    params["missing"] = self.sort_missing
+                    sort_params.append(params)
+            else:
+                sort_params = self.sort_fields_list
+        else:
+            return None
+        return sort_params

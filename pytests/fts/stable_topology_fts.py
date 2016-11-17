@@ -559,12 +559,12 @@ class StableTopFTS(FTSBaseTest):
         index.add_child_field_to_default_mapping(field_name="type",
                                                  field_type="text",
                                                  field_alias="type",
-                                                 analyzer="keyword")
+                                                 analyzer="en")
         if field_indexed:
             index.add_child_field_to_default_mapping(field_name="dept",
                                                  field_type="text",
                                                  field_alias="dept",
-                                                 analyzer="keyword")
+                                                 analyzer="en")
             index.add_child_field_to_default_mapping(field_name="salary",
                                                  field_type="number",
                                                  field_alias="salary")
@@ -809,17 +809,18 @@ class StableTopFTS(FTSBaseTest):
 
         try:
             for index in self._cb_cluster.get_indexes():
+                sort_params = self.build_sort_params()
                 hits, raw_hits, _, _ = index.execute_query(query = query,
                                                         zero_results_ok=zero_results_ok,
                                                         expected_hits=expected_hits,
-                                                        sort_fields=self.sort_fields,
+                                                        sort_fields=sort_params,
                                                         return_raw_hits=True)
 
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Doc IDs: %s" % raw_hits)
                 if hits:
                     result = index.validate_sorted_results(raw_hits,
-                                                           self.sort_fields)
+                                                           self.sort_fields_list)
                     if not result:
                         self.fail(
                             "Testcase failed. Actual results do not match expected.")
@@ -827,7 +828,7 @@ class StableTopFTS(FTSBaseTest):
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
 
-    def test_sorting_of_results_custom_map(self):
+    def test_sorting_of_results_on_non_indexed_fields(self):
         self.load_data()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
@@ -837,9 +838,6 @@ class StableTopFTS(FTSBaseTest):
                                                  field_type="text",
                                                  field_alias="name",
                                                  analyzer="en")
-        index.add_child_field_to_default_mapping(field_name="join_date",
-                                                 field_type="datetime",
-                                                 field_alias="join_date")
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         self.sleep(5)
