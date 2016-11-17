@@ -37,14 +37,14 @@ all api method return boolean status and err string
 """
 
 import os
-import time
 import signal
 import socket
 import threading
 import logging as log
-log.basicConfig(level=log.INFO)
 import subprocess
 import platform
+
+log.basicConfig(level=log.INFO)
 
 os.environ.copy()
 CTXDIR = os.path.dirname(os.path.abspath(__file__))
@@ -54,7 +54,7 @@ NSDIR = "{0}{1}..{1}..{1}ns_server".format(CTXDIR, os.sep)
 class CRManager:
     """ cluster run management api """
 
-    def __init__(self, num_nodes, start_index = 0):
+    def __init__(self, num_nodes, start_index=0):
         self.num_nodes = num_nodes
         self.nodes = {}
         for i in xrange(num_nodes):
@@ -67,7 +67,7 @@ class CRManager:
         keys = self.nodes.keys()
         for index in keys:
             status = self.start(index)
-            if status == False:
+            if not status:
                 break
 
         return status
@@ -75,14 +75,13 @@ class CRManager:
     def stop_nodes(self):
 
         status = False
-        keys = self.nodes.keys()
         nodes = self.get_nodes()
         for node in nodes:
 
             if node is not None:
                 status = self.stop(node.index)
 
-                if status == False:
+                if not status:
                     break
 
         return status
@@ -140,7 +139,7 @@ class CRManager:
         return status
 
     def get_node(self, index):
-        return  self.nodes.get(index)
+        return self.nodes.get(index)
 
     def clean(self, make="make"):
         """ clean up cluster_run data path """
@@ -150,7 +149,7 @@ class CRManager:
         try:
             null = open(os.devnull, 'w')
             os.chdir("{0}{1}build".format(NSDIR, os.sep))
-            subprocess.check_call([make,"ns_dataclean"], stdout = null)
+            subprocess.check_call([make, "ns_dataclean"], stdout=null)
             log.info("ns_dataclean successful")
             clean = True
         except subprocess.CalledProcessError as cpex:
@@ -179,6 +178,7 @@ class CRManager:
 
         return errno == 0
 
+
 class Node:
     """ cluster_run process interface """
 
@@ -192,7 +192,7 @@ class Node:
     def start(self):
         log.info("starting node {0}".format(self.index))
 
-        logf = open(self.nslog,'w')
+        logf = open(self.nslog, 'w')
         args = ["python",
                 "cluster_run",
                 "--node=%s" % 1,
@@ -203,7 +203,7 @@ class Node:
             stdout=logf,
             stderr=logf)
         self.ready.set()
-        return self.instance.poll() == None
+        return self.instance.poll() is None
 
     def started(self):
         return self.ready.is_set()
@@ -226,6 +226,5 @@ class Node:
         self.instance.kill()
         self.instance.wait()
         rc = self.instance.returncode
-        expected_rc = signal.SIGKILL*-1
+        expected_rc = signal.SIGKILL * -1
         return (rc == expected_rc)
-
