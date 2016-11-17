@@ -65,6 +65,13 @@ class QueryDetails:
             "query": "SELECT bw.name, COUNT(*) AS num_beers, AVG(br.abv) AS abv_avg, MIN(br.abv) AS abv_min, MAX(br.abv) AS abv_max FROM breweries bw, beers br WHERE br.brewery_id = meta(bw).id GROUP BY bw.name ORDER BY num_beers DESC LIMIT 3;",
             "expected_status": "success",
             "expected_hits": "3"
+        },
+        {
+            "id": "equijoin_limits",
+            "dataset_id": "beer-sample",
+            "query": "SELECT * FROM beers b1, beers b2 WHERE b1.name = b2.name AND b1.brewery_id != b2.brewery_id LIMIT 20;",
+            "expected_status": "success",
+            "expected_hits": "20"
         }
     ]
 

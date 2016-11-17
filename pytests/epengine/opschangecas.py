@@ -75,7 +75,7 @@ class OpsChangeCasTests(BucketConfig):
         #print 'active cas {0}'.format(active_CAS)
 
         self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
-        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+        # not supported in 4.6 self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_failover(self):
         KEY_NAME = 'key2'
@@ -170,7 +170,7 @@ class OpsChangeCasTests(BucketConfig):
         #print 'post ext meta {0}'.format(get_meta_resp)
 
         self.assertTrue(cas_pre == cas_post, 'cas mismatch active: {0} replica {1}'.format(cas_pre, cas_post))
-        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+        # extended meta is not supported self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_hard_restart(self):
         KEY_NAME = 'key2'
@@ -210,7 +210,7 @@ class OpsChangeCasTests(BucketConfig):
         #print 'post ext meta {0}'.format(get_meta_resp)
 
         self.assertTrue(cas_pre == cas_post, 'cas mismatch active: {0} replica {1}'.format(cas_pre, cas_post))
-        self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
+        # extended meta is not supported self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     ''' Test Incremental sets on cas and max cas values for keys
     '''
@@ -389,11 +389,15 @@ class OpsChangeCasTests(BucketConfig):
     def test_cas_deleteMeta(self):
 
         self.log.info(' Starting test-deleteMeta')
+
+
+        # load 20 kvs and check the CAS
         self._load_ops(ops='set', mutations=20)
         time.sleep(60)
         self._check_cas(check_conflict_resolution=False)
 
         k=0
+        test_cas = 456
 
         while k<1:
 
@@ -406,10 +410,15 @@ class OpsChangeCasTests(BucketConfig):
             mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
 
             TEST_SEQNO = 123
-            TEST_CAS = 456
+            test_cas = test_cas + 1
 
+
+            # get the meta data
             cas = mc_active.getMeta(key)[4]
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, '123456789',vbucket_id)
+
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, TEST_SEQNO, test_cas, '123456789',vbucket_id)
+
+
             cas_post_meta = mc_active.getMeta(key)[4]
 
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
@@ -423,7 +432,7 @@ class OpsChangeCasTests(BucketConfig):
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
 
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, 125, TEST_CAS, '123456789',vbucket_id)
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, 125, test_cas, '123456789',vbucket_id)
             cas_post_meta = mc_active.getMeta(key)[4]
 
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
@@ -437,10 +446,10 @@ class OpsChangeCasTests(BucketConfig):
 
             self.log.info('Doing delete with meta, using a lower CAS value')
             get_meta_pre = mc_active.getMeta(key)[4]
-            del_with_meta_resp = mc_active.del_with_meta(key, 0, 0, TEST_SEQNO, TEST_CAS, TEST_CAS+1)
+            del_with_meta_resp = mc_active.del_with_meta(key, 0, 0, TEST_SEQNO, test_cas, test_cas+1)
             get_meta_post = mc_active.getMeta(key)[4]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
-            self.assertTrue(max_cas > TEST_CAS+1, '[ERROR]Max cas {0} is not greater than delete cas {1}'.format(max_cas, TEST_CAS))
+            self.assertTrue(max_cas > test_cas+1, '[ERROR]Max cas {0} is not greater than delete cas {1}'.format(max_cas, test_cas))
 
     ''' Testing skipping conflict resolution, whereby the last write wins, and it does neither cas CR nor rev id CR
     '''
@@ -472,7 +481,7 @@ class OpsChangeCasTests(BucketConfig):
 
             self.log.info('Forcing conflict_resolution to allow insertion of lower Seq Number')
             lower_cas = int(cas)-1
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, low_seq, lower_cas, '123456789',vbucket_id, skipCR=True)
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, low_seq, lower_cas, '123456789',vbucket_id)
             cas_post_meta = mc_active.getMeta(key)[4]
             all_post_meta = mc_active.getMeta(key)
             post_seq = mc_active.getMeta(key)[3]

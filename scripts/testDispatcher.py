@@ -47,6 +47,7 @@ def main():
     parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y','--serverType', dest='serverType', default='VM')
     parser.add_option('-u','--url', dest='url', default=None)
+    parser.add_option('-j','--jenkins', dest='jenkins', default=None)
 
     options, args = parser.parse_args()
 
@@ -165,15 +166,18 @@ def main():
 
 
 
+
     # Docker goes somewhere else
     launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
-    if options.test:
-        if options.serverType.lower() == 'docker':
-            launchStringBase = launchStringBase + '-docker-test'
-        else:
-            launchStringBase = launchStringBase + '-test'
-    elif options.serverType.lower() == 'docker':
+
+    # optional add [-docker] [-Jenkins extension]
+    if options.serverType.lower() == 'docker':
         launchStringBase = launchStringBase + '-docker'
+    if options.test:
+        launchStringBase = launchStringBase + '-test'
+    elif options.jenkins is not None:
+        launchStringBase = launchStringBase + '-' + options.jenkins
+
 
 
     # this are VM/Docker dependent - or maybe not

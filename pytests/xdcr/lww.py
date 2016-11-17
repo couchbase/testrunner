@@ -161,6 +161,7 @@ class Lww(XDCRNewBaseTest):
         for line in output:
             if "max_cas" in line:
                 max_cas = line.split()[1]
+                break
         return long(max_cas)
 
     def _get_vbucket_id(self, node, bucket, key):
@@ -287,43 +288,6 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.resume_all_replications()
 
         self.verify_results()
-
-    def test_lww_extended_metadata(self):
-        src_conn = RestConnection(self.c1_cluster.get_master_node())
-        dest_conn = RestConnection(self.c2_cluster.get_master_node())
-
-        self._create_buckets(bucket='default', ramQuotaMB=100)
-        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
-
-        gen = DocumentGenerator('lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen)
-        gen = DocumentGenerator('lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen)
-
-        data_path = src_conn.get_data_path()
-        dump_file = data_path + "/default/0.couch.1"
-        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
-        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
-        output, error = conn.execute_command(cmd)
-        conn.log_command_output(output, error)
-        json_parsed = json.loads(output[1])
-        self.assertEqual(json_parsed['conflict_resolution_mode'], 1,
-                         "Conflict resolution mode is not LWW in extended metadata of src bucket")
-        self.log.info("Conflict resolution mode is LWW in extended metadata of src bucket as expected")
-
-        data_path = dest_conn.get_data_path()
-        dump_file = data_path + "/default/0.couch.1"
-        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
-        conn = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
-        output, error = conn.execute_command(cmd)
-        conn.log_command_output(output, error)
-        json_parsed = json.loads(output[1])
-        self.assertEqual(json_parsed['conflict_resolution_mode'], 1,
-                         "Conflict resolution mode is not LWW in extended metadata of dest bucket")
-        self.log.info("Conflict resolution mode is LWW in extended metadata of dest bucket as expected")
 
     def test_seq_upd_on_uni_with_src_wins(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -1626,52 +1590,7 @@ class Lww(XDCRNewBaseTest):
 
         self.verify_results()
 
-    def test_lww_disabled_extended_metadata(self):
-        src_conn = RestConnection(self.c1_cluster.get_master_node())
-        dest_conn = RestConnection(self.c2_cluster.get_master_node())
-
-        self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, dst_lww=False)
-        self.assertFalse(src_conn.is_lww_enabled(), "LWW enabled on source bucket")
-        self.log.info("LWW not enabled on source bucket as expected")
-        self.assertFalse(dest_conn.is_lww_enabled(), "LWW enabled on dest bucket")
-        self.log.info("LWW not enabled on dest bucket as expected")
-
-        self.setup_xdcr()
-        self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
-
-        gen = DocumentGenerator('lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen)
-        gen = DocumentGenerator('lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen)
-
-        self.c1_cluster.resume_all_replications()
-
-        self._wait_for_replication_to_catchup()
-
-        data_path = src_conn.get_data_path()
-        dump_file = data_path + "/default/0.couch.1"
-        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
-        conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
-        output, error = conn.execute_command(cmd)
-        conn.log_command_output(output, error)
-        json_parsed = json.loads(output[1])
-        self.assertEqual(json_parsed['conflict_resolution_mode'], 0,
-                         "Conflict resolution mode is LWW in extended metadata of src bucket")
-        self.log.info("Conflict resolution mode is not LWW in extended metadata of src bucket as expected")
-
-        data_path = dest_conn.get_data_path()
-        dump_file = data_path + "/default/0.couch.1"
-        cmd = "/opt/couchbase/bin/couch_dbdump --json " + dump_file
-        conn = RemoteMachineShellConnection(self.c2_cluster.get_master_node())
-        output, error = conn.execute_command(cmd)
-        conn.log_command_output(output, error)
-        json_parsed = json.loads(output[1])
-        self.assertEqual(json_parsed['conflict_resolution_mode'], 0,
-                         "Conflict resolution mode is LWW in extended metadata of dest bucket")
-        self.log.info("Conflict resolution mode is not LWW in extended metadata of dest bucket as expected")
-
-    def test_lww_src_enabled_dst_disabled_extended_metadata(self):
+    def test_mixed_mode(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
 

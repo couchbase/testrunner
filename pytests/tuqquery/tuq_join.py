@@ -88,23 +88,126 @@ class JoinTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_bidirectional_join(self):
-            self.query = "create index idxbidirec on %s(join_day)" %self.buckets[1].name ;
+            self.query = "create index idxbidirec on %s(join_day)" %self.buckets[0].name ;
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = "explain SELECT employee.name, employee.join_day " +\
-            "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[1].name) +\
+            "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[0].name) +\
             "ON KEY new_project.join_day FOR employee where new_project.join_day is not null"
             actual_result = self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.test_explain_particular_index("idxbidirec")
             self.query = "SELECT employee.name, employee.join_day " +\
-            "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[1].name)  +\
+            "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[0].name)  +\
             "ON KEY new_project.join_day FOR employee where new_project.join_day is not null"
             actual_result = self.run_cbq_query()
-            print actual_result
-            self.assertTrue(actual_result['metrics']['resultCount'] == 0, 'Query was not run successfully')
-            self.query = "drop index %s.idxbidirec" %self.buckets[1].name;
-            actual_result = self.run_cbq_query()
+            #self.assertTrue(actual_result['metrics']['resultCount'] == 0, 'Query was not run successfully')
+            self.query = "drop index %s.idxbidirec" %self.buckets[0].name;
+            self.run_cbq_query()
+
+            self.query = "CREATE INDEX ix1 ON default(docid,name)"
+            self.run_cbq_query()
+            self.query = 'CREATE INDEX ix2 ON default(docid,name) where type = "wdoc"'
+            self.run_cbq_query()
+            self.query = "CREATE INDEX ix3 ON default(altid, name, DISTINCT ARRAY p FOR p IN phones END)"
+            self.run_cbq_query()
+            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % ("default", "w001", {"type":"wdoc", "docid":"x001","name":"wdoc","phones":["123-456-7890","123-456-7891"],"altid":"x001"})
+            self.run_cbq_query()
+            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % ("default", "pdoc1", {"type":"pdoc", "docid":"x001","name":"pdoc","phones":["123-456-7890","123-456-7891"],"altid":"x001"})
+            self.run_cbq_query()
+            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % ("default", "pdoc2", {"type":"pdoc", "docid":"w001","name":"pdoc","phones":["123-456-7890","123-456-7891"],"altid":"w001"})
+            self.run_cbq_query()
+            self.query = 'explain SELECT meta(b1).id b1id FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+
+            self.query = 'SELECT meta(b1).id b1id FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+
+            self.assertTrue(actual_result['results']==[{u'b1id': u'w001'}])
+            self.query = 'explain SELECT meta(b1).id b1id, meta(b2).id b2id FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, meta(b2).id b2id FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'b1id': u'w001', u'b2id': u'pdoc2'}])
+            self.query = 'explain SELECT meta(b1).id b1id, b2.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, b2.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'docid': u'w001', u'b1id': u'w001'}])
+            self.query = 'explain SELECT meta(b1).id b1id, b2.name FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, b2.name FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'b1id': u'w001', u'name': u'pdoc'}])
+            self.query = 'explain SELECT meta(b1).id b1id, b2.name, b3.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, b2.name, b3.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'docid': u'w001', u'b1id': u'w001', u'name': u'pdoc'}])
+            self.query = 'explain SELECT meta(b1).id b1id, b2.name, b3.docid  FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b2 WHERE meta(b1).id > ""'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, b2.name, b3.docid  FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b2 WHERE meta(b1).id > "";'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['metrics']['resultCount']==0)
+            self.query = 'explain SELECT meta(b1).id b1id, meta(b2).id, b2.name  FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > "" AND b2.type = "wdoc"'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix2" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, meta(b2).id, b2.name  FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > "" AND b2.type = "wdoc"'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['metrics']['resultCount']==0)
+            self.query = 'explain SELECT meta(b1).id b1id, b2.name, b3.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b1 WHERE meta(b1).id > "" AND b2.type = "wdoc"'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix2" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, b2.name, b3.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b1 WHERE meta(b1).id > "" AND b2.type = "wdoc"'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['metrics']['resultCount']==0)
+            self.query = 'explain SELECT meta(b1).id b1id, b2.name, b3.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b2 WHERE meta(b1).id > "" AND b2.type = "wdoc"'
+            actual_result= self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix2" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, b2.name, b3.docid FROM default b1 JOIN default b2 ON KEY b2.docid FOR b1 JOIN default b3 ON KEY b3.docid FOR b2 WHERE meta(b1).id > "" AND b2.type = "wdoc"'
+            actual_result= self.run_cbq_query()
+            self.assertTrue(actual_result['metrics']['resultCount']==0)
+            self.query = 'SELECT meta(b1).id b1id, b2 from default b1 JOIN default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result=self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'b1id': u'w001', u'b2': {u'phones': [u'123-456-7890', u'123-456-7891'], u'type': u'pdoc', u'docid': u'w001', u'name': u'pdoc', u'altid': u'w001'}}])
+            self.query='SELECT meta(b1).id b1id FROM default b1 JOIN default b2 ON KEY b2.altid FOR b1 WHERE meta(b1).id > ""'
+            #enhancement
+            #actual_result=self.run_cbq_query()
+            #print actual_result
+            #right side should not use covered index
+            self.query = 'explain SELECT meta(b1).id b1id from default b1 NEST default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result=self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+            self.assertTrue("(`b2`.`docid`)" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id from default b1 NEST default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result=self.run_cbq_query()
+            self.query = 'explain SELECT meta(b1).id b1id, b2 from default b1 NEST default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result=self.run_cbq_query()
+            self.assertTrue("covers" in str(actual_result))
+            self.assertTrue("ix1" in str(actual_result))
+            self.assertTrue("(`b2`.`docid`)" in str(actual_result))
+            self.query = 'SELECT meta(b1).id b1id, b2 from default b1 NEST default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
+            actual_result=self.run_cbq_query()
+            self.assertTrue( actual_result['results']== [{u'b1id': u'w001', u'b2': [{u'phones': [u'123-456-7890', u'123-456-7891'], u'type': u'pdoc', u'docid': u'w001', u'name': u'pdoc', u'altid': u'w001'}]}] )
+
+
 
 
 

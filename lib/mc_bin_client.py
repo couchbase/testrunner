@@ -253,12 +253,11 @@ class MemcachedClient(object):
                                key, value, 0, exp, flags, seqno, remote_cas)
 
     # set with meta using the LWW conflict resolution CAS
-    def setWithMetaConflictResolution(self, key, value, exp, flags,cas):
+    def setWithMetaLWW(self, key, value, exp, flags,cas):
         """Set a value and its meta data in the memcached server.
         The format is described here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/set_with_meta.md,
         the first CAS will be 0 because that is the traditional CAS, and the CAS in the "extras" will be populated.
         The sequence number will be 0 because as to the best of my understanding it is not used with LWW.
-
 
         """
         #
@@ -266,29 +265,54 @@ class MemcachedClient(object):
         META_LEN = 0
         SEQNO = 0
 
+        self._set_vbucket(key, -1)
+
         return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, value,
-                struct.pack(SET_META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+
+
+    # set with meta using the LWW conflict resolution CAS
+    def delWithMetaLWW(self, key, exp, flags,cas):
+        """Set a value and its meta data in the memcached server.
+        The format is described here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/del_with_meta.md,
+        the first CAS will be 0 because that is the traditional CAS, and the CAS in the "extras" will be populated.
+        The sequence number will be 0 because as to the best of my understanding it is not used with LWW.
+
+        """
+
+        META_LEN = 0
+        SEQNO = 0
+
+
+        self._set_vbucket(key, -1)
+
+        return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
 
 
     # hope to remove this and migrate existing calls to the aboce
     def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
-                      adjusted_time=0, conflict_resolution_mode=0, skipCR=False):
+                      adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
 
-        if skipCR:
-            return self._doCmd(memcacheConstants.CMD_SET_WITH_META,
-                key,
-                val,
-                struct.pack(memcacheConstants.SKIP_META_CMD_FMT,
-                    flags,
-                    exp,
-                    seqno,
-                    cas,
-                    memcacheConstants.CR
-                ))
+
+        return self._doCmd(memcacheConstants.CMD_SET_WITH_META,
+            key,
+            val,
+            struct.pack(memcacheConstants.SKIP_META_CMD_FMT,
+                flags,
+                exp,
+                seqno,
+                cas,
+                memcacheConstants.CR
+            ))
 
 
+        # Extended meta data was a 4.0 and 4.5 era construct, and not supported in 4.6 Not sure if will ever be needed
+        # but leaving the code visible in case it is
+
+        """
         if add_extended_meta_data:
             extended_meta_data =  self.pack_the_extended_meta_data( adjusted_time, conflict_resolution_mode)
             return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
@@ -297,6 +321,7 @@ class MemcachedClient(object):
         else:
             return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
                    struct.pack(META_CMD_FMT, flags, exp, seqno, cas) )
+        """
 
 
 

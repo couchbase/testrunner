@@ -2,6 +2,7 @@ import copy
 import json
 import os
 from threading import Thread
+import time
 
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -633,54 +634,6 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertEqual(output, ["(u'notRunning', None)"])
         remote_client.disconnect()
 
-    def testNodeInit(self):
-        server = self.servers[-1]
-        remote_client = RemoteMachineShellConnection(server)
-        prefix = ''
-        type = remote_client.extract_remote_info().distribution_type
-        if type.lower() == 'windows':
-            prefix_path = "C:"
-
-        data_path = self.input.param("data_path", None)
-        index_path = self.input.param("index_path", None)
-
-        if data_path is not None:
-            data_path = prefix + data_path.replace('|', "/")
-        if index_path is not None:
-            index_path = prefix + index_path.replace('|', "/")
-
-        server_info = self._get_cluster_info(remote_client, cluster_port=server.port, \
-                              user=server.rest_username, password=server.rest_password)
-        data_path_before = server_info["storage"]["hdd"][0]["path"]
-        index_path_before = server_info["storage"]["hdd"][0]["index_path"]
-
-        try:
-            rest = RestConnection(server)
-            rest.force_eject_node()
-            cli_command = "node-init"
-            options = ""
-            options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
-            options += ("--node-init-index-path={0} ".format(index_path), "")[index_path is None]
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                              options=options, cluster_host="localhost", \
-                                                user="Administrator", password="password")
-            self.sleep(7)  # time needed to reload couchbase
-            """ no output print out.  Bug https://issues.couchbase.com/browse/MB-13704
-                output    []
-                error    []
-                It need to check when this bug is fixed """
-            #self.assertEqual(output[0], "SUCCESS: init localhost")
-            rest.init_cluster()
-            server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-            data_path_after = server_info["storage"]["hdd"][0]["path"]
-            index_path_after = server_info["storage"]["hdd"][0]["index_path"]
-            self.assertEqual((data_path, data_path_before)[data_path is None], data_path_after)
-            self.assertEqual((index_path, index_path_before)[index_path is None], index_path_after)
-        finally:
-            rest = RestConnection(server)
-            rest.force_eject_node()
-            rest.init_cluster()
-
     def testClusterInit(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
@@ -814,6 +767,52 @@ class CouchbaseCliTest(CliBaseTest):
                             "Expected command to succeed")
             self.assertTrue(self.verifyAuditSettings(server, enabled, log_path, rotate_interval),
                             "Audit settings were not set properly")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server),
+                                "Cluster was initialized, but error was received")
+
+    def testSettingCompaction(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+
+        db_frag_perc = self.input.param("db-frag-perc", None)
+        db_frag_size = self.input.param("db-frag-size", None)
+        view_frag_perc = self.input.param("view-frag-perc", None)
+        view_frag_size = self.input.param("view-frag-size", None)
+        from_period = self.input.param("from-period", None)
+        to_period = self.input.param("to-period", None)
+        abort_outside = self.input.param("abort-outside", None)
+        parallel_compact = self.input.param("parallel-compact", None)
+        purgeInt = self.input.param("purge-interval", None)
+
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, username, password)
+        if initialized:
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        stdout, _, errored = cli.setting_compaction(db_frag_perc, db_frag_size, view_frag_perc, view_frag_size,
+                                                    from_period, to_period, abort_outside, parallel_compact, purgeInt)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            self.assertTrue(self.verifyCompactionSettings(server, db_frag_perc, db_frag_size, view_frag_perc,
+                                                          view_frag_size, from_period, to_period, abort_outside,
+                                                          parallel_compact, purgeInt),
+                            "Settings don't match")
 
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
@@ -1012,6 +1011,99 @@ class CouchbaseCliTest(CliBaseTest):
             if not initialized:
                 self.assertTrue(not self.isClusterInitialized(server),
                                 "Cluster was initialized, but error was received")
+
+    def testSettingLdap(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        admins = self.input.param("admins", None)
+        ro_admins = self.input.param("ro-admins", None)
+        enabled = self.input.param("enabled", False)
+        default = self.input.param("default", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, username, password)
+        if initialized:
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        stdout, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "LDAP settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyLdapSettings(server, admins, ro_admins, default, enabled), "LDAP settings not set")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(self.verifyLdapSettings(server, None, None, None, 0), "LDAP setting changed")
+
+    def testSettingAlert(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        enabled = self.input.param("enabled", None)
+        email_recipients = self.input.param("email-recipients", None)
+        email_sender = self.input.param("email-sender", None)
+        email_username = self.input.param("email-user", None)
+        email_password = self.input.param("email-password", None)
+        email_host = self.input.param("email-host", None)
+        email_port = self.input.param("email-port", None)
+        encrypted = self.input.param("encrypted", None)
+        alert_af_node = self.input.param("alert-auto-failover-node", False)
+        alert_af_max_reached = self.input.param("alert-auto-failover-max-reached", False)
+        alert_af_node_down = self.input.param("alert-auto-failover-node-down", False)
+        alert_af_small = self.input.param("alert-auto-failover-cluster-small", False)
+        alert_af_disable = self.input.param("alert-auto-failover-disable", False)
+        alert_ip_changed = self.input.param("alert-ip-changed", False)
+        alert_disk_space = self.input.param("alert-disk-space", False)
+        alert_meta_overhead = self.input.param("alert-meta-overhead", False)
+        alert_meta_oom = self.input.param("alert-meta-oom", False)
+        alert_write_failed = self.input.param("alert-write-failed", False)
+        alert_audit_dropped = self.input.param("alert-audit-msg-dropped", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, username, password)
+        if initialized:
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        stdout, _, _ = cli.setting_alert(enabled, email_recipients, email_sender, email_username, email_password,
+                                         email_host, email_port, encrypted, alert_af_node, alert_af_max_reached,
+                                         alert_af_node_down, alert_af_small, alert_af_disable, alert_ip_changed,
+                                         alert_disk_space, alert_meta_overhead, alert_meta_oom, alert_write_failed,
+                                         alert_audit_dropped)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Email alert settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyAlertSettings(server, enabled, email_recipients, email_sender, email_username,
+                                                     email_password, email_host, email_port, encrypted, alert_af_node,
+                                                     alert_af_max_reached, alert_af_node_down, alert_af_small,
+                                                     alert_af_disable, alert_ip_changed, alert_disk_space,
+                                                     alert_meta_overhead, alert_meta_oom, alert_write_failed,
+                                                     alert_audit_dropped),
+                            "Alerts settings not set")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
 
     def testBucketCompact(self):
         username = self.input.param("username", None)
@@ -1225,336 +1317,589 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys),
                                 "Expected keys to exist after the flush failed")
 
-    # MB-8566
-    def testSettingCompacttion(self):
-        '''setting-compacttion OPTIONS:
-        --compaction-db-percentage=PERCENTAGE     at which point database compaction is triggered
-        --compaction-db-size=SIZE[MB]             at which point database compaction is triggered
-        --compaction-view-percentage=PERCENTAGE   at which point view compaction is triggered
-        --compaction-view-size=SIZE[MB]           at which point view compaction is triggered
-        --compaction-period-from=HH:MM            allow compaction time period from
-        --compaction-period-to=HH:MM              allow compaction time period to
-        --enable-compaction-abort=[0|1]           allow compaction abort when time expires
-        --enable-compaction-parallel=[0|1]        allow parallel compaction for database and view'''
-        compaction_db_percentage = self.input.param("compaction-db-percentage", None)
-        compaction_db_size = self.input.param("compaction-db-size", None)
-        compaction_view_percentage = self.input.param("compaction-view-percentage", None)
-        compaction_view_size = self.input.param("compaction-view-size", None)
-        compaction_period_from = self.input.param("compaction-period-from", None)
-        compaction_period_to = self.input.param("compaction-period-to", None)
-        enable_compaction_abort = self.input.param("enable-compaction-abort", None)
-        enable_compaction_parallel = self.input.param("enable-compaction-parallel", None)
-        bucket = self.input.param("bucket", "default")
-        output = self.input.param("output", '')
-        rest = RestConnection(self.master)
-        remote_client = RemoteMachineShellConnection(self.master)
-        self.testBucketCreation()
-        cli_command = "setting-compacttion"
-        options = "--bucket={0}".format(bucket)
-        options += (" --compaction-db-percentage={0}".format(compaction_db_percentage), "")[compaction_db_percentage is None]
-        options += (" --compaction-db-size={0}".format(compaction_db_size), "")[compaction_db_size is None]
-        options += (" --compaction-view-percentage={0}".format(compaction_view_percentage), "")[compaction_view_percentage is None]
-        options += (" --compaction-view-size={0}".format(compaction_view_size), "")[compaction_view_size is None]
-        options += (" --compaction-period-from={0}".format(compaction_period_from), "")[compaction_period_from is None]
-        options += (" --compaction-period-to={0}".format(compaction_period_to), "")[compaction_period_to is None]
-        options += (" --enable-compaction-abort={0}".format(enable_compaction_abort), "")[enable_compaction_abort is None]
-        options += (" --enable-compaction-parallel={0}".format(enable_compaction_parallel), "")[enable_compaction_parallel is None]
+    def testServerAdd(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        num_servers = self.input.param("num-add-servers", None)
+        server_username = self.input.param("server-add-username", None)
+        server_password = self.input.param("server-add-password", None)
+        group = self.input.param("group-name", None)
+        services = self.input.param("services", None)
+        index_storage_mode = self.input.param("index-storage-mode", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+        init_index_storage_mode = self.input.param("init-index-storage-mode", None)
+        init_services = self.input.param("init-services", None)
 
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ['SUCCESS: bucket-edit'])
-        cluster_status = rest.cluster_status()
-        remote_client.disconnect()
+        server = copy.deepcopy(self.servers[0])
 
-    """ tests for the group-manage option. group creation, renaming and deletion are tested .
-        These tests require a cluster of four or more nodes. """
-    def testCreateRenameDeleteGroup(self):
-        remote_client = RemoteMachineShellConnection(self.master)
-        cli_command = "group-manage"
+        servers_list = list()
+        for i in range(0, num_servers):
+            servers_list.append("%s:%s" % (self.servers[i+1].ip, self.servers[i+1].port))
+        server_to_add = ",".join(servers_list)
 
-        if self.os == "linux":
-            # create group
-            options = " --create --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group created group2"])
-            # create existing group. operation should fail
-            options = " --create --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
-            self.assertEqual(output[1], '{"name":"already exists"}')
-            # rename group test
-            options = " --rename=group3 --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group renamed group2"])
-            # delete group test
-            options = " --delete --group-name=group3"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group deleted group3"])
-            # delete non-empty group test
-            options = " --delete --group-name=\"Group 1\""
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
-            self.assertEqual(output[1], '{"_":"group is not empty"}')
-            # delete non-existing group
-            options = " --delete --group-name=groupn"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["ERROR: invalid group name:groupn"])
-            remote_client.disconnect()
+        rest = RestConnection(server)
+        rest.force_eject_node()
 
-        if self.os == "windows":
-            # create group
-            options = " --create --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: group created group2")
-            # create existing group. operation should fail
-            options = " --create --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
-            self.assertEqual(output[2], '{"name":"already exists"}')
-            # rename group test
-            options = " --rename=group3 --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: group renamed group2")
-            # delete group test
-            options = " --delete --group-name=group3"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: group deleted group3")
-            # delete non-empty group test
-            options = " --delete --group-name=\"Group 1\""
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
-            self.assertEqual(output[2], '{"_":"group is not empty"}')
-            # delete non-existing group
-            options = " --delete --group-name=groupn"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "ERROR: invalid group name:groupn")
-            remote_client.disconnect()
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, init_services, init_index_storage_mode, None,
+                                             server.rest_username, server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
 
-    """ tests for the group-manage option. adding and moving servers between groups are tested. 
-        These tests require a cluster of four or more nodes. """
-    def testAddMoveServerListGroup(self):
-        nodes_add = self.input.param("nodes_add", 1)
-        remote_client = RemoteMachineShellConnection(self.master)
-        cli_command = "group-manage"
-        if self.os == "linux":
-            # create a group to use in this testcase
-            options = " --create --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group created group2"])
-            # add multiple servers to group
-            for num in xrange(nodes_add):
-                options = "--add-servers=\"{0}:8091;{1}:8091\" --group-name=group2 \
-                           --server-add-username=Administrator --server-add-password=password" \
-                           .format(self.servers[num + 1].ip, self.servers[num + 2].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="{0}:8091".format(self.servers[num].ip), \
-                        user="Administrator", password="password")
-                output = self.del_runCmd_value(output)
-                # This one is before Watson
-                #self.assertEqual(output[0], "SUCCESS: add server {0}:8091' to group 'group2'" \
-                #                                              .format(self.servers[num + 1].ip))
-                self.assertEqual(output[0], "Server {0}:8091 added to group group2" \
-                                                              .format(self.servers[num + 1].ip))
-                """Server 172.23.105.114:8091 added to group group2"""
-                # This one is before Watson
-                #self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'" \
-                #                                              .format(self.servers[num + 2].ip))
-                self.assertEqual(output[1], "Server {0}:8091 added to group group2" \
-                                                              .format(self.servers[num + 2].ip))
-            # add single server to group
-            for num in xrange(nodes_add):
-                options = "--add-servers={0}:8091 --group-name=group2 \
-                           --server-add-username=Administrator --server-add-password=password" \
-                           .format(self.servers[num + 3].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                output = self.del_runCmd_value(output)
-                # This one is before Watson
-                #self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'" \
-                #                                           .format(self.servers[num + 3].ip)])
-                self.assertEqual(output, ["Server {0}:8091 added to group group2" \
-                                                           .format(self.servers[num + 3].ip)])
-            # list servers in group
-            for num in xrange(nodes_add):
-                options = " --list --group-name=group2"
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                output = self.del_runCmd_value(output)
-                self.assertEqual(output[0], "group2")
-                self.assertEqual(output[1], " server: {0}:8091".format(self.servers[num + 1].ip))
-                self.assertEqual(output[2], " server: {0}:8091".format(self.servers[num + 2].ip))
-                self.assertEqual(output[3], " server: {0}:8091".format(self.servers[num + 3].ip))
-            # test move multiple servers
-            for num in xrange(nodes_add):
-                options = "--from-group=group2 --to-group=\"Group 1\" \
-                           --move-servers=\"{0}:8091;{1}:8091;{2}:8091\"".format(self.servers[num + 1].ip, \
-                                                       self.servers[num + 2].ip, self.servers[num + 3].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                output = self.del_runCmd_value(output)
-                self.assertEqual(output, ["SUCCESS: move servers from group 'group2' to group 'Group 1'"])
-            # clean up by deleting group
-            options = " --delete --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group deleted group2"])
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, _ = cli.server_add(server_to_add, server_username, server_password, group, services,
+                                      index_storage_mode)
 
-        if self.os == "windows":
-            # create a group to use in this testcase
-            options = " --create --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: group created group2")
-            # add multiple servers to group
-            for num in xrange(nodes_add):
-                options = "--add-servers=\"{0}:8091;{1}:8091\" --group-name=group2 \
-                    --server-add-username=Administrator --server-add-password=password" \
-                    .format(self.servers[num + 1].ip, self.servers[num + 2].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="{0}:8091".format(self.servers[num].ip), \
-                        user="Administrator", password="password")
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'group2'" \
-                                 .format(self.servers[num + 1].ip))
-                self.assertEqual(output[2], "SUCCESS: add server '{0}:8091' to group 'group2'" \
-                                 .format(self.servers[num + 2].ip))
-            # add single server to group
-            for num in xrange(nodes_add):
-                options = "--add-servers={0}:8091 --group-name=group2 --server-add-username=Administrator \
-                           --server-add-password=password".format(self.servers[num + 3].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'group2'" \
-                                 .format(self.servers[num + 3].ip))
-            # list servers in group
-            for num in xrange(nodes_add):
-                options = " --list --group-name=group2"
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                self.assertEqual(output[0], "group2")
-                self.assertEqual(output[2], " server: {0}:8091".format(self.servers[num + 1].ip))
-                self.assertEqual(output[4], " server: {0}:8091".format(self.servers[num + 2].ip))
-                self.assertEqual(output[6], " server: {0}:8091".format(self.servers[num + 3].ip))
-            # test move multiple servers
-            for num in xrange(nodes_add):
-                options = "--from-group=group2 --to-group=\"Group 1\" \
-                --move-servers=\"{0}:8091;{1}:8091;{2}:8091\"".format(self.servers[num + 1].ip, \
-                                            self.servers[num + 2].ip, self.servers[num + 3].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                self.assertEqual(output[0], "SUCCESS: move servers from group 'group2' to group 'Group 1'")
-            # clean up by deleting group
-            options = " --delete --group-name=group2"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: group deleted group2")
+        if not services:
+            services = "kv"
+        if group:
+            if (group[0] == group[-1]) and group.startswith(("'", '"')):
+                group = group[1:-1]
+        else:
+            group = "Group 1"
 
-    """ tests for the server-add option with group manage rider.
-        These tests require a cluster of four or more nodes. """
-    def testServerAddRebalancewithGroupManage(self):
-        nodes_add = self.input.param("nodes_add", 1)
-        remote_client = RemoteMachineShellConnection(self.master)
+        if not index_storage_mode and "index" in services.split(","):
+            index_storage_mode = "default"
 
-        if self.os == "linux":
-            # test server-add command with group manage option
-            cli_command = "server-add"
-            for num in xrange(nodes_add):
-                options = "--server-add={0}:8091 --server-add-username=Administrator \
-                           --server-add-password=password --group-name=\"Group 1\"" \
-                           .format(self.servers[num + 1].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                output = self.del_runCmd_value(output)
-                # This one is before Watson
-                #self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                #                                            .format(self.servers[num + 1].ip)])
-                self.assertEqual(output[1], "Server {0}:8091 added to group Group 1" \
-                                                            .format(self.servers[num + 1].ip))
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server added"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyPendingServer(server, server_to_add, group, services),
+                            "Pending server has incorrect settings")
+            self.assertTrue(self.verifyIndexSettings(server, None, None, None, index_storage_mode, None, None),
+                            "Invalid index storage setting")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized:
+                self.assertTrue(self.verifyPendingServerDoesNotExist(server, server_to_add),
+                                "Pending server exists")
 
-            # test rebalance command with add server and group manage option
-            cli_command = "rebalance"
-            for num in xrange(nodes_add):
-                options = "--server-add={0}:8091 --server-add-username=Administrator \
-                           --server-add-password=password --group-name=\"Group 1\"" \
-                                                    .format(self.servers[num + 2].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                output = self.del_runCmd_value(output)
-                # This one before watson
-                #self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                #                                               .format(self.servers[num + 2].ip))
-                self.assertEqual(output[1], "Server {0}:8091 added to group Group 1" \
-                                                               .format(self.servers[num + 2].ip))
+    def testRebalance(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        num_add_servers = self.input.param("num-add-servers", 0)
+        num_remove_servers = self.input.param("num-remove-servers", 0)
+        num_initial_servers = self.input.param("num-initial-servers", 1)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
 
-                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
+        self.assertTrue(num_initial_servers > num_remove_servers, "Specified more remove servers than initial servers")
 
-            for num in xrange(nodes_add):
-                options = "--server-remove={0}:8091 --server-add={1}:8091 \
-                           --server-add-username=Administrator --server-add-password=password \
-                           --group-name=\"Group 1\"".format(self.servers[num + 2].ip, self.servers[num + 3].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                output = self.del_runCmd_value(output)
-                # This one before watson
-                #self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                self.assertTrue(self._check_output("Server %s:8091 added" %self.servers[num + 3].ip, output))
-                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
+        srv_idx = 0
+        server = copy.deepcopy(self.servers[srv_idx])
+        srv_idx += 1
 
+        initial_servers_list = list()
+        for _ in range(0, num_initial_servers-1):
+            initial_servers_list.append("%s:%s" % (self.servers[srv_idx].ip, self.servers[srv_idx].port))
+            srv_idx += 1
+        initial_servers = ",".join(initial_servers_list)
 
-        if self.os == "windows":
-            # test server-add command with group manage option
-            cli_command = "server-add"
-            for num in xrange(nodes_add):
-                options = "--server-add={0}:8091 --server-add-username=Administrator \
-                           --server-add-password=password --group-name=\"Group 1\""  \
-                                                     .format(self.servers[num + 1].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                                                            .format(self.servers[num + 1].ip))
-            # test rebalance command with add server and group manage option
-            cli_command = "rebalance"
-            for num in xrange(nodes_add):
-                options = "--server-add={0}:8091 --server-add-username=Administrator \
-                           --server-add-password=password --group-name=\"Group 1\"" \
-                                                    .format(self.servers[num + 2].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                self.assertEqual(output[4], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                                                               .format(self.servers[num + 2].ip))
-                # old before watson
-                #self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
-                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
+        add_servers_list = list()
+        for _ in range(0, num_add_servers):
+            add_servers_list.append("%s:%s" % (self.servers[srv_idx].ip, self.servers[srv_idx].port))
+            srv_idx += 1
+        servers_to_add = ",".join(add_servers_list)
 
-            for num in xrange(nodes_add):
-                options = "--server-remove={0}:8091 --server-add={1}:8091 \
-                           --server-add-username=Administrator --server-add-password=password \
-                           --group-name=\"Group 1\"".format(self.servers[num + 2].ip, self.servers[num + 3].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user="Administrator", password="password")
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                                                               .format(self.servers[num + 3].ip))
-                self.assertTrue("INFO: rebalancing" in output[1])
-                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+        remove_servers_list = list()
+        for i in range(0, num_remove_servers):
+            remove_servers_list.append("%s:%s" % (self.servers[i+1].ip, self.servers[i+1].port))
+        servers_to_remove = ",".join(remove_servers_list)
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+            time.sleep(5)
+            if initial_servers != "":
+                _, _, errored = cli.server_add(initial_servers, server.rest_username, server.rest_password, None, None, None)
+                self.assertTrue(errored, "Unable to add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+            if servers_to_add != "":
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                self.assertTrue(errored, "Unable to add initial servers")
+
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, _ = cli.rebalance(servers_to_remove)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Rebalance complete"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyActiveServers(server, num_initial_servers + num_add_servers - num_remove_servers),
+                            "No new servers were added to the cluster")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized:
+                self.assertTrue(self.verifyActiveServers(server, num_initial_servers),
+                                "Expected no new servers to be in the cluster")
+
+    def testRebalanceInvalidRemoveServer(self):
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+        _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                         server.rest_password, None)
+        self.assertTrue(success, "Cluster initialization failed during test setup")
+        time.sleep(5)
+
+        stdout, _, _ = cli.rebalance("invalid.server:8091")
+
+        self.assertTrue(self.verifyCommandOutput(stdout, True, error_msg),
+                        "Expected error message not found")
+        self.assertTrue(self.verifyActiveServers(server, 1),
+                        "Expected no new servers to be in the cluster")
+
+    def testFailover(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        num_initial_servers = self.input.param("num-initial-servers", 2)
+        invalid_node = self.input.param("invalid-node", False)
+        no_failover_servers = self.input.param("no-failover-servers", False)
+        force = self.input.param("force", False)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        initial_servers_list = list()
+        for i in range(0, num_initial_servers - 1):
+            initial_servers_list.append("%s:%s" % (self.servers[i + 1].ip, self.servers[i + 1].port))
+        initial_servers = ",".join(initial_servers_list)
+
+        server_to_failover = "%s:%s" % (self.servers[1].ip, self.servers[1].port)
+        if invalid_node:
+            server_to_failover = "invalid.server:8091"
+        if no_failover_servers:
+            server_to_failover = None
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+            if initial_servers != "":
+                time.sleep(5)
+                _, _, errored = cli.server_add(initial_servers, server.rest_username, server.rest_password, None, None,
+                                               None)
+                self.assertTrue(errored, "Unable to add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+            _, _, success = cli.bucket_create("bucket", '""', "couchbase", 256, None, None, None, None,
+                                                  None, None)
+            self.assertTrue(success, "Bucket not created during test setup")
+            time.sleep(10)
+
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, _ = cli.failover(server_to_failover, force)
+
+        if not expect_error:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server failed over"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyActiveServers(server, num_initial_servers - 1),
+                            "Servers not failed over")
+            self.assertTrue(self.verifyFailedServers(server, 1),
+                            "Not all servers failed over have `inactiveFailed` status")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized:
+                self.assertTrue(self.verifyActiveServers(server, num_initial_servers),
+                                "Servers should not have been failed over")
+
+    def testUserManage(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        list = self.input.param("list", False)
+        delete = self.input.param("delete", False)
+        set = self.input.param("set", False)
+        ro_username = self.input.param("ro-username", None)
+        ro_password = self.input.param("ro-password", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_ro_username = self.input.param("init-ro-username", None)
+        init_ro_password = self.input.param("init-ro-password", None)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+            if init_ro_username and init_ro_password:
+                self.assertTrue(rest.create_ro_user(init_ro_username, init_ro_password), "Setting initial ro user failed")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.user_manage(delete, list, set, ro_username, ro_password)
+
+        if not expect_error:
+            if list:
+                self.assertTrue(stdout[0] == init_ro_username, "Listed ro user is not correct")
+            else:
+                self.assertTrue(errored, "Expected command to succeed")
+            if set:
+                self.assertTrue(self.verifyReadOnlyUser(server, ro_username), "Read only user was not set")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if initialized and init_ro_username:
+                self.assertTrue(self.verifyReadOnlyUser(server, init_ro_username), "Read only user was changed")
+
+    def testCollectLogStart(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        all_nodes = self.input.param("all-nodes", False)
+        nodes = self.input.param("nodes", 0)
+        upload = self.input.param("upload", None)
+        upload_host = self.input.param("upload-host", None)
+        upload_customer = self.input.param("customer", None)
+        upload_ticket = self.input.param("ticket", None)
+        invalid_node = self.input.param("invalid-node", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_num_servers = self.input.param("init-num-servers", 1)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        servers_to_add = list()
+        for idx in range(init_num_servers-1):
+            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+        servers_to_add = ",".join(servers_to_add)
+
+        log_nodes = None
+        if nodes > 0 or invalid_node is not None:
+            log_nodes = list()
+            for idx in range(nodes):
+                log_nodes.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+            if invalid_node is not None:
+                log_nodes.append("invalid:8091")
+            log_nodes = ",".join(log_nodes)
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+            if init_num_servers > 1:
+                time.sleep(5)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                self.assertTrue(errored, "Could not add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.collect_logs_start(all_nodes, log_nodes, upload, upload_host, upload_customer, upload_ticket)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
+    def testCollectLogStop(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.collect_logs_stop()
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
+    def testNodeInit(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        data_path = self.input.param("data-path", None)
+        index_path = self.input.param("index-path", None)
+        hostname = self.input.param("hostname", None)
+        initialized = self.input.param("initialized", False)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        node_settings = rest.get_nodes_self()
+
+        if data_path is not None and data_path == "valid":
+            data_path = self.log_path
+
+        if index_path is not None and index_path == "valid":
+            index_path = self.log_path
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.node_init(data_path, index_path, hostname)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            if data_path is None:
+                data_path = node_settings.storage[0].path
+            if index_path is None:
+                index_path = node_settings.storage[0].index_path
+            self.assertTrue(self.verify_node_settings(server, data_path, index_path, hostname),
+                            "Node settings not changed")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
+    def testGroupManage(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        create = self.input.param("create", None)
+        delete = self.input.param("delete", None)
+        list = self.input.param("list", None)
+        move = self.input.param("move-servers", 0)
+        rename = self.input.param("rename", None)
+        name = self.input.param("name", None)
+        from_group = self.input.param("from-group", None)
+        to_group = self.input.param("to-group", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        init_group = self.input.param("init-group", None)
+        init_num_servers = self.input.param("init-num-servers", 1)
+        invalid_move_server = self.input.param("invalid-move-server", None)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        to_move = None
+        if move > 0:
+            to_move = []
+            for idx in range(move):
+                to_move.append("%s:%s" % (self.servers[idx].ip, self.servers[idx].port))
+            to_move = ",".join(to_move)
+
+        if invalid_move_server:
+            to_move = invalid_move_server
+
+        servers_to_add = []
+        for idx in range(init_num_servers-1):
+            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+        servers_to_add = ",".join(servers_to_add)
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+            if init_num_servers > 1:
+                time.sleep(5)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                self.assertTrue(errored, "Could not add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+
+            if init_group is not None:
+                time.sleep(5)
+                _, _, errored = cli.group_manage(True, False, False, None, None, init_group, None, None)
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.group_manage(create, delete, list, to_move, rename, name, to_group, from_group)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            if create:
+                self.assertTrue(self.verifyGroupExists(server, name), "Group doesn't exist")
+            elif delete:
+                self.assertTrue(not self.verifyGroupExists(server, name), "Group doesn't exist")
+            elif rename:
+                self.assertTrue(self.verifyGroupExists(server, name), "Group not renamed")
+            elif move > 0:
+                _, _, errored = cli.group_manage(False, False, False, to_move, None, None, from_group, to_group)
+                self.assertTrue(errored, "Group reset failed")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
+    def testRecovery(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        servers = self.input.param("servers", 0)
+        recovery_type = self.input.param("recovery-type", None)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        skip_failover = self.input.param("skip-failover", False)
+        init_num_servers = self.input.param("init-num-servers", 1)
+        invalid_recover_server = self.input.param("invalid-recover-server", None)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        servers_to_recover = None
+        if servers > 0:
+            servers_to_recover = []
+            for idx in range(servers):
+                servers_to_recover.append("%s:%s" % (self.servers[idx+1].ip, self.servers[idx+1].port))
+            servers_to_recover = ",".join(servers_to_recover)
+
+        if invalid_recover_server:
+            servers_to_recover = invalid_recover_server
+
+        servers_to_add = []
+        for idx in range(init_num_servers - 1):
+            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+        servers_to_add = ",".join(servers_to_add)
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+            if init_num_servers > 1:
+                time.sleep(5)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None,
+                                               None)
+                self.assertTrue(errored, "Could not add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+
+            if servers_to_recover and not skip_failover:
+                for restore_server in servers_to_recover.split(","):
+                    _, _, errored = cli.failover(restore_server, True)
+                    self.assertTrue(errored, "Unable to failover servers")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.recovery(servers_to_recover, recovery_type)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            self.assertTrue(self.verifyRecoveryType(server, servers_to_recover, recovery_type), "Servers not recovered")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+
+    def testServerReadd(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        servers = self.input.param("servers", 0)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        skip_failover = self.input.param("skip-failover", False)
+        init_num_servers = self.input.param("init-num-servers", 1)
+        invalid_recover_server = self.input.param("invalid-recover-server", None)
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        servers_to_recover = None
+        if servers > 0:
+            servers_to_recover = []
+            for idx in range(servers):
+                servers_to_recover.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+            servers_to_recover = ",".join(servers_to_recover)
+
+        if invalid_recover_server:
+            servers_to_recover = invalid_recover_server
+
+        servers_to_add = []
+        for idx in range(init_num_servers - 1):
+            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+        servers_to_add = ",".join(servers_to_add)
+
+        if initialized:
+            cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+            if init_num_servers > 1:
+                time.sleep(5)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None,
+                                               None)
+                self.assertTrue(errored, "Could not add initial servers")
+                _, _, errored = cli.rebalance(None)
+                self.assertTrue(errored, "Unable to complete initial rebalance")
+
+            if servers_to_recover and not skip_failover:
+                for restore_server in servers_to_recover.split(","):
+                    _, _, errored = cli.failover(restore_server, True)
+                    self.assertTrue(errored, "Unable to failover servers")
+
+        time.sleep(5)
+        cli = CouchbaseCLI(server, username, password)
+        stdout, _, errored = cli.server_readd(servers_to_recover)
+
+        if not expect_error:
+            self.assertTrue(errored, "Expected command to succeed")
+            self.assertTrue(self.verifyRecoveryType(server, servers_to_recover, "full"), "Servers not recovered")
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
 
     def test_change_admin_password_with_read_only_account(self):
         """ this test automation for bug MB-20170.

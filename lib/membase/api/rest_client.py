@@ -1666,6 +1666,8 @@ class RestConnection(object):
         status, content, header = self._http_request(api)
         return json.loads(content)
 
+
+
     def fetch_bucket_xdcr_stats(self, bucket='default', zoom='minute'):
         """Return deserialized bucket xdcr stats.
         Keyword argument:
@@ -2052,6 +2054,23 @@ class RestConnection(object):
         log.info('settings/alerts params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
+
+
+
+    def set_cas_drift_threshold(self, bucket, ahead_threshold_in_millisecond, behind_threshold_in_millisecond):
+
+        api = self.baseUrl + 'pools/default/buckets/{0}'. format( bucket )
+        params_dict ={'driftAheadThresholdMs': ahead_threshold_in_millisecond,
+                      'driftBehindThresholdMs': behind_threshold_in_millisecond}
+        params = urllib.urlencode(params_dict)
+        log.info("%s with param: %s" % (api, params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
+
+
+
+
 
     def stop_rebalance(self, wait_timeout=10):
         api = self.baseUrl + '/controller/stopRebalance'
@@ -2463,6 +2482,11 @@ class RestConnection(object):
 
         return self.diag_eval(cmd)
 
+    def get_auto_compaction_settings(self):
+        api = self.baseUrl + "settings/autoCompaction"
+        status, content, header = self._http_request(api)
+        return json.loads(content)
+
     def set_auto_compaction(self, parallelDBAndVC="false",
                             dbFragmentThreshold=None,
                             viewFragmntThreshold=None,
@@ -2645,6 +2669,11 @@ class RestConnection(object):
         logs = self.get_logs(last_n, contains_text)
         log.info("Latest logs from UI on {0}:".format(self.ip))
         for lg in logs: log.error(lg)
+
+    def get_ro_user(self):
+        api = self.baseUrl + 'settings/readOnlyAdminName'
+        status, content, header = self._http_request(api, 'GET', '')
+        return content, status
 
     def delete_ro_user(self):
         api = self.baseUrl + 'settings/readOnlyUser'

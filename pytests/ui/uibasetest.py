@@ -184,13 +184,14 @@ class BaseUITestCase(unittest.TestCase):
 
     def tearDown(self):
         try:
+            test_failed = len(self._resultForDoCleanups.errors)
+            if self.driver and test_failed:
+                BaseHelper(self).create_screenshot()
             if self.driver:
-                path_screen = self.input.ui_conf['screenshots'] or 'logs/screens'
-                full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
-                self.log.info('screenshot is available: %s' % full_path)
-                if not os.path.exists(path_screen):
-                    os.mkdir(path_screen)
-                self.driver.get_screenshot_as_file(os.path.abspath(full_path))
+                self.driver.close()
+            if test_failed and TestInputSingleton.input.param("stop-on-failure", False):
+                print "test fails, teardown will be skipped!!!"
+                return
             rest = RestConnection(self.servers[0])
             if rest._rebalance_progress_status() == 'running':
                 stopped = rest.stop_rebalance()
@@ -199,8 +200,6 @@ class BaseUITestCase(unittest.TestCase):
             for server in self.servers:
                 ClusterOperationHelper.cleanup_cluster([server])
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-            if self.driver:
-                self.driver.close()
         except Exception as e:
             raise e
         finally:
@@ -313,9 +312,6 @@ class Control():
     def mouse_over(self):
         ActionChains(self.selenium).move_to_element(self.web_element).perform()
 
-    def get_inner_html(self):
-        return self.web_element.get_attribute("outerHTML")
-
 
 class ControlsHelper():
     def __init__(self, driver):
@@ -368,6 +364,7 @@ class BaseHelperControls():
         self._login_btn = helper.find_control('login', 'login_btn')
         self._logout_btn = helper.find_control('login', 'logout_btn')
         self.error = helper.find_control('login', 'error')
+        self.ajax_spinner = helper.find_control('login', 'ajax_spinner')
 
 
 class BaseHelper():
@@ -375,6 +372,21 @@ class BaseHelper():
         self.tc = tc
         self.controls = BaseHelperControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=100)
+
+    def wait_ajax_loaded(self):
+        try:
+            self.wait.until_not(lambda fn:  self.controls.ajax_spinner.is_displayed(),
+                                "Page is still loaded")
+        except StaleElementReferenceException:
+            pass
+
+    def create_screenshot(self):
+        path_screen = self.tc.input.ui_conf['screenshots'] or 'logs/screens'
+        full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
+        self.tc.log.info('screenshot is available: %s' % full_path)
+        if not os.path.exists(path_screen):
+            os.mkdir(path_screen)
+        self.tc.driver.get_screenshot_as_file(os.path.abspath(full_path))
 
     def login(self, user=None, password=None):
         self.tc.log.info("Try to login to Couchbase Server in browser")
@@ -391,6 +403,7 @@ class BaseHelper():
         self.wait.until(lambda fn: self.controls._login_btn.is_displayed(),
                         "Login Button is not displayed in %d sec" % (self.wait._timeout))
         self.controls._login_btn.click()
+        BaseHelper(self.tc).wait_ajax_loaded()
         self.tc.log.info("user %s is logged in" % user)
 
     def logout(self):
