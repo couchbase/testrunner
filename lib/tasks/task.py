@@ -730,7 +730,8 @@ class GenericLoadingTask(Thread, Task):
         self.timeout = timeout_secs
         self.server = server
         self.bucket = bucket
-        self.client = VBucketAwareMemcached(RestConnection(server), bucket)
+        self.rest = RestConnection(self.server)
+        self.client = VBucketAwareMemcached(self.rest, self.bucket)
 
     def execute(self, task_manager):
         self.start()
@@ -776,11 +777,14 @@ class GenericLoadingTask(Thread, Task):
         '''
         localgenerator = self.generator
         localgenerator.setrange(distributed_work)
-        self.client = VBucketAwareMemcached(RestConnection(self.server), self.bucket)
+        if getattr(VBucketAwareMemcached, 'is_mc_bin_client', None):
+            client = self.client
+        else:
+            client = VBucketAwareMemcached(RestConnection(self.server), self.bucket)
         while self.has_next():
             try:
                 key, value = localgenerator.next()
-                self.client.set(key, self.exp, self.flag, value)
+                client.set(key, self.exp, self.flag, value)
             except Exception as e:
                raise e
 
@@ -857,10 +861,13 @@ class GenericLoadingTask(Thread, Task):
     def _batch_create(self, distributed_work, parallel_method=None):
         localgenerator = self.generator
         localgenerator._doc_gen.setrange(distributed_work)
-        self.client = VBucketAwareMemcached(RestConnection(self.server), self.bucket)
+        if getattr(VBucketAwareMemcached, 'is_mc_bin_client', None):
+            client = self.client
+        else:
+            client = VBucketAwareMemcached(RestConnection(self.server), self.bucket)
         while self.has_next():
             key_val = localgenerator.next_batch()
-            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=True)
+            client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=True)
 
     def _batch_update(self, partition_keys_dic, key_val):
         self._process_values_for_update(partition_keys_dic, key_val)
@@ -884,16 +891,6 @@ class GenericLoadingTask(Thread, Task):
     def _process_values_for_create(self, key_val):
         for key, value in key_val.items():
             key_val[key] = value
-            '''
-            try:
-                json_
-                value = json.loads(value)
-            except ValueError:
-                index = random.choice(range(len(value)))
-                value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
-            finally:
-                key_val[key] = value
-            '''
 
     def _process_values_for_update(self, partition_keys_dic, key_val):
         for part, keys in partition_keys_dic.items():
@@ -951,7 +948,7 @@ class LoadDocumentsTask(GenericLoadingTask):
         function += self.op_type
         try:
             if self.op_type == "create":
-                if not self.kv_store:
+                if self.kv_store is None:
                     self.load_kvstore_parallel = None
                 getattr(self, function)(self.generator, self.load_kvstore_parallel)
             else:
@@ -1282,6 +1279,7 @@ class WorkloadTask(GenericLoadingTask):
             return
 
         self._unlocked_delete(partition, key)
+
 
 class ValidateDataTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, replica_to_read=None):

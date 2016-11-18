@@ -635,7 +635,7 @@ class XDCRBaseTest(unittest.TestCase):
     def _get_active_replica_count_from_cluster(self, master):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
-            keys_loaded = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            keys_loaded = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
             self.log.info("Keys loaded into bucket {0}:{1}".format(bucket.name,
                                                                    keys_loaded))
             self.log.info("Stat: vb_active_curr_items = {0}".
@@ -1345,7 +1345,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         buckets = self._get_cluster_buckets(master)
         self.assertTrue(buckets, "No buckets received from the server {0} for verification".format(master.ip))
         for bucket in buckets:
-            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
             for stat in ['curr_items', 'vb_active_curr_items']:
                 stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                     stat, '==', items))

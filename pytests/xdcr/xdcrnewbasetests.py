@@ -2130,7 +2130,7 @@ class CouchbaseCluster:
         buckets = copy.copy(self.get_buckets())
 
         for bucket in buckets:
-            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
             while True:
                 try:
                     active_keys = int(rest.get_active_key_count(bucket.name))
@@ -2160,7 +2160,7 @@ class CouchbaseCluster:
 
         for bucket in buckets:
             if len(self.__nodes) > 1:
-                items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                items = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
                 items = items * bucket.numReplicas
             else:
                 items = 0

@@ -51,6 +51,7 @@ class KVStore(object):
             partition = self.cache[itr]["partition"]
             valid_keys.extend(partition.valid_key_set())
             deleted_keys.extend(partition.deleted_key_set())
+            self.cache[itr]["lock"].release()
         return valid_keys, deleted_keys
 
     def __len__(self):
