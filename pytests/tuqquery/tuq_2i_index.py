@@ -348,7 +348,7 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             for idx in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
-                actual_result = self.run_cbq_query()
+                actual_result1 = self.run_cbq_query()
                 self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
             self.query = "select name from %s  WHERE ANY s IN SUFFIXES( LOWER( _id ) ) " % (bucket.name) + \
                          " SATISFIES s LIKE  'query-test%'  END" \
@@ -1994,9 +1994,9 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
             self.query = 'select * from {0}'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            number_of_docs= self.docs_per_day*2016
+            number_of_docs= self.docs_per_day*2016*2
             self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
-            self.query = 'delete from {0} where meta().id = select to_string(name)|| UUID() as k'
+            self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format(bucket.name)
             self.run_cbq_query()
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()

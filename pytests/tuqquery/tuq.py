@@ -1371,9 +1371,29 @@ class QueryTests(BaseTestCase):
 
     def test_array_union_symdiff(self):
         for bucket in self.buckets:
-            self.query = 'select ARRAY_UNION(["skill1","skill2"],skills) as skills_new from {0}'.format(bucket.name)
-            self.run_cbq_query()
-            import pdb;pdb.set_trace()
+            self.query = 'select ARRAY_SORT(ARRAY_UNION(["skill1","skill2","skill2010","skill2011"],skills)) as skills_union from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results']==([{u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}]))
+
+            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF(["skill1","skill2","skill2010","skill2011"],skills)) as skills_diff1 from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results']==([{u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}]))
+            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF1(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff2 from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result1 = self.run_cbq_query()
+            self.assertTrue(actual_result1['results'] == [{u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}])
+            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFFN(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff3 from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results'] == [{u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}])
+
+
+    def test_let(self):
+        for bucket in self.buckets:
+            self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'default': {u'tasks_points': {u'task1': 1, u'task2': 1}, u'name': u'employee-9', u'mutated': 0, u'skills': [u'skill2010', u'skill2011'], u'join_day': 9, u'email': u'9-mail@couchbase.com', u'test_rate': 10.1, u'join_mo': 10, u'join_yr': 2011, u'_id': u'query-testemployee10153.1877827-0', u'VMs': [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], u'job_title': u'Engineer'}, u'x1': {u'name': 1}}])
+
+
+
 
 
 
@@ -2585,7 +2605,6 @@ class QueryTests(BaseTestCase):
         self.query = "select now_millis() as now"
         now = time.time()
         res = self.run_cbq_query()
-        print res
         self.assertFalse("error" in str(res).lower())
 
     def test_str_to_millis(self):
