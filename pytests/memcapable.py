@@ -1020,7 +1020,7 @@ class MultiGetNegativeTest(unittest.TestCase):
                                         moxi_sys_stats["vsize"]))
 
         self.log.info("running multiget to get {0} keys".format(howmany))
-        gets = client.getMulti(keys)
+        gets = client.get_multi(keys)
         self.log.info("recieved {0} keys".format(len(gets)))
 
         self.log.info(gets)

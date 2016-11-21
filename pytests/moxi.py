@@ -105,7 +105,7 @@ class MoxiTests(unittest.TestCase):
         while not self.finished:
             try:
                 start = random.randint(0, self.keycount-20)
-                mct.getMulti(self.keys[start:start+20])
+                mct.get_multi(self.keys[start:start + 20])
             except mc_ascii_client.MemcachedError as e:
                 mct.close()
                 mct = mc_ascii_client.MemcachedAsciiClient(self.ip, self.port, timeout=2)
