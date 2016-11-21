@@ -8,6 +8,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
+from testconstants import COUCHBASE_FROM_4DOT6
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -27,6 +28,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
+        """ from version 4.6.0 and later, --host flag is deprecated """
+        self.cluster_flag = "--host"
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            self.cluster_flag = "--cluster"
         self.backup_validation_files_location = "/tmp/backuprestore"
         self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.name = self.input.param("name", "backup")
@@ -180,10 +185,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info(msg)
 
     def backup_cluster(self):
-        args = "backup --archive {0} --repo {1} --cluster http://{2}:{3} --username {4} --password {5}". \
+        args = "backup --archive {0} --repo {1} {6} http://{2}:{3} --username {4} --password {5}". \
             format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
-                   self.backupset.cluster_host_password)
+                   self.backupset.cluster_host_password, self.cluster_flag)
         if self.backupset.resume:
             args += " --resume"
         if self.backupset.purge:
@@ -227,13 +232,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "restore --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
-               "--end {7}".format(self.backupset.directory, self.backupset.name,
-                                                  self.backupset.restore_cluster_host.ip,
-                                                  self.backupset.restore_cluster_host.port,
-                                                  self.backupset.restore_cluster_host_username,
-                                                  self.backupset.restore_cluster_host_password, backup_start,
-                                                  backup_end)
+        args = "restore --archive {0} --repo {1} {7} http://{2}:{3} --username {4} "\
+                                              "--password {5} --start {6} --end {7}"\
+                               .format(self.backupset.directory, self.backupset.name,
+                                              self.backupset.restore_cluster_host.ip,
+                                            self.backupset.restore_cluster_host.port,
+                                        self.backupset.restore_cluster_host_username,
+                          self.backupset.restore_cluster_host_password, backup_start,
+                                                       backup_end, self.cluster_flag)
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets {0}".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
