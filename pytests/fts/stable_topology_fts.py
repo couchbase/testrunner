@@ -559,12 +559,12 @@ class StableTopFTS(FTSBaseTest):
         index.add_child_field_to_default_mapping(field_name="type",
                                                  field_type="text",
                                                  field_alias="type",
-                                                 analyzer="en")
+                                                 analyzer="keyword")
         if field_indexed:
             index.add_child_field_to_default_mapping(field_name="dept",
                                                  field_type="text",
                                                  field_alias="dept",
-                                                 analyzer="en")
+                                                 analyzer="keyword")
             index.add_child_field_to_default_mapping(field_name="salary",
                                                  field_type="number",
                                                  field_alias="salary")
