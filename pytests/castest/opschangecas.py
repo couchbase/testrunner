@@ -8,6 +8,8 @@ from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 import json
+from sdk_client import SDKClient
+from couchbase.exceptions import NotFoundError
 
 
 from remote.remote_util import RemoteMachineShellConnection
@@ -304,3 +306,44 @@ class OpsChangeCasTests(CasBaseTest):
 
         maxCas = mc_active.getMeta(KEY_NAME)[4]
         self.assertTrue(maxCas == 0, 'max cas after reboot is not 0 it is {0}'.format(maxCas))
+
+    #MB-21448 bug test
+    #Description: REPLACE_WITH_CAS on a key that has recently been deleted and then requested 
+    #sometimes returns key exists with different CAS instead of key not exists error, this test
+    #only requires one node 
+    def key_not_exists_test(self):
+        client = SDKClient(hosts = [self.master.ip], bucket = "default")
+        KEY_NAME = 'key'
+
+        for i in range(1500):
+            client.set(KEY_NAME, "x")
+            #For some reason could not get delete to work
+            client.remove(KEY_NAME)
+            rc = client.get(KEY_NAME)
+            #.get is automatically set to quiet for the sdk_client, therefore I look for
+            #none to indicate an error, otherwise the sdk_client spends 10 seconds trying
+            #to retry the commands and is very slow
+            if rc[2] == None:
+                pass
+            else:
+                assert False
+            #cas errors do not sleep the test for 10 seconds, plus we need to check that the correct
+            #error is being thrown
+            try:
+                #For some reason replace instead of cas would not reproduce the bug
+                client.cas(KEY_NAME, "value", cas = 10)
+            except NotFoundError:
+                pass
+        assert True 
+
+
+
+
+
+
+
+
+
+
+
+
