@@ -1178,7 +1178,7 @@ class Cluster(object):
         return status
 
     def async_backup_cluster(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
-                             no_progress_bar=False, cli_command_location=''):
+                             no_progress_bar=False, cli_command_location='', cb_version=None):
         """
         Asynchronously starts backup cluster
 
@@ -1193,12 +1193,12 @@ class Cluster(object):
         :return: task with the output or error message
         """
         _task = EnterpriseBackupTask(cluster_host, backup_host, directory, name, resume, purge,
-                                     no_progress_bar, cli_command_location)
+                                     no_progress_bar, cli_command_location, cb_version)
         self.task_manager.schedule(_task)
         return _task
 
     def async_restore_cluster(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
-                 force_updates=False, no_progress_bar=False, cli_command_location=''):
+                 force_updates=False, no_progress_bar=False, cli_command_location='', cb_version=None):
         """
         Asynchronously start backup restore
         :param restore_host: cluster to be restored to
@@ -1214,7 +1214,7 @@ class Cluster(object):
         :return: task with the output or error message
         """
         _task = EnterpriseRestoreTask(restore_host, backup_host, backups, start, end, directory, name,
-                                      force_updates, no_progress_bar, cli_command_location)
+                                      force_updates, no_progress_bar, cli_command_location, cb_version)
         self.task_manager.schedule(_task)
         return _task
 

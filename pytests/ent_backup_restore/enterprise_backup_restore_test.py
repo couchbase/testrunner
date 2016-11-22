@@ -568,7 +568,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                           directory=self.backupset.directory, name=self.backupset.name,
                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                           no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location)
+                                          cli_command_location=self.cli_command_location,
+                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
@@ -593,7 +594,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                           directory=self.backupset.directory, name=self.backupset.name,
                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                           no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location)
+                                          cli_command_location=self.cli_command_location,
+                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
@@ -618,7 +620,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                           directory=self.backupset.directory, name=self.backupset.name,
                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                           no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location)
+                                          cli_command_location=self.cli_command_location,
+                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.pause_memcached()
@@ -645,7 +648,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                               name=self.backupset.name,
                                                               resume=self.backupset.resume, purge=self.backupset.purge,
                                                               no_progress_bar=self.no_progress_bar,
-                                                              cli_command_location=self.cli_command_location)
+                                                              cli_command_location=self.cli_command_location,
+                                                              cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.kill_erlang()
@@ -676,7 +680,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                               name=self.backupset.name,
                                                               resume=self.backupset.resume, purge=self.backupset.purge,
                                                               no_progress_bar=self.no_progress_bar,
-                                                              cli_command_location=self.cli_command_location)
+                                                              cli_command_location=self.cli_command_location,
+                                                              cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.stop_couchbase()
@@ -707,7 +712,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                               name=self.backupset.name,
                                                               resume=self.backupset.resume, purge=self.backupset.purge,
                                                               no_progress_bar=self.no_progress_bar,
-                                                              cli_command_location=self.cli_command_location)
+                                                              cli_command_location=self.cli_command_location,
+                                                              cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.pause_memcached()
@@ -741,7 +747,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                            name=self.backupset.name,
                                                            force_updates=self.backupset.force_updates,
                                                            no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location)
+                                                           cli_command_location=self.cli_command_location,
+                                                           cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.kill_erlang()
@@ -771,7 +778,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                            name=self.backupset.name,
                                                            force_updates=self.backupset.force_updates,
                                                            no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location)
+                                                           cli_command_location=self.cli_command_location,
+                                                           cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.stop_couchbase()
@@ -801,7 +809,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                            name=self.backupset.name,
                                                            force_updates=self.backupset.force_updates,
                                                            no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location)
+                                                           cli_command_location=self.cli_command_location,
+                                                           cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.pause_memcached()
@@ -833,7 +842,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                                 name=self.backupset.name,
                                                                 force_updates=self.backupset.force_updates,
                                                                 no_progress_bar=self.no_progress_bar,
-                                                                cli_command_location=self.cli_command_location)
+                                                                cli_command_location=self.cli_command_location,
+                                                                cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.kill_erlang()
@@ -869,7 +879,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                                 name=self.backupset.name,
                                                                 force_updates=self.backupset.force_updates,
                                                                 no_progress_bar=self.no_progress_bar,
-                                                                cli_command_location=self.cli_command_location)
+                                                                cli_command_location=self.cli_command_location,
+                                                                cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.stop_couchbase()
@@ -905,7 +916,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                                 name=self.backupset.name,
                                                                 force_updates=self.backupset.force_updates,
                                                                 no_progress_bar=self.no_progress_bar,
-                                                                cli_command_location=self.cli_command_location)
+                                                                cli_command_location=self.cli_command_location,
+                                                                cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.pause_memcached()

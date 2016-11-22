@@ -28,7 +28,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6
 
 try:
     CHECK_FLAG = False
@@ -4216,7 +4216,7 @@ class CancelBucketCompactionTask(Task):
 class EnterpriseBackupTask(Task):
 
     def __init__(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
-                 no_progress_bar=False, cli_command_location=''):
+                 no_progress_bar=False, cli_command_location='', cb_version=None):
         Task.__init__(self, "enterprise_backup_task")
         self.cluster_host = cluster_host
         self.backup_host = backup_host
@@ -4226,6 +4226,13 @@ class EnterpriseBackupTask(Task):
         self.purge = purge
         self.no_progress_bar = no_progress_bar
         self.cli_command_location = cli_command_location
+        self.cb_version = cb_version
+        self.cluster_flag = "--host"
+        """ from couchbase version 4.6.x, --host flag is not supported """
+        if self.cb_version is None:
+            self.fail("Need to pass Couchbase version to run correctly bk/rt ")
+        elif self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            self.cluster_flag = "--cluster"
         self.output = []
         self.error = []
         try:
@@ -4237,10 +4244,10 @@ class EnterpriseBackupTask(Task):
 
     def execute(self, task_manager):
         try:
-            args = "backup --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5}". \
+            args = "backup --archive {0} --repo {1} {6} http://{2}:{3} --username {4} --password {5}". \
             format(self.directory, self.name, self.cluster_host.ip,
                    self.cluster_host.port, self.cluster_host.rest_username,
-                   self.cluster_host.rest_password)
+                   self.cluster_host.rest_password, self.cluster_flag)
             if self.resume:
                 args += " --resume"
             if self.purge:
@@ -4272,7 +4279,7 @@ class EnterpriseBackupTask(Task):
 class EnterpriseRestoreTask(Task):
 
     def __init__(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
-                 force_updates=False, no_progress_bar=False, cli_command_location=''):
+                 force_updates=False, no_progress_bar=False, cli_command_location='', cb_version=None):
         Task.__init__(self, "enterprise_backup_task")
         self.restore_host = restore_host
         self.backup_host = backup_host
@@ -4281,6 +4288,13 @@ class EnterpriseRestoreTask(Task):
         self.force_updates = force_updates
         self.no_progress_bar = no_progress_bar
         self.cli_command_location = cli_command_location
+        self.cb_version = cb_version
+        self.cluster_flag = "--host"
+        """ from couchbase version 4.6.x, --host flag is not supported """
+        if self.cb_version is None:
+            self.fail("Need to pass Couchbase version to run correctly bk/rt ")
+        elif self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            self.cluster_flag = "--cluster"
         self.output = []
         self.error = []
         self.backups = backups
@@ -4303,12 +4317,13 @@ class EnterpriseRestoreTask(Task):
                 backup_end = self.backups[int(self.end) - 1]
             except IndexError:
                 backup_end = "{0}{1}".format(self.backups[-1], self.end)
-            args = "restore --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
-                   "--end {7}".format(self.directory, self.name, self.restore_host.ip,
-                                                  self.restore_host.port,
-                                                  self.restore_host.rest_username,
-                                                  self.restore_host.rest_password, backup_start,
-                                                  backup_end)
+            args = "restore --archive {0} --repo {1} {8} http://{2}:{3} --username {4} "\
+                                                " --password {5}  --start {6} --end {7}"\
+                                                        .format(self.directory, self.name,
+                                             self.restore_host.ip, self.restore_host.port,
+                                                          self.restore_host.rest_username,
+                                            self.restore_host.rest_password, backup_start,
+                                                            backup_end, self.cluster_flag)
             if self.no_progress_bar:
                 args += " --no-progress-bar"
             if self.force_updates:
