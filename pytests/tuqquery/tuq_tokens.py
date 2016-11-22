@@ -43,7 +43,7 @@ class TokenTests(BaseTestCase):
 
     def test_tokens_secondary_indexes(self):
         bucket_name = "beer-sample"
-        self.query = 'create primary index "beer_primary" on {0}'.format(bucket_name)
+        self.query = 'create primary index on {0}'.format(bucket_name)
         self.run_cbq_query()
         self.query = 'create index idx1 on `beer-sample`(description,name )'
         self.run_cbq_query()
@@ -101,7 +101,7 @@ class TokenTests(BaseTestCase):
 
         self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ('cover ((distinct (array `v` for `v` in tokens((`beer-sample`.`description`)) end)))'))
 
-        self.query = 'select name from `beer-sample` use index(`beer_primary`) where any v in tokens(reverse(description)) satisfies v = "nedlog" END order by meta().id limit 10'
+        self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(reverse(description)) satisfies v = "nedlog" END order by meta().id limit 10'
         expected_result = self.run_cbq_query()
 
 
@@ -118,7 +118,7 @@ class TokenTests(BaseTestCase):
         self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ('cover ((distinct (array `v` for `v` in tokens((`beer-sample`.`description`), {"case": "lower", "names": true, "specials": false}) end)))'))
         self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == "idx3")
 
-        self.query = 'select name from `beer-sample` use index(`beer_primary`) where any v in tokens(description,{"case":"lower","names":true,"specials":false}) satisfies v = "brewery" END order by meta().id limit 10'
+        self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(description,{"case":"lower","names":true,"specials":false}) satisfies v = "brewery" END order by meta().id limit 10'
 
         expected_result = self.run_cbq_query()
 
@@ -148,7 +148,7 @@ class TokenTests(BaseTestCase):
         self.query = 'select name from `beer-sample` use index(`idx17`) where any v in tokens(description,{"case":"upper","names":false}) satisfies v = "GOLDEN" END limit 10'
         actual_result = self.run_cbq_query()
 
-        self.query = 'select name from `beer-sample` use index(`beer_primary`) where any v in tokens(description,{"case":"upper","names":false}) satisfies v = "GOLDEN" END limit 10'
+        self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(description,{"case":"upper","names":false}) satisfies v = "GOLDEN" END limit 10'
         expected_result = self.run_cbq_query()
         self.assertTrue(actual_result['results']==expected_result['results'])
 
@@ -161,7 +161,7 @@ class TokenTests(BaseTestCase):
         self.query = 'select name from `beer-sample` use index(`idx18`) where any v in tokens(description,{}) satisfies  v = "golden" END limit 10'
         actual_result = self.run_cbq_query()
 
-        self.query = 'select name from `beer-sample` use index(`beer_primary`) where any v in tokens(description,{}) satisfies  v = "golden" END limit 10'
+        self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(description,{}) satisfies  v = "golden" END limit 10'
         expected_result = self.run_cbq_query()
         self.assertTrue(actual_result['results']==expected_result['results'])
 
@@ -173,7 +173,7 @@ class TokenTests(BaseTestCase):
 
         self.query = 'select name from `beer-sample` use index(`idx19`)  where any v in tokens(description,{"":""}) satisfies v = "golden" END order by name '
         actual_result = self.run_cbq_query()
-        self.query = 'select name from `beer-sample` use index(`beer_primary`)  where any v in tokens(description,{"":""}) satisfies v = "golden" END order by name '
+        self.query = 'select name from `beer-sample` use index(`#primary`)  where any v in tokens(description,{"":""}) satisfies v = "golden" END order by name '
         expected_result = self.run_cbq_query()
         self.assertTrue(actual_result['results']==expected_result['results'])
 
@@ -186,7 +186,7 @@ class TokenTests(BaseTestCase):
 
         self.query = 'select name from `beer-sample` use index(`idx20`) where any v in tokens(description,{"case":"random"}) satisfies  v = "golden"  END order by name '
         actual_result = self.run_cbq_query()
-        self.query = 'select name from `beer-sample` use index(`beer_primary`) where any v in tokens(description,{"case":"random"}) satisfies  v = "golden"  END  order by name '
+        self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(description,{"case":"random"}) satisfies  v = "golden"  END  order by name '
         expected_result = self.run_cbq_query()
         self.assertTrue(actual_result['results']==expected_result['results'])
 
@@ -198,7 +198,7 @@ class TokenTests(BaseTestCase):
 
         self.query = 'select name from `beer-sample` use index(`idx22`) where any v in tokens(description,{"specials":"random"}) satisfies  v = "golden"  END  order by name'
         actual_result = self.run_cbq_query()
-        self.query = 'select name from `beer-sample` use index(`beer_primary`) where any v in tokens(description,{"specials":"random"}) satisfies  v = "golden"  END order by name'
+        self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(description,{"specials":"random"}) satisfies  v = "golden"  END order by name'
         expected_result = self.run_cbq_query()
         self.assertTrue(actual_result['results']==expected_result['results'])
 
@@ -211,7 +211,7 @@ class TokenTests(BaseTestCase):
 
         self.query = 'select name from `beer-sample` use index(`idx21`) where any v in tokens(description,{"names":"random"}) satisfies  v = "golden"  END  limit 10'
         actual_result = self.run_cbq_query()
-        self.query = 'select name from `beer-sample` use index(`beer_primary`) where any v in tokens(description,{"names":"random"}) satisfies  v = "golden"  END limit 10'
+        self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(description,{"names":"random"}) satisfies  v = "golden"  END limit 10'
         expected_result = self.run_cbq_query()
         self.assertTrue(actual_result['results']==expected_result['results'])
 

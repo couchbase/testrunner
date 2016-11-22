@@ -2001,6 +2001,26 @@ class QueriesIndexTests(QueryTests):
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
+    def test_between_spans(self):
+        for bucket in self.buckets:
+            self.query = 'create index ix5 on %s(x)' % bucket.name
+            self.run_cbq_query()
+            self.query = 'insert into %s (KEY, VALUE) VALUES ("kk02",{"x":100,"y":101,"z":102,"id":"kk02"})'%(bucket.name)
+            self.run_cbq_query()
+            self.query = 'explain select count(1) from %s where x BETWEEN $1 AND $2' %(bucket.name)
+            actual_result = self.run_cbq_query()
+            plan =  ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['#operator']=='IndexCountScan')
+            self.query = 'explain select count(1) from %s where x >= $1 AND x <= $2'%(bucket.name)
+            actual_result = self.run_cbq_query()
+            plan =  ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['#operator']=='IndexCountScan')
+            self.query = 'drop index %s.ix5' %bucket.name
+            self.run_cbq_query()
+            self.query = 'delete from %s use keys ["kk02"]'%(bucket.name)
+            self.run_cbq_query()
+
+
 
     def test_distinct_raw_orderby(self):
         for bucket in self.buckets:
