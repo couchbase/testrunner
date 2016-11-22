@@ -14,6 +14,10 @@ from testconstants import COUCHBASE_FROM_4DOT6
 class EnterpriseBackupRestoreBase(BaseTestCase):
     def setUp(self):
         super(EnterpriseBackupRestoreBase, self).setUp()
+        """ from version 4.6.0 and later, --host flag is deprecated """
+        self.cluster_flag = "--host"
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            self.cluster_flag = "--cluster"
         self.backupset = Backupset()
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
@@ -28,10 +32,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
-        """ from version 4.6.0 and later, --host flag is deprecated """
-        self.cluster_flag = "--host"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
         self.backup_validation_files_location = "/tmp/backuprestore"
         self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.name = self.input.param("name", "backup")
@@ -158,7 +158,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets \"{0}\"".format(",".join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
-            args += " --include-buckets=\"{0}\"".format(",".join(self.backupset.include_buckets))
+            args += " --include-buckets \"{0}\"".format(",".join(self.backupset.include_buckets))
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config"
         if self.backupset.disable_views:
@@ -232,7 +232,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "restore --archive {0} --repo {1} {7} http://{2}:{3} --username {4} "\
+        args = "restore --archive {0} --repo {1} {8} http://{2}:{3} --username {4} "\
                                               "--password {5} --start {6} --end {7}"\
                                .format(self.backupset.directory, self.backupset.name,
                                               self.backupset.restore_cluster_host.ip,

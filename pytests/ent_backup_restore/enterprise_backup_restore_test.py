@@ -87,6 +87,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
                 else:
                     self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
+                self.log.info("Done reset cluster")
             self.backupset.start = start
             self.backupset.end = end
             self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
