@@ -669,10 +669,16 @@ class XDCRRemoteClusterRef:
         """
         [repl.pause(verify) for repl in self.__replications]
 
+    def pause_all_replications_by_id(self, verify=False):
+        [repl.pause(repl_id=repl.get_repl_id(), verify=verify) for repl in self.__replications]
+
     def resume_all_replications(self, verify=False):
         """Resume all created replication
         """
         [repl.resume(verify) for repl in self.__replications]
+
+    def resume_all_replications_by_id(self, verify=False):
+        [repl.resume(repl_id=repl.get_repl_id(), verify=verify) for repl in self.__replications]
 
     def stop_all_replications(self):
         rest = RestConnection(self.__src_cluster.get_master_node())
@@ -851,15 +857,19 @@ class XDCReplication:
             self.get_src_cluster().get_master_node(),
             self.__get_event_expected_results())
 
-    def pause(self, verify=False):
+    def pause(self, repl_id=None, verify=False):
         """Pause replication"""
         src_master = self.__src_cluster.get_master_node()
-        if not RestConnection(src_master).is_replication_paused(
-                self.__from_bucket.name, self.__to_bucket.name):
-            self.set_xdcr_param(
-                REPL_PARAM.PAUSE_REQUESTED,
-                'true',
-                verify_event=False)
+        if repl_id:
+            if not RestConnection(src_master).is_replication_paused_by_id(repl_id):
+                RestConnection(src_master).pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        else:
+            if not RestConnection(src_master).is_replication_paused(
+                    self.__from_bucket.name, self.__to_bucket.name):
+                self.set_xdcr_param(
+                    REPL_PARAM.PAUSE_REQUESTED,
+                    'true',
+                    verify_event=False)
 
         self.__validate_pause_event()
 
@@ -917,12 +927,16 @@ class XDCReplication:
             self.get_src_cluster().get_master_node(),
             self.__get_event_expected_results())
 
-    def resume(self, verify=False):
+    def resume(self, repl_id=None, verify=False):
         """Resume replication if paused"""
         src_master = self.__src_cluster.get_master_node()
-        if RestConnection(src_master).is_replication_paused(
-                self.__from_bucket.name, self.__to_bucket.name):
-            self.set_xdcr_param(
+        if repl_id:
+            if RestConnection(src_master).is_replication_paused_by_id(repl_id):
+                RestConnection(src_master).pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        else:
+            if RestConnection(src_master).is_replication_paused(
+                    self.__from_bucket.name, self.__to_bucket.name):
+                self.set_xdcr_param(
                 REPL_PARAM.PAUSE_REQUESTED,
                 'false',
                 verify_event=False)
@@ -2308,9 +2322,17 @@ class CouchbaseCluster:
         for remote_cluster_ref in self.__remote_clusters:
             remote_cluster_ref.pause_all_replications(verify)
 
+    def pause_all_replications_by_id(self, verify=False):
+        for remote_cluster_ref in self.__remote_clusters:
+            remote_cluster_ref.pause_all_replications_by_id(verify)
+
     def resume_all_replications(self, verify=False):
         for remote_cluster_ref in self.__remote_clusters:
             remote_cluster_ref.resume_all_replications(verify)
+
+    def resume_all_replications_by_id(self, verify=False):
+        for remote_cluster_ref in self.__remote_clusters:
+            remote_cluster_ref.resume_all_replications_by_id(verify)
 
     def enable_time_sync(self, enable):
         """

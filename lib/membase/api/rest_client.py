@@ -2229,6 +2229,26 @@ class RestConnection(object):
     def is_replication_paused(self, src_bucket_name, dest_bucket_name):
         return self.get_xdcr_param(src_bucket_name, dest_bucket_name, 'pauseRequested')
 
+    def is_replication_paused_by_id(self, repl_id):
+        repl_id = repl_id.replace('/','%2F')
+        api = self.baseUrl + 'settings/replications/' + repl_id
+        status, content, header = self._http_request(api)
+        if not status:
+            raise XDCRException("Unable to retrieve pause resume status for replication {0}".
+                                format(repl_id))
+        repl_stats = json.loads(content)
+        return repl_stats['pauseRequested']
+
+    def pause_resume_repl_by_id(self, repl_id, param, value):
+        repl_id = repl_id.replace('/','%2F')
+        api = self.baseUrl + 'settings/replications/' + repl_id
+        params = urllib.urlencode({param: value})
+        status, _, _ = self._http_request(api, "POST", params)
+        if not status:
+            raise XDCRException("Unable to update {0}={1} setting for replication {2}".
+                            format(param, value, repl_id))
+        log.info("Updated {0}={1} on {2}".format(param, value, repl_id))
+
     def get_recent_xdcr_vb_ckpt(self, repl_id):
         command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
         status, content = self.diag_eval(command)
