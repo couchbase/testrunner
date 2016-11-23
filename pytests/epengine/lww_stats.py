@@ -39,7 +39,7 @@ class LWWStatsTests(BaseTestCase):
 
         # get the stats
         client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
-        ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
+        ahead_threshold = int(client.stats()["ep_drift_hlc_ahead_threshold_us"])
         self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD,
                         'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD, ahead_threshold))
         # change the setting and verify it is per the new setting - this may or may not be supported
@@ -50,7 +50,7 @@ class LWWStatsTests(BaseTestCase):
         if len(error) > 0:
             self.fail('Failed to set the drift counter threshold, please check the logs.')
 
-        ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
+        ahead_threshold = int(client.stats()["ep_drift_hlc_ahead_threshold_us"])
         self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD/2,
                         'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD/2, ahead_threshold))
 
@@ -161,7 +161,7 @@ class LWWStatsTests(BaseTestCase):
         # 2. Set the clock back 1 hour, set the CAS back 2 hours, the clock should be use
 
 
-        # do case 1, set the CAS back 30 minutes.  Calculation below assumes the CAS is in nanseconds
+        # do case 1, set the CAS back 30 minutes.  Calculation below assumes the CAS is in nanoseconds
         earlier_max_cas = poisoned_cas - 30 * 60 * 1000000000
         for i in range(self.vbuckets):
             output, error = shell.execute_cbepctl(self.buckets[0], "", "set_vbucket_param",
@@ -294,11 +294,11 @@ class LWWStatsTests(BaseTestCase):
         # do the ahead set with meta case - verify: ahead threshold exceeded, total_abs_drift count and abs_drift
         if check_ahead_threshold:
             stat_descriptor = 'ahead'
-            cas = current_time_cas + 5 * LWWStatsTests.DEFAULT_THRESHOLD
+            cas = current_time_cas + 5000 * LWWStatsTests.DEFAULT_THRESHOLD
 
         else:
             stat_descriptor = 'behind'
-            cas = current_time_cas -5 * LWWStatsTests.DEFAULT_THRESHOLD
+            cas = current_time_cas -5000 * LWWStatsTests.DEFAULT_THRESHOLD
 
 
         rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, cas)
