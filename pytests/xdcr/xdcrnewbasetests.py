@@ -667,7 +667,7 @@ class XDCRRemoteClusterRef:
     def pause_all_replications(self, verify=False):
         """Pause all created replication
         """
-        [repl.pause(verify) for repl in self.__replications]
+        [repl.pause(verify=verify) for repl in self.__replications]
 
     def pause_all_replications_by_id(self, verify=False):
         [repl.pause(repl_id=repl.get_repl_id(), verify=verify) for repl in self.__replications]
@@ -675,7 +675,7 @@ class XDCRRemoteClusterRef:
     def resume_all_replications(self, verify=False):
         """Resume all created replication
         """
-        [repl.resume(verify) for repl in self.__replications]
+        [repl.resume(verify=verify) for repl in self.__replications]
 
     def resume_all_replications_by_id(self, verify=False):
         [repl.resume(repl_id=repl.get_repl_id(), verify=verify) for repl in self.__replications]
