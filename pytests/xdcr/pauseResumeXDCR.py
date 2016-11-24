@@ -179,7 +179,7 @@ class PauseResumeTest(XDCRNewBaseTest):
             self.log.info("Pausing one replication does not affect other replications")
         else:
             self.log.info("Other buckets have completed replication")
-        repl.resume(True)
+        repl.resume(verify=True)
 
         [task.result() for task in load_tasks]
         self.verify_results()
