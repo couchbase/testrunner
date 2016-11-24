@@ -2412,9 +2412,6 @@ class RestConnection(object):
 
         if status:
             content = json.loads(content)
-            log.info("==========Query Response==========")
-            log.info(content)
-            log.info("==================================")
             return content['total_hits'], content['hits'], content['took'], \
                    content['status']
 
