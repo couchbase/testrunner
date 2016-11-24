@@ -102,7 +102,7 @@ class DateTimeFunctionClass(QueryTests):
                     self.assertEqual(actual_result["results"][0]["$1"], expected_result["results"][0]["$1"],
                                      "Results mismatch for query {0}".format(date_format_query))
 
-    def test_array_date_range(self):
+    def test_date_range_str(self):
         error_query = []
         local_parts = ["millennium",
                        "century",
@@ -135,7 +135,7 @@ class DateTimeFunctionClass(QueryTests):
                     if not (self._is_time_part_present(first_expression) and
                                 self._is_time_part_present(second_expression)):
                         expect_null_result = 1
-                query = self._generate_array_date_range_query(first_expression, second_expression, part)
+                query = self._generate_date_range_str_query(first_expression, second_expression, part)
                 log.info(query)
                 try:
                     actual_result = self.run_cbq_query(query)
@@ -150,13 +150,13 @@ class DateTimeFunctionClass(QueryTests):
                             error_query.append(query)
         self.assertFalse(error_query, "Queries Failed are: {0}".format(error_query))
 
-    def test_array_date_range_for_intervals(self):
+    def test_date_range_str_for_intervals(self):
         #Set Interval
         intervals = [0, 2, 10, -1]
         start_date = "2006-01-02T15:04:05"
         end_date = "2006-01-10T15:04:05"
         for interval in intervals:
-            query = self._generate_array_date_range_query(start_date, end_date, "day", interval)
+            query = self._generate_date_range_str_query(start_date, end_date, "day", interval)
             self.log.info(query)
             actual_result = self.run_cbq_query(query)
             lst = actual_result["results"][0]["$1"]
@@ -192,11 +192,11 @@ class DateTimeFunctionClass(QueryTests):
         query = 'SELECT DATE_FORMAT_STR("{0}", "{1}")'.format(expression, format)
         return query
 
-    def _generate_array_date_range_query(self, initial_date, final_date, part, increment=None):
+    def _generate_date_range_str_query(self, initial_date, final_date, part, increment=None):
         if increment is None:
-            query = 'SELECT ARRAY_DATE_RANGE("{0}", "{1}", "{2}")'.format(initial_date, final_date, part)
+            query = 'SELECT DATE_RANGE_STR("{0}", "{1}", "{2}")'.format(initial_date, final_date, part)
         else:
-            query = 'SELECT ARRAY_DATE_RANGE("{0}", "{1}", "{2}", {3})'.format(initial_date, final_date, part, increment)
+            query = 'SELECT DATE_RANGE_STR("{0}", "{1}", "{2}", {3})'.format(initial_date, final_date, part, increment)
         return query
 
     def _is_date_part_present(self, expression):
