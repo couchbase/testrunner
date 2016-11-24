@@ -1920,6 +1920,7 @@ class RestConnection(object):
         if lww:
             init_params['conflictResolutionType'] = 'lww'
         params = urllib.urlencode(init_params)
+
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
 
@@ -3462,7 +3463,7 @@ class NodeDiskStorage(object):
 
 class Bucket(object):
     def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
-                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid=""):
+                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False):
         self.name = name
         self.port = port
         self.type = type
@@ -3481,6 +3482,7 @@ class Bucket(object):
         self.eviction_policy = eviction_policy
         self.bucket_priority = bucket_priority
         self.uuid = uuid
+        self.lww = lww
 
     def __str__(self):
         return self.name

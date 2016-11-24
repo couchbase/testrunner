@@ -432,10 +432,9 @@ class BaseTestCase(unittest.TestCase):
                                                lww=self.lww)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size,
-                                       eviction_policy=self.eviction_policy))
+                                       eviction_policy=self.eviction_policy, lww=self.lww))
             if self.enable_time_sync:
                 self._set_time_sync_on_buckets( ['default'] )
-
 
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
@@ -489,7 +488,7 @@ class BaseTestCase(unittest.TestCase):
         for i in range(num_buckets):
             name = self.sasl_bucket_name + str(i)
             bucket_priority = None
-            if self.sasl_bucket_priority != None:
+            if self.sasl_bucket_priority is not None:
                 bucket_priority = self.get_bucket_priority(self.sasl_bucket_priority[i])
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name,
                                                                       password,
@@ -497,15 +496,15 @@ class BaseTestCase(unittest.TestCase):
                                                                       self.num_replicas,
                                                                       enable_replica_index=self.enable_replica_index,
                                                                       eviction_policy=self.eviction_policy,
-                                                                      bucket_priority=bucket_priority))
+                                                                      bucket_priority=bucket_priority, lww=self.lww))
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=password,
                                        num_replicas=self.num_replicas, bucket_size=bucket_size,
-                                       master_id=server_id, eviction_policy=self.eviction_policy));
+                                       master_id=server_id, eviction_policy=self.eviction_policy, lww=self.lww))
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
 
         if self.enable_time_sync:
-            self._set_time_sync_on_buckets( ['bucket' + str(i) for i in range(num_buckets)] )
+            self._set_time_sync_on_buckets(['bucket' + str(i) for i in range(num_buckets)])
 
     def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
@@ -518,7 +517,7 @@ class BaseTestCase(unittest.TestCase):
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             bucket_priority = None
-            if self.standard_bucket_priority != None:
+            if self.standard_bucket_priority is not None:
                 bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
             bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
                                                                           STANDARD_BUCKET_PORT + i,
@@ -526,18 +525,18 @@ class BaseTestCase(unittest.TestCase):
                                                                           self.num_replicas,
                                                                           enable_replica_index=self.enable_replica_index,
                                                                           eviction_policy=self.eviction_policy,
-                                                                          bucket_priority=bucket_priority))
+                                                                          bucket_priority=bucket_priority,
+                                                                          lww=self.lww))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size,
                                        port=STANDARD_BUCKET_PORT + i, master_id=server_id,
-                                       eviction_policy=self.eviction_policy));
+                                       eviction_policy=self.eviction_policy, lww=self.lww))
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
 
-
         if self.enable_time_sync:
-            self._set_time_sync_on_buckets( ['standard_bucket' + str(i) for i in range(num_buckets)] )
+            self._set_time_sync_on_buckets(['standard_bucket' + str(i) for i in range(num_buckets)])
 
     def _create_buckets(self, server, bucket_list, server_id=None, bucket_size=None):
         if server_id is None:

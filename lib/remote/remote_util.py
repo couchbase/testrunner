@@ -3031,7 +3031,6 @@ class RemoteMachineShellConnection:
             self.delete_files(backup_file_location)
             self.create_directory(backup_file_location)
 
-
         command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
                                            cluster_ip, cluster_port, backup_file_location, command_options_string)
         if self.info.type.lower() == 'windows':
@@ -3050,7 +3049,7 @@ class RemoteMachineShellConnection:
             backup_file_location = "C:%s" % (backup_location)
         if self.info.distribution_type.lower() == 'mac':
             restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
-
+        outputs = errors = []
         for bucket in buckets:
             command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_file_location, "http://",
                                                   login_info, self.ip, self.port, "-b", bucket)
@@ -3059,6 +3058,9 @@ class RemoteMachineShellConnection:
                                                       login_info, self.ip, self.port, "-b", bucket)
             output, error = self.execute_command(command)
             self.log_command_output(output, error)
+            outputs.extend(output)
+            errors.extend(error)
+        return outputs, errors
 
     def delete_files(self, file_location):
         command = "%s%s" % ("rm -rf ", file_location)

@@ -31,12 +31,12 @@ class Cluster(object):
 
         _task = BucketCreateTask(server, 'default', replicas, size,
                                  enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
-                                 bucket_priority=bucket_priority,lww=lww)
+                                 bucket_priority=bucket_priority, lww=lww)
         self.task_manager.schedule(_task)
         return _task
 
     def async_create_sasl_bucket(self, server, name, password, size, replicas, enable_replica_index=1,
-                                 eviction_policy='valueOnly', bucket_priority=None):
+                                 eviction_policy='valueOnly', bucket_priority=None, lww=False):
         """Asynchronously creates a sasl bucket
 
         Parameters:
@@ -50,7 +50,7 @@ class Cluster(object):
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, password=password,
                                  enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
-                                 bucket_priority=bucket_priority)
+                                 bucket_priority=bucket_priority, lww=lww)
         self.task_manager.schedule(_task)
         return _task
 
@@ -69,7 +69,7 @@ class Cluster(object):
         return _task
 
     def async_create_standard_bucket(self, server, name, port, size, replicas, enable_replica_index=1,
-                                     eviction_policy='valueOnly', bucket_priority=None):
+                                     eviction_policy='valueOnly', bucket_priority=None, lww=False):
         """Asynchronously creates a standard bucket
 
         Parameters:
@@ -83,7 +83,7 @@ class Cluster(object):
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, port,
                                  enable_replica_index=enable_replica_index,
-                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority)
+                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority, lww=lww)
         self.task_manager.schedule(_task)
         return _task
 

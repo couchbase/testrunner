@@ -62,6 +62,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", self.expires)
         self.ops_type = self.input.param("ops-type", "update")
+        self.expected_error = self.input.param("expected_error", None)
         if self.auto_failover:
             self.log.info("Enabling auto failover on " + str(self.backupset.cluster_host))
             rest_conn = RestConnection(self.backupset.cluster_host)
@@ -90,7 +91,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.log.info("Done reset cluster")
             self.backupset.start = start
             self.backupset.end = end
-            self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+            self.backup_restore_validate(compare_uuid=False,
+                                         seqno_compare_function=">=", expected_error=self.expected_error )
             if self.backupset.number_of_backups == 1:
                 continue
             while "{0}/{1}".format(start, end) in restored:
@@ -1234,7 +1236,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Comparing cluster host data cas and flags against restore host data")
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
-            if cluster_host_data[key]["cas"] != restore_host_data[key]["cas"]:
+            if self.backupset.force_updates:
+                if cluster_host_data[key]["cas"] == restore_host_data[key]["cas"]:
+                    self.fail("CAS not changed for key: {0}".format(key))
+            elif cluster_host_data[key]["cas"] != restore_host_data[key]["cas"]:
                 self.fail("CAS mismatch for key: {0}".format(key))
             if cluster_host_data[key]["flags"] != restore_host_data[key]["flags"]:
                 self.fail("Flags mismatch for key: {0}".format(key))
