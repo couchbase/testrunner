@@ -24,16 +24,18 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster = self.get_cb_cluster_by_name('C2')
 
         self.skip_ntp = self._input.param("skip_ntp", False)
+        self.clean_backup = self._input.param("clean_backup", False)
 
         if not self.skip_ntp:
             self._enable_ntp_and_sync()
 
     def tearDown(self):
         super(Lww, self).tearDown()
-        remote_client = RemoteMachineShellConnection(self._input.servers[6])
-        command = "rm -rf /data/lww-backup"
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.clean_backup:
+            remote_client = RemoteMachineShellConnection(self._input.servers[6])
+            command = "rm -rf /data/lww-backup"
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
         if not self.skip_ntp:
             self._disable_ntp()
 
