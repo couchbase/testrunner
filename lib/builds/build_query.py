@@ -326,10 +326,21 @@ class BuildQuery(object):
                 """
                 if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     if "rpm" in deliverable_type:
-                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
+                        if "centos" in os_version.lower():
+                            if "centos 7" in os_version.lower():
+                                os_name = "centos7"
+                            else:
+                                os_name = "centos6"
+                        elif "suse" in os_version.lower():
+                            os_name = "suse11"
+                        elif "oracle linux" in os_version.lower():
+                            os_name = "oel6"
+                        else:
+                            os_name = "centos6"
+                        build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                 product, os_architecture, deliverable_type,
-                                build_details[:5], CB_RELEASE_REPO)
+                                build_details[:5],os_name, CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
@@ -353,9 +364,21 @@ class BuildQuery(object):
             else:
                 if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     if "rpm" in deliverable_type:
-                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
-                            .format(build_version, product, os_architecture,
-                            deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                        if "centos" in os_version.lower():
+                            if "centos 7" in os_version.lower():
+                                os_name = "centos7"
+                            else:
+                                os_name = "centos6"
+                        elif "suse" in os_version.lower():
+                            os_name = "suse11"
+                        elif "oracle linux" in os_version.lower():
+                            os_name = "oel6"
+                        else:
+                            os_name = "centos6"
+                        build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
+                                .format(build_version[:build_version.find('-')],
+                                product, os_architecture, deliverable_type,
+                                build_details[:5],os_name, CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
