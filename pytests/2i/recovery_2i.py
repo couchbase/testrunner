@@ -218,25 +218,36 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_failover(self):
         try:
-            self._run_initial_index_tasks()
+            before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
             servr_out = self.nodes_out_list
             kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            failover_task = self.cluster.async_failover([self.master],
-                    failover_nodes = servr_out, graceful=self.graceful)
-            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([before_tasks])
+            self._create_replica_indexes()
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=servr_out, graceful=self.graceful)
+            query_definitions = self._redefine_index_usage()
+            in_between_tasks = self.async_run_operations(buckets=self.buckets, query_definitions=query_definitions,
+                                                             phase="in_between")
             failover_task.result()
             if self.graceful:
                 # Check if rebalance is still running
                 msg = "graceful failover failed for nodes"
                 self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                   [], servr_out)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()
-            self.sleep(120)
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self.sleep(60)
+            self._run_tasks([kvOps_tasks, in_between_tasks])
+            nodes_out = []
+            for service in self.nodes_out_dist.split("-"):
+                nodes_out.append(service.split(":")[0])
+            if not "n1ql" in nodes_out and not "index" in nodes_out:
+                if self.index_nodes_out:
+                    self._verify_bucket_count_with_index_count(query_definitions=self.load_query_definitions)
+                else:
+                    self._verify_bucket_count_with_index_count()
+                after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
+                self._run_tasks([after_tasks])
         except Exception, ex:
+            self.log.info(str(ex))
             raise
 
     def test_failover_add_back(self):
