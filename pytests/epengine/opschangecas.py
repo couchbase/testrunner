@@ -57,6 +57,7 @@ class OpsChangeCasTests(BucketConfig):
         rebalance = self.cluster.async_rebalance(self.servers[-1:], [] ,[self.master])
 
         rebalance.result()
+        time.sleep(60)
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
         get_meta_resp = mc_replica.getMeta(KEY_NAME,request_extended_meta_data=False)
         #print 'replica CAS {0}'.format(replica_CAS)
@@ -67,6 +68,8 @@ class OpsChangeCasTests(BucketConfig):
         rebalance = self.cluster.async_rebalance(self.servers[-1:], [self.master], [])
 
         rebalance.result()
+
+        time.sleep(60)
 
         # verify the CAS is good
         client = VBucketAwareMemcached(rest, self.bucket)
