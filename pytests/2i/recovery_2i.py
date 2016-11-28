@@ -501,6 +501,28 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 qdfs.append(query_definition)
             self.query_definitions = qdfs
 
+    def _create_replica_indexes(self):
+        query_definitions = []
+        if not self.use_replica:
+            return []
+        if not self.index_nodes_out:
+            return []
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in self.index_nodes_out:
+            if node in index_nodes:
+                index_nodes.remove(node)
+        if index_nodes:
+            deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip, index_nodes[0].port)]
+            ops_map = self.generate_operation_map("in_between")
+            if ("query" in ops_map or "query_with_explain" in ops_map) and not self.all_index_nodes_lost:
+                for query_definition in self.query_definitions:
+                    if query_definition.index_name in self.index_lost_during_move_out:
+                        query_definition.index_name = query_definition.index_name + "_replica"
+                        query_definitions.append(query_definition)
+                        for bucket in self.buckets:
+                            self.create_index(bucket=bucket, query_definition=query_definition,
+                                              deploy_node_info=deploy_node_info)
+
     def _create_replica_index_when_indexer_is_down(self, index_lost_during_move_out):
         memory = []
         static_node_list = self._find_nodes_not_moved_out()
