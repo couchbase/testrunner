@@ -1190,7 +1190,7 @@ class VBucketAwareMemcached(object):
 
     def _getMulti_from_mc(self, memcached_client, keys, pause, timeout, rec_caller_fn):
         try:
-            return memcached_client.get_multi(keys)
+            return memcached_client.getMulti(keys)
         except (EOFError, socket.error), error:
             if "Got empty data (remote died?)" in error.message or \
                "Timeout waiting for socket" in error.message or \

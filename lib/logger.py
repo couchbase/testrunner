@@ -2,8 +2,8 @@ import logging
 
 global _logger
 
-
 class Logger:
+
     _logger = None
 
     @staticmethod
@@ -16,7 +16,7 @@ class Logger:
 
     @staticmethod
     def start_logger(name):
-        # create logger
+    # create logger
         return logging.getLogger()
 
 

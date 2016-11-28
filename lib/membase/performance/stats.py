@@ -713,8 +713,8 @@ class StatsCollector(object):
             src_client.setMulti(0, 0, kvs)
             while True:
                 try:
-                    dst_client.get_multi(kvs.keys(), timeout_sec=120,
-                                         parallel=False)
+                    dst_client.getMulti(kvs.keys(), timeout_sec=120,
+                                        parallel=False)
                     break
                 except ValueError:
                     time.sleep(0.05)
