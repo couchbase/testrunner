@@ -14,7 +14,8 @@ from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT
+from testconstants import STANDARD_BUCKET_PORT,LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, \
+    MAC_COUCHBASE_BIN_PATH
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -26,6 +27,7 @@ from couchbase_helper.documentgenerator import *
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from es_base import ElasticSearchBase
+
 
 
 class RenameNodeException(FTSException):
@@ -915,12 +917,14 @@ class FTSIndex:
 
     def construct_cbft_query_json(self, query, fields=None, timeout=None,
                                                           facets=False,
-                                                          sort_fields=None):
+                                                          sort_fields=None,
+                                                          explain=False):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = QUERY.JSON
         # query is a unicode dict
         query_json['query'] = query
         query_json['indexName'] = self.name
+        query_json['explain'] = explain
         if max_matches:
             query_json['size'] = int(max_matches)
         if timeout:
@@ -931,6 +935,7 @@ class FTSIndex:
             query_json['facets'] = self.construct_facets_definition()
         if sort_fields:
             query_json['sort'] = sort_fields
+
         return query_json
 
     def construct_facets_definition(self):
@@ -989,12 +994,14 @@ class FTSIndex:
         return facet_definition
 
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
-                                      return_raw_hits=False, sort_fields=None):
+                                      return_raw_hits=False, sort_fields=None,
+                                      explain=False):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query,
-                                                    sort_fields=sort_fields)
+                                                    sort_fields=sort_fields,
+                                                    explain=explain)
         hits = -1
         matches = []
         doc_ids = []
@@ -1281,6 +1288,92 @@ class FTSIndex:
             if content['id'] == doc_id:
                 return True
         return False
+
+    def get_detailed_scores_for_doc(self, doc_id, search_results, weight,
+                                    searchTerm):
+        """
+        Parses the search results content and extracts the desired score component
+        :param doc_id: Doc ID for which detailed score is requested
+        :param search_results: Search results contents
+        :param weight: component of score - queryWeight/fieldWeight/coord
+        :param searchTerm: searchTerm for which score component is required
+        :return: Individual Score components
+        """
+        tf_score = 0
+        idf_score = 0
+        field_norm_score = 0
+        coord_score = 0
+        query_norm_score = 0
+        for doc in search_results:
+            if doc['id'] == doc_id:
+                if doc['explanation'].has_key('children'):
+                    tree = self.find_node_in_score_tree(
+                        doc['explanation']['children'], weight, searchTerm)
+                    if tree.has_key('children'):
+                        tf_score, field_norm_score, idf_score, query_norm_score, \
+                            coord_score = self.extract_detailed_score_from_node(
+                            tree['children'])
+                    else:
+                        nodes = []
+                        nodes.append(tree)
+                        tf_score, field_norm_score, idf_score, query_norm_score, \
+                            coord_score = self.extract_detailed_score_from_node(
+                            nodes)
+                else:
+                    tf_score, field_norm_score, idf_score, query_norm_score, \
+                        coord_score = self.extract_detailed_score_from_node(
+                        doc['explanation'])
+
+        return tf_score, field_norm_score, idf_score, query_norm_score, coord_score
+
+    def find_node_in_score_tree(self, tree, weight, searchTerm):
+        """
+        Finds the node that contains the desired score component in the tree
+        structure containing the score explanation
+        """
+        while 1:
+            newSubnodes = []
+            for node in tree:
+                if (weight in node['message']) and (
+                            searchTerm in node['message']):
+                    self.__log.info("Found it")
+                    return node
+                if node.has_key('children'):
+                    if len(node['children']) == 0:
+                        break
+                    for subnode in node['children']:
+                        if (weight in subnode['message']) and (
+                                    searchTerm in subnode['message']):
+                            self.__log.info("Found it")
+                            return subnode
+                        else:
+                            if subnode.has_key('children'):
+                                for subsubnode in subnode['children']:
+                                    newSubnodes.append(subsubnode)
+            tree = copy.deepcopy(newSubnodes)
+        return None
+
+    def extract_detailed_score_from_node(self, tree):
+        """
+        Extracts the score components from the node containing it.
+        """
+        tf_score = 0
+        idf_score = 0
+        field_norm_score = 0
+        coord_score = 0
+        query_norm_score = 0
+        for item in tree:
+            if 'termFreq' in item['message']:
+                tf_score = item['value']
+            if 'fieldNorm' in item['message']:
+                field_norm_score = item['value']
+            if 'idf' in item['message']:
+                idf_score = item['value']
+            if 'queryNorm' in item['message']:
+                query_norm_score = item['value']
+            if 'coord' in item['message']:
+                coord_score = item['value']
+        return tf_score, field_norm_score, idf_score, query_norm_score, coord_score
 
 
 class CouchbaseCluster:
@@ -2767,6 +2860,7 @@ class FTSBaseTest(unittest.TestCase):
         self.sort_desc = self._input.param("sort_desc", False)
         self.sort_mode = self._input.param("sort_mode", "min")
         self.__fail_on_errors = self._input.param("fail-on-errors", True)
+        self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
 
     def __initialize_error_count_dict(self):
         """
@@ -3633,3 +3727,33 @@ class FTSBaseTest(unittest.TestCase):
         else:
             return None
         return sort_params
+
+    def create_test_dataset(self, server, docs):
+        """
+        Creates documents using cbdocloader in the default bucket from a given
+        list of json data
+        :param server: Server on which docs are to be loaded
+        :param docs: List of json data
+        :return: None
+        """
+        remote = RemoteMachineShellConnection(server)
+        info = remote.extract_remote_info()
+        if info.type.lower() != 'windows':
+            self.log.info("Creating test dataset")
+            command = "cd /tmp; rm -rf dataset; mkdir -p dataset; cd dataset; mkdir docs; cd docs"
+            remote.execute_command(command)
+            i = 1
+            for doc in docs:
+                command = "cd /tmp/dataset/docs; echo \"%s\" > %s.json;" % (
+                doc, i)
+                i += 1
+                output, error = remote.execute_command(command)
+                for o in output:
+                    self.log.info(o)
+            command = "{0}/cbdocloader -c {1} -u {2} -p {3} -b default -d /tmp/dataset -m 100 -v".format(
+                self.cli_command_location,
+                server.ip, server.rest_username,
+                server.rest_password)
+            output, error = remote.execute_command(command)
+            for o in output:
+                self.log.info(o)

@@ -873,3 +873,263 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
+
+    def test_scoring_tf_score(self):
+        """
+        Test if the TF score in the Scoring functionality works fine
+        """
+        test_data = ["{\\\"text\\\":\\\"cat - a lazy cat and a brown cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat\\\"}"]
+
+        self.create_test_dataset(self._master, test_data)
+        plan_params = self.construct_plan_params()
+        index = self.create_index(plan_params=plan_params,
+                                  bucket=self._cb_cluster.get_bucket_by_name(
+                                      'default'),
+                                  index_name="default_index")
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, raw_hits, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=zero_results_ok,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True,
+                                                       explain=True)
+            tf_score1, _, _, _, _ = index.get_detailed_scores_for_doc(
+                doc_id='1',
+                search_results=raw_hits,
+                weight='fieldWeight',
+                searchTerm='cat')
+            self.log.info("TF for Doc ID 1 = %s" % tf_score1)
+            tf_score2, _, _, _, _ = index.get_detailed_scores_for_doc(
+                doc_id='2',
+                search_results=raw_hits,
+                weight='fieldWeight',
+                searchTerm='cat')
+            self.log.info("TF for Doc ID 2 = %s" % tf_score2)
+            tf_score3, _, _, _, _ = index.get_detailed_scores_for_doc(
+                doc_id='3',
+                search_results=raw_hits,
+                weight='fieldWeight',
+                searchTerm='cat')
+            self.log.info("TF for Doc ID 3 = %s" % tf_score3)
+
+            self.assertTrue(tf_score1 > tf_score2 > tf_score3,
+                            "Testcase failed. TF score for Doc1 not > Doc2 not > Doc3")
+
+    def test_scoring_idf_score(self):
+        """
+        Test if the IDF score in the Scoring functionality works fine
+        """
+        test_data = ["{\\\"text\\\":\\\"a brown cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}",
+                     "{\\\"text\\\":\\\"a brown dog\\\"}",
+                     "{\\\"text\\\":\\\"a lazy dog\\\"}",
+                     "{\\\"text\\\":\\\"a lazy dog and a brown dog\\\"}",
+                     "{\\\"text\\\":\\\"a lazy fox and a brown fox\\\"}"]
+
+        self.create_test_dataset(self._master, test_data)
+        plan_params = self.construct_plan_params()
+        index = self.create_index(plan_params=plan_params,
+                                  bucket=self._cb_cluster.get_bucket_by_name(
+                                      'default'),
+                                  index_name="default_index")
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, raw_hits, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=zero_results_ok,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True,
+                                                       explain=True)
+            _, _, idf1, _, _ = index.get_detailed_scores_for_doc(doc_id='2',
+                                                                 search_results=raw_hits,
+                                                                 weight='fieldWeight',
+                                                                 searchTerm='cat')
+            self.log.info("IDF score for Doc ID 1 = %s" % idf1)
+
+            _, _, idf2, _, _ = index.get_detailed_scores_for_doc(doc_id='2',
+                                                                 search_results=raw_hits,
+                                                                 weight='fieldWeight',
+                                                                 searchTerm='lazy')
+            self.log.info( "IDF score for Doc ID 2 = %s" % idf2)
+
+            self.assertTrue(idf1 > idf2, "Testcase failed. IDF score for Doc1 "
+                    "for search term 'cat' not > that of search term 'lazy'")
+
+    def test_scoring_field_norm_score(self):
+        """
+        Test if the Field Normalization score in the Scoring functionality works fine
+        """
+        test_data = ["{\\\"text\\\":\\\"a cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
+
+        self.create_test_dataset(self._master, test_data)
+        plan_params = self.construct_plan_params()
+        index = self.create_index(plan_params=plan_params,
+                                  bucket=self._cb_cluster.get_bucket_by_name(
+                                      'default'),
+                                  index_name="default_index")
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, raw_hits, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=zero_results_ok,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True,
+                                                       explain=True)
+            _, field_norm1, _, _, _ = index.get_detailed_scores_for_doc(
+                doc_id='1',
+                search_results=raw_hits,
+                weight='fieldWeight',
+                searchTerm='cat')
+            self.log.info(
+                "Field Normalization score for Doc ID 1 = %s" % field_norm1)
+            _, field_norm2, _, _, _ = index.get_detailed_scores_for_doc(
+                doc_id='2',
+                search_results=raw_hits,
+                weight='fieldWeight',
+                searchTerm='cat')
+            self.log.info(
+                "Field Normalization score for Doc ID 2 = %s" % field_norm2)
+            _, field_norm3, _, _, _ = index.get_detailed_scores_for_doc(
+                doc_id='3',
+                search_results=raw_hits,
+                weight='fieldWeight',
+                searchTerm='cat')
+            self.log.info(
+                "Field Normalization score for Doc ID 3 = %s" % field_norm3)
+
+            self.assertTrue(field_norm1 > field_norm2 > field_norm3,
+                            "Testcase failed. Field Normalization score for "
+                            "Doc1 not > Doc2 not > Doc3")
+
+    def test_scoring_query_norm_score(self):
+        """
+        Test if the Query Normalization score in the Scoring functionality works fine
+        """
+        test_data = ["{\\\"text\\\":\\\"a cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
+
+        self.create_test_dataset(self._master, test_data)
+        plan_params = self.construct_plan_params()
+        index = self.create_index(plan_params=plan_params,
+                                  bucket=self._cb_cluster.get_bucket_by_name(
+                                      'default'),
+                                  index_name="default_index")
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, raw_hits, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=zero_results_ok,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True,
+                                                       explain=True)
+            _, _, _, query_norm1, _ = index.get_detailed_scores_for_doc(
+                doc_id='1',
+                search_results=raw_hits,
+                weight='queryWeight',
+                searchTerm='cat')
+            self.log.info(
+                "Query Normalization score for Doc ID 1 = %s" % query_norm1)
+            _, _, _, query_norm2, _ = index.get_detailed_scores_for_doc(
+                doc_id='2',
+                search_results=raw_hits,
+                weight='queryWeight',
+                searchTerm='cat')
+            self.log.info(
+                "Query Normalization score for Doc ID 2 = %s" % query_norm2)
+            _, _, _, query_norm3, _ = index.get_detailed_scores_for_doc(
+                doc_id='3',
+                search_results=raw_hits,
+                weight='queryWeight',
+                searchTerm='cat')
+            self.log.info(
+                "Query Normalization score for Doc ID 3 = %s" % query_norm3)
+
+            self.assertTrue(query_norm1 == query_norm2 == query_norm3,
+                            "Testcase failed. Query Normalization score for "
+                            "Doc1 != Doc2 != Doc3")
+
+    def test_scoring_coord_score(self):
+        """
+        Test if the Coord score in the Scoring functionality works fine
+        """
+        test_data = ["{\\\"text\\\":\\\"a cat\\\"}",
+                     "{\\\"text\\\":\\\"a lazy cat\\\"}"]
+
+        self.create_test_dataset(self._master, test_data)
+        plan_params = self.construct_plan_params()
+        index = self.create_index(plan_params=plan_params,
+                                  bucket=self._cb_cluster.get_bucket_by_name(
+                                      'default'),
+                                  index_name="default_index")
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, raw_hits, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=zero_results_ok,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True,
+                                                       explain=True)
+            _, _, _, _, coord1 = index.get_detailed_scores_for_doc(
+                doc_id='1',
+                search_results=raw_hits,
+                weight='coord',
+                searchTerm='')
+            self.log.info(
+                "Coord score for Doc ID 1 = %s" % coord1)
+            _, _, _, _, coord2 = index.get_detailed_scores_for_doc(
+                doc_id='2',
+                search_results=raw_hits,
+                weight='coord',
+                searchTerm='')
+            self.log.info(
+                "Coord score for Doc ID 2 = %s" % coord2)
+
+            self.assertTrue(coord1 < coord2,
+                            "Testcase failed. Coord score for Doc1 not < Doc2")
