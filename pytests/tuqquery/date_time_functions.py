@@ -146,7 +146,7 @@ class DateTimeFunctionClass(QueryTests):
                     if not expect_null_result and not lst:
                         error_query.append(query)
                     elif lst:
-                        if len(lst) != count+1:
+                        if len(lst) != count:
                             error_query.append(query)
         self.assertFalse(error_query, "Queries Failed are: {0}".format(error_query))
 
@@ -163,7 +163,10 @@ class DateTimeFunctionClass(QueryTests):
             if interval < 1:
                 self.assertEqual(len(lst), 0, "Query {0} Failed".format(query))
             else:
-                self.assertEqual(len(lst), (8/interval)+1, "Query {0} Failed".format(query))
+                if not (8%interval):
+                    self.assertEqual(len(lst), (8/interval), "Query {0} Failed".format(query))
+                else:
+                    self.assertEqual(len(lst), (8/interval)+1, "Query {0} Failed".format(query))
 
     def test_new_functions(self):
         local_formats = ["2006-01-02"]
