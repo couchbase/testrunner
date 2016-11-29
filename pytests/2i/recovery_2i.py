@@ -381,28 +381,35 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
-        self._run_initial_index_tasks()
+        before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
+        self._run_tasks([before_tasks])
+        self._create_replica_indexes()
         servr_out = self.nodes_out_list
         remote = RemoteMachineShellConnection(servr_out[0])
         try:
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
             remote.stop_server()
+            self.sleep(10)
+            kvOps_tasks = self._run_kvops_tasks()
+            query_definitions = self._redefine_index_usage()
+            in_between_tasks = self.async_run_operations(buckets=self.buckets, query_definitions=query_definitions,
+                                                         phase="in_between")
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                   [], [servr_out[0]])
-            in_between_index_ops = self._run_in_between_tasks()
+            active_nodes = self.get_nodes_in_cluster()
+            rebalance = self.cluster.async_rebalance(active_nodes, [], servr_out)
             rebalance.result()
-            self.sleep(120)
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self.sleep(30)
+            self._run_tasks([kvOps_tasks, in_between_tasks])
         except Exception, ex:
-            raise
+            msg = "unable to reach the host @ {0}".format(servr_out[0].ip)
+            if msg not in str(ex):
+                self.log.info(str(ex))
+                raise
         finally:
+            self._verify_bucket_count_with_index_count()
+            after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
+            self._run_tasks([after_tasks])
             remote.start_server()
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
-            for task in tasks:
-                task.result()
+            self.sleep(30)
 
     def test_network_partitioning(self):
         self._run_initial_index_tasks()
