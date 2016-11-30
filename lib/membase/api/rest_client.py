@@ -406,6 +406,7 @@ class RestConnection(object):
         return True
 
     def init_http_request(self, api):
+        content = None
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
             json_parsed = json.loads(content)
@@ -414,8 +415,11 @@ class RestConnection(object):
             else:
                 print("{0} with status {1}: {2}".format(api, status, json_parsed))
                 return json_parsed, False
-        except ValueError:
-            print("{0}: {1}".format(api, content))
+        except ValueError as e:
+            if content is not None:
+                print("{0}: {1}".format(api, content))
+            else:
+                print e
             return content, False
 
     def rename_node(self, hostname, username='Administrator', password='password'):
@@ -2056,8 +2060,6 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-
-
     def set_cas_drift_threshold(self, bucket, ahead_threshold_in_millisecond, behind_threshold_in_millisecond):
 
         api = self.baseUrl + 'pools/default/buckets/{0}'. format( bucket )
@@ -2067,11 +2069,6 @@ class RestConnection(object):
         log.info("%s with param: %s" % (api, params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
-
-
-
-
-
 
     def stop_rebalance(self, wait_timeout=10):
         api = self.baseUrl + '/controller/stopRebalance'
