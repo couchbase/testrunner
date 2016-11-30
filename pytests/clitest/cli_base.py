@@ -6,7 +6,7 @@ from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH,\
                           WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
-                          WIN_COUCHBASE_LOGS_PATH
+                          WIN_COUCHBASE_LOGS_PATH, COUCHBASE_FROM_4DOT6
 import logger
 import random
 import time
@@ -37,6 +37,12 @@ class CliBaseTest(BaseTestCase):
         info = self.shell.extract_remote_info()
         type = info.type.lower()
         self.excluded_commands = self.input.param("excluded_commands", None)
+        """ cli output message """
+        self.cli_bucket_create_msg = "SUCCESS: Bucket created"
+        self.cli_rebalance_msg = "SUCCESS: Rebalance complete"
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            self.cli_bucket_create_msg = "SUCCESS: bucket-create"
+            self.cli_rebalance_msg = "SUCCESS: rebalanced cluster"
         self.os = 'linux'
         self.full_v = None
         self.short_v = None
