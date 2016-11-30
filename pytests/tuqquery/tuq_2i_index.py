@@ -1982,23 +1982,22 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
 
     def test_dynamic_names(self):
-        for bucket in self.buckets:
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.query = "CREATE PRIMARY INDEX ON %s" % "default"
             self.run_cbq_query()
             self.sleep(15,'wait for index')
             self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
             actual_result = self.run_cbq_query()
             expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
             self.assertTrue(actual_result['results']==expected_result)
-            self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0}'.format(bucket.name)
+            self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0} where name is not null'.format("default")
             self.run_cbq_query()
-            self.query = 'select * from {0}'.format(bucket.name)
+            self.query = 'select * from {0}'.format("default")
             actual_result = self.run_cbq_query()
             number_of_docs= self.docs_per_day*2016*2
             self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
-            self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format(bucket.name)
+            self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format("default")
             self.run_cbq_query()
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.query = "DROP PRIMARY INDEX ON %s" % "default"
             self.run_cbq_query()
 
     def test_between_spans(self):

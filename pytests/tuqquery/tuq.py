@@ -1397,9 +1397,12 @@ class QueryTests(BaseTestCase):
             #self.assertTrue(actual_result['results']==([{u'default': {u'tasks_points': {u'task1': 1, u'task2': 1}, u'name': u'employee-9', u'mutated': 0, u'skills': [u'skill2010', u'skill2011'], u'join_day': 9, u'email': u'9-mail@couchbase.com', u'test_rate': 10.1, u'join_mo': 10, u'join_yr': 2011, u'_id': u'query-testemployee10153.1877827-0', u'VMs': [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], u'job_title': u'Engineer'}, u'x1': {u'name': 1}}]))
 
     def test_correlated_queries(self):
-        for bucket in self.buckets:
+        created_indexes = []
+        try:
+         for bucket in self.buckets:
             self.query = 'create index ix1 on %s(x,id)'%bucket.name
             self.run_cbq_query()
+            created_indexes.append("ix1")
             self.query = 'insert into %s (KEY, VALUE) VALUES ("kk02",{"x":100,"y":101,"z":102,"id":"kk02"})'%(bucket.name)
             self.run_cbq_query()
 
@@ -1476,16 +1479,19 @@ class QueryTests(BaseTestCase):
             self.query = 'explain select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
             actual_result=self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            print plan
-            #self.assertTrue("covers" in str(plan))
+            #print plan
+            self.assertTrue("covers" in str(plan))
             self.assertTrue(plan['~children'][0]['index']=='ix1')
             self.query = 'select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
             actual_result=self.run_cbq_query()
             self.assertTrue( sorted(actual_result['results']) ==sorted([{u'x': 100, u's': [100]}]))
-            self.query = 'drop index %s.ix1'%(bucket.name)
-            self.run_cbq_query()
             self.query = 'delete from %s use keys["kk02"]'%(bucket.name)
             self.run_cbq_query()
+        finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
 
     def test_object_concat_remove(self):
