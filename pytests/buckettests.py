@@ -10,7 +10,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH
-from testconstants import COUCHBASE_FROM_WATSON
+from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6
 from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
@@ -203,9 +203,14 @@ class CreateBucketTests(BaseTestCase):
 
         """ check all indexes are completed """
         index_name = []
+        index_count = 8
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            index_count = 10
         result = self.rest.index_tool_stats()
+
+        self.log.info("check if all %s indexes built." % index_count)
         end_time_i = time.time() + 60
-        while time.time() < end_time_i and len(index_name) < 8:
+        while time.time() < end_time_i and len(index_name) < index_count:
             for map in result:
                 if result["indexes"]:
                     for x in result["indexes"]:
@@ -222,7 +227,7 @@ class CreateBucketTests(BaseTestCase):
                 else:
                     self.sleep(7, "waiting for indexing start")
                     result = self.rest.index_tool_stats()
-        if time.time() >= end_time_i and len(index_name) < 8:
+        if time.time() >= end_time_i and len(index_name) < index_count:
             self.log.info("index list {0}".format(index_name))
             self.fail("some indexing may not complete")
         elif len(index_name) == 8:
@@ -274,20 +279,30 @@ class CreateBucketTests(BaseTestCase):
 
         """ check all indexes are completed """
         index_name = []
+        index_count = 8
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            index_count = 10
         result = self.rest.index_tool_stats()
+        """ check all indexes are completed """
+
+        self.log.info("check if all %s indexes built." % index_count)
         end_time_i = time.time() + 60
-        for map in result:
+        while time.time() < end_time_i and len(index_name) < index_count:
             if result["indexes"]:
                 for x in result["indexes"]:
                     if x["bucket"] == "travel-sample":
-                        if x["progress"] == 100 and x["index"] not in index_name:
-                            index_name.append(x["index"])
+                        if x["progress"] == 100 and \
+                           x["index"] not in index_name:
+                                index_name.append(x["index"])
+                self.sleep(7, "waiting for indexing complete")
+                result = self.rest.index_tool_stats()
             else:
-                self.fail("indexing failed to build")
-        if len(index_name) < 8:
+                self.sleep(2, "waiting for indexing start")
+                result = self.rest.index_tool_stats()
+        if time.time() >= end_time_i and len(index_name) < index_count:
             self.log.info("index list {0}".format(index_name))
             self.fail("some indexing may not complete")
-        elif len(index_name) == 8:
+        elif len(index_name) == index_count:
             self.log.info("travel-sample bucket is created and complete indexing")
             self.log.info("index list in travel-sample bucket: {0}"
                                        .format(index_name))
