@@ -588,6 +588,7 @@ class ImportExportTests(CliBaseTest):
                 format_flag = "-f"
                 if self.imex_type == "csv":
                     format_flag = ""
+                    self.format_type = ""
                 for bucket in self.buckets:
                     key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
