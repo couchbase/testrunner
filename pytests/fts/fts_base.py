@@ -918,7 +918,8 @@ class FTSIndex:
     def construct_cbft_query_json(self, query, fields=None, timeout=None,
                                                           facets=False,
                                                           sort_fields=None,
-                                                          explain=False):
+                                                          explain=False,
+                                                          show_results_from_item=0):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = QUERY.JSON
         # query is a unicode dict
@@ -927,6 +928,8 @@ class FTSIndex:
         query_json['explain'] = explain
         if max_matches:
             query_json['size'] = int(max_matches)
+        if show_results_from_item:
+            query_json['from'] = int(show_results_from_item)
         if timeout:
             query_json['timeout'] = int(timeout)
         if fields:
@@ -994,14 +997,15 @@ class FTSIndex:
         return facet_definition
 
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
-                                      return_raw_hits=False, sort_fields=None,
-                                      explain=False):
+                      return_raw_hits=False, sort_fields=None,
+                      explain=False, show_results_from_item=0):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query,
                                                     sort_fields=sort_fields,
-                                                    explain=explain)
+                                                    explain=explain,
+                                                    show_results_from_item=show_results_from_item)
         hits = -1
         matches = []
         doc_ids = []
@@ -2861,6 +2865,12 @@ class FTSBaseTest(unittest.TestCase):
         self.sort_mode = self._input.param("sort_mode", "min")
         self.__fail_on_errors = self._input.param("fail-on-errors", True)
         self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+        self.expected_docs = str(self._input.param("expected", None))
+        self.expected_docs_list = []
+        if (self.expected_docs) and (',' in self.expected_docs):
+            self.expected_docs_list = self.expected_docs.split(',')
+        else:
+            self.expected_docs_list.append(self.expected_docs)
 
     def __initialize_error_count_dict(self):
         """

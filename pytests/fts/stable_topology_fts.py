@@ -1133,3 +1133,108 @@ class StableTopFTS(FTSBaseTest):
 
             self.assertTrue(coord1 < coord2,
                             "Testcase failed. Coord score for Doc1 not < Doc2")
+
+    def test_fuzzy_query(self):
+        """
+        Test if fuzzy queries work fine
+        """
+        test_data = ["{\\\"text\\\":\\\"simmer\\\"}",
+                     "{\\\"text\\\":\\\"dimmer\\\"}",
+                     "{\\\"text\\\":\\\"hammer\\\"}",
+                     "{\\\"text\\\":\\\"shimmer\\\"}",
+                     "{\\\"text\\\":\\\"rubber\\\"}",
+                     "{\\\"text\\\":\\\"jabber\\\"}",
+                     "{\\\"text\\\":\\\"kilmer\\\"}",
+                     "{\\\"text\\\":\\\"year\\\"}",
+                     "{\\\"text\\\":\\\"mumma\\\"}",
+                     "{\\\"text\\\":\\\"tool stemmer\\\"}",
+                     "{\\\"text\\\":\\\"he is weak at grammar\\\"}",
+                     "{\\\"text\\\":\\\"sum of all the rows\\\"}"
+                     ]
+
+        self.create_test_dataset(self._master, test_data)
+        index = self.create_index(bucket=self._cb_cluster.get_bucket_by_name(
+                                      'default'),
+                                  index_name="default_index")
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        if expected_hits:
+            zero_results_ok = False
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, content, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=zero_results_ok,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True)
+            self.log.info("Docs in Search results = %s" % content)
+            self.log.info("Expected Docs = %s" % self.expected_docs)
+            if hits>0:
+                all_expected_docs_present = True
+                for doc in self.expected_docs_list:
+                    all_expected_docs_present &= index.is_doc_present_in_query_result_content(content, doc)
+
+                self.assertTrue(all_expected_docs_present, "All expected docs not in search results")
+
+    def test_pagination_of_search_results(self):
+        max_matches = self._input.param("query_max_matches",10000000)
+        show_results_from_item = self._input.param("show_results_from_item",0)
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"match_all": "true", "field":"name"}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            sort_params = self.build_sort_params()
+            for index in self._cb_cluster.get_indexes():
+                hits, doc_ids, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           sort_fields=sort_params,
+                                                          show_results_from_item=show_results_from_item)
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Doc IDs: %s" % doc_ids)
+                if hits:
+                    self.log.info("Count of docs on page = %s" % len(doc_ids))
+                    if (show_results_from_item >= 0 and show_results_from_item <=self._num_items):
+                        items_on_page = self._num_items - show_results_from_item
+                    elif show_results_from_item < 0:
+                        items_on_page = self._num_items
+                        show_results_from_item = 0
+                    else:
+                        items_on_page = 0
+
+                    expected_items_on_page = min(items_on_page,max_matches)
+
+                    self.assertEqual(len(doc_ids),expected_items_on_page,"Items per page are not correct")
+
+                    doc_id_prefix='emp'
+                    first_doc_id = 10000001
+
+                    i = 0
+                    expected_doc_present = True
+                    while i < expected_items_on_page:
+                        expected_doc_id = doc_id_prefix+str(first_doc_id+i+show_results_from_item)
+                        expected_doc_present &= (expected_doc_id in doc_ids)
+                        if not expected_doc_present:
+                            self.log.info("Doc ID %s not in the search results page" % expected_doc_id)
+                        i += 1
+                    self.assertTrue(expected_doc_present, "Some docs not present in the results page")
+
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
