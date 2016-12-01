@@ -609,8 +609,11 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
-            self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
-                                      "Server {0}:8091 added".format(self.servers[num + 1].ip)])
+            output_msg = "SUCCESS: Server added"
+            if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
+                                                    self.servers[num + 1].port)
+            self.assertEqual(output[0], output_msg)
 
         cli_command = "rebalance-status"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
