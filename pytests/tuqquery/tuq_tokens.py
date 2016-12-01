@@ -20,7 +20,7 @@ class TokenTests(BaseTestCase):
     def tearDown(self):
         server = self.master
         shell = RemoteMachineShellConnection(server)
-        shell.execute_command("""curl -X DELETE -u Administrator:password http://{0}:8091/pools/default/buckets/beer-sample""".format(server.ip))
+        #  shell.execute_command("""curl -X DELETE -u Administrator:password http://{0}:8091/pools/default/buckets/beer-sample""".format(server.ip))
         self.sleep(20)
         super(TokenTests, self).tearDown()
 
@@ -42,14 +42,6 @@ class TokenTests(BaseTestCase):
         shell.disconnect()
 
     def test_tokens_secondary_indexes(self):
-        server = self.master
-        shell = RemoteMachineShellConnection(server)
-        shell.execute_command("""curl -v -u Administrator:password \
-                             -X POST http://{0}:8091/sampleBuckets/install \
-                          -d '["{1}"]'""".format(server.ip, "beer-sample"))
-        self.sleep(30)
-
-        shell.disconnect()
         #bucket_name = "beer-sample"
         self.query = 'create primary index on `beer-sample`'
         self.run_cbq_query()
