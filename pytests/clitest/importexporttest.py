@@ -97,8 +97,12 @@ class ImportExportTests(CliBaseTest):
                         if self.imex_type == "csv":
                             format_flag = ""
                             if self.field_separator != "comma":
-                                """ we test tab separator in this case """
-                                field_separator_flag = "--field-separator $'%s' " % self.field_separator
+                                if self.field_separator == "tab":
+                                    """ we test tab separator in this case """
+                                    field_separator_flag = "--field-separator $'\\t' "
+                                else:
+                                    field_separator_flag = "--field-separator %s "\
+                                                              % self.field_separator
                         key_gen = "%index%"
                         imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                     " -b %s -d %s%s %s %s -g %s %s "\
@@ -592,8 +596,11 @@ class ImportExportTests(CliBaseTest):
                     format_flag = ""
                     self.format_type = ""
                     if self.field_separator != "comma":
-                        """ we test tab separator in this case """
-                        field_separator_flag = "--field-separator $'%s' " % self.field_separator
+                        if self.field_separator == "tab":
+                            """ we test tab separator in this case """
+                            field_separator_flag = "--field-separator $'\\t' "
+                        else:
+                            field_separator_flag = "--field-separator %s " % self.field_separator
                 for bucket in self.buckets:
                     key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
@@ -604,7 +611,6 @@ class ImportExportTests(CliBaseTest):
                                                              import_method, des_file,
                                               format_flag, self.format_type, key_gen,
                                                                 field_separator_flag)
-                    print "command  ", imp_cmd_str
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
                     """ Json `file:///root/json_list` imported to `http://host:8091` successfully """
