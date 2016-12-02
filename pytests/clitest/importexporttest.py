@@ -97,7 +97,8 @@ class ImportExportTests(CliBaseTest):
                         if self.imex_type == "csv":
                             format_flag = ""
                             if self.field_separator != "comma":
-                                field_separator_flag = "--field-separator %s " % self.field_separator
+                                """ we test tab separator in this case """
+                                field_separator_flag = "--field-separator $'%s' " % self.field_separator
                         key_gen = "%index%"
                         imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                     " -b %s -d %s%s %s %s -g %s %s "\
@@ -591,7 +592,8 @@ class ImportExportTests(CliBaseTest):
                     format_flag = ""
                     self.format_type = ""
                     if self.field_separator != "comma":
-                        field_separator_flag = "--field-separator %s " % self.field_separator
+                        """ we test tab separator in this case """
+                        field_separator_flag = "--field-separator $'%s' " % self.field_separator
                 for bucket in self.buckets:
                     key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
