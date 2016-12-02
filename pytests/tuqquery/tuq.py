@@ -3224,6 +3224,7 @@ class QueryTests(BaseTestCase):
              self.query = "create index idx on %s(META())" %(bucket.name)
              self.run_cbq_query()
              self.query = "create index idx2 on {0}(META({0}))".format(bucket.name)
+             self.run_cbq_query()
              self.query = "SELECT  META() as meta_c FROM %s  ORDER BY meta_c limit 10" %(bucket.name)
              actual_result = self.run_cbq_query()
              self.assertTrue(actual_result['status']=="success")
@@ -3232,6 +3233,10 @@ class QueryTests(BaseTestCase):
              self.assertTrue(actual_result['status']=="success")
              self.query = "SELECT META(t1).id as id FROM default t1 JOIN default t2 ON KEYS t1.id;"
              self.assertTrue(actual_result['status']=="success")
+             self.query = "drop index %s.idx" %(bucket.name)
+             self.run_cbq_query()
+             self.query = "drop index %s.idx2" %(bucket.name)
+             self.run_cbq_query()
 
 
 
