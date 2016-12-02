@@ -586,18 +586,22 @@ class ImportExportTests(CliBaseTest):
 
             if len(self.buckets) >= 1:
                 format_flag = "-f"
+                field_separator_flag = ''
                 if self.imex_type == "csv":
                     format_flag = ""
                     self.format_type = ""
+                    if self.field_separator != "comma":
+                        field_separator_flag = "--field-separator %s " % self.field_separator
                 for bucket in self.buckets:
                     key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
                     -b default -d file:///tmp/export/default -f list -g %index%  """
-                    imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s"\
+                    imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                           server.ip, username, password, bucket.name,
                                                              import_method, des_file,
-                                              format_flag, self.format_type, key_gen)
+                                              format_flag, self.format_type, key_gen,
+                                                                field_separator_flag)
                     print "command  ", imp_cmd_str
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
