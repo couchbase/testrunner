@@ -2913,14 +2913,9 @@ class QueryTests(BaseTestCase):
             " FROM %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            self.query = "SELECT reverse(name) || \" \" || reverse(job_title) as rev_employee" +\
-            " FROM %s" % (bucket.name)
 
-            actual_list1 = self.run_cbq_query()
             actual_result = sorted(actual_list['results'], key=lambda doc: (doc['employee']))
-            actual_result1 = sorted(actual_list1['results'], key=lambda doc: (doc['rev_employee']))
 
-            self.assertEqual(actual_result1,actual_result)
             expected_result = [{"employee" : doc["name"] + " " + doc["job_title"]}
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['employee']))
