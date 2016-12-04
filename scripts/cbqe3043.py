@@ -1,13 +1,10 @@
 import getopt
 import sys
-import os
 
 sys.path.append('.')
 sys.path.append('lib')
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.membase.api.rest_client import RestConnection
-import logger
-import logging.config
 import TestInput
 
 def usage(error=None):

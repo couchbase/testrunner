@@ -1341,7 +1341,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "cbbackupmgr restore [<args>]")
+        self.assertEqual(output[0], "cbbackupmgr {} [<args>]".format(cmd_to_test))
         cmd = cmd_to_test + " --archive"
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -1409,7 +1409,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error restoring cluster: Backup Repository `abc` not found" in output[-1], "Expected error message not thrown")
+        part_message = "backing up"
+        if cmd_to_test == "restore":
+            part_message = 'restoring'
+        self.assertTrue("Error {0} cluster: Backup Repository `abc` not found".format(part_message) in output[-1],
+                        "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster abc --username {2} \
                               --password {3}".format(self.backupset.directory,
                                                      self.backupset.name,
@@ -1418,7 +1422,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error restoring cluster: Rest client error" in output[0],
+        self.assertTrue("Error {0} cluster: Rest client error".format(part_message) in output[0],
                         "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} --username abc \
                               --password {4}".format(self.backupset.directory,
@@ -1826,7 +1830,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         NodeHelper.wait_warmup_completed([self.backupset.cluster_host])
 
     def stat(self, key):
-        stats =  StatsCommon.get_stats([self.master], 'default', "", key)
+        stats = StatsCommon.get_stats([self.master], 'default', "", key)
         val = stats.values()[0]
         if val.isdigit():
             val = int(val)

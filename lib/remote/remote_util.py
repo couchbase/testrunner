@@ -1,4 +1,3 @@
-from ast import literal_eval
 import os
 import re
 import sys
@@ -7,10 +6,7 @@ import uuid
 import time
 import logging
 import stat
-import unittest
 import TestInput
-from datetime import datetime
-import logger
 from subprocess import Popen, PIPE
 
 import logger
