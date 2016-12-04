@@ -1,11 +1,15 @@
 import getopt
 import sys
+import logging
+import logging.config
 
-sys.path.append('.')
-sys.path.append('lib')
+sys.path = [".", "lib"] + sys.path
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.membase.api.rest_client import RestConnection
 import TestInput
+
+logging.config.fileConfig("scripts.logging.conf")
+log = logging.getLogger()
 
 def usage(error=None):
     print "Please provide INI file"
