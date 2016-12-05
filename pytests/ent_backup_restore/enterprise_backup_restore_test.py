@@ -77,6 +77,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self._load_all_buckets(self.master, gen, "update", self.expires)
             elif self.ops_type == "delete":
                 self._load_all_buckets(self.master, gen, "delete", self.expires)
+            self.sleep(10)
             self.backup_cluster_validate()
         self.targetMaster = True
         start = randrange(1, self.backupset.number_of_backups + 1)
@@ -93,6 +94,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 else:
                     self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
                 self.log.info("Done reset cluster")
+            self.sleep(10)
             self.backupset.start = start
             self.backupset.end = end
             self.backup_restore_validate(compare_uuid=False,
