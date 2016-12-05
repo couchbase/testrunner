@@ -46,6 +46,10 @@ INDEX_DEFINITION = {
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
+        for server in [self.backupset.backup_host, self.backupset.restore_cluster_host]:
+            conn = RemoteMachineShellConnection(server)
+            conn.extract_remote_info()
+            conn.terminate_processes(conn.info, ["cbbackupmgr"])
 
     def tearDown(self):
         super(EnterpriseBackupRestoreTest, self).tearDown()
@@ -817,10 +821,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.pause_memcached()
         conn.unpause_memcached()
-        output = restore_result.result(timeout=200)
+        output = restore_result.result(timeout=400)
         self.assertTrue("Restore completed successfully" in output[0],
-                        "Restore failed with memcached crash and restart within 180 seconds")
-        self.log.info("Restore succeeded with memcached crash and restart within 180 seconds")
+                        "Restore failed with memcached crash and restart within 400 seconds")
+        self.log.info("Restore succeeded with memcached crash and restart within 400 seconds")
 
     def test_restore_with_erlang_crash(self):
         """
