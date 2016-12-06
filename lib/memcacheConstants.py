@@ -200,7 +200,7 @@ SET_PKT_FMT = ">II"
 META_CMD_FMT = '>IIQQ'  # flags (4 bytes), expiration (4), seqno (8), CAS (8), metalen (2)
 
 META_CMD_FMT = '>IIQQ'
-EXTENDED_META_CMD_FMT = '>IIQQH'
+EXTENDED_META_CMD_FMT = '>IIQQI'
 SKIP_META_CMD_FMT = '>IIQQI'
 
 CR = 0x01
