@@ -10,7 +10,7 @@ from copy import deepcopy
 from threading import Thread
 from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
-from testconstants import COUCHBASE_FROM_VERSION_4
+from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_4DOT6
 
 import httplib2
 import logger
@@ -119,6 +119,12 @@ class RestHelper(object):
         while time.time() <= end_time:
             vBuckets = self.rest.get_vbuckets(bucket)
             if vBuckets:
+                """ Need to find the main slow issue and remove these change """
+                cb_version = self.rest.get_nodes_self().version[:5]
+                if cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                    log.info("sleep 7 seconds to make sure bucket ready")
+                    time.sleep(7)
+                """ End this change """
                 return True
             else:
                 time.sleep(0.5)
