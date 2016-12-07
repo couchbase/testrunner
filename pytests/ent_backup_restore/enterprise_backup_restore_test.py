@@ -1005,7 +1005,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end = 2
         output, error = self.backup_restore()
         if error:
-            self.fail("Restoring backup failed")
+            self.fail("Restoring backup failed: {0}".format(error))
         self.log.info("Finished restoring backup before merging")
         status, output, message = self.backup_merge()
         if not status:
@@ -1062,7 +1062,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                           directory=self.backupset.directory, name=self.backupset.name,
                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                           no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location)
+                                          cli_command_location=self.cli_command_location,
+                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
