@@ -79,8 +79,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         bucket_size = self._get_bucket_size(cluster.get_mem_quota(), len(buckets))
 
         if "default" in buckets:
-            cluster.create_default_bucket(bucket_size,
-                                          num_replicas=self._num_replicas)
+            bucket_params = self._create_bucket_params(size=bucket_size,
+                                                              replicas=self.num_replicas)
+            self.cluster.create_default_bucket(bucket_params)
 
         sasl_buckets = len([bucket for bucket in buckets if bucket.startswith("sasl")])
         if sasl_buckets > 0:

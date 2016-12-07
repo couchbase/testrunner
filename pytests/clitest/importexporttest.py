@@ -570,9 +570,10 @@ class ImportExportTests(CliBaseTest):
                     self.quota = info.memoryQuota
                 imp_rest.init_node()
                 self.cluster.rebalance(import_servers[2:], [import_servers[3]], [])
-                self.cluster.create_default_bucket(import_servers[2], "250", self.num_replicas,
-                                               enable_replica_index=self.enable_replica_index,
-                                               eviction_policy=self.eviction_policy)
+                bucket_params=self._create_bucket_params(server=import_servers[2],size=250,replicas=self.num_replicas,
+                                                         enable_replica_index=self.enable_replica_index,
+                                                         eviction_policy=self.eviction_policy)
+                self.cluster.create_default_bucket(bucket_params)
                 imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d file://%s -f %s -g key::%%%s%%"\
                               % (self.cli_command_path, "cbimport", self.cmd_ext, self.imex_type,
                                  import_servers[2].ip, username, password, "default",

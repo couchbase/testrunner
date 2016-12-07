@@ -538,14 +538,51 @@ class XDCRBaseTest(unittest.TestCase):
                 servers[i].hostname = hostnames[servers[i]]
         return hostnames
 
+    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
+                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                             bucket_priority=None, flush_enabled=1, lww=False):
+        """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            bucket_name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            password - The password for this bucket. (String)
+            size - The size of the bucket to be created. (int)
+            enable_replica_index - can be 0 or 1, 1 enables indexing of replica bucket data (int)
+            replicas - The number of replicas for this bucket. (int)
+            eviction_policy - The eviction policy for the bucket, can be valueOnly or fullEviction. (String)
+            bucket_priority - The priority of the bucket:either none, low, or high. (String)
+            bucket_type - The type of bucket. (String)
+            flushEnabled - Enable or Disable the flush functionality of the bucket. (int)
+            lww = determine the conflict resolution type of the bucket. (Boolean)
+
+        Returns:
+            bucket_params - A dictionary containing the parameters needed to create a bucket."""
+
+        bucket_params = {}
+        bucket_params['server'] = server
+        bucket_params['replicas'] = replicas
+        bucket_params['size'] = size
+        bucket_params['port'] = port
+        bucket_params['password'] = password
+        bucket_params['bucket_type'] = bucket_type
+        bucket_params['enable_replica_index'] = enable_replica_index
+        bucket_params['eviction_policy'] = eviction_policy
+        bucket_params['bucket_priority'] = bucket_priority
+        bucket_params['flush_enabled'] = flush_enabled
+        bucket_params['lww'] = lww
+        return bucket_params
+
     def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
+        sasl_params = self._create_bucket_params(server=server, password='password', size=bucket_size,
+                                                        replicas=self._num_replicas,
+                                                        eviction_policy=self.eviction_policy,
+                                                        bucket_priority=self.bucket_priority)
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
-            bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name, 'password',
-                                                                              bucket_size, self._num_replicas,
-                                                                              eviction_policy=self.eviction_policy,
-                                                                              bucket_priority=self.bucket_priority))
+            bucket_tasks.append(self.cluster.async_create_sasl_bucket(name=name, password='password', bucket_params=sasl_params))
+
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
                                    num_replicas=self._num_replicas, bucket_size=bucket_size,
                                    master_id=server_id, eviction_policy=self.eviction_policy))
@@ -555,14 +592,14 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _create_standard_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
+        standard_params = self._create_bucket_params(server=server, size=bucket_size, replicas=self._num_replicas,
+                                                    eviction_policy=self.eviction_policy,
+                                                    bucket_priority=self.bucket_priority)
         for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
-            bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
-                                                                                  STANDARD_BUCKET_PORT + i,
-                                                                                  bucket_size,
-                                                                                  self._num_replicas,
-                                                                                  eviction_policy=self.eviction_policy,
-                                                                                  bucket_priority=self.bucket_priority))
+            bucket_tasks.append(self.cluster.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
+                                                                          bucket_params=standard_params))
+
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                     num_replicas=self._num_replicas, bucket_size=bucket_size,
                                     port=STANDARD_BUCKET_PORT + i, master_id=server_id, eviction_policy=self.eviction_policy))
@@ -587,7 +624,10 @@ class XDCRBaseTest(unittest.TestCase):
         self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
         self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
-            self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas, eviction_policy=self.eviction_policy)
+            bucket_params = self._create_bucket_params(server=master_node, size=bucket_size,
+                                                              replicas=self.num_replicas,
+                                                              eviction_policy=self.eviction_policy)
+            self.cluster.create_default_bucket(bucket_params)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id,
                                        eviction_policy=self.eviction_policy))

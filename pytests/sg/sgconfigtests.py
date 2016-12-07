@@ -46,16 +46,54 @@ class SGConfigTests(GatewayConfigBaseTest):
             shutil.copy2('pytests/sg/resources/gateway_config_backup.json', 'pytests/sg/resources/gateway_config.json')
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
             self.cluster = Cluster()
-            self.cluster.create_default_bucket(self.master, 150)
-            task = self.cluster.async_create_sasl_bucket(self.master, 'test_%E-.5', 'password', 150, 1)
+            shared_params=self._create_bucket_params(server=self.master, size=150)
+            self.cluster.create_default_bucket(shared_params)
+            task = self.cluster.async_create_sasl_bucket(name='test_%E-.5',password='password',
+                                                         bucket_params=shared_params)
             task.result()
-            task = self.cluster.async_create_standard_bucket(self.master, 'db', 11219, 150, 1)
+            task = self.cluster.async_create_standard_bucket(name='db',port=11219,bucket_params=shared_params)
+
             task.result()
 
     def tearDown(self):
         super(SGConfigTests, self).tearDown()
         if self.case_number == 1:
             self.cluster.shutdown(force=True)
+
+    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
+                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                             bucket_priority=None, flush_enabled=1, lww=False):
+        """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            bucket_name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            password - The password for this bucket. (String)
+            size - The size of the bucket to be created. (int)
+            enable_replica_index - can be 0 or 1, 1 enables indexing of replica bucket data (int)
+            replicas - The number of replicas for this bucket. (int)
+            eviction_policy - The eviction policy for the bucket, can be valueOnly or fullEviction. (String)
+            bucket_priority - The priority of the bucket:either none, low, or high. (String)
+            bucket_type - The type of bucket. (String)
+            flushEnabled - Enable or Disable the flush functionality of the bucket. (int)
+            lww = determine the conflict resolution type of the bucket. (Boolean)
+
+        Returns:
+            bucket_params - A dictionary containing the parameters needed to create a bucket."""
+
+        bucket_params = {}
+        bucket_params['server'] = server
+        bucket_params['replicas'] = replicas
+        bucket_params['size'] = size
+        bucket_params['port'] = port
+        bucket_params['password'] = password
+        bucket_params['bucket_type'] = bucket_type
+        bucket_params['enable_replica_index'] = enable_replica_index
+        bucket_params['eviction_policy'] = eviction_policy
+        bucket_params['bucket_priority'] = bucket_priority
+        bucket_params['flush_enabled'] = flush_enabled
+        bucket_params['lww'] = lww
+        return bucket_params
 
     def configHelp(self):
         for server in self.servers:

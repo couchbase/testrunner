@@ -1078,6 +1078,40 @@ class CouchbaseCluster:
                     self.__log.info("Enabling audit ...")
                     audit_obj.setAuditEnable('true')
 
+    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
+                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                             bucket_priority=None, flush_enabled=1, lww=False):
+        """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            bucket_name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            password - The password for this bucket. (String)
+            size - The size of the bucket to be created. (int)
+            enable_replica_index - can be 0 or 1, 1 enables indexing of replica bucket data (int)
+            replicas - The number of replicas for this bucket. (int)
+            eviction_policy - The eviction policy for the bucket, can be valueOnly or fullEviction. (String)
+            bucket_priority - The priority of the bucket:either none, low, or high. (String)
+            bucket_type - The type of bucket. (String)
+            flushEnabled - Enable or Disable the flush functionality of the bucket. (int)
+            lww = determine the conflict resolution type of the bucket. (Boolean)
+
+        Returns:
+            bucket_params - A dictionary containing the parameters needed to create a bucket."""
+
+        bucket_params = {}
+        bucket_params['server'] = server
+        bucket_params['replicas'] = replicas
+        bucket_params['size'] = size
+        bucket_params['port'] = port
+        bucket_params['password'] = password
+        bucket_params['bucket_type'] = bucket_type
+        bucket_params['enable_replica_index'] = enable_replica_index
+        bucket_params['eviction_policy'] = eviction_policy
+        bucket_params['bucket_priority'] = bucket_priority
+        bucket_params['flush_enabled'] = flush_enabled
+        bucket_params['lww'] = lww
+        return bucket_params
 
     def set_global_checkpt_interval(self, value):
         self.set_xdcr_param("checkpointInterval",value)
@@ -1159,14 +1193,13 @@ class CouchbaseCluster:
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
-            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(
-                self.__master_node,
-                name,
-                'password',
-                bucket_size,
-                num_replicas,
-                eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+            sasl_params = self._create_bucket_params(server=self.__master_node, password='password',
+                                                                size=bucket_size, replicas=num_replicas,
+                                                                eviction_policy=eviction_policy,
+                                                                bucket_priority=bucket_priority)
+            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name,password='password',
+                                                                          bucket_params=sasl_params))
+
             self.__buckets.append(
                 Bucket(
                     name=name, authType="sasl", saslPassword="password",
@@ -1192,14 +1225,17 @@ class CouchbaseCluster:
         bucket_tasks = []
         for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
-            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(
-                self.__master_node,
-                name,
-                STANDARD_BUCKET_PORT + i,
-                bucket_size,
-                num_replicas,
+            standard_params = self._create_bucket_params(
+                server=self.__master_node,
+                size=bucket_size,
+                replicas=num_replicas,
                 eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+                bucket_priority=bucket_priority)
+
+            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
+                                                                              bucket_params=standard_params))
+
+
             self.__buckets.append(
                 Bucket(
                     name=name,
@@ -1226,13 +1262,14 @@ class CouchbaseCluster:
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
         """
-        self.__clusterop.create_default_bucket(
-            self.__master_node,
-            bucket_size,
-            num_replicas,
+        bucket_params=self._create_bucket_params(
+            server=self.__master_node,
+            size=bucket_size,
+            replicas=num_replicas,
             eviction_policy=eviction_policy,
             bucket_priority=bucket_priority
         )
+        self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
             Bucket(
                 name=BUCKET_NAME.DEFAULT,

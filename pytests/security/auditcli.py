@@ -585,11 +585,15 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-replication-mode=\'{0}\'".format(replication_mode), "")[replication_mode is None]
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         if from_bucket:
-            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
-                                               enable_replica_index=self.enable_replica_index)
+            bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                              replicas=self.num_replicas,
+                                                              enable_replica_index=self.enable_replica_index)
+            self.cluster.create_default_bucket(bucket_params)
         if to_bucket:
-            self.cluster.create_default_bucket(self.servers[xdcr_hostname], self.bucket_size, self.num_replicas,
-                                               enable_replica_index=self.enable_replica_index)
+            bucket_params = self._create_bucket_params(server=self.servers[xdcr_hostname], size=self.bucket_size,
+                                                              replicas=self.num_replicas,
+                                                              enable_replica_index=self.enable_replica_index)
+            self.cluster.create_default_bucket(bucket_params)
         output, _ = self.__execute_cli(cli_command, options)
         expectedResults = {"real_userid:source":self.source, "user":self.__user, "local_cluster_name":self.master.ip + ":8091", "source_bucket_name":"default",
                            "remote_cluster_name":"remote", "target_bucket_name":"default"}

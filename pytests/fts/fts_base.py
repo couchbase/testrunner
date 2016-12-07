@@ -1750,8 +1750,9 @@ class CouchbaseCluster:
                 'password',
                 bucket_size,
                 num_replicas,
-                eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+                eviction_policy,
+                bucket_priority))
+
             self.__buckets.append(
                 Bucket(
                     name=name, authType="sasl", saslPassword="password",
@@ -1783,14 +1784,15 @@ class CouchbaseCluster:
         for i in range(num_buckets):
             if not (num_buckets == 1 and name):
                 name = "standard_bucket_" + str(i + 1)
-            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(
-                self.__master_node,
-                name,
-                start_port + i,
-                bucket_size,
-                num_replicas,
-                eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+
+            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(self.__master_node,
+                                                                              name,
+                                                                              start_port+i,
+                                                                              bucket_size,
+                                                                              num_replicas,
+                                                                              eviction_policy=eviction_policy,
+                                                                              bucket_priority=bucket_priority))
+
             self.__buckets.append(
                 Bucket(
                     name=name,
@@ -1816,13 +1818,12 @@ class CouchbaseCluster:
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
         """
-        self.__clusterop.create_default_bucket(
-            self.__master_node,
-            bucket_size,
-            num_replicas,
-            eviction_policy=eviction_policy,
-            bucket_priority=bucket_priority
-        )
+        self.__clusterop.create_default_bucket(self.__master_node,
+                                               bucket_size,
+                                               num_replicas,
+                                               eviction_policy=eviction_policy,
+                                               bucket_priority=bucket_priority)
+
         self.__buckets.append(
             Bucket(
                 name=BUCKET_NAME.DEFAULT,
