@@ -21,9 +21,6 @@ class audit:
     AUDITLOGFILENAME = 'audit.log'
     AUDITCONFIGFILENAME = 'audit.json'
     AUDITDESCFILE = 'audit_events.json'
-    WINLOGFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs"
-    LINLOGFILEPATH = "/opt/couchbase/var/lib/couchbase/logs"
-    MACLOGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/logs"
     WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
     LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
     MACCONFIGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/config/"
@@ -42,8 +39,6 @@ class audit:
         self.method = method
         self.host = host
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
-        # self.pathLogFile = self.getAuditConfigElement('log_path')
-        # self.archiveFilePath = self.getAuditConfigElement('archive_path')
         self.pathLogFile = self.getAuditLogPath()
         self.defaultFields = ['id', 'name', 'description']
         if (eventID is not None):
@@ -53,16 +48,17 @@ class audit:
     def getAuditConfigPathInitial(self):
         shell = RemoteMachineShellConnection(self.host)
         os_type = shell.extract_remote_info().distribution_type
+        dist_ver = (shell.extract_remote_info().distribution_version).rstrip()
         log.info ("OS type is {0}".format(os_type))
         if os_type == 'windows':
             auditconfigpath = audit.WINCONFIFFILEPATH
-            self.currentLogFile = audit.WINLOGFILEPATH
         elif os_type == 'Mac':
-            auditconfigpath = audit.MACCONFIGFILEPATH
-            self.currentLogFile = audit.MACLOGFILEPATH
+            if ('10.12' == dist_ver):
+                auditconfigpath = "/Users/admin/Library/Application Support/Couchbase/var/lib/couchbase/config/"
+            else:
+                auditconfigpath = audit.MACCONFIGFILEPATH
         else:
             auditconfigpath = audit.LINCONFIGFILEPATH
-            self.currentLogFile = audit.LINLOGFILEPATH
         return auditconfigpath
 
     '''
