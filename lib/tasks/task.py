@@ -204,21 +204,22 @@ class NodeInitializeTask(Task):
 
 
 class BucketCreateTask(Task):
-    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211, password=None, bucket_type='membase',
-                 enable_replica_index=1, eviction_policy='valueOnly', bucket_priority=None,lww=False):
+    def __init__(self, bucket_params):
         Task.__init__(self, "bucket_create_task")
-        self.server = server
-        self.bucket = bucket
-        self.replicas = replicas
-        self.port = port
-        self.size = size
-        self.password = password
-        self.bucket_type = bucket_type
-        self.enable_replica_index = enable_replica_index
-        self.eviction_policy = eviction_policy
-        self.bucket_priority = None
-        self.lww = lww
-        if bucket_priority is not None:
+        self.server = bucket_params['server']
+        self.bucket = bucket_params['bucket_name']
+        self.replicas = bucket_params['replicas']
+        self.port = bucket_params['port']
+        self.size = bucket_params['size']
+        self.password = bucket_params['password']
+        self.bucket_type = bucket_params['bucket_type']
+        self.enable_replica_index = bucket_params['enable_replica_index']
+        self.eviction_policy = bucket_params['eviction_policy']
+        self.lww = bucket_params['lww']
+        self.flush_enabled = bucket_params['flush_enabled']
+        if bucket_params['bucket_priority'] is None or bucket_params['bucket_priority'].lower() is 'low':
+            self.bucket_priority = 3
+        else:
             self.bucket_priority = 8
 
     def execute(self, task_manager):
@@ -258,6 +259,7 @@ class BucketCreateTask(Task):
                                saslPassword=self.password,
                                bucketType=self.bucket_type,
                                replica_index=self.enable_replica_index,
+                               flushEnabled=self.flush_enabled,
                                evictionPolicy=self.eviction_policy,
                                threadsNumber=self.bucket_priority,
                                lww=self.lww
@@ -271,6 +273,7 @@ class BucketCreateTask(Task):
                                saslPassword=self.password,
                                bucketType=self.bucket_type,
                                replica_index=self.enable_replica_index,
+                               flushEnabled=self.flush_enabled,
                                evictionPolicy=self.eviction_policy,
                                lww=self.lww)
             self.state = CHECKING

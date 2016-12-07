@@ -85,9 +85,13 @@ class CreateBucketTests(BaseTestCase):
 
     def test_create_bucket_used_port(self):
         ports = [25, 68, 80, 135, 139, 143, 500]
+
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                          replicas=self.num_replicas)
         for port in ports:
             try:
-                self.cluster.create_standard_bucket(self.server, self.bucket_name + str(port), port, self.bucket_size, self.num_replicas)
+                self.cluster.create_standard_bucket(name=self.bucket_name+str(port), port=port,
+                                                    bucket_params=bucket_params)
             except:
                 self.log.info('Error appears as expected')
                 rest = RestConnection(self.master)
@@ -98,19 +102,25 @@ class CreateBucketTests(BaseTestCase):
     # Bucket creation with names as mentioned in MB-5844(isasl.pw, ns_log)
     def test_valid_bucket_name(self, password='password'):
             tasks = []
+            shared_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                              replicas=self.num_replicas)
             if self.bucket_type == 'sasl':
-                self.cluster.create_sasl_bucket(self.server, self.bucket_name, password, self.num_replicas, self.bucket_size)
+                self.cluster.create_sasl_bucket(name=self.bucket_name, password=password,bucket_params=shared_params)
                 self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=password, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, master_id=self.server))
             elif self.bucket_type == 'standard':
-                self.cluster.create_standard_bucket(self.server, self.bucket_name, STANDARD_BUCKET_PORT + 1, self.bucket_size, self.num_replicas)
+                self.cluster.create_standard_bucket(name=self.bucket_name, port=STANDARD_BUCKET_PORT+1,
+                                                    bucket_params=shared_params)
                 self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, port=STANDARD_BUCKET_PORT + 1, master_id=self.server))
             elif self.bucket_type == "memcached":
-                tasks.append(self.cluster.async_create_memcached_bucket(self.server, self.bucket_name, STANDARD_BUCKET_PORT + 1,
-                                                                        self.bucket_size, self.num_replicas))
-                self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
-                                           bucket_size=self.bucket_size, port=STANDARD_BUCKET_PORT + 1 , master_id=self.server, type='memcached'))
+                tasks.append(self.cluster.async_create_memcached_bucket(name=self.bucket_name,
+                                                                        port=STANDARD_BUCKET_PORT+1,
+                                                                        bucket_params=shared_params))
+
+                self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None,
+                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size,
+                                           port=STANDARD_BUCKET_PORT + 1 , master_id=self.server, type='memcached'))
                 for task in tasks:
                     task.result()
             else:

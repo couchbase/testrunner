@@ -18,10 +18,9 @@ class SaslTest(BaseTestCase):
     def create_pwd_buckets(self, server, buckets):
         tasks = []
         for name in buckets:
-            tasks.append(self.cluster.async_create_sasl_bucket(server,
-                                                               name,
-                                                               buckets[name],
-                                                               100, 0))
+            sasl_params = self._create_bucket_params(server=server, size=100, replicas=0)
+            tasks.append(self.cluster.async_create_sasl_bucket(name=name, password=buckets[name],bucket_params=sasl_params))
+
         for task in tasks:
             task.result(self.wait_timeout * 10)
 

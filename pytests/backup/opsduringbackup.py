@@ -50,7 +50,9 @@ class OpsDuringBackupTests(BackupBaseTest):
         gc.collect()
 
         if self.default_bucket:
-            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+            default_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                               replicas=self.num_replicas)
+            self.cluster.create_default_bucket(default_params)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
@@ -112,7 +114,9 @@ class OpsDuringBackupTests(BackupBaseTest):
             gc.collect()
 
             if self.default_bucket:
-                self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+                default_params=self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                                 replicas=self.num_replicas)
+                self.cluster.create_default_bucket(default_params)
                 self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
             self._create_sasl_buckets(self.master, self.sasl_buckets)
             self._create_standard_buckets(self.master, self.standard_buckets)
