@@ -21,6 +21,9 @@ class audit:
     AUDITLOGFILENAME = 'audit.log'
     AUDITCONFIGFILENAME = 'audit.json'
     AUDITDESCFILE = 'audit_events.json'
+    WINLOGFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs"
+    LINLOGFILEPATH = "/opt/couchbase/var/lib/couchbase/logs"
+    MACLOGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/logs"
     WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
     LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
     MACCONFIGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/config/"
@@ -52,13 +55,17 @@ class audit:
         log.info ("OS type is {0}".format(os_type))
         if os_type == 'windows':
             auditconfigpath = audit.WINCONFIFFILEPATH
+            self.currentLogFile = audit.WINLOGFILEPATH
         elif os_type == 'Mac':
             if ('10.12' == dist_ver):
                 auditconfigpath = "/Users/admin/Library/Application Support/Couchbase/var/lib/couchbase/config/"
+                self.currentLogFile = "/Users/admin/Library/Application Support/Couchbase/var/lib/couchbase/logs"
             else:
                 auditconfigpath = audit.MACCONFIGFILEPATH
+                self.currentLogFile = audit.MACLOGFILEPATH
         else:
             auditconfigpath = audit.LINCONFIGFILEPATH
+            self.currentLogFile = audit.LINLOGFILEPATH
         return auditconfigpath
 
     '''
