@@ -3099,7 +3099,6 @@ class RemoteMachineShellConnection:
             path = temp_path + genFileName
             dest_path = "/tmp/" + fileName
             destination = "csv:" + csv_path
-            log.info("Run cbtransfer to get data map")
             self.execute_cbtransfer(source, destination, options)
             file_existed = self.file_exists(temp_path, genFileName)
             if file_existed:
@@ -3127,7 +3126,6 @@ class RemoteMachineShellConnection:
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
-        log.info("done execute cbtransfer")
         return output
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):

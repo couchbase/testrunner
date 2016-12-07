@@ -173,9 +173,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-data"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
-
-        self.log.info("Remove any old dir before create new one")
-        remote_client.execute_command("rm -rf %s" % self.backupset.directory)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         return output, error
@@ -329,7 +326,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Finished restoring backup")
 
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets, self.skip_consistency, self.per_node)
-        self.log.info("*** Start to validate the restore ")
         status, msg = self.validation_helper.validate_restore(self.backupset.end, self.vbucket_seqno, current_vseqno,
                                                               compare_uuid=compare_uuid, compare=seqno_compare_function,
                                                               get_replica=replicas, mode=mode)

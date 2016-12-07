@@ -64,9 +64,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         3. Perform restores for the same number of times with random start and end values
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        self.log.info("*** start to load items to all buckets")
         self._load_all_buckets(self.master, gen, "create", self.expires)
-        self.log.info("*** done to load items to all buckets")
         self.ops_type = self.input.param("ops-type", "update")
         self.expected_error = self.input.param("expected_error", None)
         if self.auto_failover:
@@ -76,15 +74,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create_validate()
         for i in range(1, self.backupset.number_of_backups + 1):
             if self.ops_type == "update":
-                self.log.info("*** start to update items in all buckets")
                 self._load_all_buckets(self.master, gen, "update", self.expires)
-                self.log.info("*** done update items in all buckets")
             elif self.ops_type == "delete":
-                self.log.info("*** start to delete items in all buckets")
                 self._load_all_buckets(self.master, gen, "delete", self.expires)
-                self.log.info("*** done to delete items in all buckets")
             self.sleep(10)
-            self.log.info("*** start to validate backup cluster")
             self.backup_cluster_validate()
         self.targetMaster = True
         start = randrange(1, self.backupset.number_of_backups + 1)
@@ -92,11 +85,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             end = start
         else:
             end = randrange(start, self.backupset.number_of_backups + 1)
-        self.log.info("*** start to restore cluster")
         restored = {"{0}/{1}".format(start, end): ""}
         for i in range(1, self.backupset.number_of_backups + 1):
             if self.reset_restore_cluster:
-                self.log.info("*** start to reset cluster")
                 self.backup_reset_clusters(self.cluster_to_restore)
                 if self.same_cluster:
                     self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
@@ -106,7 +97,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.sleep(10)
             self.backupset.start = start
             self.backupset.end = end
-            self.log.info("*** start restore validation")
             self.backup_restore_validate(compare_uuid=False,
                                          seqno_compare_function=">=", expected_error=self.expected_error )
             if self.backupset.number_of_backups == 1:
