@@ -936,7 +936,9 @@ class RQGTests(BaseTestCase):
 
             if(len(n1ql_result)!=len(sql_result)):
                 self.log.info("number of results returned from sql and n1ql are different")
-                if (len(sql_result) == 0 and len(n1ql_result) ==1) or (len(n1ql_result) == 0 and len(sql_result) == 1):
+                self.log.info("sql query is {0}".format(sql_query))
+                self.log.info("n1ql query is {0}".format(n1ql_query))
+                if (len(sql_result) == 0 and len(n1ql_result) ==1) or (len(n1ql_result) == 0 and len(sql_result) == 1) or (len(sql_result == 0)):
                         return {"success":True, "result": "Pass"}
                 return {"success":False, "result": str("different results")}
             try:
@@ -974,6 +976,19 @@ class RQGTests(BaseTestCase):
             #self.log.info(sql_result)
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+
+
+            if(len(n1ql_result)!=len(sql_result)):
+                self.log.info("number of results returned from sql and n1ql are different")
+                self.log.info("sql query is {0}".format(sql_query))
+                self.log.info("n1ql query is {0}".format(n1ql_query))
+                if (len(sql_result) == 0 and len(n1ql_result) ==1) or (len(n1ql_result) == 0 and len(sql_result) == 1) or (len(sql_result == 0)):
+                        return {"success":True, "result": "Pass"}
+                return {"success":False, "result": str("different results")}
+            try:
+                self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+            except Exception, ex:
+                self.log.info(ex)
             try:
                 self.n1ql_helper._verify_results_crud_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
