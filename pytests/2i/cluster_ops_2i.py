@@ -17,7 +17,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
     	#Initialization operation
         self.run_multi_operations(buckets = self.buckets,
             query_definitions = self.query_definitions,
-            create_index = self.run_create_index, drop_index = False,
+            create_index=True, drop_index = False,
             query_with_explain = self.run_query_with_explain, query = self.run_query)
         #Remove bucket and recreate it
         for bucket in self.buckets:

@@ -270,6 +270,20 @@ class DateTimeFunctionClass(QueryTests):
             actual_result = self.run_cbq_query(query)
             self.assertEqual(actual_result["results"][0]["$1"], expected_result["results"][0]["$1"],
                              "{0} failed ".format(query))
+            query = 'SELECT STR_TO_ZONE_NAME(CLOCK_STR("{0}"), "UTC")'.format(
+                expression)
+            expected_result = self.run_cbq_query(query)
+            query = 'SELECT CLOCK_TZ("UTC", "{0}")'.format(expression)
+            actual_result = self.run_cbq_query(query)
+            self.assertEqual(actual_result["results"][0]["$1"], expected_result["results"][0]["$1"],
+                             "{0} failed ".format(query))
+            query = 'SELECT STR_TO_ZONE_NAME(NOW_STR("{0}"), "UTC")'.format(
+                expression)
+            expected_result = self.run_cbq_query(query)
+            query = 'SELECT NOW_TZ("UTC", "{0}")'.format(expression)
+            actual_result = self.run_cbq_query(query)
+            self.assertEqual(actual_result["results"][0]["$1"], expected_result["results"][0]["$1"],
+                             "{0} failed ".format(query))
 
     def _generate_date_part_millis_query(self, expression, part, timezone=None):
         if not timezone:

@@ -13,9 +13,6 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexingScanTests, self).tearDown()
 
-    def test_dummy(self):
-        pass
-
     def test_create_query_explain_drop_index(self):
         self.use_primary_index= self.input.param("use_primary_index",False)
         self.indexes= self.input.param("indexes","").split(":")
@@ -25,9 +22,10 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         query_template = QUERY_TEMPLATE
         query_template = query_template.format(self.emitFields)
         self.index_name = "test_create_query_explain_drop_index"
+        run_create_index = True
         if self.use_primary_index:
-            self.run_create_index = False
-            self.run_drop_index = False
+            run_create_index = False
+            run_drop_index = False
             self.index_name = "primary"
         if self.whereCondition:
             query_template += " WHERE {0}".format(self.whereCondition)
@@ -40,7 +38,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         self.run_multi_operations(
             buckets = self.buckets,
             query_definitions = [query_definition],
-            create_index = self.run_create_index, drop_index = self.run_drop_index,
+            create_index = run_create_index, drop_index = run_drop_index,
             query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def test_multi_create_query_explain_drop_index(self):

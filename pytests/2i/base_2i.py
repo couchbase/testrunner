@@ -11,23 +11,16 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
-        self.initial_stats = None
-        self.final_stats = None
-        self.index_lost_during_move_out =[]
+        self.index_lost_during_move_out = []
         self.verify_using_index_status = self.input.param("verify_using_index_status",False)
         self.use_replica_when_active_down = self.input.param("use_replica_when_active_down",True)
         self.use_where_clause_in_index= self.input.param("use_where_clause_in_index",False)
-        self.check_stats= self.input.param("check_stats",True)
-        self.create_index_usage= self.input.param("create_index_usage","no_usage")
         self.scan_consistency= self.input.param("scan_consistency","request_plus")
         self.scan_vector_per_values= self.input.param("scan_vector_per_values",None)
         self.timeout_for_index_online= self.input.param("timeout_for_index_online",600)
-        self.run_create_index= self.input.param("run_create_index",True)
         self.verify_query_result= self.input.param("verify_query_result",True)
         self.verify_explain_result= self.input.param("verify_explain_result",True)
         self.defer_build= self.input.param("defer_build",True)
-        self.deploy_on_particular_node= self.input.param("deploy_on_particular_node",None)
-        self.run_drop_index= self.input.param("run_drop_index",True)
         self.run_query_with_explain= self.input.param("run_query_with_explain",True)
         self.run_query= self.input.param("run_query",True)
         self.graceful = self.input.param("graceful",False)
@@ -59,7 +52,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.dgm_run:
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
-        self.index_op = self.input.param("index_op", None)
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
 
     def tearDown(self):
