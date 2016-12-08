@@ -52,7 +52,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             raise
         finally:
             tasks = self.async_run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
-                                                    drop_index=self.run_drop_index)
+                                                    drop_index=True)
             self._run_tasks(tasks)
 
     def test_multi_create_query_explain_drop_index_with_concurrent_mutations(self):
@@ -67,7 +67,8 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             raise
         finally:
             tasks = self.async_run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
-                                                    create_index=False, drop_index=self.run_drop_index,
+                                                    create_index=False,
+                                                    drop_index=True,
                                                     query_with_explain=False, query=False,
                                                     scan_consistency=self.scan_consistency)
             self._run_tasks(tasks)
@@ -129,12 +130,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         finally:
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions_create_candidates,
-                    create_index = False, drop_index = self.run_drop_index,
+                    create_index = False, drop_index=True,
                     query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
             self._run_tasks(tasks)
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions_query_candidates,
-                    create_index = False, drop_index = self.run_drop_index,
+                    create_index = False, drop_index=True,
                     query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
             self._run_tasks(tasks)
 
@@ -256,7 +257,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         finally:
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
-                create_index = False, drop_index = self.run_drop_index,
+                create_index = False, drop_index=True,
                 query_with_explain = False, query = False)
             self._run_tasks(tasks)
 
