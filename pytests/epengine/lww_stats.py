@@ -39,7 +39,7 @@ class LWWStatsTests(BaseTestCase):
 
         # get the stats
         client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
-        ahead_threshold = int(client.stats()["ep_drift_hlc_ahead_threshold_us"])
+        ahead_threshold = int(client.stats()["ep_hlc_drift_ahead_threshold_us"])
         self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD,
                         'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD, ahead_threshold))
         # change the setting and verify it is per the new setting - this may or may not be supported
@@ -50,7 +50,7 @@ class LWWStatsTests(BaseTestCase):
         if len(error) > 0:
             self.fail('Failed to set the drift counter threshold, please check the logs.')
 
-        ahead_threshold = int(client.stats()["ep_drift_hlc_ahead_threshold_us"])
+        ahead_threshold = int(client.stats()["ep_hlc_drift_ahead_threshold_us"])
         self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD/2,
                         'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD/2, ahead_threshold))
 
@@ -75,11 +75,11 @@ class LWWStatsTests(BaseTestCase):
         stats = client.stats()
 
 
-        self.assertTrue( int(stats['ep_hlc_ahead_threshold_us']) == 10000 * 1000,
-             'Ahead threshold incorrect. Expected {0} actual {1}'.format(10000 * 1000 , stats['ep_hlc_ahead_threshold_us']))
+        self.assertTrue( int(stats['ep_hlc_drift_ahead_threshold_us']) == 5000000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(5000000 , stats['ep_hlc_drift_ahead_threshold_us']))
 
-        self.assertTrue( int(stats['ep_hlc_behind_threshold_us']) == 20000 * 1000,
-             'Ahead threshold incorrect. Expected {0} actual {1}'.format(20000 * 1000, stats['ep_hlc_behind_threshold_us']))
+        self.assertTrue( int(stats['ep_hlc_drift_behind_threshold_us']) == 20000 * 1000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(20000 * 1000, stats['ep_hlc_drift_behind_threshold_us']))
 
 
 
@@ -269,7 +269,8 @@ class LWWStatsTests(BaseTestCase):
 
 
         # verifying the case where we are within the threshold, do a set and del, neither should trigger
-        rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, current_time_cas)
+        rc = mc_client.setWithMeta(test_key, 'test-value', 0, 0, 0, current_time_cas)
+        #rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, current_time_cas)
         rc = mc_client.delWithMetaLWW(test_key, 0, 0, current_time_cas+1)
 
         vbucket_stats = mc_client.stats('vbucket-details')
@@ -301,7 +302,7 @@ class LWWStatsTests(BaseTestCase):
             cas = current_time_cas -5000 * LWWStatsTests.DEFAULT_THRESHOLD
 
 
-        rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, cas)
+        rc = mc_client.setWithMeta(test_key, 'test-value', 0, 0, 0, cas)
         rc = mc_client.delWithMetaLWW(test_key, 0, 0, cas+1)
 
 

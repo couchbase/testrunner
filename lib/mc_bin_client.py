@@ -291,7 +291,9 @@ class MemcachedClient(object):
         self._set_vbucket(key, -1)
 
         return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+                struct.pack('>IIQQI', flags, exp,  SEQNO, cas, memcacheConstants.FORCE_ACCEPT_WITH_META_OPS))
+                #struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+
 
 
     # hope to remove this and migrate existing calls to the aboce
@@ -336,7 +338,8 @@ class MemcachedClient(object):
         self._set_vbucket(key, vbucket)
 
         resp = self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, cas, 2) )
+                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags,
+                                   exp, seqno, cas, memcacheConstants.FORCE_ACCEPT_WITH_META_OPS) )
         return resp
 
 
