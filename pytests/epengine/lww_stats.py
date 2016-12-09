@@ -70,16 +70,16 @@ class LWWStatsTests(BaseTestCase):
 
 
         rest = RestConnection(self.master)
-        self.assertTrue( rest.set_cas_drift_threshold( self.buckets[0], 10000, 20000), 'Unable to set the CAS drift threshold')
+        self.assertTrue( rest.set_cas_drift_threshold( self.buckets[0], 100000, 200000), 'Unable to set the CAS drift threshold')
         time.sleep(15)           # take a few seconds for the stats to settle in
         stats = client.stats()
 
 
-        self.assertTrue( int(stats['ep_hlc_drift_ahead_threshold_us']) == 5000000,
-             'Ahead threshold incorrect. Expected {0} actual {1}'.format(5000000 , stats['ep_hlc_drift_ahead_threshold_us']))
+        self.assertTrue( int(stats['ep_hlc_drift_ahead_threshold_us']) == 100000 * 1000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(100000 * 1000 , stats['ep_hlc_drift_ahead_threshold_us']))
 
-        self.assertTrue( int(stats['ep_hlc_drift_behind_threshold_us']) == 20000 * 1000,
-             'Ahead threshold incorrect. Expected {0} actual {1}'.format(20000 * 1000, stats['ep_hlc_drift_behind_threshold_us']))
+        self.assertTrue( int(stats['ep_hlc_drift_behind_threshold_us']) == 200000 * 1000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(200000 * 1000, stats['ep_hlc_drift_behind_threshold_us']))
 
 
 
