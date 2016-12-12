@@ -144,10 +144,15 @@ class LWWStatsTests(BaseTestCase):
         self.log.info('Date after is set backwards {0}'.format( output))
 
 
+        use_mc_bin_client = self.input.param("use_mc_bin_client", False)
 
 
-        rc = sdk_client.set('key2', 'val2')
-        second_poisoned_cas = rc.cas
+        if use_mc_bin_client:
+            rc = mc_client.set('key2',0,0,'val2')
+            second_poisoned_cas = rc[1]
+        else:
+            rc = sdk_client.set('key2', 'val2')
+            second_poisoned_cas = rc.cas
         self.log.info('The second_poisoned CAS is {0}'.format(second_poisoned_cas))
         self.assertTrue(  second_poisoned_cas > poisoned_cas,
                 'Second poisoned CAS {0} is not larger than the first poisoned cas'.format(second_poisoned_cas,poisoned_cas))
