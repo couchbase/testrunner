@@ -57,7 +57,7 @@ class TestRepoManager(object):
         self.repo_cluster = repo_cluster
         self.qe_cluster = qe_cluster
         self.qe_bucket = qe_bucket
-
+        self.conf_history = []
 
     def get_conf_files(self):
         """
@@ -117,10 +117,14 @@ class TestRepoManager(object):
             conf = info.get('confFile', None)
             component = info.get('component', "")
             subcomponent = info.get('subcomponent', "")
-            if conf is None:
+            if conf is None or conf in self.conf_history:
+                # no conf or duplicate
                 continue
-            conf = CG.rm_leading_slash(conf)
+            else:
+                # update conf history
+                self.conf_history.append(conf)
 
+            conf = CG.rm_leading_slash(conf)
             doc = self.safe_get_doc(conf_bucket, conf)
 
             # get last known status of tests for this conf
