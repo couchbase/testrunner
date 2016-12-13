@@ -155,7 +155,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets, self.skip_consistency, self.per_node)
         self.vbucket_seqno.append(vseqno)
 
-    def backup_create(self):
+    def backup_create(self, del_old_backup=True):
         args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets \"{0}\"".format(",".join(self.backupset.exclude_buckets))
@@ -173,9 +173,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-data"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
-
-        self.log.info("Remove any old dir before create new one")
-        remote_client.execute_command("rm -rf %s" % self.backupset.directory)
+        if del_old_backup:
+            self.log.info("Remove any old dir before create new one")
+            remote_client.execute_command("rm -rf %s" % self.backupset.directory)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         return output, error
@@ -292,9 +292,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.log_command_output(output, error)
         res = output
         res.extend(error)
-        error = "Error restoring cluster: Transfer failed. Check the logs for more information."
-        if 'Error restoring cluster: Transfer failed. Check the logs for more information.' in res:
-            command = "cat " + self.backupset.directory + "/logs/backup.log | grep '" + error + "' -A 10 -B 100"
+        error_str = "Error restoring cluster: Transfer failed. Check the logs for more information."
+        if error_str in res:
+            command = "cat " + self.backupset.directory + "/logs/backup.log | grep '" + error_str + "' -A 10 -B 100"
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
         if 'Required Flags:' in res:

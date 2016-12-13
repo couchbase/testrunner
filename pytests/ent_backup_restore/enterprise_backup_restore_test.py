@@ -248,7 +248,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self._take_n_backups(n=2)
         self.backupset.name = "backup2"
-        self.backup_create()
+        self.backup_create(del_old_backup=False)
         self._take_n_backups(n=2)
         incr_names = 0
         backup_name = False
@@ -401,11 +401,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Moving {0} to new zone {1}".format(self.backupset.cluster_host.ip, target_zone))
         rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)],source_zone,target_zone)
         self.log.info("Restoring to {0} after group change".format(self.backupset.cluster_host.ip))
-        self.backup_restore_validate()
-        self.log.info("Moving {0} back to old zone {1}".format(self.backupset.cluster_host.ip, source_zone))
-        rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)],target_zone,source_zone)
-        self.log.info("Deleting new zone " + target_zone)
-        rest_conn.delete_zone(target_zone)
+        try:
+            self.backup_restore_validate()
+        except Exception as ex:
+            self.fail(str(ex))
+        finally:
+            self.log.info("Moving {0} back to old zone {1}".format(self.backupset.cluster_host.ip, source_zone))
+            rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)],target_zone,source_zone)
+            self.log.info("Deleting new zone " + target_zone)
+            rest_conn.delete_zone(target_zone)
 
     def test_backup_restore_with_firewall(self):
         """
