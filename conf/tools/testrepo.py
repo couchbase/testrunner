@@ -8,12 +8,16 @@ bucket.  Changes are recorded and stored into a history bucket and then the
 remote couchbase server is updated.
 """
 
+import os
+import re
 import argparse
 from common import Generics as CG
 from couchbase.bucket import Bucket
 from couchbase.n1ql import N1QLQuery
 from couchbase.exceptions import NotFoundError, CouchbaseNetworkError
 
+FUNCTIONAL_TEST_TYPE = "functional"
+PERFORMANCE_TEST_TYPE = "performance"
 
 def main():
     """
@@ -33,18 +37,32 @@ def main():
         '-repo_cluster',
         type=str,
         help='couchbae node for test repo data')
+    parser.add_argument(
+        '-perf_repo_dir',
+        type=str,
+        default="perfrunner",
+        help='path to perfrunner repo')
+
     args = parser.parse_args()
 
     repo_manager = TestRepoManager(
         args.repo_cluster,
         args.qe_cluster,
-        args.qe_bucket)
+        args.qe_bucket,
+        args.perf_repo_dir)
 
-    # create history docs for today
-    repo_manager.update_history_bucket()
+    # run repo manager against test types
+    test_types = [FUNCTIONAL_TEST_TYPE, PERFORMANCE_TEST_TYPE]
+    for test_type in test_types:
 
-    # push update conf file with latest changes
-    repo_manager.update_conf_bucket()
+        # get test config files for all tests
+        conf_info = repo_manager.get_conf_files(test_type)
+
+        # create history docs for today
+        repo_manager.update_history_bucket(conf_info)
+
+        # push update conf file with latest changes
+        repo_manager.update_test_bucket(conf_info)
 
 
 class TestRepoManager(object):
@@ -53,13 +71,26 @@ class TestRepoManager(object):
     and updates source repo bucket
     """
 
-    def __init__(self, repo_cluster, qe_cluster, qe_bucket):
+    def __init__(self, repo_cluster, qe_cluster, qe_bucket, perf_repo_dir):
         self.repo_cluster = repo_cluster
         self.qe_cluster = qe_cluster
         self.qe_bucket = qe_bucket
+        self.perf_repo_dir = perf_repo_dir
         self.conf_history = []
 
-    def get_conf_files(self):
+    def get_conf_files(self, test_type):
+        """
+        retrievs list of conf files based on test type
+        arguments:
+            test_type -- type of test functional, peformance
+        """
+
+        if test_type == FUNCTIONAL_TEST_TYPE:
+            return self.get_functional_tests()
+        if test_type == PERFORMANCE_TEST_TYPE:
+            return self.get_perfomance_tests()
+
+    def get_functional_tests(self):
         """
         query the qe bucket for conf files that are used for testing
         """
@@ -74,45 +105,85 @@ class TestRepoManager(object):
 
         # add each row as test
         for row in bucket.n1ql_query(query):
+            row['type'] = 'functional'
             rows.append(row)
         return rows
 
-    def update_conf_bucket(self):
+    def get_perfomance_tests(self):
+        """
+        walk the perfrunner directory and retrieve tests files
+        """
+        rows = []
+        tests = {}
+        root_dir = "%s/tests" % self.perf_repo_dir
+        for _, _, files in os.walk(root_dir):
+            for conf in files:
+                match_str = re.search('.*.test$', conf)
+                if match_str is not None:
+                    parts = conf.split("_")
+                    component = parts[0]
+                    sub_component = component
+                    if len(parts) > 1:
+                        if not parts[1][0].isdigit():
+                            match_str = re.split('[0-9]', parts[1])
+                            sub_component = match_str[0]
+                    if component in tests:
+                        if sub_component in tests[component]:
+                            tests[component][sub_component].append(conf)
+                        else:
+                            tests[component][sub_component] = [conf]
+                    else:
+                        tests[component] = {}
+                        tests[component][sub_component] = [conf]
+
+        # combine tests by components[subcomponent]
+        for component in tests:
+            for sub_component in tests[component]:
+                val = tests[component][sub_component]
+                conf = "%s_%s.conf" % (component, sub_component)
+                rows.append({
+                    'confFile': conf,
+                    'component': component,
+                    'subcomponent': sub_component,
+                    'tests': val,
+                    'type': 'performance'})
+        return rows
+
+    def update_test_bucket(self, conf_info):
         """
         update the conf bucket with most test info
         """
-
         bucket = Bucket('couchbase://%s/conf' % self.repo_cluster)
-        conf_info = self.get_conf_files()
 
         for info in conf_info:
             conf = info.get('confFile', None)
             component = info.get('component', "")
             subcomponent = info.get('subcomponent', "")
+            test_type = info.get('type', "")
             if conf is None:
                 continue
             conf = CG.rm_leading_slash(conf)
-            print conf
-            tests = CG.parse_conf_file(conf)
+            tests = info.get('tests', None)
+            if tests is None:
+                tests = CG.parse_conf_file(conf)
             bucket.upsert(
                 conf,
                 {'tests': tests,
                  'component': component,
-                 'subcomponent': subcomponent})
+                 'subcomponent': subcomponent,
+                 'type': test_type})
 
 
-    def update_history_bucket(self):
+    def update_history_bucket(self, conf_info):
         """
         update the history bucket with changes between git repo and conf bucket
         """
 
         url = 'couchbase://%s' % self.repo_cluster
         history_bucket = Bucket('%s/history' % url)
-        conf_bucket = Bucket('%s/conf' % url)
+        test_bucket = Bucket('%s/conf' % url)
         timestamp = CG.timestamp()
 
-        # get all config files
-        conf_info = self.get_conf_files()
         for info in conf_info:
             conf = info.get('confFile', None)
             component = info.get('component', "")
@@ -125,13 +196,15 @@ class TestRepoManager(object):
                 self.conf_history.append(conf)
 
             conf = CG.rm_leading_slash(conf)
-            doc = self.safe_get_doc(conf_bucket, conf)
+            doc = self.safe_get_doc(test_bucket, conf)
 
             # get last known status of tests for this conf
             if doc is not None and doc.rc == 0:
                 cb_tests = doc.value.get('tests')
                 if cb_tests is not None:
-                    repo_tests = [str(t) for t in CG.parse_conf_file(conf)]
+                    repo_tests = info.get('tests', None)
+                    if repo_tests is None:
+                        repo_tests = [str(t) for t in CG.parse_conf_file(conf)]
 
                     # array comparison
                     if cb_tests == repo_tests:
