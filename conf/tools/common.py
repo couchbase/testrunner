@@ -85,6 +85,33 @@ class Generics(object):
                 for p in params.split(",")]
 
     @staticmethod
+    def split_test_base(test_list):
+        """
+        takes a list of test strings and returns
+        the base test name without params.
+        the tests are indexed to establish uniquness
+        arguments:
+            test_list -- array of test names
+        """
+
+        base_tests = []
+        index = 0
+        last_test_base = None
+        for test_name in test_list:
+            test_base = test_name.split(',')[0]
+            test = test_base
+            if test_base == last_test_base:
+                # is duplicate
+                test = "%s.%d" % (test, index)
+            else:
+                index = 0
+            base_tests.append(test)
+            last_test_base = test_base
+            index += 1
+
+        return base_tests
+
+    @staticmethod
     def split_test_param_keys(params):
         """
         takes a param string like k1=v1,k2=v2, and returns [k1, k2]

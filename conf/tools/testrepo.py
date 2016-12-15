@@ -218,9 +218,13 @@ class TestRepoManager(object):
                                   'subcomponent': subcomponent,
                                   'conf': conf}
 
+                    # sort tests
+                    cb_tests.sort()
+                    repo_tests.sort()
+
                     # detect new/removed tests
-                    base_repo_tests = [t.split(',')[0] for t in repo_tests]
-                    base_cb_tests = [t.split(',')[0] for t in cb_tests]
+                    base_repo_tests = CG.split_test_base(repo_tests)
+                    base_cb_tests = CG.split_test_base(cb_tests)
                     new_tests = set(base_repo_tests) - set(base_cb_tests)
                     removed_tests = set(base_cb_tests) - set(base_repo_tests)
 
@@ -300,7 +304,6 @@ class TestRepoManager(object):
                             changed_test,
                             param_to_str,
                             param_from_str)
-
                         change_doc['changed'].append(
                             {'test': changed_test,
                              'to': param_to_str,
