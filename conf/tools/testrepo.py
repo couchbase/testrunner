@@ -188,6 +188,7 @@ class TestRepoManager(object):
             conf = info.get('confFile', None)
             component = info.get('component', "")
             subcomponent = info.get('subcomponent', "")
+            test_type = info.get('type', "")
             if conf is None or conf in self.conf_history:
                 # no conf or duplicate
                 continue
@@ -216,6 +217,7 @@ class TestRepoManager(object):
                                   'changed': [],
                                   'component': component,
                                   'subcomponent': subcomponent,
+                                  'type': test_type,
                                   'conf': conf}
 
                     # sort tests
