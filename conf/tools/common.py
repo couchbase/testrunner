@@ -36,7 +36,8 @@ class Generics(object):
         tests = []
         file_handle = Generics.locate_conf_file(filename)
         if not file_handle:
-            print "WARN: unable to locate configuration file: " + filename
+            # TODO: logger with WARN level
+            # print "WARN: unable to locate configuration file: " + filename
             return []
 
         prefix = None
@@ -145,3 +146,12 @@ class Generics(object):
         ts_month = str(ts_date.tm_mon).zfill(2)
         ts_day = str(ts_date.tm_mday).zfill(2)
         return "%d-%s-%s" % (ts_year, ts_month, ts_day)
+
+
+    @staticmethod
+    def timestamp_sec():
+        """
+            current time in unix format seconds
+        """
+        ts_now = time.time()
+        return "%d" % ts_now

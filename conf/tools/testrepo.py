@@ -55,6 +55,8 @@ def main():
     test_types = [FUNCTIONAL_TEST_TYPE, PERFORMANCE_TEST_TYPE]
     for test_type in test_types:
 
+        print "===== %s =====" % test_type
+
         # get test config files for all tests
         conf_info = repo_manager.get_conf_files(test_type)
 
@@ -183,6 +185,7 @@ class TestRepoManager(object):
         history_bucket = Bucket('%s/history' % url)
         test_bucket = Bucket('%s/conf' % url)
         timestamp = CG.timestamp()
+        total_new = total_removed = total_changed = 0
 
         for info in conf_info:
             conf = info.get('confFile', None)
@@ -211,6 +214,7 @@ class TestRepoManager(object):
                     if cb_tests == repo_tests:
                         continue # same same
 
+                    curr_new = curr_removed = curr_changed = 0
                     change_doc = {'ts': timestamp,
                                   'new': [],
                                   'removed': [],
@@ -241,6 +245,7 @@ class TestRepoManager(object):
                         test = "%s%s" % (test, params)
                         print "[new] %s" % test
                         change_doc['new'].append(test)
+                        curr_new += 1
 
                     for test in removed_tests:
                         # get params
@@ -252,6 +257,7 @@ class TestRepoManager(object):
                         test = "%s%s" % (test, params)
                         print "[removed] %s" % test
                         change_doc['removed'].append(test)
+                        curr_removed += 1
 
                     # detect param changes
                     base_repo_params = [CG.parse_params(t) for t in repo_tests]
@@ -289,6 +295,7 @@ class TestRepoManager(object):
                             test_new = "%s,%s" % (changed_test, params)
                             print "[new] %s" % test_new
                             change_doc['new'].append(test_new)
+                            curr_new += 1
                             continue
 
                         # detect which value param actually changed
@@ -310,13 +317,25 @@ class TestRepoManager(object):
                             {'test': changed_test,
                              'to': param_to_str,
                              'from': param_from_str})
+                        curr_changed += 1
 
-                    # push change
-                    key = "%s_%s:%s" % (timestamp, component, subcomponent)
-                    history_bucket.upsert(key, change_doc)
+                    curr_total = curr_new + curr_removed + curr_changed
+                    if  curr_total > 0:
+                        # push change
+                        timestamp_sec = CG.timestamp_sec()
+                        key = "%s:%s_%s" % (component, subcomponent, timestamp_sec)
+                        history_bucket.upsert(key, change_doc)
+                        total_new += curr_new
+                        total_removed += curr_removed
+                        total_changed += curr_changed
             else:
                 # handle brand new conf
                 return
+
+        print "New: %d, Removed: %d, Changed: %d" % (
+            total_new,
+            total_removed,
+            total_changed)
 
     def safe_get_doc(self, bucket, key):
         """
