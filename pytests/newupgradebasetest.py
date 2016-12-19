@@ -59,6 +59,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.upgrade_versions = [self.input.param('released_upgrade_version', None)]
 
         self.initial_build_type = self.input.param('initial_build_type', None)
+        self.upgrade_build_type = self.input.param('upgrade_build_type', self.initial_build_type)
         self.stop_persistence = self.input.param('stop_persistence', False)
         self.rest_settings = self.input.membase_settings
         self.rest = None
@@ -93,6 +94,14 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_ubuntu = True
         self.queue = Queue.Queue()
         self.upgrade_servers = []
+        if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+            if self.initial_version != self.upgrade_versions:
+                self.log.warn(
+                    "we can't upgrade from couchbase CE to EE with a different version,defaulting to initial_version")
+                self.log.warn("http://developer.couchbase.com/documentation/server/4.0/install/upgrading.html")
+                self.upgrade_versions = self.input.param('initial_version', '4.1.0-4963')
+                self.upgrade_versions = self.upgrade_versions.split(";")
+
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -133,7 +142,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self._install(self.upgrade_servers,version=self.initial_version)
         self.sleep(20, "sleep 20 seconds before run next test")
 
-    def _install(self, servers, version=None):
+    def _install(self, servers, version=None, community_to_enterprise=False):
         params = {}
         params['num_nodes'] = len(servers)
         params['product'] = self.product
@@ -144,6 +153,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             params['version'] = version
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
+        if community_to_enterprise:
+            params['type'] = self.upgrade_build_type
         self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
@@ -211,7 +222,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             elif version[:5] in COUCHBASE_MP_VERSION:
                 build_repo = MV_LATESTBUILD_REPO
 
-        if self.initial_build_type == "community":
+        if self.upgrade_build_type == "community":
             edition_type = "couchbase-server-community"
         else:
             edition_type = "couchbase-server-enterprise"
@@ -244,13 +255,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None):
+    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None, save_upgrade_config=False):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
             self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
-            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=False, forcefully=self.is_downgrade)
+            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=save_upgrade_config, forcefully=self.is_downgrade)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             """ remove this line when bug MB-11807 fixed """
             if self.is_ubuntu:
@@ -284,7 +295,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
-    def _async_update(self, upgrade_version, servers, queue=None, skip_init=False):
+    def _async_update(self, upgrade_version, servers, queue=None, skip_init=False, info=None, save_upgrade_config=False):
         self.log.info("servers {0} will be upgraded to {1} version".
                       format([server.ip for server in servers], upgrade_version))
         q = queue or self.queue
@@ -292,7 +303,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         for server in servers:
             upgrade_thread = Thread(target=self._upgrade,
                                     name="upgrade_thread" + server.ip,
-                                    args=(upgrade_version, server, q, skip_init))
+                                    args=(upgrade_version, server, q, skip_init, info, save_upgrade_config))
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads

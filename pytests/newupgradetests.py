@@ -380,7 +380,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.product = 'couchbase-server'
         servs_in = self.servers[self.nodes_init:self.nodes_in + self.nodes_init]
         servs_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self._install(self.servers[self.nodes_init:self.num_servers])
+
+        if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+            self._install(self.servers[self.nodes_init:self.num_servers], community_to_enterprise=True)
+        else:
+            self._install(self.servers[self.nodes_init:self.num_servers])
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
 
         modify_data()
@@ -404,7 +408,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
                        format(self.initial_version))
         self.product = 'couchbase-server'
-        self._install(self.servers[self.nodes_init:self.num_servers])
+        if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+            self._install(self.servers[self.nodes_init:self.num_servers], community_to_enterprise=True)
+        else:
+            self._install(self.servers[self.nodes_init:self.num_servers])
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
         if self.during_ops:
             for opn in self.during_ops:
@@ -508,7 +515,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.initial_version = self.upgrade_versions[0]
         self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
                        format(self.initial_version))
-        self._install(upgrade_servers)
+        if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+            self._install(upgrade_servers, community_to_enterprise=True)
+        else:
+            self._install(upgrade_servers)
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
         self.log.info("Rebalance in new version nodes and rebalance out some nodes")
         self.cluster.rebalance(self.servers, upgrade_servers, self.servers[self.num_servers:])
@@ -558,7 +568,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.product = 'couchbase-server'
         self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
                        format(self.initial_version))
-        self._install(self.servers[self.nodes_init:self.num_servers])
+        if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+            self._install(self.servers[self.nodes_init:self.num_servers], community_to_enterprise=True)
+        else:
+            self._install(self.servers[self.nodes_init:self.num_servers])
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
         self.swap_num_servers = self.input.param('swap_num_servers', 1)
         old_servers = self.servers[:self.nodes_init]
