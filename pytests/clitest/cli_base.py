@@ -696,6 +696,35 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verify_gsi_compact_settings(self, compact_mode, compact_percent, compact_interval,
+                                                   from_period, to_period, enable_abort):
+        settings = self.rest.get_auto_compaction_settings()
+        ac = settings["autoCompactionSettings"]["indexFragmentationThreshold"]
+        cc = settings["autoCompactionSettings"]["indexCircularCompaction"]
+        if compact_mode is not None:
+            if compact_mode == "append":
+                self.log.info("append compactino settings %s " % ac)
+                if compact_percent is not None and \
+                                         compact_percent != ac["percentage"]:
+                    raise Exception("setting percent does not match.  Set: %s vs %s :Actual"
+                                     % (compact_percent, ac["percentage"]))
+            if compact_mode == "circular":
+                self.log.info("circular compaction settings %s " % cc)
+                if enable_abort and not cc["interval"]["abortOutside"]:
+                    raise Exception("setting enable abort failed")
+                if compact_interval is not None:
+                    if compact_interval != cc["daysOfWeek"]:
+                        raise Exception("Failed to set compaction on %s " % compact_interval)
+                    elif from_period is None and int(cc["interval"]["fromHour"]) != 0 and \
+                                           int(cc["interval"]["fromMinute"]) != 0:
+                        raise Exception("fromHour and fromMinute should be zero")
+                if compact_interval is None:
+                    if from_period != \
+                        str(cc["interval"]["fromHour"]) + ":" + str(cc["interval"]["fromMinute"])\
+                        and str(cc["interval"]["toHour"]) + ":" + str(cc["interval"]["toMinute"]):
+                        raise Exception("fromHour and fromMinute do not set correctly")
+        return True
+
     def verifyGroupExists(self, server, name):
         rest = RestConnection(server)
         groups = rest.get_zone_names()

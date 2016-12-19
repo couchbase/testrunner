@@ -851,6 +851,38 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(not self.isClusterInitialized(server),
                                 "Cluster was initialized, but error was received")
 
+    def test_gsi_compaction(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+
+        compact_mode = self.input.param("compact_mode", None)
+        compact_percent = self.input.param("compact_percent", None)
+        compact_interval = self.input.param("compact_interval", None)
+        from_period = self.input.param("from_period", None)
+        to_period = self.input.param("to_period", None)
+        enable_abort = self.input.param("enable_abort", 0)
+        expect_error = self.input.param("expect-error", False)
+        error_msg = self.input.param("error-msg", "")
+
+        """ reset node to setup services """
+        self.rest.force_eject_node()
+        cli = CouchbaseCLI(self.master, username, password, self.cb_version)
+        _, _, success = cli.cluster_init(256, 512, None, "data,index,query", None, None,
+                                                 self.master.rest_username,
+                                                 self.master.rest_password, None)
+        self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        if compact_interval is not None and "-" in compact_interval:
+            compact_interval = compact_interval.replace("-", ",")
+        stdout, _, errored = cli.setting_gsi_compaction(compact_mode, compact_percent,
+                              compact_interval, from_period, to_period, enable_abort)
+        self.assertTrue(errored, "Expected command to succeed")
+        if not expect_error:
+            self.verify_gsi_compact_settings(compact_mode, compact_percent,
+                                             compact_interval,
+                                             from_period, to_period,
+                                             enable_abort)
+
     def testSettingAutoFailover(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)

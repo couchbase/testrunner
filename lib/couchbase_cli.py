@@ -1,12 +1,13 @@
 from remote.remote_util import RemoteMachineShellConnection
-
+from testconstants import COUCHBASE_FROM_4DOT6
 
 class CouchbaseCLI:
-    def __init__(self, server, username, password):
+    def __init__(self, server, username, password, cb_version=None):
         self.server = server
         self.hostname = "%s:%s" % (server.ip, server.port)
         self.username = username
         self.password = password
+        self.cb_version = cb_version
 
     def bucket_create(self, name, password, bucket_type, quota,
                       eviction_policy, replica_count, enable_replica_indexes,
@@ -138,7 +139,11 @@ class CouchbaseCLI:
         stdout, stderr = remote_client.couchbase_cli("cluster-init",
                                                      self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Cluster initialized")
+        print_msg = "Cluster initialized"
+        if self.cb_version is not None and \
+               self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            print_msg = "init/edit %s" % self.server.ip
+        return stdout, stderr, self._was_success(stdout, print_msg)
 
     def collect_logs_start(self, all_nodes, nodes, upload, upload_host,
                            upload_customer, upload_ticket):
@@ -426,6 +431,32 @@ class CouchbaseCLI:
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Compaction "
                                                          "settings modified")
+
+    def setting_gsi_compaction(self, compact_mode, compact_percent, compact_interval,
+                                               from_period, to_period, enable_abort):
+        options = self._get_default_options()
+        if compact_mode is not None:
+            options += " --gsi-compaction-mode %s" % compact_mode
+            if compact_mode == "append":
+                if compact_percent is not None:
+                    options += " --compaction-gsi-percentage=" + str(compact_percent)
+            elif compact_mode == "circular":
+                if compact_interval is not None:
+                    options += " --compaction-gsi-interval " + str(compact_interval)
+                if from_period is not None:
+                    options += " --compaction-gsi-period-from=" + str(from_period)
+                if to_period is not None:
+                    options += " --compaction-gsi-period-to=" + str(to_period)
+                if enable_abort:
+                    options += " --enable-gsi-compaction-abort=" + str(enable_abort)
+            else:
+                raise Exception("need compact mode to run!")
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("setting-compaction",
+                                                     self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "set compaction settings")
 
     def setting_index(self, max_rollbacks, stable_snap_interval,
                       mem_snap_interval, storage_mode, threads,
