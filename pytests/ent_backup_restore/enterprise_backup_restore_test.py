@@ -185,8 +185,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         3. Perform restores for the same number of times with random start and end values
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self.log.info("Start to load items to all buckets")
         self._load_all_buckets(self.master, gen, "create", 0)
         self.ops_type = self.input.param("ops-type", "update")
+        self.compact_backup = self.input.param("compact-backup", False)
+        self.log.info("Create backup repo ")
         self.backup_create()
         for i in range(1, self.backupset.number_of_backups + 1):
             self._backup_restore_with_ops()
@@ -195,6 +198,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             end = start
         else:
             end = randrange(start, self.backupset.number_of_backups + 1)
+        self.log.info( "start restore cluster ")
         restored = {"{0}/{1}".format(start, end): ""}
         for i in range(1, self.backupset.number_of_backups + 1):
             self.backupset.start = start
@@ -214,6 +218,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                  mode="memory"):
         self.ops_type = self.input.param("ops-type", "update")
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self.log.info("Start doing ops: %s " % self.ops_type)
         self._load_all_buckets(self.master, gen, self.ops_type, exp)
         if backup:
             self.backup_cluster_validate()
