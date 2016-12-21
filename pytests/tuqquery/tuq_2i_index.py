@@ -2082,7 +2082,7 @@ class QueriesIndexTests(QueryTests):
 
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
-                self.query = "EXPLAIN select count(1) from %s WHERE _id like '%s' " %(bucket.name,'query-test%')
+                self.query = "EXPLAIN select count(1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
 
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
@@ -2094,7 +2094,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexCountScan',
                     "IndexCountScan is not being used")
-                self.query = "explain select a.cnt from (select count(1) from default where _id is not null) as a"
+                self.query = "explain select a.cnt from (select count(1) from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result2)
                 self.assertTrue(
