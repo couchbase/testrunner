@@ -31,6 +31,187 @@ class QueriesIndexTests(QueryTests):
     def suite_tearDown(self):
         super(QueriesIndexTests, self).suite_tearDown()
 
+    def test_meta_indexcountscan(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+               idx = "idx"
+               self.query = "CREATE INDEX %s ON %s ( name )" %(idx,bucket.name)
+               self.run_cbq_query()
+               idx2 = "idx2"
+               self.query = "CREATE INDEX %s ON %s ( department )"%(idx2,bucket.name)
+               self.run_cbq_query()
+               created_indexes.append(idx)
+               created_indexes.append(idx2)
+               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               ' ] and meta().id = "query-testemployee10317.9004497-0"'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue("IndexCountScan" not in plan)
+               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               '] and meta().id = "query-testemployee10317.9004497-0"'
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results'] == ([{u'$1': 1}]))
+               self.query = 'explain select name from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               '] and meta().id like "query-testemployee%" limit 3'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue("limit" not in plan['~children'][0])
+               self.query = 'select name from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               '] and meta().id like "query-testemployee%" order by meta().id limit 3'
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results'] == ([{u'name': [{u'FirstName': u'employeefirstname-23'}, {u'MiddleName': u'employeemiddlename-23'}, {u'LastName': u'employeelastname-23'}]}, {u'name': [{u'FirstName': u'employeefirstname-23'}, {u'MiddleName': u'employeemiddlename-23'}, {u'LastName': u'employeelastname-23'}]}, {u'name': [{u'FirstName': u'employeefirstname-23'}, {u'MiddleName': u'employeemiddlename-23'}, {u'LastName': u'employeelastname-23'}]}]))
+
+               self.query = 'explain select min(department) from {0} where department = "Support" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+
+               self.assertTrue("limit" not in plan['~children'][0])
+
+
+               self.query = 'select min(department) from {0} where department = "Support" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results'] ==  [{"$1": "Support"}])
+
+               self.query = 'explain select count(1) from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}]'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
+
+               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}]'
+
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results']==[{u'$1': 60}])
+
+               self.query = 'explain select count(1) from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}] and join_yr=2010'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']!="IndexCountScan")
+
+               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}] and department="Support"'
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results'] == [{ "$1": 12}])
+
+               self.query = 'drop index {0}.idx'.format(bucket.name)
+               self.run_cbq_query()
+               self.query = "CREATE INDEX %s ON %s ( name,meta().id )" %(idx,bucket.name)
+               self.run_cbq_query()
+               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               ' ] and meta().id = "query-testemployee10317.9004497-0"'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
+
+               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               '] and meta().id = "query-testemployee10317.9004497-0"'
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results'] == ([{u'$1': 1}]))
+
+
+               self.query = 'drop index {0}.idx'.format(bucket.name)
+               self.run_cbq_query()
+               self.query = "CREATE INDEX %s ON %s ( meta().id )" %(idx,bucket.name)
+               self.run_cbq_query()
+               self.query = 'explain select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
+               self.query = 'select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results']==[{u'$1': 1}])
+
+               self.query = 'drop index {0}.idx'.format(bucket.name)
+               self.run_cbq_query()
+
+               self.query = 'explain select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
+               self.query = 'select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results']==[{u'$1': 1}])
+
+               self.query = 'CREATE INDEX idx ON {0}( join_yr[0] ) WHERE department = "Support"'.format(bucket.name)
+               self.run_cbq_query()
+               self.query = 'explain select count(*) from {0} where join_yr[0]>2012 and department = "Support"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
+
+               self.query = 'select count(*) from {0} where join_yr[0]>2012 and department = "Support"'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               self.assertTrue(actual_result['results']==[{u'$1': 181}])
+
+
+               self.query = 'drop index {0}.idx'.format(bucket.name)
+               self.run_cbq_query()
+               self.query = 'CREATE INDEX idx ON {0}( department ) WHERE join_yr[0]<2012'.format(bucket.name)
+               self.run_cbq_query()
+               self.query = 'explain select count(*) from {0} where department = "Support" and join_yr[0]<2010'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']!="IndexCountScan")
+               self.query = 'select count(*) from {0} where department = "Support" and join_yr[0]<2011'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+
+               self.assertTrue(actual_result['results']==[{u'$1': 53}])
+
+
+               self.query = 'explain select count(*) from {0} where department = "Support" and join_yr[0]<2012 limit 10'.format(bucket.name)
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+
+               self.assertTrue("limit" not in plan['~children'][0])
+
+               self.query = 'drop index {0}.idx'.format(bucket.name)
+               self.run_cbq_query()
+               self.query = 'CREATE INDEX idx ON {0}( name,department,join_yr[0] )'.format(bucket.name)
+               self.run_cbq_query()
+               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               ' ] and department = "Support"'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
+
+               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               ' ] and join_yr[0] = 2010'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue(plan['~children'][0]['#operator']!="IndexCountScan")
+
+               self.query = 'explain select tasks from {0} where name = [ '.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               ' ] and department = "Support" limit 5'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue("limit" in plan['~children'][0]['~children'][0])
+
+               self.query = 'explain select department from {0} where name = [ '.format(bucket.name)+\
+               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
+               ' ] and join_yr[0] = 2010 limit 5'
+               actual_result = self.run_cbq_query()
+               plan = ExplainPlanHelper(actual_result)
+               self.assertTrue("limit"  not in plan['~children'][0])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+
     def test_index_missing_null(self):
         for bucket in self.buckets:
             created_indexes = []
@@ -847,7 +1028,6 @@ class QueriesIndexTests(QueryTests):
                 bucket.name, bucket.name) + \
                              "AND  NOT (department = 'Manager') ORDER BY name limit 10"
                 expected_result = self.run_cbq_query()
-
                 self.assertTrue(sorted(actual_result['results']) == sorted(expected_result['results']))
 
                 self.query = "EXPLAIN select name from %s where (ANY x within %s.VMs SATISFIES x.RAM between 1 and 5  END ) " % (
@@ -1891,7 +2071,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
                 created_indexes = []
                 idx = "idx"
-                self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'_id')+\
+                self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'meta().id')+\
                              " USING %s" % (self.index_type)
                 # if self.gsi_type:
                 #     self.query += " WITH {'index_type': 'memdb'}"
@@ -1909,7 +2089,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue("covers" in str(plan))
                 result1 = plan['~children'][0]['index']
                 self.assertTrue(result1 == idx)
-                self.query = "select count(1) from %s WHERE _id like '%s' " %(bucket.name,'query-test%')
+                self.query = "select count(1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexCountScan',
@@ -1920,9 +2100,8 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(
                     plan['~children'][0]['#operator'] != 'IndexCountScan',
                     "IndexCountScan should not be used in subquery")
-                self.query = "select a.cnt from (select count(1) from default where _id is not null) as a"
+                self.query = "select a.cnt from (select count(1) from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
-
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     self.run_cbq_query()
@@ -1930,7 +2109,7 @@ class QueriesIndexTests(QueryTests):
                     self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
                     self.run_cbq_query()
                     self.sleep(15,'wait for index')
-                    self.query = "select count(1) from %s use index(`#primary`) WHERE _id like '%s'  " %(bucket.name,'query-test%')
+                    self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s'  " %(bucket.name,'query-test%')
                     result = self.run_cbq_query()
                     self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
                     self.query = "select a.cnt from (select count(1) from %s where _id is not null) as a " %(bucket.name)
