@@ -1,4 +1,4 @@
-import re
+import re, copy
 from random import randrange
 
 from couchbase_helper.cluster import Cluster
@@ -185,10 +185,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         3. Perform restores for the same number of times with random start and end values
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        initial_gen = copy.deepcopy(gen)
+        initial_keys = []
+        for x in initial_gen:
+            initial_keys.append(x[0])
         self.log.info("Start to load items to all buckets")
         self._load_all_buckets(self.master, gen, "create", 0)
         self.ops_type = self.input.param("ops-type", "update")
-        self.compact_backup = self.input.param("compact-backup", False)
         self.log.info("Create backup repo ")
         self.backup_create()
         for i in range(1, self.backupset.number_of_backups + 1):
@@ -198,6 +201,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             end = start
         else:
             end = randrange(start, self.backupset.number_of_backups + 1)
+
+        if self.compact_backup and self.ops_type == "delete":
+            self.log.info("Start to compact backup ")
+            self.backup_compact_validate()
+            self.log.info("Validate deleted keys")
+            self.backup_compact_deleted_keys_validation(initial_keys)
+
         self.log.info( "start restore cluster ")
         restored = {"{0}/{1}".format(start, end): ""}
         for i in range(1, self.backupset.number_of_backups + 1):

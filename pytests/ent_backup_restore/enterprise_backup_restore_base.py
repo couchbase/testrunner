@@ -19,12 +19,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
         self.backupset = Backupset()
+        self.cmd_ext = ""
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
             self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         elif info == 'windows':
+            self.cmd_ext = ".exe"
             self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
             self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
@@ -36,6 +38,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
+        self.compact_backup = self.input.param("compact-backup", False)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
             self.backupset.cluster_host_username = self.servers[1].rest_username
@@ -404,6 +407,36 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not status:
             self.fail(message)
         self.log.info(message)
+
+    def backup_compact_deleted_keys_validation(self, delete_keys):
+        self.log.info("Check deleted keys status in file after compact")
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        output, error = conn.execute_command("ls %s/backup/201*/default*/data "\
+                                                     % self.backupset.directory)
+        deleted_key_status = {}
+        if "shard_0.fdb" in output:
+            cmd = "%sforestdb_dump%s --plain-meta --no-body "\
+                  "%s/backup/201*/default*/data/shard_0.fdb | grep -A 6 ent-backup "\
+                                         % (self.cli_command_location, self.cmd_ext,\
+                                         self.backupset.directory)
+            dump_output, error = conn.execute_command(cmd)
+            if dump_output:
+                key_ids =        [x.split(":")[1].strip(' ') for x in dump_output[0::8]]
+                miss_keys = [x for x in delete_keys if x not in key_ids]
+                if miss_keys:
+                    raise Exception("Lost some keys %s ", miss_keys)
+                partition_ids =  [x.split(":")[1].strip(' ') for x in dump_output[1::8]]
+                status_ids =     [x.split(" ")[-3].strip(' ') for x in dump_output[6::8]]
+                for idx, key in enumerate(key_ids):
+                    deleted_key_status[key] = \
+                           {"KV store name":partition_ids[idx], "Status":status_ids[idx]}
+                    if status_ids[idx] != "deleted":
+                        raise Exception("key %s status was not deleted. " % key)
+            else:
+                raise Exception("backup compaction failed to keep delete docs in file")
+        else:
+            raise Exception("file shard_0.fdb did not created ")
+        return deleted_key_status
 
     def backup_merge(self):
         self.log.info("backups before merge: " + str(self.backups))
