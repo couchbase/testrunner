@@ -2447,18 +2447,21 @@ class CouchbaseCluster:
                                                  services=None)
         return tasks
 
-    def __async_failover(self, master=False, num_nodes=1, graceful=False):
+    def __async_failover(self, master=False, num_nodes=1, graceful=False, node=None):
         """Failover nodes from Cluster
         @param master: True if failover master node only.
         @param num_nodes: number of nodes to rebalance-out from cluster.
         @param graceful: True if graceful failover else False.
+        @param node: Specific node to be failed over
         """
         raise_if(
             len(self.__nodes) <= 1,
             FTSException(
                 "More than 1 node required in cluster to perform failover")
         )
-        if master:
+        if node:
+            self.__fail_over_nodes = [node]
+        elif master:
             self.__fail_over_nodes = [self.__master_node]
         else:
             self.__fail_over_nodes = self.__nodes[-num_nodes:]
@@ -2473,8 +2476,8 @@ class CouchbaseCluster:
 
         return task
 
-    def async_failover(self, num_nodes=1, graceful=False):
-        return self.__async_failover(num_nodes=num_nodes, graceful=graceful)
+    def async_failover(self, master=False, num_nodes=1, graceful=False,node=None):
+        return self.__async_failover(master=master, num_nodes=num_nodes, graceful=graceful,node=node)
 
     def failover_and_rebalance_master(self, graceful=False, rebalance=True):
         """Failover master node
