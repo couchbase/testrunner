@@ -974,7 +974,7 @@ class Cluster(object):
 
         Parameters:
             servers - node used for connection (TestInputServer)
-            failover_nodes - servers to be failover. (TestInputServer)
+            failover_nodes - servers to be failovered, i.e. removed from the cluster. (TestInputServer)
             bucket - The name of the bucket to be flushed. (String)
 
         Returns:

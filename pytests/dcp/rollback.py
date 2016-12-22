@@ -10,24 +10,137 @@ from lib.cluster_run_manager  import CRManager
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from memcacheConstants import *
 import zlib
+from couchbase_helper.documentgenerator import DocumentGenerator
 
 log = logger.Logger.get_logger()
 
 class DCPRollBack(DCPBase):
 
 
+    """
+    # MB-21587 rollback recover is incorrect
 
-    # MB-21568 sequence number is incorrect during a race between persistence and failover
+    The scenario is as follows:
+     1. 2 node cluster
+     2. populate some kvs
+     3. turn off persistence on both nodes
+     4. modify less than 1/2 of the keys
+     5. kill memcache on node 1. When node 2 reconnects to node 1 it will ask for sequence numbers higher than
+       those seen node 1 so node 1 will ask it to rollback
+     6. failover to node 2
+     7. Verify the keys that were modified and were active on node 1 have the values as set prior to step 4
+
+    """
+
+    def replicate_correct_data_after_rollback(self):
+
+        NUMBER_OF_DOCS = 10000
+
+
+        # populate the kvs, they will look like ...
+        """
+        key: keyname-x
+        value:
+          {
+          "mutated": 0,
+            "_id": "keyname-x",
+             "val-field-name": "serial-vals-100"
+            }
+        """
+        vals = ['serial-vals-' + str(i) for i in xrange(NUMBER_OF_DOCS)]
+        template = '{{ "val-field-name": "{0}"  }}'
+        gen_load = DocumentGenerator('keyname', template, vals, start=0,
+                                     end=NUMBER_OF_DOCS)
+
+        rc = self.cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000)
+
+
+        # store the KVs which were modified and active on node 1
+        modified_kvs_active_on_node1 = {}
+        vbucket_client = VBucketAwareMemcached(RestConnection(self.master), 'default')
+        client = MemcachedClientHelper.direct_client(self.servers[0], 'default')
+        for i in range(NUMBER_OF_DOCS/100):
+            keyname = 'keyname-' + str(i)
+            vbId = ((zlib.crc32(keyname) >> 16) & 0x7fff) & (self.vbuckets- 1)
+            if vbucket_client.vBucketMap[vbId].split(':')[0] == self.servers[0].ip:
+                rc = client.get( keyname )
+                modified_kvs_active_on_node1[ keyname ] = rc[2]
+
+        # stop persistence
+        for bucket in self.buckets:
+            for s in self.servers:
+                client = MemcachedClientHelper.direct_client(s, bucket)
+                client.stop_persistence()
+
+
+        # modify less than 1/2 of the keys
+        vals = ['modified-serial-vals-' + str(i) for i in xrange(NUMBER_OF_DOCS/100)]
+        template = '{{ "val-field-name": "{0}"  }}'
+        gen_load = DocumentGenerator('keyname', template, vals, start=0,
+                                     end=NUMBER_OF_DOCS/100)
+        rc = self.cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000)
+
+
+        # kill memcached, when it comes back because persistence is disabled it will have lost the second set of mutations
+        shell = RemoteMachineShellConnection(self.servers[0])
+        shell.kill_memcached()
+        time.sleep(10)
+
+
+        # start persistence on the second node
+        client = MemcachedClientHelper.direct_client(self.servers[1], 'default')
+        client.start_persistence()
+
+
+        time.sleep(5)
+
+
+        # failover to the second node
+        rc = self.cluster.failover(self.servers, self.servers[0:1], graceful=True)
+        time.sleep(30)     # give time for the failover to complete
+
+
+        # check the values, they should be what they were prior to the second update
+        client = MemcachedClientHelper.direct_client(self.servers[1], 'default')
+        for k,v  in modified_kvs_active_on_node1.iteritems():
+            rc = client.get( k )
+            self.assertTrue( v == rc[2], 'Expected {0}, actual {1}'.format(v, rc[2]))
+
+        # need to rebalance the node back into the cluster
+        #def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
+        rc = self.cluster.rebalance(self.servers, self.servers[0:1],[])
+
+
+
+
+
+
+
+
+    """
+    # MB-21568 sequence number is incorrect during a race between persistence and failover.
+
+    The scenario is as follows:
+    1. Two node cluster
+    2. Set 1000 KVs
+    3. Stop persistence
+    4. Set another 1000 non-intersecting KVs
+    5. Kill memcached on node 1
+    6. Verify that the number of items on both nodes is the same
+
+
+
+    """
+
+
+
     def test_rollback_and_persistence_race_condition(self):
 
         nodeA = self.servers[0]
         vbucket_client = VBucketAwareMemcached(RestConnection(self.master), 'default')
         gen_create = BlobGenerator('dcp', 'dcp-', 64, start=0, end=self.num_items)
-
-
-        #def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
-        #                  only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
-        #                  proxy_client=None):
         self._load_all_buckets(nodeA, gen_create, "create", 0)
 
         # stop persistence
@@ -38,12 +151,7 @@ class DCPRollBack(DCPBase):
 
         vb_uuid, seqno, high_seqno = self.vb_info(self.servers[0], 5)
 
-        #dcp_client = self.dcp_client(self.master, FLAG_OPEN_PRODUCER, 5, name='testDCPconn')
-        """
-            def stream_req(self, vbucket, takeover, start_seqno, end_seqno,
-                       vb_uuid, snap_start = None, snap_end = None):
-        """
-        #stream = dcp_client.stream_req(  5, 0, 2*high_seqno, 3*high_seqno, vb_uuid)
+
 
         time.sleep(10)
 
@@ -52,60 +160,20 @@ class DCPRollBack(DCPBase):
         self._load_all_buckets(nodeA, gen_create, "create", 0)
 
 
-        """
-
-        # find which keys are active on the first node.
-        active_on_first_node = []
-        for i in range(self.num_items):
-            # map the key to the vbucket to the node
-            vbId = (((zlib.crc32('dcp-secondgroup' + str(i))) >> 16) & 0x7fff) & (self.vbuckets- 1)
-            #print 'key', 'dcp-secondgroup' + str(i), 'is on vbid', vbId, 'and the server is', vbucket_client.vBucketMap[vbId].split(':')[0]
-            if vbucket_client.vBucketMap[vbId].split(':')[0] == self.servers[0].ip:
-                #print 'adding key ', 'dcp-secondgroup' + str(i)
-                active_on_first_node.append('dcp-secondgroup' + str(i) )
-        """
-
-
-
-        #import pdb;pdb.set_trace()
         shell = RemoteMachineShellConnection(self.servers[0])
         shell.kill_memcached()
-        #shell.execute_command("kill -9 $(pgrep -l -f memcached|cut -d ' ' -f 1)")
 
 
-        # start persistence on the second node
-
-        client = MemcachedClientHelper.direct_client(self.servers[1], bucket)
-        client.start_persistence()
-
-        # the second node should have the same number of items at this point
-        # some kind of check can go here for curr_items_tot
+        time.sleep(10)
 
 
-        # failover ...
-        #tasks = self.cluster.failover(self.servers, self.servers[0:1], graceful=True)
-        #for t in tasks:
-            #result = t.result()
 
+        mc1 = MemcachedClientHelper.direct_client(self.servers[0], "default")
+        mc2 = MemcachedClientHelper.direct_client(self.servers[1], "default")
 
-        #   def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
+        node1_items = mc1.stats()["curr_items_tot"]
+        node2_items = mc2.stats()["curr_items_tot"]
 
-
-        #self.cluster.rebalance(self.servers, [], self.servers[0:1])
-
-
-        # and then check on the newly active, check a key that was previously a replica and should have been rolled
-        # back ie. should not exist but in the presence of this bug it will exist
-
-        #vbucket_client = VBucketAwareMemcached(RestConnection(self.servers[1]), 'default')
-
-
-        """
-        client = MemcachedClientHelper.direct_client(self.servers[1], 'default')
-
-        for i in active_on_first_node:
-            rc = client.get( i )
-            print 'the rc from the get is', rc
-        print 'done'
-        """
-
+        self.assertTrue( node1_items == node2_items,
+                         'Node items not equal. Node 1:{0}, node 2:{1}'.format(node1_items, node2_items ))
+        
