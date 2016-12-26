@@ -1,33 +1,34 @@
-import os
-import time
-import logger
-import random
-import socket
-import string
 import copy
 import json
-import re
 import math
-import crc32
+import os
+import random
+import re
+import socket
+import string
+import time
 import traceback
-import testconstants
 from httplib import IncompleteRead
 from threading import Thread
-from memcacheConstants import ERR_NOT_FOUND,NotFoundError
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
-from membase.api.exception import BucketCreationException
-from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
-from couchbase_helper.document import DesignDocument, View
-from mc_bin_client import MemcachedError
-from tasks.future import Future
+
+import crc32
+import logger
+import testconstants
+from TestInput import TestInputServer
+from couchbase_helper.document import DesignDocument
+from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
+from mc_bin_client import MemcachedError
+from membase.api.exception import BucketCreationException
 from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
-from remote.remote_util import RemoteMachineShellConnection
-from couchbase_helper.documentgenerator import BatchedDocumentGenerator
-from TestInput import TestInputServer
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
+from membase.helper.bucket_helper import BucketOperationHelper
+from memcacheConstants import ERR_NOT_FOUND,NotFoundError
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from tasks.future import Future
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6
 
 try:
@@ -4450,3 +4451,115 @@ class EnterpriseCompactTask(Task):
             self.remote_client.log_command_output(self.output, self.error)
         else:
             task_manager.schedule(self, 10)
+
+class GenericAutoFailoverFailureTask(Task, Thread):
+    def __init__(self, timeout_secs=60):
+        Thread.__init__(self)
+        Task.__init__(self, "autofailover_failure_task")
+        self.timeout = timeout_secs
+
+    def execute(self, task_manager):
+        self.start()
+        self.state = EXECUTING
+
+    def check(self, task_manager):
+        pass
+
+    def run(self):
+        while self.has_next() and not self.done():
+            self.next()
+        self.state = FINISHED
+        self.set_result(True)
+
+    def has_next(self):
+        raise NotImplementedError
+
+    def next(self):
+        raise NotImplementedError
+
+
+class AutoFailoverNodesFailureTask(GenericAutoFailoverFailureTask):
+    def __init__(self, servers_to_fail, failure_type, timeout, pause=0):
+        GenericAutoFailoverFailureTask.__init__(timeout)
+        self.servers_to_fail = servers_to_fail
+        self.num_servers_to_fail = self.servers_to_fail.__len__()
+        self.itr = 0
+        self.failure_type = failure_type
+        self.pause = pause
+        self.log.info("")
+
+    def execute(self, task_manager):
+        try:
+            self.log.info("")
+        except:
+            self.log.info("")
+
+    def check(self, task_manager):
+        self.log.info("")
+
+    def has_next(self):
+        return self.itr < self.num_servers_to_fail
+
+    def next(self):
+        if self.pause != 0:
+            time.sleep(self.pause)
+        server_to_fail = self.servers_to_fail[self.itr]
+        if self.failure_type == "enable_firewall":
+            self._enable_firewall(server_to_fail)
+        elif self.failure_type == "disable_firewall":
+            self._disable_firewall(server_to_fail)
+        elif self.failure_type == "restart_couchbase":
+            self._restart_couchbase_server(server_to_fail)
+        elif self.failure_type == "stop_couchbase":
+            self._stop_couchbase_server(server_to_fail)
+        elif self.failure_type == "start_couchbase":
+            self._start_couchbase_server(server_to_fail)
+        elif self.failure_type == "restart_network":
+            self._stop_restart_network(server_to_fail, self.timeout)
+        elif self.failure_type == "restart_machine":
+            self._restart_machine(server_to_fail, self.timeout)
+        self.itr += 1
+
+    def _enable_firewall(self, node):
+        RemoteUtilHelper.enable_firewall(node)
+
+    def _disable_firewall(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.disable_firewall()
+
+    def _restart_couchbase_server(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.restart_couchbase()
+        shell.disconnect()
+        self.log.info("Restarted the couchbase server on {}".format(node))
+
+    def _stop_couchbase_server(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.stop_couchbase()
+        shell.disconnect()
+        self.log.info("Stopped the couchbase server on {}".format(node))
+
+    def _start_couchbase_server(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.start_couchbase()
+        shell.disconnect()
+        self.log.info("Started the couchbase server on {}".format(node))
+
+    def _stop_restart_network(self, node, stop_time):
+        shell = RemoteMachineShellConnection(node)
+        shell.stop_network(stop_time)
+        shell.disconnect()
+        self.log.info("Stopped the network for {0} sec and restarted the "
+                      "network on {1}".format(stop_time, node))
+
+    def _restart_machine(self, node, timeout=120):
+        shell = RemoteMachineShellConnection(node)
+        command = "/sbin/reboot"
+        shell.execute_command(command=command)
+        self.log.info("Waiting for the rebooted machine to be back up")
+        time.sleep(timeout)
+        try:
+            shell = RemoteMachineShellConnection(node)
+        except:
+            self.log.info("Unable to connect to the host. Machine has not "
+                          "restarted")

@@ -1,41 +1,39 @@
+import logging
 import os
 import re
+import stat
 import sys
+import time
 import urllib
 import uuid
-import time
-import logging
-import stat
-import TestInput
 from subprocess import Popen, PIPE
 
+import TestInput
 import logger
-from builds.build_query import BuildQuery
 import testconstants
-from testconstants import WIN_REGISTER_ID
-from testconstants import MEMBASE_VERSIONS
-from testconstants import COUCHBASE_VERSIONS
-from testconstants import MISSING_UBUNTU_LIB
-from testconstants import MV_LATESTBUILD_REPO
-from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_VERSIONS
-from testconstants import WIN_CB_VERSION_3
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import COUCHBASE_FROM_VERSION_3
-from testconstants import COUCHBASE_RELEASE_VERSIONS_3
-from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
-from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
-from testconstants import RPM_DIS_NAME
-from testconstants import LINUX_DISTRIBUTION_NAME
-from testconstants import WIN_COUCHBASE_BIN_PATH
-from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
-from testconstants import WIN_TMP_PATH
-from testconstants import CB_VERSION_NAME
-from testconstants import CB_REPO
+from builds.build_query import BuildQuery
+from membase.api.rest_client import RestConnection, RestHelper
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
-from membase.api.rest_client import RestConnection, RestHelper
+from testconstants import CB_REPO
+from testconstants import CB_VERSION_NAME
+from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
+from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import COUCHBASE_VERSIONS
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_3
+from testconstants import LINUX_DISTRIBUTION_NAME
+from testconstants import MEMBASE_VERSIONS
+from testconstants import MISSING_UBUNTU_LIB
+from testconstants import MV_LATESTBUILD_REPO
+from testconstants import RPM_DIS_NAME
+from testconstants import SHERLOCK_BUILD_REPO
+from testconstants import WIN_COUCHBASE_BIN_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
+from testconstants import WIN_PROCESSES_KILLED
+from testconstants import WIN_REGISTER_ID
+from testconstants import WIN_TMP_PATH
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -230,6 +228,14 @@ class RemoteMachineShellConnection:
             for line in output:
                 if not 'grep' in line.strip().split(' '):
                     return float(line.strip().split(' ')[0])
+
+    def stop_network(self, stop_time):
+        self.extract_remote_info()
+        os_type = self.info.type.lower()
+        if os_type == "unix" or os_type == "linux":
+            command = "service network_stop && sleep {} && network start"
+            output, error = self.execute_command(command.format(stop_time))
+            self.log_command_output(output, error)
 
     def stop_membase(self):
         self.extract_remote_info()
