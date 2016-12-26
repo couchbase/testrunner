@@ -1,6 +1,6 @@
 from base_2i import BaseSecondaryIndexingTests
+from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from datetime import datetime
 
 class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
 
@@ -31,6 +31,27 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
                  'num_docs_pending','delete_bytes' ]
                 map = self._create_stats_map(items_count=2016)
                 self._verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
+
+    def test_indexer_logs_for_leaked_password(self):
+        expected_msg = "http://%40index-cbauth@127.0.0.1:8091"
+        indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.assertGreater(len(indexers), 0, "No indexer found in cluster")
+        for server in indexers:
+            shell = RemoteMachineShellConnection(server)
+            _, dir = RestConnection(server).diag_eval('filename:absname('
+                                                      'element(2, '
+                                                      'application:get_env('
+                                                      'ns_server, error_logger_mf_dir))).')
+            indexer_log = str(dir) + '/indexer.log*'
+            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                        format(expected_msg, indexer_log))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            shell.disconnect()
+            self.assertGreater(count, 0, "Password leak found in Indexer {"
+                                         "0}".format(server.ip))
 
     def test_get_index_settings(self):
         #Check Index Settings

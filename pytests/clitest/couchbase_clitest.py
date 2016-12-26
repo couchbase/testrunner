@@ -3,6 +3,8 @@ import json
 import os
 from threading import Thread
 import time
+import string
+import random
 
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -10,10 +12,10 @@ from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_cli import CouchbaseCLI
-from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
-                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK
+                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK,\
+                          COUCHBASE_FROM_4DOT6
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -226,6 +228,14 @@ class CouchbaseCliTest(CliBaseTest):
     def tearDown(self):
         super(CouchbaseCliTest, self).tearDown()
 
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            for x in output:
+                if word_check in x:
+                    self.log.info("Found \"%s\" in CLI output" % word_check)
+                    found = True
+        return found
 
     def _get_dict_from_output(self, output):
         result = {}
@@ -309,11 +319,14 @@ class CouchbaseCliTest(CliBaseTest):
         options += (" --wait", "")[wait]
         cli_command = "bucket-create"
 
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                          options=options, cluster_host="localhost",
+                                          user="Administrator", password="password")
         if "TIMED OUT" in output[0]:
             raise Exception("Timed out.  Could not create bucket")
         else:
-            self.assertTrue("SUCCESS: Bucket created" in output[0], "Fail to create bucket")
+            """ need to remove dot in front of output"""
+            self.assertTrue(self.cli_bucket_create_msg in output[0].lstrip("."), "Fail to create bucket")
 
     def testHelp(self):
         command_with_error = {}
@@ -354,7 +367,7 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client = RemoteMachineShellConnection(self.master)
 
         cli_command = "server-list"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                   cluster_host="localhost", user="Administrator", password="password")
         server_info = self._get_cluster_info(remote_client)
         """ In new single node not join any cluster yet,
@@ -368,7 +381,7 @@ class CouchbaseCliTest(CliBaseTest):
                                            .format(remote_client.ip))
 
         cli_command = "bucket-list"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                   cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual([], output)
         remote_client.disconnect()
@@ -382,21 +395,25 @@ class CouchbaseCliTest(CliBaseTest):
         cli_command = "server-add"
         if int(nodes_add) < len(self.servers):
             for num in xrange(nodes_add):
-                self.log.info("add node {0} to cluster"\
-                                             .format(self.servers[num + 1].ip))
+                self.log.info("add node {0} to cluster".format(
+                    self.servers[num + 1].ip))
                 options = "--server-add={0}:8091 \
                            --server-add-username=Administrator \
                            --server-add-password=password" \
                             .format(self.servers[num + 1].ip)
                 output, error = \
                       remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                                          options=options, cluster_host="localhost",
-                                                          cluster_port=8091, user="Administrator",
-                                                          password="password")
+                                        options=options, cluster_host="localhost",
+                                          cluster_port=8091, user="Administrator",
+                                                              password="password")
                 server_added = False
+                output_msg = "SUCCESS: Server added"
+                if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                    output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
+                                                         self.servers[num + 1].port)
                 if len(output) >= 1:
                     for x in output:
-                        if "SUCCESS: Server added" in x:
+                        if output_msg in x:
                             server_added = True
                             break
                     if not server_added:
@@ -412,17 +429,16 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                             options=options, cluster_host="localhost", cluster_port=8091,\
                             user="Administrator", password="password")
-            self.assertTrue("SUCCESS: Rebalance complete" in output)
-
+            self.assertTrue(self.cli_rebalance_msg in output)
         if nodes_rem == 0 and nodes_add > 0:
             cli_command = "rebalance"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost",
-                                                                cluster_port=8091, user="Administrator",
-                                                                password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                            cluster_host="localhost", cluster_port=8091,
+                                              user="Administrator", password="password")
             if len(output) == 4:
                 self.assertEqual(output, ["INFO: rebalancing ", "", "SUCCESS: rebalanced cluster", ""])
             else:
-                self.assertTrue("SUCCESS: Rebalance complete" in output)
+                self.assertTrue(self.cli_rebalance_msg in output)
 
         """ when no bucket, have to add option --force to failover
             since no data => no graceful failover.  Need to add test
@@ -444,14 +460,15 @@ class CouchbaseCliTest(CliBaseTest):
                     self.assertEqual(output, ["SUCCESS: failover ns_1@{0}" \
                         .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
                 else:
-                    self.assertTrue("SUCCESS: Server failed over" in output)
+                    self.assertTrue("SUCCESS: failover ns_1@{}".format(
+                        self.servers[nodes_add - nodes_rem - num].ip) in output)
             else:
                 output, error = remote_client.execute_couchbase_cli(\
                         cli_command=cli_command, options=options, \
                         cluster_host="localhost", cluster_port=8091, \
                         user="Administrator", password="password")
-                self.assertTrue("SUCCESS: Server failed over" in output)
-
+                self.assertTrue("SUCCESS: failover ns_1@{0}" \
+                        .format(self.servers[nodes_add - nodes_rem - num].ip) in output)
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
@@ -459,12 +476,13 @@ class CouchbaseCliTest(CliBaseTest):
                     .format(self.servers[nodes_add - nodes_rem - num ].ip))
             options = "--server-add={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                                                                options=options, cluster_host="localhost",
-                                                                cluster_port=8091, user="Administrator",
-                                                                password="password")
+                                                        options=options, cluster_host="localhost",
+                                                          cluster_port=8091, user="Administrator",
+                                                                              password="password")
             if len(output) == 2:
-                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
-                                          "by the recovery command", "SUCCESS: Servers recovered"])
+                self.assertEqual(output, ["DEPRECATED: The server-readd "
+                                          "command is deprecated and will be removed in a future release. Please use recovery instead.",
+                                          "SUCCESS: re-add ns_1@{}".format(self.servers[nodes_add - nodes_rem - num ].ip)])
             else:
                 self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
                                           "by the recovery command", "SUCCESS: Servers recovered"])
@@ -473,9 +491,8 @@ class CouchbaseCliTest(CliBaseTest):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost", cluster_port=8091,
                                                             user="Administrator", password="password")
-        self.assertTrue("SUCCESS: Rebalance complete" in output)
+        self.assertTrue(self.cli_rebalance_msg in output)
         remote_client.disconnect()
-
 
     def testAddRemoveNodesWithRecovery(self):
         nodes_add = self.input.param("nodes_add", 1)
@@ -492,7 +509,8 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
                                                                     cluster_host="localhost", cluster_port=8091,
                                                                     user="Administrator", password="password")
-                self.assertTrue("SUCCESS: Server added" in output)
+                self.assertTrue("Server {}:{} added".format(self.servers[num +
+                                1].ip, self.servers[num + 1].port) in output)
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -500,12 +518,12 @@ class CouchbaseCliTest(CliBaseTest):
         for num in xrange(nodes_rem):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertTrue("SUCCESS: Rebalance complete" in output)
+            self.assertTrue("SUCCESS: rebalanced cluster" in output)
 
         if nodes_rem == 0 and nodes_add > 0:
             cli_command = "rebalance"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
-            self.assertTrue("SUCCESS: Rebalance complete" in output)
+            self.assertTrue("SUCCESS: rebalanced cluster" in output)
 
         self._create_bucket(remote_client)
 
@@ -516,14 +534,17 @@ class CouchbaseCliTest(CliBaseTest):
             if self.force_failover or num == nodes_failover - 1:
                 options += " --force"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertTrue("SUCCESS: Server failed over" in output)
+            self.assertTrue("SUCCESS: failover ns_1@{0}" \
+                        .format(self.servers[nodes_add - nodes_rem - num].ip) in output)
 
         cli_command = "recovery"
         for num in xrange(nodes_failover):
             # try to set recovery when nodes failovered (MB-11230)
             options = "--server-recovery={0}:8091 --recovery-type=delta".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual("SUCCESS: Servers recovered", output[0])
+            self.assertEqual("SUCCESS: setRecoveryType for node ns_1@{"
+                             "}".format(format(self.servers[nodes_add - nodes_rem - num].ip)),
+                             output[0])
 
         for num in xrange(nodes_recovery):
             cli_command = "server-readd"
@@ -531,8 +552,11 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--server-add={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             if (len(output) == 2):
-                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
-                                          "by the recovery command", "SUCCESS: Servers recovered"])
+                self.assertEqual(output, ["DEPRECATED: The server-readd "
+                                          "command is deprecated and will be removed in a future release. Please use recovery instead.",
+                                          "SUCCESS: re-add ns_1@{}".format(
+                                              self.servers[
+                                                  nodes_add - nodes_rem - num].ip)])
             else:
                 self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
                                           "by the recovery command", "SUCCESS: Servers recovered"])
@@ -542,7 +566,10 @@ class CouchbaseCliTest(CliBaseTest):
             if (len(output) == 2):
                 self.assertEqual(output, ["SUCCESS: Servers recovered", ""])
             else:
-                self.assertEqual(output, ["SUCCESS: Servers recovered"])
+                self.assertEqual("SUCCESS: setRecoveryType for node ns_1@{"
+                                 "}".format(
+                    format(self.servers[nodes_add - nodes_rem - num].ip)),
+                                 output[0])
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
@@ -550,18 +577,20 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--server-add={0}:8091".format(self.servers[nodes_add - nodes_rem - num ].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             if (len(output) == 2):
-                self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
-                                          "by the recovery command", "SUCCESS: Servers recovered"])
+                self.assertEqual(output, ["DEPRECATED: The server-readd "
+                                          "command is deprecated and will be removed in a future release. Please use recovery instead.",
+                                          "SUCCESS: re-add ns_1@{}".format(
+                                              self.servers[
+                                                  nodes_add - nodes_rem - num].ip)])
             else:
                 self.assertEqual(output, ["DEPRECATED: This command is deprecated and has been replaced "
                                           "by the recovery command", "SUCCESS: Servers recovered"])
 
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
-        self.assertTrue("SUCCESS: Rebalance complete" in output)
+        self.assertTrue("SUCCESS: rebalanced cluster" in output)
 
         remote_client.disconnect()
-
 
     def testStartStopRebalance(self):
         nodes_add = self.input.param("nodes_add", 1)
@@ -580,8 +609,11 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
-            self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
-                                      "Server {0}:8091 added".format(self.servers[num + 1].ip)])
+            output_msg = "SUCCESS: Server added"
+            if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
+                                                    self.servers[num + 1].port)
+            self.assertEqual(output[0], output_msg)
 
         cli_command = "rebalance-status"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
@@ -615,7 +647,6 @@ class CouchbaseCliTest(CliBaseTest):
                       cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ["(u'running', None)"])
 
-
             cli_command = "rebalance-stop"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                       cluster_host="localhost", user="Administrator", password="password")
@@ -626,7 +657,6 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                       cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
-
 
             cli_command = "rebalance-status"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
@@ -820,6 +850,38 @@ class CouchbaseCliTest(CliBaseTest):
             if not initialized:
                 self.assertTrue(not self.isClusterInitialized(server),
                                 "Cluster was initialized, but error was received")
+
+    def test_gsi_compaction(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+
+        compact_mode = self.input.param("compact_mode", None)
+        compact_percent = self.input.param("compact_percent", None)
+        compact_interval = self.input.param("compact_interval", None)
+        from_period = self.input.param("from_period", None)
+        to_period = self.input.param("to_period", None)
+        enable_abort = self.input.param("enable_abort", 0)
+        expect_error = self.input.param("expect-error", False)
+        error_msg = self.input.param("error-msg", "")
+
+        """ reset node to setup services """
+        self.rest.force_eject_node()
+        cli = CouchbaseCLI(self.master, username, password, self.cb_version)
+        _, _, success = cli.cluster_init(256, 512, None, "data,index,query", None, None,
+                                                 self.master.rest_username,
+                                                 self.master.rest_password, None)
+        self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        if compact_interval is not None and "-" in compact_interval:
+            compact_interval = compact_interval.replace("-", ",")
+        stdout, _, errored = cli.setting_gsi_compaction(compact_mode, compact_percent,
+                              compact_interval, from_period, to_period, enable_abort)
+        self.assertTrue(errored, "Expected command to succeed")
+        if not expect_error:
+            self.verify_gsi_compact_settings(compact_mode, compact_percent,
+                                             compact_interval,
+                                             from_period, to_period,
+                                             enable_abort)
 
     def testSettingAutoFailover(self):
         username = self.input.param("username", None)
@@ -2156,14 +2218,90 @@ class CouchbaseCliTest(CliBaseTest):
         self.shell.execute_command("rm -rf %sbackup" % self.tmp_path)
         self.shell.disconnect()
 
-    def _check_output(self, word_check, output):
-        found = False
-        if len(output) >=1 :
-            for x in output:
-                if word_check in x:
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
-                    found = True
-        return found
+    def test_reset_admin_password(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+        cli_command = "reset-admin-password"
+
+        options = ''
+        output, error = remote_client.execute_couchbase_cli(
+            cli_command=cli_command, options=options, cluster_host="localhost",
+            cluster_port=8091, user="Administrator", password="password")
+        self.assertEqual(output, ['No parameters specified'])
+
+        options = '--blabla'
+        output, error = remote_client.execute_couchbase_cli(
+            cli_command=cli_command, options=options, cluster_host="localhost",
+            cluster_port=8091, user="Administrator", password="password")
+        self.assertEqual(output, ['ERROR: option --blabla not recognized'])
+
+        options = '--new-password aaa'
+        output, error = remote_client.execute_couchbase_cli(
+            cli_command=cli_command, options=options, cluster_host="127.0.0.5",
+            cluster_port=8091, user="Administrator", password="password")
+        self.assertEqual(output, ['API is accessible from localhost only'])
+
+        output, error = remote_client.execute_couchbase_cli(
+            cli_command=cli_command, options=options, cluster_host="127.0.0.1",
+            cluster_port=8091, user="Administrator", password="password")
+        self.assertEqual(output, ['{"errors":{"_":"The password must be at least six characters."}}'])
+        try:
+            options = '--regenerate'
+            outputs = []
+            for i in xrange(10):
+                output, error = remote_client.execute_couchbase_cli(
+                    cli_command=cli_command, options=options, cluster_host="127.0.0.1",
+                    cluster_port=8091, user="FAKE", password="FAKE")
+                new_password = output[0]
+                self.assertEqual(len(new_password), 8)
+                self.assertTrue(new_password not in outputs)
+                outputs.append(new_password)
+
+            old_password = "password"
+            apis = ["get_zone_and_nodes", "get_pools_info", "get_notifications", "get_pools",
+                    "_rebalance_progress_status", "get_nodes_version", "get_alerts_settings"]
+            for i in xrange(10):
+                server = copy.deepcopy(self.servers[0])
+                chars = string.letters + string.digits
+                new_password = ''.join((random.choice(chars)) for x in range(random.randint(6, 30)))
+                options = '--new-password "%s"' % new_password
+                output, _ = remote_client.execute_couchbase_cli(
+                    cli_command=cli_command, options=options, cluster_host="127.0.0.1",
+                    cluster_port=8091, user="Administrator", password="password")
+                self.assertEqual(output, ['SUCCESS: Administrator password changed'])
+                server.rest_password = old_password
+                rest = RestConnection(server)
+                server.rest_password = new_password
+                old_password = new_password
+
+                rest_new = RestConnection(server)
+                for m in apis:
+                        getattr(rest_new, m)()
+                for m in apis:
+                        self.assertRaises(Exception, getattr(rest, m))
+            for i in xrange(5):
+                server = copy.deepcopy(self.servers[0])
+                options = '--regenerate'
+                output, _ = remote_client.execute_couchbase_cli(
+                    cli_command=cli_command, options=options, cluster_host="127.0.0.1",
+                    cluster_port=8091, user="Administrator", password="password")
+                new_password = output[0]
+                server.rest_password = old_password
+                rest = RestConnection(server)
+
+                server.rest_password = new_password
+                rest_new = RestConnection(server)
+
+                old_password = new_password
+                for m in apis:
+                        getattr(rest_new, m)()
+                for m in apis:
+                        self.assertRaises(Exception, getattr(rest, m))
+        finally:
+            self.log.info("Inside finally block")
+            options = '--new-password password'
+            remote_client.execute_couchbase_cli(
+                cli_command=cli_command, options=options, cluster_host="127.0.0.1",
+                cluster_port=8091, user="Administrator", password="password")
 
 
 class XdcrCLITest(CliBaseTest):
@@ -2323,6 +2461,12 @@ class XdcrCLITest(CliBaseTest):
                     output_error = "ERROR: unable to delete xdcr remote site"
                 self.assertTrue(self._check_output(output_error, output))
             else:
+                if output_error == \
+                      "['ERROR: unable to delete xdcr remote site localhost (404) Object Not Found',"\
+                      " 'unknown remote cluster']" and  self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                    output_error = \
+                      "['ERROR: unable to delete xdcr remote site localhost (400) Bad Request',\
+                                                             '{\"_\":\"unknown remote cluster\"}']"
                 self.assertEqual(output, eval(output_error))
             return
 
@@ -2417,7 +2561,7 @@ class XdcrCLITest(CliBaseTest):
             self.fail("need params xdcr-certificate to run")
         cli_command = "ssl-manage"
         cert_info = "--retrieve-cert"
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
             cert_info = "--cluster-cert-info"
             output, error = self.__execute_cli(cli_command=cli_command,
                                                            options=cert_info)

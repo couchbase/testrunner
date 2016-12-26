@@ -2,6 +2,9 @@ from fts_base import FTSBaseTest, FTSException
 from fts_base import NodeHelper
 from TestInput import TestInputSingleton
 from threading import Thread
+from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.memcached.helper.data_helper import MemcachedClientHelper
+import json
 
 class MovingTopFTS(FTSBaseTest):
 
@@ -861,3 +864,95 @@ class MovingTopFTS(FTSBaseTest):
         NodeHelper.kill_cbft_process(node)
         self._cb_cluster.set_bypass_fts_node(node)
         self.run_query_and_compare(index)
+
+    def partial_rollback(self):
+        bucket = self._cb_cluster.get_bucket_by_name("default")
+
+        self._cb_cluster.flush_buckets([bucket])
+
+        index = self.create_index(bucket, "default_index")
+        self.load_data()
+        self.wait_for_indexing_complete()
+
+        # Stop Persistence on Node A & Node B
+        mem_client = MemcachedClientHelper.direct_client(self._input.servers[0],
+                                                         bucket)
+        mem_client.stop_persistence()
+        mem_client = MemcachedClientHelper.direct_client(self._input.servers[1],
+                                                         bucket)
+        mem_client.stop_persistence()
+
+        # Perform mutations on the bucket
+        self.async_perform_update_delete(self.upd_del_fields)
+        if self._update:
+            self.sleep(60, "Waiting for updates to get indexed...")
+        self.wait_for_indexing_complete()
+
+        # Run FTS Query to fetch the initial count of mutated items
+        query = "{\"query\": \"mutated:>0\"}"
+        query = json.loads(query)
+        for index in self._cb_cluster.get_indexes():
+            hits1, _, _, _ = index.execute_query(query)
+            self.log.info("Hits before rollback: %s" % hits1)
+
+        # Fetch count of docs in index and bucket
+        before_index_doc_count = index.get_indexed_doc_count()
+        before_bucket_doc_count = index.get_src_bucket_doc_count()
+
+        self.log.info("Docs in Bucket : %s, Docs in Index : %s" % (
+            before_bucket_doc_count, before_index_doc_count))
+
+        # Kill memcached on Node A so that Node B becomes master
+        shell = RemoteMachineShellConnection(self._master)
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        mem_client = MemcachedClientHelper.direct_client(self._input.servers[1],
+                                                         bucket)
+        mem_client.start_persistence()
+
+        # Failover Node B
+        failover_task = self._cb_cluster.async_failover(
+            node=self._input.servers[1])
+        failover_task.result()
+
+        # Wait for Failover & FTS index rollback to complete
+        self.sleep(10)
+
+        # Run FTS query to fetch count of mutated items post rollback.
+        for index in self._cb_cluster.get_indexes():
+            hits2, _, _, _ = index.execute_query(query)
+            self.log.info("Hits after rollback: %s" % hits2)
+
+        # Fetch count of docs in index and bucket
+        after_index_doc_count = index.get_indexed_doc_count()
+        after_bucket_doc_count = index.get_src_bucket_doc_count()
+
+        self.log.info("Docs in Bucket : %s, Docs in Index : %s"
+                      % (after_bucket_doc_count, after_index_doc_count))
+
+        # Validation : If there are deletes, validate the #docs in index goes up post rollback
+        if self._input.param("delete", False):
+            self.assertGreater(after_index_doc_count, before_index_doc_count,
+                               "Deletes : Index count after rollback not greater than before rollback")
+        else:
+            # For Updates, validate that #hits goes down in the query output post rollback
+            self.assertGreater(hits1, hits2,
+                               "Mutated items before rollback are not more than after rollback")
+
+        # Failover FTS node
+        failover_fts_node = self._input.param("failover_fts_node", False)
+
+        if failover_fts_node:
+            failover_task = self._cb_cluster.async_failover(
+                node=self._input.servers[2])
+            failover_task.result()
+            self.sleep(10)
+
+            # Run FTS query to fetch count of mutated items post FTS node failover.
+            for index in self._cb_cluster.get_indexes():
+                hits3, _, _, _ = index.execute_query(query)
+                self.log.info(
+                    "Hits after rollback and failover of primary FTS node: %s" % hits3)
+                self.assertEqual(hits2, hits3,
+                                 "Mutated items after FTS node failover are not equal to that after rollback")

@@ -243,14 +243,18 @@ class MemcachedClient(object):
 
 
     # doMeta - copied from the mc bin client on github
-    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas):
-        extra = struct.pack('>IIQq', flags, exp, seqno, remote_cas)
+    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas, options):
+        #extra = struct.pack('>IIQQI', flags, exp, seqno, remote_cas, 0)
+        exp = 0
+        extra = struct.pack('>IIQQI', flags, exp, seqno, remote_cas, options)
+
+
         return self._doCmd(cmd, key, value, extra, cas)
 
-    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas):
+    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas, options=2):
         """Set a value and its meta data in the memcached server."""
         return self._doMetaCmd(memcacheConstants.CMD_SET_WITH_META,
-                               key, value, 0, exp, flags, seqno, remote_cas)
+                               key, value, 0, exp, flags, seqno, remote_cas, options)
 
     # set with meta using the LWW conflict resolution CAS
     def setWithMetaLWW(self, key, value, exp, flags,cas):
@@ -287,7 +291,9 @@ class MemcachedClient(object):
         self._set_vbucket(key, -1)
 
         return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+                struct.pack('>IIQQI', flags, exp,  SEQNO, cas, memcacheConstants.FORCE_ACCEPT_WITH_META_OPS))
+                #struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+
 
 
     # hope to remove this and migrate existing calls to the aboce
@@ -332,7 +338,8 @@ class MemcachedClient(object):
         self._set_vbucket(key, vbucket)
 
         resp = self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, cas, 0) )
+                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags,
+                                   exp, seqno, cas, memcacheConstants.FORCE_ACCEPT_WITH_META_OPS) )
         return resp
 
 

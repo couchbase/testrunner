@@ -42,8 +42,6 @@ class audit:
         self.method = method
         self.host = host
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
-        # self.pathLogFile = self.getAuditConfigElement('log_path')
-        # self.archiveFilePath = self.getAuditConfigElement('archive_path')
         self.pathLogFile = self.getAuditLogPath()
         self.defaultFields = ['id', 'name', 'description']
         if (eventID is not None):
@@ -53,13 +51,18 @@ class audit:
     def getAuditConfigPathInitial(self):
         shell = RemoteMachineShellConnection(self.host)
         os_type = shell.extract_remote_info().distribution_type
+        dist_ver = (shell.extract_remote_info().distribution_version).rstrip()
         log.info ("OS type is {0}".format(os_type))
         if os_type == 'windows':
             auditconfigpath = audit.WINCONFIFFILEPATH
             self.currentLogFile = audit.WINLOGFILEPATH
         elif os_type == 'Mac':
-            auditconfigpath = audit.MACCONFIGFILEPATH
-            self.currentLogFile = audit.MACLOGFILEPATH
+            if ('10.12' == dist_ver):
+                auditconfigpath = "/Users/admin/Library/Application Support/Couchbase/var/lib/couchbase/config/"
+                self.currentLogFile = "/Users/admin/Library/Application Support/Couchbase/var/lib/couchbase/logs"
+            else:
+                auditconfigpath = audit.MACCONFIGFILEPATH
+                self.currentLogFile = audit.MACLOGFILEPATH
         else:
             auditconfigpath = audit.LINCONFIGFILEPATH
             self.currentLogFile = audit.LINLOGFILEPATH

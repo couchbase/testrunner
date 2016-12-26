@@ -1,23 +1,24 @@
-
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import COUCHBASE_FROM_4DOT6
 
-class CouchbaseCLI():
-
-    def __init__(self, server, username, password):
+class CouchbaseCLI:
+    def __init__(self, server, username, password, cb_version=None):
         self.server = server
         self.hostname = "%s:%s" % (server.ip, server.port)
         self.username = username
         self.password = password
+        self.cb_version = cb_version
 
-    def bucket_create(self, name, password, type, quota, eviction_policy, replica_count, enable_replica_indexes,
+    def bucket_create(self, name, password, bucket_type, quota,
+                      eviction_policy, replica_count, enable_replica_indexes,
                       priority, enable_flush, wait):
         options = self._get_default_options()
         if name is not None:
             options += " --bucket " + name
         if password is not None:
             options += " --bucket-password " + password
-        if type is not None:
-            options += " --bucket-type " + type
+        if bucket_type is not None:
+            options += " --bucket-type " + bucket_type
         if quota is not None:
             options += " --bucket-ramsize " + str(quota)
         if eviction_policy is not None:
@@ -34,7 +35,8 @@ class CouchbaseCLI():
             options += " --wait"
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("bucket-create", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("bucket-create",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket created")
 
@@ -48,9 +50,11 @@ class CouchbaseCLI():
             options += " --view-only"
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("bucket-compact", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("bucket-compact",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Bucket compaction started")
+        return stdout, stderr, self._was_success(stdout,
+                                                 "Bucket compaction started")
 
     def bucket_delete(self, bucket_name):
         options = self._get_default_options()
@@ -58,11 +62,13 @@ class CouchbaseCLI():
             options += " --bucket " + bucket_name
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("bucket-delete", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("bucket-delete",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket deleted")
 
-    def bucket_edit(self, name, password, quota, eviction_policy, replica_count, priority, enable_flush):
+    def bucket_edit(self, name, password, quota, eviction_policy,
+                    replica_count, priority, enable_flush):
         options = self._get_default_options()
         if name is not None:
             options += " --bucket " + name
@@ -80,7 +86,8 @@ class CouchbaseCLI():
             options += " --enable-flush " + str(enable_flush)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("bucket-edit", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("bucket-edit",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket edited")
 
@@ -92,16 +99,21 @@ class CouchbaseCLI():
             options += " --force"
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("bucket-flush", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("bucket-flush",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket flushed")
 
-    def cluster_edit(self, data_ramsize, index_ramsize, fts_ramsize, cluster_name, cluster_username,
-                            cluster_password, cluster_port):
-        return self._setting_cluster("cluster-edit", data_ramsize, index_ramsize, fts_ramsize, cluster_name,
-                                     cluster_username, cluster_password, cluster_port)
+    def cluster_edit(self, data_ramsize, index_ramsize, fts_ramsize,
+                     cluster_name, cluster_username,
+                     cluster_password, cluster_port):
+        return self._setting_cluster("cluster-edit", data_ramsize,
+                                     index_ramsize, fts_ramsize, cluster_name,
+                                     cluster_username, cluster_password,
+                                     cluster_port)
 
-    def cluster_init(self, data_ramsize, index_ramsize, fts_ramsize, services, index_storage_mode, cluster_name,
+    def cluster_init(self, data_ramsize, index_ramsize, fts_ramsize, services,
+                     index_storage_mode, cluster_name,
                      cluster_username, cluster_password, cluster_port):
         options = ""
         if cluster_username:
@@ -124,11 +136,17 @@ class CouchbaseCLI():
             options += " --services " + str(services)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("cluster-init", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("cluster-init",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Cluster initialized")
+        print_msg = "Cluster initialized"
+        if self.cb_version is not None and \
+               self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            print_msg = "init/edit %s" % self.server.ip
+        return stdout, stderr, self._was_success(stdout, print_msg)
 
-    def collect_logs_start(self, all_nodes, nodes, upload, upload_host, upload_customer, upload_ticket):
+    def collect_logs_start(self, all_nodes, nodes, upload, upload_host,
+                           upload_customer, upload_ticket):
         options = self._get_default_options()
         if all_nodes is True:
             options += " --all-nodes "
@@ -144,16 +162,20 @@ class CouchbaseCLI():
             options += " --ticket " + str(upload_ticket)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("collect-logs-start", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("collect-logs-start",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Log collection started")
+        return stdout, stderr, self._was_success(stdout,
+                                                 "Log collection started")
 
     def collect_logs_stop(self):
         options = self._get_default_options()
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("collect-logs-stop", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("collect-logs-stop",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Log collection stopped")
+        return stdout, stderr, self._was_success(stdout,
+                                                 "Log collection stopped")
 
     def failover(self, failover_servers, force):
         options = self._get_default_options()
@@ -163,11 +185,13 @@ class CouchbaseCLI():
             options += " --force"
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("failover", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("failover", self.hostname,
+                                                     options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server failed over")
 
-    def group_manage(self, create, delete, list, move_servers, rename, name, to_group, from_group):
+    def group_manage(self, create, delete, list, move_servers, rename, name,
+                     to_group, from_group):
         options = self._get_default_options()
         if create:
             options += " --create "
@@ -187,7 +211,8 @@ class CouchbaseCLI():
             options += " --from-group " + str(from_group)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("group-manage", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("group-manage",
+                                                     self.hostname, options)
         remote_client.disconnect()
 
         success = False
@@ -214,7 +239,8 @@ class CouchbaseCLI():
             options += " --node-init-hostname " + str(hostname)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("node-init", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("node-init",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Node initialized")
 
@@ -224,14 +250,16 @@ class CouchbaseCLI():
             options += " --server-remove " + str(remove_servers)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("rebalance", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("rebalance",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Rebalance complete")
 
     def rebalance_stop(self):
         options = self._get_default_options()
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("rebalance-stop", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("rebalance-stop",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Rebalance stopped")
 
@@ -243,11 +271,13 @@ class CouchbaseCLI():
             options += " --recovery-type " + str(recovery_type)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("recovery", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("recovery", self.hostname,
+                                                     options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Servers recovered")
 
-    def server_add(self, server, server_username, server_password, group_name, services, index_storage_mode):
+    def server_add(self, server, server_username, server_password, group_name,
+                   services, index_storage_mode):
         options = self._get_default_options()
         if server:
             options += " --server-add " + str(server)
@@ -263,7 +293,8 @@ class CouchbaseCLI():
             options += " --index-storage-setting " + str(index_storage_mode)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("server-add", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("server-add",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server added")
 
@@ -273,7 +304,8 @@ class CouchbaseCLI():
             options += " --server-add " + str(servers)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("server-readd", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("server-readd",
+                                                     self.hostname, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Servers recovered")
 
@@ -287,13 +319,18 @@ class CouchbaseCLI():
             options += " --audit-log-rotate-interval " + str(rotate_interval)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("setting-audit", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("setting-audit",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Audit settings modified")
+        return stdout, stderr, self._was_success(stdout,
+                                                 "Audit settings modified")
 
-    def setting_alert(self, enabled, email_recipients, email_sender, email_username, email_password, email_host,
-                      email_port, encrypted, alert_af_node, alert_af_max_reached, alert_af_node_down, alert_af_small,
-                      alert_af_disable, alert_ip_changed, alert_disk_space, alert_meta_overhead, alert_meta_oom,
+    def setting_alert(self, enabled, email_recipients, email_sender,
+                      email_username, email_password, email_host,
+                      email_port, encrypted, alert_af_node,
+                      alert_af_max_reached, alert_af_node_down, alert_af_small,
+                      alert_af_disable, alert_ip_changed, alert_disk_space,
+                      alert_meta_overhead, alert_meta_oom,
                       alert_write_failed, alert_audit_dropped):
         options = self._get_default_options()
 
@@ -337,9 +374,11 @@ class CouchbaseCLI():
             options += " --alert-audit-msg-dropped "
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("setting-alert", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("setting-alert",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Email alert settings modified")
+        return stdout, stderr, self._was_success(stdout, "Email alert "
+                                                         "settings modified")
 
     def setting_autofailover(self, enabled, timeout):
         options = self._get_default_options()
@@ -349,17 +388,23 @@ class CouchbaseCLI():
             options += " --auto-failover-timeout " + str(timeout)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("setting-autofailover", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("setting-autofailover",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Auto-failover settings modified")
+        return stdout, stderr, self._was_success(stdout, "Auto-failover "
+                                                         "settings modified")
 
-    def setting_cluster(self, data_ramsize, index_ramsize, fts_ramsize, cluster_name, cluster_username,
-                         cluster_password, cluster_port):
-        return self._setting_cluster("setting-cluster", data_ramsize, index_ramsize, fts_ramsize, cluster_name,
-                                     cluster_username, cluster_password, cluster_port)
+    def setting_cluster(self, data_ramsize, index_ramsize, fts_ramsize,
+                        cluster_name, cluster_username,
+                        cluster_password, cluster_port):
+        return self._setting_cluster("setting-cluster", data_ramsize,
+                                     index_ramsize, fts_ramsize, cluster_name,
+                                     cluster_username, cluster_password,
+                                     cluster_port)
 
-    def setting_compaction(self, db_frag_perc, db_frag_size, view_frag_perc, view_frag_size, from_period, to_period,
-                           abort_outside, parallel_compact, purgeInt):
+    def setting_compaction(self, db_frag_perc, db_frag_size, view_frag_perc,
+                           view_frag_size, from_period, to_period,
+                           abort_outside, parallel_compact, purgeint):
         options = self._get_default_options()
         if db_frag_perc is not None:
             options += " --compaction-db-percentage " + str(db_frag_perc)
@@ -377,23 +422,54 @@ class CouchbaseCLI():
             options += " --enable-compaction-abort " + str(abort_outside)
         if parallel_compact is not None:
             options += " --enable-compaction-parallel " + str(parallel_compact)
-        if purgeInt is not None:
-            options += " --metadata-purge-interval " + str(purgeInt)
+        if purgeint is not None:
+            options += " --metadata-purge-interval " + str(purgeint)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("setting-compaction", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("setting-compaction",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Compaction settings modified")
+        return stdout, stderr, self._was_success(stdout, "Compaction "
+                                                         "settings modified")
 
-    def setting_index(self, max_rollbacks, stable_snap_interval, mem_snap_interval, storage_mode, threads,
+    def setting_gsi_compaction(self, compact_mode, compact_percent, compact_interval,
+                                               from_period, to_period, enable_abort):
+        options = self._get_default_options()
+        if compact_mode is not None:
+            options += " --gsi-compaction-mode %s" % compact_mode
+            if compact_mode == "append":
+                if compact_percent is not None:
+                    options += " --compaction-gsi-percentage=" + str(compact_percent)
+            elif compact_mode == "circular":
+                if compact_interval is not None:
+                    options += " --compaction-gsi-interval " + str(compact_interval)
+                if from_period is not None:
+                    options += " --compaction-gsi-period-from=" + str(from_period)
+                if to_period is not None:
+                    options += " --compaction-gsi-period-to=" + str(to_period)
+                if enable_abort:
+                    options += " --enable-gsi-compaction-abort=" + str(enable_abort)
+            else:
+                raise Exception("need compact mode to run!")
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("setting-compaction",
+                                                     self.hostname, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "set compaction settings")
+
+    def setting_index(self, max_rollbacks, stable_snap_interval,
+                      mem_snap_interval, storage_mode, threads,
                       log_level):
         options = self._get_default_options()
         if max_rollbacks:
             options += " --index-max-rollback-points " + str(max_rollbacks)
         if stable_snap_interval:
-            options += " --index-stable-snapshot-interval " + str(stable_snap_interval)
+            options += " --index-stable-snapshot-interval " + str(
+                stable_snap_interval)
         if mem_snap_interval:
-            options += " --index-memory-snapshot-interval " + str(mem_snap_interval)
+            options += " --index-memory-snapshot-interval " + str(
+                mem_snap_interval)
         if storage_mode:
             options += " --index-storage-setting " + str(storage_mode)
         if threads:
@@ -402,9 +478,11 @@ class CouchbaseCLI():
             options += " --index-log-level " + str(log_level)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("setting-index", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("setting-index",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Indexer settings modified")
+        return stdout, stderr, self._was_success(stdout,
+                                                 "Indexer settings modified")
 
     def setting_ldap(self, admins, ro_admins, default, enabled):
         options = self._get_default_options()
@@ -418,9 +496,11 @@ class CouchbaseCLI():
             options += " --ldap-enabled " + str(enabled)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("setting-ldap", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("setting-ldap",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "LDAP settings modified")
+        return stdout, stderr, self._was_success(stdout,
+                                                 "LDAP settings modified")
 
     def setting_notification(self, enable):
         options = self._get_default_options()
@@ -428,9 +508,11 @@ class CouchbaseCLI():
             options += " --enable-notification " + str(enable)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("setting-notification", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("setting-notification",
+                                                     self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Notification settings updated")
+        return stdout, stderr, self._was_success(stdout, "Notification "
+                                                         "settings updated")
 
     def user_manage(self, delete, list, set, ro_username, ro_password):
         options = self._get_default_options()
@@ -446,17 +528,21 @@ class CouchbaseCLI():
             options += " --ro-password " + str(ro_password)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli("user-manage", self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli("user-manage",
+                                                     self.hostname, options)
         remote_client.disconnect()
 
         if delete:
-            return stdout, stderr, self._was_success(stdout, "Local read-only user deleted")
+            return stdout, stderr, self._was_success(stdout, "Local read-only"
+                                                             "user deleted")
         elif set:
-            return stdout, stderr, self._was_success(stdout, "Local read-only user created")
+            return stdout, stderr, self._was_success(stdout, "Local read-only"
+                                                             "user deleted")
         else:
             return stdout, stderr, self._no_error_in_output(stdout)
 
-    def _setting_cluster(self, cmd, data_ramsize, index_ramsize, fts_ramsize, cluster_name, cluster_username,
+    def _setting_cluster(self, cmd, data_ramsize, index_ramsize, fts_ramsize,
+                         cluster_name, cluster_username,
                          cluster_password, cluster_port):
         options = self._get_default_options()
         if cluster_username is not None:
@@ -475,9 +561,11 @@ class CouchbaseCLI():
             options += " --cluster-port " + str(cluster_port)
 
         remote_client = RemoteMachineShellConnection(self.server)
-        stdout, stderr = remote_client.couchbase_cli(cmd, self.hostname, options)
+        stdout, stderr = remote_client.couchbase_cli(cmd, self.hostname,
+                                                     options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Cluster settings modified")
+        return stdout, stderr, self._was_success(stdout,
+                                                 "Cluster settings modified")
 
     def _get_default_options(self):
         options = ""
@@ -488,13 +576,12 @@ class CouchbaseCLI():
         return options
 
     def _no_error_in_output(self, stdout):
-        """Inspects each line of the command output and checks to see if the command errored
-
-        This check is used for API's that get data and do not simply report a success message.
+        """Inspects each line of the command output and checks to see if
+        the command errored. This check is used for API's that get data and
+        do not simply report a success message.
 
         Options:
         stdout - A list of output lines from stdout
-
         Returns true if not error was found, false otherwise
         """
 
@@ -504,13 +591,15 @@ class CouchbaseCLI():
         return True
 
     def _was_success(self, stdout, message):
-        """Inspects each line of the command output and checks to see if the command succeeded
+        """Inspects each line of the command output and checks to see if
+        the command succeeded
 
         Options:
         stdout - A list of output lines from stdout
         message - The success message
 
-        Returns a boolean indicating whether or not the success message was found in the output
+        Returns a boolean indicating whether or not the success message was
+        found in the output
         """
 
         for line in stdout:

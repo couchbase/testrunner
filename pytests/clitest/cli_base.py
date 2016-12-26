@@ -6,7 +6,7 @@ from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH,\
                           WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
-                          WIN_COUCHBASE_LOGS_PATH
+                          WIN_COUCHBASE_LOGS_PATH, COUCHBASE_FROM_4DOT6
 import logger
 import random
 import time
@@ -37,6 +37,12 @@ class CliBaseTest(BaseTestCase):
         info = self.shell.extract_remote_info()
         type = info.type.lower()
         self.excluded_commands = self.input.param("excluded_commands", None)
+        """ cli output message """
+        self.cli_bucket_create_msg = "SUCCESS: Bucket created"
+        self.cli_rebalance_msg = "SUCCESS: Rebalance complete"
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            self.cli_bucket_create_msg = "SUCCESS: bucket-create"
+            self.cli_rebalance_msg = "SUCCESS: rebalanced cluster"
         self.os = 'linux'
         self.full_v = None
         self.short_v = None
@@ -688,6 +694,35 @@ class CliBaseTest(BaseTestCase):
             log.info("Purge interval does not match (%s vs %s)", str(purgeInt), str(settings["purgeInterval"]))
             return False
 
+        return True
+
+    def verify_gsi_compact_settings(self, compact_mode, compact_percent, compact_interval,
+                                                   from_period, to_period, enable_abort):
+        settings = self.rest.get_auto_compaction_settings()
+        ac = settings["autoCompactionSettings"]["indexFragmentationThreshold"]
+        cc = settings["autoCompactionSettings"]["indexCircularCompaction"]
+        if compact_mode is not None:
+            if compact_mode == "append":
+                self.log.info("append compactino settings %s " % ac)
+                if compact_percent is not None and \
+                                         compact_percent != ac["percentage"]:
+                    raise Exception("setting percent does not match.  Set: %s vs %s :Actual"
+                                     % (compact_percent, ac["percentage"]))
+            if compact_mode == "circular":
+                self.log.info("circular compaction settings %s " % cc)
+                if enable_abort and not cc["interval"]["abortOutside"]:
+                    raise Exception("setting enable abort failed")
+                if compact_interval is not None:
+                    if compact_interval != cc["daysOfWeek"]:
+                        raise Exception("Failed to set compaction on %s " % compact_interval)
+                    elif from_period is None and int(cc["interval"]["fromHour"]) != 0 and \
+                                           int(cc["interval"]["fromMinute"]) != 0:
+                        raise Exception("fromHour and fromMinute should be zero")
+                if compact_interval is None:
+                    if from_period != \
+                        str(cc["interval"]["fromHour"]) + ":" + str(cc["interval"]["fromMinute"])\
+                        and str(cc["interval"]["toHour"]) + ":" + str(cc["interval"]["toMinute"]):
+                        raise Exception("fromHour and fromMinute do not set correctly")
         return True
 
     def verifyGroupExists(self, server, name):

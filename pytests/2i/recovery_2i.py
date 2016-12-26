@@ -218,25 +218,36 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_failover(self):
         try:
-            self._run_initial_index_tasks()
+            before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
             servr_out = self.nodes_out_list
             kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            failover_task = self.cluster.async_failover([self.master],
-                    failover_nodes = servr_out, graceful=self.graceful)
-            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([before_tasks])
+            self._create_replica_indexes()
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=servr_out, graceful=self.graceful)
+            query_definitions = self._redefine_index_usage()
+            in_between_tasks = self.async_run_operations(buckets=self.buckets, query_definitions=query_definitions,
+                                                             phase="in_between")
             failover_task.result()
             if self.graceful:
                 # Check if rebalance is still running
                 msg = "graceful failover failed for nodes"
                 self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                   [], servr_out)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()
-            self.sleep(120)
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self.sleep(60)
+            self._run_tasks([kvOps_tasks, in_between_tasks])
+            nodes_out = []
+            for service in self.nodes_out_dist.split("-"):
+                nodes_out.append(service.split(":")[0])
+            if not "n1ql" in nodes_out and not "index" in nodes_out:
+                if self.index_nodes_out:
+                    self._verify_bucket_count_with_index_count(query_definitions=self.load_query_definitions)
+                else:
+                    self._verify_bucket_count_with_index_count()
+                after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
+                self._run_tasks([after_tasks])
         except Exception, ex:
+            self.log.info(str(ex))
             raise
 
     def test_failover_add_back(self):
@@ -370,28 +381,35 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
-        self._run_initial_index_tasks()
+        before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
+        self._run_tasks([before_tasks])
+        self._create_replica_indexes()
         servr_out = self.nodes_out_list
         remote = RemoteMachineShellConnection(servr_out[0])
         try:
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
             remote.stop_server()
+            self.sleep(10)
+            kvOps_tasks = self._run_kvops_tasks()
+            query_definitions = self._redefine_index_usage()
+            in_between_tasks = self.async_run_operations(buckets=self.buckets, query_definitions=query_definitions,
+                                                         phase="in_between")
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                   [], [servr_out[0]])
-            in_between_index_ops = self._run_in_between_tasks()
+            active_nodes = self.get_nodes_in_cluster()
+            rebalance = self.cluster.async_rebalance(active_nodes, [], servr_out)
             rebalance.result()
-            self.sleep(120)
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self.sleep(30)
+            self._run_tasks([kvOps_tasks, in_between_tasks])
         except Exception, ex:
-            raise
+            msg = "unable to reach the host @ {0}".format(servr_out[0].ip)
+            if msg not in str(ex):
+                self.log.info(str(ex))
+                raise
         finally:
+            self._verify_bucket_count_with_index_count()
+            after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
+            self._run_tasks([after_tasks])
             remote.start_server()
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
-            for task in tasks:
-                task.result()
+            self.sleep(30)
 
     def test_network_partitioning(self):
         self._run_initial_index_tasks()
@@ -489,6 +507,28 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     query_definition.index_name = "#primary"
                 qdfs.append(query_definition)
             self.query_definitions = qdfs
+
+    def _create_replica_indexes(self):
+        query_definitions = []
+        if not self.use_replica:
+            return []
+        if not self.index_nodes_out:
+            return []
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in self.index_nodes_out:
+            if node in index_nodes:
+                index_nodes.remove(node)
+        if index_nodes:
+            deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip, index_nodes[0].port)]
+            ops_map = self.generate_operation_map("in_between")
+            if ("query" in ops_map or "query_with_explain" in ops_map) and not self.all_index_nodes_lost:
+                for query_definition in self.query_definitions:
+                    if query_definition.index_name in self.index_lost_during_move_out:
+                        query_definition.index_name = query_definition.index_name + "_replica"
+                        query_definitions.append(query_definition)
+                        for bucket in self.buckets:
+                            self.create_index(bucket=bucket, query_definition=query_definition,
+                                              deploy_node_info=deploy_node_info)
 
     def _create_replica_index_when_indexer_is_down(self, index_lost_during_move_out):
         memory = []

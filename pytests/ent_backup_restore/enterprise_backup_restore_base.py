@@ -8,11 +8,16 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
+from testconstants import COUCHBASE_FROM_4DOT6
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
     def setUp(self):
         super(EnterpriseBackupRestoreBase, self).setUp()
+        """ from version 4.6.0 and later, --host flag is deprecated """
+        self.cluster_flag = "--host"
+        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            self.cluster_flag = "--cluster"
         self.backupset = Backupset()
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
@@ -57,6 +62,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
         self.backupset.disable_ft_indexes = self.input.param("disable-ft-indexes", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
+        self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", None)
         self.backupset.force_updates = self.input.param("force-updates", False)
         self.backupset.resume = self.input.param("resume", False)
         self.backupset.purge = self.input.param("purge", False)
@@ -82,6 +88,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.graceful = self.input.param("graceful",False)
         self.recoveryType = self.input.param("recoveryType", "full")
         self.skip_buckets = self.input.param("skip_buckets", False)
+        self.lww_new = self.input.param("lww_new", False)
         self.skip_consistency = self.input.param("skip_consistency", False)
         self.per_node = self.input.param("per_node", True)
         if not os.path.exists(self.backup_validation_files_location):
@@ -148,12 +155,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets, self.skip_consistency, self.per_node)
         self.vbucket_seqno.append(vseqno)
 
-    def backup_create(self):
+    def backup_create(self, del_old_backup=True):
         args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets \"{0}\"".format(",".join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
-            args += " --include-buckets=\"{0}\"".format(",".join(self.backupset.include_buckets))
+            args += " --include-buckets \"{0}\"".format(",".join(self.backupset.include_buckets))
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config"
         if self.backupset.disable_views:
@@ -166,6 +173,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-data"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        if del_old_backup:
+            self.log.info("Remove any old dir before create new one")
+            remote_client.execute_command("rm -rf %s" % self.backupset.directory)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         return output, error
@@ -180,10 +190,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info(msg)
 
     def backup_cluster(self):
-        args = "backup --archive {0} --repo {1} --cluster http://{2}:{3} --username {4} --password {5}". \
+        args = "backup --archive {0} --repo {1} {6} http://{2}:{3} --username {4} --password {5}". \
             format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
-                   self.backupset.cluster_host_password)
+                   self.backupset.cluster_host_password, self.cluster_flag)
         if self.backupset.resume:
             args += " --resume"
         if self.backupset.purge:
@@ -227,13 +237,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "restore --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
-               "--end {7}".format(self.backupset.directory, self.backupset.name,
-                                                  self.backupset.restore_cluster_host.ip,
-                                                  self.backupset.restore_cluster_host.port,
-                                                  self.backupset.restore_cluster_host_username,
-                                                  self.backupset.restore_cluster_host_password, backup_start,
-                                                  backup_end)
+        args = "restore --archive {0} --repo {1} {2} http://{3}:{4} --username {5} "\
+               "--password {6} --start {7} --end {8}" \
+                               .format(self.backupset.directory, self.backupset.name,
+                                       self.cluster_flag, self.backupset.restore_cluster_host.ip,
+                                       self.backupset.restore_cluster_host.port,
+                                       self.backupset.restore_cluster_host_username,
+                                       self.backupset.restore_cluster_host_password,
+                                       backup_start, backup_end)
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets {0}".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
@@ -248,6 +259,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes {0}".format(self.backupset.disable_ft_indexes)
         if self.backupset.disable_data:
             args += " --disable-data {0}".format(self.backupset.disable_data)
+        if self.backupset.disable_conf_res_restriction is not None:
+            args += " --disable-conf-res-restriction {0}".format(
+                self.backupset.disable_conf_res_restriction)
         if self.backupset.filter_keys:
             args += " --filter_keys {0}".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
@@ -267,7 +281,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             ramQuotaMB=512,
                                             authType=bucket.authType if bucket.authType else 'none',
                                             proxyPort=bucket.port,
-                                            saslPassword=bucket.saslPassword)
+                                            saslPassword=bucket.saslPassword,
+                                            lww=self.lww_new)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket.name)
                     if not bucket_ready:
                         self.fail("Bucket %s not created after 120 seconds." % bucket.name)
@@ -275,18 +290,46 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        res = output
+        res.extend(error)
+        error_str = "Error restoring cluster: Transfer failed. Check the logs for more information."
+        if error_str in res:
+            command = "cat " + self.backupset.directory + "/logs/backup.log | grep '" + error_str + "' -A 10 -B 100"
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+        if 'Required Flags:' in res:
+            self.fail("Command line failed. Please check test params.")
         return output, error
 
-    def backup_restore_validate(self, compare_uuid=False, seqno_compare_function="==", replicas=False, mode="memory"):
-        self.backup_restore()
+    def backup_restore_validate(self, compare_uuid=False, seqno_compare_function="==",
+                                replicas=False, mode="memory", expected_error=None):
+        output, error =self.backup_restore()
+        if expected_error:
+            output.extend(error)
+            error_found = False
+            if expected_error:
+                for line in output:
+                    if line.find(expected_error) != -1:
+                        error_found = True
+                        break
+            self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
+            return
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + "/logs/backup.log"
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if not output:
             self.fail("Restoring backup failed.")
+        command = "grep 'Transfer failed' " + self.backupset.directory + "/logs/backup.log"
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if output:
+            self.fail("Restoring backup failed.")
+
         self.log.info("Finished restoring backup")
+
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets, self.skip_consistency, self.per_node)
+        self.log.info("*** Start to validate the restore ")
         status, msg = self.validation_helper.validate_restore(self.backupset.end, self.vbucket_seqno, current_vseqno,
                                                               compare_uuid=compare_uuid, compare=seqno_compare_function,
                                                               get_replica=replicas, mode=mode)
@@ -411,6 +454,8 @@ class Backupset:
         self.disable_gsi_indexes = False
         self.disable_ft_indexes = False
         self.disable_data = False
+        self.disable_conf_res_restriction = False
+        self.force_updates = False
         self.resume = False
         self.purge = False
         self.start = 1

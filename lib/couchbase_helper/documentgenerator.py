@@ -29,6 +29,7 @@ class KVGenerator(object):
 class DocumentGenerator(KVGenerator):
     """ An idempotent document generator."""
 
+
     def __init__(self, name, template, *args, **kwargs):
         """Initializes the document generator
 
@@ -43,8 +44,9 @@ class DocumentGenerator(KVGenerator):
         Args:
             name: The key name prefix
             template: A formated string that can be used to generate documents
-            *args: A list for each argument in the template
-            *kwargs: Special constrains for the document generator
+            *args: Each argument is list for the corresponding parameter in the template. In the above example age[2]
+                   appears in the 3rd document
+            *kwargs: Special constrains for the document generator, currently start and end are supported
         """
         self.args = args
         self.template = template

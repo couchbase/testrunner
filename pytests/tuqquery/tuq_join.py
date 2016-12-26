@@ -206,10 +206,26 @@ class JoinTests(QueryTests):
             self.query = 'SELECT meta(b1).id b1id, b2 from default b1 NEST default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
             actual_result=self.run_cbq_query()
             self.assertTrue( actual_result['results']== [{u'b1id': u'w001', u'b2': [{u'phones': [u'123-456-7890', u'123-456-7891'], u'type': u'pdoc', u'docid': u'w001', u'name': u'pdoc', u'altid': u'w001'}]}] )
+            self.query = 'delete from default use keys["w001","pdoc1","pdoc2"]'
+            self.run_cbq_query()
 
-
-
-
+    def test_basic_nest_join(self):
+           self.query = 'insert into default values("a_12345",{ "_id": "a_12345", "_type": "service" })'
+           self.run_cbq_query()
+           self.query = 'insert into default values("b_12345", { "_id": "b_12345", "parent": "a_12345", "data": { "a": "b", "c": "d" } })'
+           self.run_cbq_query()
+           self.query = 'insert into default values("b_12346", { "_id": "b_12346", "parent": "a_12345", "data": { "6": "3", "d": "f" } })'
+           self.run_cbq_query()
+           self.query = 'CREATE INDEX idx_parent ON default( parent )'
+           self.run_cbq_query()
+           self.query = 'SELECT * FROM default a NEST default b ON KEY b.parent FOR a'
+           actual_result = self.run_cbq_query()
+           self.assertTrue(actual_result['results']==([{u'a': {u'_type': u'service', u'_id': u'a_12345'}, u'b': [{u'_id': u'b_12345', u'data': {u'a': u'b', u'c': u'd'}, u'parent': u'a_12345'}, {u'_id': u'b_12346', u'data': {u'd': u'f', u'6': u'3'}, u'parent': u'a_12345'}]}]))
+           self.query = 'SELECT * FROM default a join default b ON KEY b.parent FOR a'
+           actual_result = self.run_cbq_query()
+           self.assertTrue(actual_result['results']==([{u'a': {u'_type': u'service', u'_id': u'a_12345'}, u'b': {u'_id': u'b_12345', u'data': {u'a': u'b', u'c': u'd'}, u'parent': u'a_12345'}}, {u'a': {u'_type': u'service', u'_id': u'a_12345'}, u'b': {u'_id': u'b_12346', u'data': {u'd': u'f', u'6': u'3'}, u'parent': u'a_12345'}}]))
+           self.query = 'delete from default use keys ["a_12345","b_12345","b_12346"]'
+           self.run_cbq_query()
 
     def test_where_join_keys_covering(self):
         created_indexes = []

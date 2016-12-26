@@ -200,7 +200,7 @@ SET_PKT_FMT = ">II"
 META_CMD_FMT = '>IIQQ'  # flags (4 bytes), expiration (4), seqno (8), CAS (8), metalen (2)
 
 META_CMD_FMT = '>IIQQ'
-EXTENDED_META_CMD_FMT = '>IIQQH'
+EXTENDED_META_CMD_FMT = '>IIQQI'
 SKIP_META_CMD_FMT = '>IIQQI'
 
 CR = 0x01
@@ -333,3 +333,9 @@ PROTOCOL_BINARY_FEATURE_DATATYPE = 0x01,
 PROTOCOL_BINARY_FEATURE_TLS = 0x2,
 PROTOCOL_BINARY_FEATURE_TCPNODELAY = 0x03,
 PROTOCOL_BINARY_FEATURE_MUTATION_SEQNO = 0x04
+
+
+# LWW related - these are documented here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/set_with_meta.md
+SKIP_CONFLICT_RESOLUTION_FLAG = 0x1
+FORCE_ACCEPT_WITH_META_OPS = 0x2
+REGENERATE_CAS = 0x4

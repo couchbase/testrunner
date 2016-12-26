@@ -168,7 +168,7 @@ class PauseResumeTest(XDCRNewBaseTest):
             for repl in remote_cluster_ref.get_replications():
                 if repl.get_src_bucket().name == pause_bucket_name:
                     break
-        repl.pause(True)
+        repl.pause(verify=True)
         # wait till replication is paused
         self.sleep(10)
         # check if remote cluster is still replicating
@@ -181,7 +181,7 @@ class PauseResumeTest(XDCRNewBaseTest):
             self.log.info("Pausing one replication does not affect other replications")
         else:
             self.log.info("Other buckets have completed replication")
-        repl.resume(True)
+        repl.resume(verify=True)
 
         [task.result() for task in load_tasks]
         self.verify_results()

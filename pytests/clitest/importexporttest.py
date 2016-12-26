@@ -22,6 +22,7 @@ class ImportExportTests(CliBaseTest):
         super(ImportExportTests, self).setUp()
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
+        self.field_separator = self.input.param("field_separator", "comma")
 
     def tearDown(self):
         super(ImportExportTests, self).tearDown()
@@ -33,6 +34,39 @@ class ImportExportTests(CliBaseTest):
             ClusterOperationHelper.cleanup_cluster(imp_servers, imp_servers[0])
             ClusterOperationHelper.wait_for_ns_servers_or_assert(imp_servers, self)
 
+
+    def test_check_require_import_flags(self):
+        require_flags = ['Flag required, but not specified: -c/--cluster',
+                         'Flag required, but not specified: -u/--username',
+                         'Flag required, but not specified: -p/--password',
+                         'Flag required, but not specified: -b/--bucket',
+                         'Flag required, but not specified: -d/--dataset',
+                         'Flag required, but not specified: -f/--format']
+
+        cmd = "%s%s%s %s --no-ssl-verify"\
+                    % (self.cli_command_path, "cbimport", self.cmd_ext, self.imex_type)
+        output, error = self.shell.execute_command(cmd)
+        num_require_flags = 6
+        if self.imex_type == "csv":
+            num_require_flags = 5
+        self.log.info("output from command run %s " % output[:num_require_flags])
+        self.assertEqual(require_flags[:num_require_flags], output[:num_require_flags],
+                                       "Error in require flags of cbimport")
+
+    def test_check_require_export_flags(self):
+        require_flags = ['Flag required, but not specified: -c/--cluster',
+                         'Flag required, but not specified: -u/--username',
+                         'Flag required, but not specified: -p/--password',
+                         'Flag required, but not specified: -b/--bucket',
+                         'Flag required, but not specified: -f/--format',
+                         'Flag required, but not specified: -o/--output']
+
+        cmd = "%s%s%s %s --no-ssl-verify"\
+                    % (self.cli_command_path, "cbexport", self.cmd_ext, "json")
+        output, error = self.shell.execute_command(cmd)
+        self.log.info("output from command run %s " % output[:6])
+        self.assertEqual(require_flags[:6], output[:6],
+                                       "Error in require flags of cbexport")
 
     def test_export_from_empty_bucket(self):
         options = {"load_doc": False, "bucket":"empty"}
@@ -58,18 +92,29 @@ class ImportExportTests(CliBaseTest):
                     if self.test_type == "import":
                         self.test_type = "cbimport"
                         self._remote_copy_import_file(self.import_file)
-                        if self.imex_type == "json":
-                            key_gen = "%index%"
-                            imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
-                                                            " -b %s -d %s%s -f %s -g %s"\
-                                  % (self.cli_command_path, self.test_type, self.cmd_ext,
-                                         self.imex_type, self.servers[0].ip, bucket.name,
-                                                       self.import_method, self.des_file,
-                                                               self.format_type, key_gen)
-                            output, error = self.shell.execute_command(imp_cmd_str)
-                            self.log.info("Output from execute command %s " % output)
-                            if not self._check_output("successfully", output):
-                                self.fail("Fail to import json file")
+                        format_flag = "-f"
+                        field_separator_flag = ""
+                        if self.imex_type == "csv":
+                            format_flag = ""
+                            if self.field_separator != "comma":
+                                if self.field_separator == "tab":
+                                    """ we test tab separator in this case """
+                                    field_separator_flag = "--field-separator $'\\t' "
+                                else:
+                                    field_separator_flag = "--field-separator %s "\
+                                                              % self.field_separator
+                        key_gen = "%index%"
+                        imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
+                                                    " -b %s -d %s%s %s %s -g %s %s "\
+                              % (self.cli_command_path, self.test_type, self.cmd_ext,
+                                     self.imex_type, self.servers[0].ip, bucket.name,
+                                                   self.import_method, self.des_file,
+                                              format_flag, self.format_type, key_gen,
+                                                                field_separator_flag)
+                        output, error = self.shell.execute_command(imp_cmd_str)
+                        self.log.info("Output from execute command %s " % output)
+                        if not self._check_output("successfully", output):
+                            self.fail("Fail to import json file")
                     elif self.test_type == "export":
                         self.test_type = "cbexport"
                         self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
@@ -443,6 +488,11 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": False}
         return self._common_imex_test("import", options)
 
+    def test_import_csv_file(self):
+        options = {"load_doc": False}
+        self.import_file = self.input.param("import_file", None)
+        return self._common_imex_test("import", options)
+
     def _common_imex_test(self, cmd, options):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
@@ -540,27 +590,38 @@ class ImportExportTests(CliBaseTest):
                 des_file = self.import_file
 
             if len(self.buckets) >= 1:
-                if self.imex_type == "json":
-                    for bucket in self.buckets:
-                        key_gen = "%index%"
-                        """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                        -b default -d file:///tmp/export/default -f list -g %index%  """
-                        imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s -f %s -g %s"\
-                             % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
+                format_flag = "-f"
+                field_separator_flag = ''
+                if self.imex_type == "csv":
+                    format_flag = ""
+                    self.format_type = ""
+                    if self.field_separator != "comma":
+                        if self.field_separator == "tab":
+                            """ we test tab separator in this case """
+                            field_separator_flag = "--field-separator $'\\t' "
+                        else:
+                            field_separator_flag = "--field-separator %s " % self.field_separator
+                for bucket in self.buckets:
+                    key_gen = "%index%"
+                    """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
+                    -b default -d file:///tmp/export/default -f list -g %index%  """
+                    imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s %s"\
+                         % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                           server.ip, username, password, bucket.name,
                                                              import_method, des_file,
-                                                           self.format_type, key_gen)
-                        output, error = self.shell.execute_command(imp_cmd_str)
-                        self.log.info("Output from execute command %s " % output)
-                        """ Json `file:///root/json_list` imported to `http://12.11.10.130:8091` successfully """
-                        json_loaded = False
-                        if "invalid" in self.import_file:
-                            if self._check_output("Json import failed:", output):
-                                json_loaded = True
-                        elif self._check_output("successfully", output):
+                                              format_flag, self.format_type, key_gen,
+                                                                field_separator_flag)
+                    output, error = self.shell.execute_command(imp_cmd_str)
+                    self.log.info("Output from execute command %s " % output)
+                    """ Json `file:///root/json_list` imported to `http://host:8091` successfully """
+                    json_loaded = False
+                    if "invalid" in self.import_file:
+                        if self._check_output("Json import failed:", output):
                             json_loaded = True
-                        if not json_loaded:
-                            self.fail("Failed to execute command")
+                    elif self._check_output("successfully", output):
+                        json_loaded = True
+                    if not json_loaded:
+                        self.fail("Failed to execute command")
 
     def _verify_export_file(self, export_file_name, options):
         if not options["load_doc"]:

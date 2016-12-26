@@ -42,15 +42,27 @@ class IBRTests(BackupBaseTest):
     def tearDown(self):
         super(IBRTests, self).tearDown()
 
-    def restoreAndVerify(self,bucket_names,kvs_before):
+    def restoreAndVerify(self, bucket_names, kvs_before, expected_error=None):
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
         del kvs_before
         gc.collect()
 
-        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+        errors, outputs = self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+        errors.extend(outputs)
+        error_found = False
+        if expected_error:
+            for line in errors:
+                if line.find(expected_error) != -1:
+                    error_found = True
+                    break
 
+            self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+
+        if expected_error:
+            for bucket in self.buckets:
+                bucket.kvs[1] = KVStore()
         self.verify_results(self.master)
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
@@ -373,7 +385,6 @@ class IBRTests(BackupBaseTest):
 
         self.restoreAndVerify(bucket_names, kvs_before)
 
-
     def testFullBackup(self):
         # Save copy of data
         kvs_before = {}
@@ -388,6 +399,43 @@ class IBRTests(BackupBaseTest):
         self._bucket_creation()
         self.sleep(20)
         self.restoreAndVerify(bucket_names, kvs_before)
+
+    def testIncrementalBackupConflict(self):
+        gen_extra = BlobGenerator('zoom', 'zoom-', self.value_size, end=self.num_items)
+        self.log.info("Starting Incremental backup")
+
+        extra_items_deleted_flag = 0
+
+        if(self.doc_ops is not None):
+            self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("update" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_extra, "update", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("delete" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_extra, "delete", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                extra_items_deleted_flag = 1
+            if("expire" in self.doc_ops):
+                if extra_items_deleted_flag == 1:
+                    self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                self._load_all_buckets(self.master, gen_extra, "update", self.expire_time, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+
+        #Take a incremental backup
+        options = self.command_options + [' -m accu']
+        self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
+
+        # Save copy of data
+        kvs_before = {}
+        for bucket in self.buckets:
+            kvs_before[bucket.name] = bucket.kvs[1]
+        bucket_names = [bucket.name for bucket in self.buckets]
+
+        # Delete all buckets
+        self._all_buckets_delete(self.master)
+        gc.collect()
+        self.lww = self.num_mutate_items = self.input.param("lww_new", False)
+        self._bucket_creation()
+        self.sleep(20)
+        expected_error = self.input.param("expected_error", None)
+        self.restoreAndVerify(bucket_names, kvs_before, expected_error)
 
 class IBRJsonTests(BackupBaseTest):
     def setUp(self):

@@ -39,7 +39,7 @@ class LWWStatsTests(BaseTestCase):
 
         # get the stats
         client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
-        ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
+        ahead_threshold = int(client.stats()["ep_hlc_drift_ahead_threshold_us"])
         self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD,
                         'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD, ahead_threshold))
         # change the setting and verify it is per the new setting - this may or may not be supported
@@ -50,7 +50,7 @@ class LWWStatsTests(BaseTestCase):
         if len(error) > 0:
             self.fail('Failed to set the drift counter threshold, please check the logs.')
 
-        ahead_threshold = int(client.stats()["ep_hlc_ahead_threshold_us"])
+        ahead_threshold = int(client.stats()["ep_hlc_drift_ahead_threshold_us"])
         self.assertTrue(ahead_threshold == LWWStatsTests.DEFAULT_THRESHOLD/2,
                         'Ahead threshold mismatch expected: {0} actual {1}'.format(LWWStatsTests.DEFAULT_THRESHOLD/2, ahead_threshold))
 
@@ -70,16 +70,16 @@ class LWWStatsTests(BaseTestCase):
 
 
         rest = RestConnection(self.master)
-        self.assertTrue( rest.set_cas_drift_threshold( self.buckets[0], 10000, 20000), 'Unable to set the CAS drift threshold')
+        self.assertTrue( rest.set_cas_drift_threshold( self.buckets[0], 100000, 200000), 'Unable to set the CAS drift threshold')
         time.sleep(15)           # take a few seconds for the stats to settle in
         stats = client.stats()
 
 
-        self.assertTrue( int(stats['ep_hlc_ahead_threshold_us']) == 10000 * 1000,
-             'Ahead threshold incorrect. Expected {0} actual {1}'.format(10000 * 1000 , stats['ep_hlc_ahead_threshold_us']))
+        self.assertTrue( int(stats['ep_hlc_drift_ahead_threshold_us']) == 100000 * 1000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(100000 * 1000 , stats['ep_hlc_drift_ahead_threshold_us']))
 
-        self.assertTrue( int(stats['ep_hlc_behind_threshold_us']) == 20000 * 1000,
-             'Ahead threshold incorrect. Expected {0} actual {1}'.format(20000 * 1000, stats['ep_hlc_behind_threshold_us']))
+        self.assertTrue( int(stats['ep_hlc_drift_behind_threshold_us']) == 200000 * 1000,
+             'Ahead threshold incorrect. Expected {0} actual {1}'.format(200000 * 1000, stats['ep_hlc_drift_behind_threshold_us']))
 
 
 
@@ -144,10 +144,15 @@ class LWWStatsTests(BaseTestCase):
         self.log.info('Date after is set backwards {0}'.format( output))
 
 
+        use_mc_bin_client = self.input.param("use_mc_bin_client", False)
 
 
-        rc = sdk_client.set('key2', 'val2')
-        second_poisoned_cas = rc.cas
+        if use_mc_bin_client:
+            rc = mc_client.set('key2',0,0,'val2')
+            second_poisoned_cas = rc[1]
+        else:
+            rc = sdk_client.set('key2', 'val2')
+            second_poisoned_cas = rc.cas
         self.log.info('The second_poisoned CAS is {0}'.format(second_poisoned_cas))
         self.assertTrue(  second_poisoned_cas > poisoned_cas,
                 'Second poisoned CAS {0} is not larger than the first poisoned cas'.format(second_poisoned_cas,poisoned_cas))
@@ -161,7 +166,7 @@ class LWWStatsTests(BaseTestCase):
         # 2. Set the clock back 1 hour, set the CAS back 2 hours, the clock should be use
 
 
-        # do case 1, set the CAS back 30 minutes.  Calculation below assumes the CAS is in nanseconds
+        # do case 1, set the CAS back 30 minutes.  Calculation below assumes the CAS is in nanoseconds
         earlier_max_cas = poisoned_cas - 30 * 60 * 1000000000
         for i in range(self.vbuckets):
             output, error = shell.execute_cbepctl(self.buckets[0], "", "set_vbucket_param",
@@ -269,7 +274,8 @@ class LWWStatsTests(BaseTestCase):
 
 
         # verifying the case where we are within the threshold, do a set and del, neither should trigger
-        rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, current_time_cas)
+        rc = mc_client.setWithMeta(test_key, 'test-value', 0, 0, 0, current_time_cas)
+        #rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, current_time_cas)
         rc = mc_client.delWithMetaLWW(test_key, 0, 0, current_time_cas+1)
 
         vbucket_stats = mc_client.stats('vbucket-details')
@@ -294,14 +300,14 @@ class LWWStatsTests(BaseTestCase):
         # do the ahead set with meta case - verify: ahead threshold exceeded, total_abs_drift count and abs_drift
         if check_ahead_threshold:
             stat_descriptor = 'ahead'
-            cas = current_time_cas + 5 * LWWStatsTests.DEFAULT_THRESHOLD
+            cas = current_time_cas + 5000 * LWWStatsTests.DEFAULT_THRESHOLD
 
         else:
             stat_descriptor = 'behind'
-            cas = current_time_cas -5 * LWWStatsTests.DEFAULT_THRESHOLD
+            cas = current_time_cas -5000 * LWWStatsTests.DEFAULT_THRESHOLD
 
 
-        rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, cas)
+        rc = mc_client.setWithMeta(test_key, 'test-value', 0, 0, 0, cas)
         rc = mc_client.delWithMetaLWW(test_key, 0, 0, cas+1)
 
 

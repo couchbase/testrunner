@@ -59,7 +59,7 @@ class QueryDefinition(object):
 			deployment_plan["nodes"] = deploy_node_info
 		if defer_build != None:
 			deployment_plan["defer_build"] = defer_build
-		if len(deployment_plan) != 0:
+		if len(deployment_plan) != 0 and use_gsi_for_secondary:
 			query += " WITH " + str(deployment_plan)
 		return query
 

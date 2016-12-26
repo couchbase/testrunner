@@ -1,4 +1,3 @@
-from ast import literal_eval
 import os
 import re
 import sys
@@ -7,10 +6,7 @@ import uuid
 import time
 import logging
 import stat
-import unittest
 import TestInput
-from datetime import datetime
-import logger
 from subprocess import Popen, PIPE
 
 import logger
@@ -354,7 +350,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("kill $(ps aux | grep 'memcached' "
+            o, r = self.execute_command("kill -9 $(ps aux | grep 'memcached' "
                                                     " | awk '{print $2}')")
             self.log_command_output(o, r)
         return o, r
@@ -3031,7 +3027,6 @@ class RemoteMachineShellConnection:
             self.delete_files(backup_file_location)
             self.create_directory(backup_file_location)
 
-
         command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
                                            cluster_ip, cluster_port, backup_file_location, command_options_string)
         if self.info.type.lower() == 'windows':
@@ -3050,7 +3045,7 @@ class RemoteMachineShellConnection:
             backup_file_location = "C:%s" % (backup_location)
         if self.info.distribution_type.lower() == 'mac':
             restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
-
+        outputs = errors = []
         for bucket in buckets:
             command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_file_location, "http://",
                                                   login_info, self.ip, self.port, "-b", bucket)
@@ -3059,6 +3054,9 @@ class RemoteMachineShellConnection:
                                                       login_info, self.ip, self.port, "-b", bucket)
             output, error = self.execute_command(command)
             self.log_command_output(output, error)
+            outputs.extend(output)
+            errors.extend(error)
+        return outputs, errors
 
     def delete_files(self, file_location):
         command = "%s%s" % ("rm -rf ", file_location)
@@ -3101,6 +3099,7 @@ class RemoteMachineShellConnection:
             path = temp_path + genFileName
             dest_path = "/tmp/" + fileName
             destination = "csv:" + csv_path
+            log.info("Run cbtransfer to get data map")
             self.execute_cbtransfer(source, destination, options)
             file_existed = self.file_exists(temp_path, genFileName)
             if file_existed:
@@ -3128,6 +3127,7 @@ class RemoteMachineShellConnection:
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
+        log.info("done execute cbtransfer")
         return output
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):

@@ -1,6 +1,6 @@
 import random
 from mc_bin_client import MemcachedClient
-from memcacheConstants import *
+import memcacheConstants as constants
 import Queue
 import time
 
@@ -82,7 +82,7 @@ class DcpClient(MemcachedClient):
 
         return r
 
-    def add_stream(self, vbucket, takeover = 0):
+    def add_stream(self, vbucket, takeover=0):
         """ sent to dcp-consumer to add stream on a particular vbucket.
             the takeover flag is there for completeness and is used by
             ns_server during vbucket move """
@@ -98,7 +98,7 @@ class DcpClient(MemcachedClient):
         return self._handle_op(op)
 
     def stream_req(self, vbucket, takeover, start_seqno, end_seqno,
-                       vb_uuid, snap_start = None, snap_end = None):
+                   vb_uuid, snap_start=None, snap_end=None):
         """" sent to dcp-producer to stream mutations from
              a particular vbucket.
 
@@ -114,14 +114,13 @@ class DcpClient(MemcachedClient):
              snap_end = end seqno of snapshot """
 
         op = StreamRequest(vbucket, takeover, start_seqno, end_seqno,
-                                        vb_uuid, snap_start, snap_end)
+                           vb_uuid, snap_start, snap_end)
 
         response = self._handle_op(op)
 
-        def __generator(response):
+        def _generator(response):
 
             yield response
-            last_by_seqno = 0
 
             while True:
 
@@ -131,20 +130,20 @@ class DcpClient(MemcachedClient):
                     response = self.recv_op(op)
                 yield response
 
-                if response and response['opcode'] == CMD_STREAM_END:
+                if response and response['opcode'] == \
+                        constants.CMD_STREAM_END:
                     break
 
         # start generator and pass to dcpStream class
-        generator = __generator(response)
+        generator = _generator(response)
         return DcpStream(generator, vbucket)
-
 
     def get_stream(self, vbucket):
         """ for use by external clients to get stream
             associated with a particular vbucket """
         return self.streams.get(vbucket)
 
-    def _handle_op(self, op, retries = 5):
+    def _handle_op(self, op, retries=5):
         """ sends op to mcd. Then it recvs response
 
             if the received response is for another op then it will
@@ -173,14 +172,13 @@ class DcpClient(MemcachedClient):
                       op.opaque,
                       op.extras)
 
-
     def recv_op(self, op):
 
         while True:
             try:
 
-                opcode, status, opaque, cas, keylen, extlen, body =\
-                     self._recvMsg()
+                opcode, status, opaque, cas, keylen, extlen, body = \
+                    self._recvMsg()
 
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
@@ -197,29 +195,28 @@ class DcpClient(MemcachedClient):
                     # save for later
                     cached_op.queue.put(response)
 
-                elif opcode == CMD_FLOW_CONTROL:
+                elif opcode == constants.CMD_FLOW_CONTROL:
                     # TODO: handle
                     continue
 
-                elif opcode == CMD_STREAM_REQ:
+                elif opcode == constants.CMD_STREAM_REQ:
                     # stream_req ops received during add_stream request
                     self.ack_stream_req(opaque)
 
             except Exception as ex:
                 if 'died' in str(ex):
-                    return  {'opcode'  : op.opcode,
-                             'status'  : 0xff}
+                    return {'opcode': op.opcode,
+                            'status': 0xff}
                 else:
                     return None
 
-
     def ack_stream_req(self, opaque):
-        body   = struct.pack("<QQ", 123456, 0)
-        header = struct.pack(REQ_PKT_FMT,
-                             RES_MAGIC_BYTE,
-                             CMD_STREAM_REQ,
-                             0, 0, 0, 0,
-                             len(body), opaque, 0)
+        body = constants.struct.pack("<QQ", 123456, 0)
+        header = constants.struct.pack(constants.REQ_PKT_FMT,
+                                       constants.RES_MAGIC_BYTE,
+                                       constants.CMD_STREAM_REQ,
+                                       0, 0, 0, 0,
+                                       len(body), opaque, 0)
         self.s.send(header + body)
 
 
@@ -244,34 +241,34 @@ class DcpStream(object):
 
     def next_response(self):
 
-        if self._ended: return None
+        if self._ended:
+            return None
 
         response = self.__generator.next()
 
         if response:
 
-            if response['opcode'] in (CMD_MUTATION, CMD_DELETION):
-
+            if response['opcode'] in (constants.CMD_MUTATION,
+                                      constants.CMD_DELETION):
                 assert int(response['vbucket']) == self.vbucket
 
-                assert 'by_seqno' in response,\
-                     "ERROR: vbucket(%s) received mutation without seqno: %s"\
-                         % (response['vbucket'], response)
-                assert response['by_seqno'] > self.last_by_seqno,\
-                     "ERROR: Out of order response on vbucket %s: %s"\
-                         % (response['vbucket'], response)
+                assert 'by_seqno' in response, \
+                    "ERROR: vbucket(%s) received mutation without seqno: %s" \
+                    % (response['vbucket'], response)
+                assert response['by_seqno'] > self.last_by_seqno, \
+                    "ERROR: Out of order response on vbucket %s: %s" \
+                    % (response['vbucket'], response)
                 self.last_by_seqno = response['by_seqno']
 
-            if response['opcode'] == CMD_STREAM_END:
+            if response['opcode'] == constants.CMD_STREAM_END:
                 self._ended = True
 
         return response
 
-
     def has_response(self):
         return not self._ended
 
-    def run(self, to_seqno = MAX_SEQNO, retries = 10):
+    def run(self, to_seqno=MAX_SEQNO, retries=10):
 
         responses = []
 
@@ -282,9 +279,9 @@ class DcpStream(object):
 
                 if r is None:
                     retries -= 1
-                    assert retries > 0,\
-                        "ERROR: vbucket (%s) stream stopped receiving mutations "\
-                        % self.vbucket
+                    assert retries > 0, \
+                        "ERROR: vbucket (%s) stream stopped receiving " \
+                        "mutations " % self.vbucket
                     continue
                 responses.append(r)
 
@@ -300,12 +297,13 @@ class DcpStream(object):
 
         return responses
 
+
 class Operation(object):
     """ Operation Class generically represents any dcp operation providing
         default values for attributes common to each operation """
 
     def __init__(self, opcode, key='', value='',
-                 extras='', vbucket=0, opaque = None):
+                 extras='', vbucket=0, opaque=None):
         self.opcode = opcode
         self.key = key
         self.value = value
@@ -314,64 +312,76 @@ class Operation(object):
         self.opaque = opaque or random.Random().randint(0, 2 ** 32)
         self.queue = Queue.Queue()
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
-        return { 'opcode' : opcode,
-                 'status' : status,
-                 'body'   : body }
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
+        return {'opcode': opcode,
+                'status': status,
+                'body': body}
+
 
 class Open(Operation):
     """ Open connection base class """
 
     def __init__(self, name, flag):
-        opcode = CMD_OPEN
+        opcode = constants.CMD_OPEN
         key = name
-        extras = struct.pack(">iI", 0, flag)
-        Operation.__init__(self, opcode, key, extras = extras)
+        extras = constants.struct.pack(">iI", 0, flag)
+        Operation.__init__(self, opcode, key, extras=extras)
+
 
 class OpenConsumer(Open):
     """ Open consumer spec """
+
     def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_CONSUMER)
+        Open.__init__(self, name, constants.FLAG_OPEN_CONSUMER)
+
 
 class OpenProducer(Open):
     """ Open producer spec """
+
     def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_PRODUCER)
+        Open.__init__(self, name, constants.FLAG_OPEN_PRODUCER)
+
 
 class OpenNotifier(Open):
     """ Open notifier spec """
+
     def __init__(self, name):
-        Open.__init__(self, name, FLAG_OPEN_NOTIFIER)
+        Open.__init__(self, name, constants.FLAG_OPEN_NOTIFIER)
+
 
 class CloseStream(Operation):
     """ CloseStream spec """
 
-    def __init__(self, vbucket, takeover = 0):
-        opcode = CMD_CLOSE_STREAM
+    def __init__(self, vbucket, takeover=0):
+        opcode = constants.CMD_CLOSE_STREAM
         Operation.__init__(self, opcode,
-                           vbucket = vbucket)
+                           vbucket=vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
-        response = { 'opcode'        : opcode,
-                     'status'        : status,
-                     'value'         : body}
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
+        response = {'opcode': opcode,
+                    'status': status,
+                    'value': body}
         return response
+
 
 class AddStream(Operation):
     """ AddStream spec """
 
-    def __init__(self, vbucket, takeover = 0):
-        opcode = CMD_ADD_STREAM
-        extras = struct.pack(">I", takeover)
+    def __init__(self, vbucket, takeover=0):
+        opcode = constants.CMD_ADD_STREAM
+        extras = constants.struct.pack(">I", takeover)
         Operation.__init__(self, opcode,
-                           extras = extras,
-                           vbucket = vbucket)
+                           extras=extras,
+                           vbucket=vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
-        response = { 'opcode'        : opcode,
-                     'status'        : status,
-                     'extlen'        : extlen,
-                     'value'         : body}
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
+        response = {'opcode': opcode,
+                    'status': status,
+                    'extlen': extlen,
+                    'value': body}
         return response
 
 
@@ -379,24 +389,24 @@ class StreamRequest(Operation):
     """ StreamRequest spec """
 
     def __init__(self, vbucket, takeover, start_seqno, end_seqno,
-                 vb_uuid, snap_start = None, snap_end = None):
+                 vb_uuid, snap_start=None, snap_end=None):
 
         if snap_start is None:
             snap_start = start_seqno
         if snap_end is None:
             snap_end = start_seqno
 
-        opcode = CMD_STREAM_REQ
-        extras = struct.pack(">IIQQQQQ", takeover, 0,
-                             start_seqno,
-                             end_seqno,
-                             vb_uuid,
-                             snap_start,
-                             snap_end)
+        opcode = constants.CMD_STREAM_REQ
+        extras = constants.struct.pack(">IIQQQQQ", takeover, 0,
+                                       start_seqno,
+                                       end_seqno,
+                                       vb_uuid,
+                                       snap_start,
+                                       snap_end)
 
         Operation.__init__(self, opcode,
-                           extras = extras,
-                           vbucket = vbucket)
+                           extras=extras,
+                           vbucket=vbucket)
         self.start_seqno = start_seqno
         self.end_seqno = end_seqno
         self.vb_uuid = vb_uuid
@@ -404,14 +414,14 @@ class StreamRequest(Operation):
         self.snap_start = snap_start
         self.snap_end = snap_end
 
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
+        if opcode == constants.CMD_STREAM_REQ:
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
-        if opcode == CMD_STREAM_REQ:
-
-            response = { 'opcode' : opcode,
-                         'status' : status,
-                         'failover_log' : [],
-                         'err_msg'   : None}
+            response = {'opcode': opcode,
+                        'status': status,
+                        'failover_log': [],
+                        'err_msg': None}
 
             if status == 0:
                 assert (len(body) % 16) == 0
@@ -420,85 +430,89 @@ class StreamRequest(Operation):
                 pos = 0
                 bodylen = len(body)
                 while bodylen > pos:
-                    vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos+16])
+                    vb_uuid, seqno = constants.struct.unpack(">QQ",
+                                                             body[pos:pos + 16]
+                                                             )
                     response['failover_log'].append((vb_uuid, seqno))
                     pos += 16
             elif status == 35:
 
-                seqno = struct.unpack(">II",body)
+                seqno = constants.struct.unpack(">II", body)
                 response['seqno'] = seqno[0]
                 response['rollback'] = seqno[1]
 
             else:
                 response['err_msg'] = body
 
-        elif opcode == CMD_STREAM_END:
-            flags = struct.unpack(">I", body[0:4])[0]
-            response = { 'opcode'  : opcode,
-                         'vbucket' : status,
-                         'flags'   : flags }
+        elif opcode == constants.CMD_STREAM_END:
+            flags = constants.struct.unpack(">I", body[0:4])[0]
+            response = {'opcode': opcode,
+                        'vbucket': status,
+                        'flags': flags}
 
-        elif opcode == CMD_MUTATION:
+        elif opcode == constants.CMD_MUTATION:
             by_seqno, rev_seqno, flags, exp, lock_time, ext_meta_len, nru = \
-                struct.unpack(">QQIIIHB", body[0:31])
-            key = body[31:31+keylen]
-            value = body[31+keylen:]
-            response = { 'opcode'     : opcode,
-                         'vbucket'    : status,
-                         'by_seqno'   : by_seqno,
-                         'rev_seqno'  : rev_seqno,
-                         'flags'      : flags,
-                         'expiration' : exp,
-                         'lock_time'  : lock_time,
-                         'nru'        : nru,
-                         'key'        : key,
-                         'value'      : value }
+                constants.struct.unpack(">QQIIIHB", body[0:31])
+            key = body[31:31 + keylen]
+            value = body[31 + keylen:]
+            response = {'opcode': opcode,
+                        'vbucket': status,
+                        'by_seqno': by_seqno,
+                        'rev_seqno': rev_seqno,
+                        'flags': flags,
+                        'expiration': exp,
+                        'lock_time': lock_time,
+                        'nru': nru,
+                        'key': key,
+                        'value': value}
 
-        elif opcode == CMD_DELETION:
+        elif opcode == constants.CMD_DELETION:
             by_seqno, rev_seqno, ext_meta_len = \
-                struct.unpack(">QQH", body[0:18])
-            key = body[18:18+keylen]
-            response = { 'opcode'     : opcode,
-                         'vbucket'    : status,
-                         'by_seqno'   : by_seqno,
-                         'rev_seqno'  : rev_seqno,
-                         'key'        : key }
+                constants.struct.unpack(">QQH", body[0:18])
+            key = body[18:18 + keylen]
+            response = {'opcode': opcode,
+                        'vbucket': status,
+                        'by_seqno': by_seqno,
+                        'rev_seqno': rev_seqno,
+                        'key': key}
 
-        elif opcode == CMD_SNAPSHOT_MARKER:
+        elif opcode == constants.CMD_SNAPSHOT_MARKER:
 
             assert len(body) == 20
-            snap_start, snap_end, flag =\
-                struct.unpack(">QQI", body)
-            assert flag in (1,2,5,6) , "Invalid snapshot flag: %s" % flag
-            assert snap_start <= snap_end, "Snapshot start: %s > end: %s" %\
-                                                (snap_start, snap_end)
-            flag = { 1 : 'memory',
-                     2 : 'disk',
-                     5 : 'memory-checkpoint',
-                     6 : 'disk-checkpoint'}[flag]
+            snap_start, snap_end, flag = \
+                constants.struct.unpack(">QQI", body)
+            assert flag in (1, 2, 5, 6), "Invalid snapshot flag: %s" % flag
+            assert snap_start <= snap_end, "Snapshot start: %s > end: %s" % \
+                                           (snap_start, snap_end)
+            flag = {1: 'memory',
+                    2: 'disk',
+                    5: 'memory-checkpoint',
+                    6: 'disk-checkpoint'}[flag]
 
-            response = { 'opcode'     : opcode,
-                         'vbucket'    : status,
-                         'snap_start_seqno' : snap_start,
-                         'snap_end_seqno'   : snap_end,
-                         'flag'   : flag }
+            response = {'opcode': opcode,
+                        'vbucket': status,
+                        'snap_start_seqno': snap_start,
+                        'snap_end_seqno': snap_end,
+                        'flag': flag}
 
         else:
-            response = { 'err_msg' : "(Stream Request) Unknown response",
-                         'opcode'  :  opcode,
-                         'status'  : -1 }
+            response = {'err_msg': "(Stream Request) Unknown response",
+                        'opcode': opcode,
+                        'status': -1}
 
         return response
+
 
 class GetFailoverLog(Operation):
     """ GetFailoverLog spec """
 
     def __init__(self, vbucket):
-        opcode = CMD_GET_FAILOVER_LOG
+        opcode = constants.CMD_GET_FAILOVER_LOG
         Operation.__init__(self, opcode,
-                           vbucket = vbucket)
+                           vbucket=vbucket)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
 
         failover_log = []
 
@@ -507,53 +521,59 @@ class GetFailoverLog(Operation):
             pos = 0
             bodylen = len(body)
             while bodylen > pos:
-                vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos+16])
+                vb_uuid, seqno = constants.struct.unpack(">QQ",
+                                                         body[pos:pos + 16])
                 failover_log.append((vb_uuid, seqno))
                 pos += 16
 
-        response = { 'opcode'        : opcode,
-                     'status'        : status,
-                     'value'         : failover_log}
+        response = {'opcode': opcode,
+                    'status': status,
+                    'value': failover_log}
         return response
+
 
 class FlowControl(Operation):
     """ FlowControl spec """
 
     def __init__(self, buffer_size):
-        opcode = CMD_FLOW_CONTROL
+        opcode = constants.CMD_FLOW_CONTROL
         Operation.__init__(self, opcode,
-                           key = "connection_buffer_size",
-                           value = str(buffer_size))
+                           key="connection_buffer_size",
+                           value=str(buffer_size))
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
-        response = { 'opcode'        : opcode,
-                     'status'        : status,
-                     'body'          : body}
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
+        response = {'opcode': opcode,
+                    'status': status,
+                    'body': body}
         return response
+
 
 class Ack(Operation):
     """ Ack spec """
 
     def __init__(self, nbytes):
-        opcode = CMD_UPR_ACK
+        opcode = constants.CMD_UPR_ACK
         self.nbytes = nbytes
-        extras = struct.pack(">L", self.nbytes)
+        extras = constants.struct.pack(">L", self.nbytes)
         Operation.__init__(self, opcode,
-                           extras = extras)
+                           extras=extras)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
-        response = { 'opcode'        : opcode,
-                     'status'        : status,
-                     'error'          : body}
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
+        response = {'opcode': opcode,
+                    'status': status,
+                    'error': body}
         return response
 
-class Quit(Operation):
 
+class Quit(Operation):
     def __init__(self):
-        opcode = CMD_QUIT
+        opcode = constants.CMD_QUIT
         Operation.__init__(self, opcode)
 
-    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
-        response = { 'opcode'        : opcode,
-                     'status'        : status}
+    def formated_response(self, opcode, keylen, extlen, status, cas, body,
+                          opaque):
+        response = {'opcode': opcode,
+                    'status': status}
         return response

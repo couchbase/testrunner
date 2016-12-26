@@ -14,7 +14,8 @@ from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT
+from testconstants import STANDARD_BUCKET_PORT,LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, \
+    MAC_COUCHBASE_BIN_PATH
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -26,6 +27,7 @@ from couchbase_helper.documentgenerator import *
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from es_base import ElasticSearchBase
+
 
 
 class RenameNodeException(FTSException):
@@ -728,7 +730,7 @@ class FTSIndex:
         if not self.index_definition['params'].has_key('mapping'):
             map['default_mapping'] = {}
             map['default_mapping']['properties'] = {}
-            map['default_mapping']['dynamic'] = True
+            map['default_mapping']['dynamic'] = False
             map['default_mapping']['enabled'] = True
             map['default_mapping']['properties'][fields.pop()] = field_maps.pop()
             self.index_definition['params']['mapping'] = map
@@ -915,14 +917,19 @@ class FTSIndex:
 
     def construct_cbft_query_json(self, query, fields=None, timeout=None,
                                                           facets=False,
-                                                          sort_fields=None):
+                                                          sort_fields=None,
+                                                          explain=False,
+                                                          show_results_from_item=0):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = QUERY.JSON
         # query is a unicode dict
         query_json['query'] = query
         query_json['indexName'] = self.name
+        query_json['explain'] = explain
         if max_matches:
             query_json['size'] = int(max_matches)
+        if show_results_from_item:
+            query_json['from'] = int(show_results_from_item)
         if timeout:
             query_json['timeout'] = int(timeout)
         if fields:
@@ -931,6 +938,7 @@ class FTSIndex:
             query_json['facets'] = self.construct_facets_definition()
         if sort_fields:
             query_json['sort'] = sort_fields
+
         return query_json
 
     def construct_facets_definition(self):
@@ -989,12 +997,15 @@ class FTSIndex:
         return facet_definition
 
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
-                                      return_raw_hits=False, sort_fields=None):
+                      return_raw_hits=False, sort_fields=None,
+                      explain=False, show_results_from_item=0):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query,
-                                                    sort_fields=sort_fields)
+                                                    sort_fields=sort_fields,
+                                                    explain=explain,
+                                                    show_results_from_item=show_results_from_item)
         hits = -1
         matches = []
         doc_ids = []
@@ -1214,47 +1225,53 @@ class FTSIndex:
         Validate if the docs returned in the search result match the expected values
         """
         result = False
-        expected_docs = TestInputSingleton.input.param("expected", None).split(
-            ',')
+
+        expected_docs = TestInputSingleton.input.param("expected", None)
         docs = []
         # Fetch the Doc IDs from raw_hits
         for doc in raw_hits:
             docs.append(doc['id'])
 
-        # Compare docs with the expected values.
-        if docs == expected_docs:
-            result = True
-        else:
-            # Sometimes, if there are two docs with same field value, their rank
-            # may be interchanged. To handle this, if the actual doc order
-            # doesn't match the expected value, swap the two such docs and then
-            # try to match
-            tolerance = TestInputSingleton.input.param("tolerance", None)
-            if tolerance:
-                tolerance = tolerance.split(',')
-                index1, index2 = expected_docs.index(
-                    tolerance[0]), expected_docs.index(tolerance[1])
-                expected_docs[index1], expected_docs[index2] = expected_docs[
-                                                                   index2], \
-                                                               expected_docs[
-                                                                   index1]
-                if docs == expected_docs:
-                    result = True
+        if expected_docs:
+            expected_docs = expected_docs.split(',')
+            # Compare docs with the expected values.
+            if docs == expected_docs:
+                result = True
+            else:
+                # Sometimes, if there are two docs with same field value, their rank
+                # may be interchanged. To handle this, if the actual doc order
+                # doesn't match the expected value, swap the two such docs and then
+                # try to match
+                tolerance = TestInputSingleton.input.param("tolerance", None)
+                if tolerance:
+                    tolerance = tolerance.split(',')
+                    index1, index2 = expected_docs.index(
+                        tolerance[0]), expected_docs.index(tolerance[1])
+                    expected_docs[index1], expected_docs[index2] = expected_docs[
+                                                                       index2], \
+                                                                   expected_docs[
+                                                                       index1]
+                    if docs == expected_docs:
+                        result = True
+                    else:
+                        self.__log.info("Actual docs returned : %s", docs)
+                        self.__log.info("Expected docs : %s", expected_docs)
+                        return False
                 else:
                     self.__log.info("Actual docs returned : %s", docs)
                     self.__log.info("Expected docs : %s", expected_docs)
                     return False
-            else:
-                self.__log.info("Actual docs returned : %s", docs)
-                self.__log.info("Expected docs : %s", expected_docs)
-                return False
+        else :
+            self.__log.info("Expected doc order not specified. It is a negative"
+                            " test, so skipping order validation")
+            result = True
 
         # Validate the sort fields in the result
         for doc in raw_hits:
             if 'sort' in doc.keys():
-                if len(doc['sort']) == len(sort_fields):
+                if not sort_fields and len(doc['sort']) == 1:
                     result &= True
-                elif not sort_fields and len(doc['sort']) == 1:
+                elif len(doc['sort']) == len(sort_fields):
                     result &= True
                 else:
                     self.__log.info("Sort fields do not match for the following document - ")
@@ -1275,6 +1292,92 @@ class FTSIndex:
             if content['id'] == doc_id:
                 return True
         return False
+
+    def get_detailed_scores_for_doc(self, doc_id, search_results, weight,
+                                    searchTerm):
+        """
+        Parses the search results content and extracts the desired score component
+        :param doc_id: Doc ID for which detailed score is requested
+        :param search_results: Search results contents
+        :param weight: component of score - queryWeight/fieldWeight/coord
+        :param searchTerm: searchTerm for which score component is required
+        :return: Individual Score components
+        """
+        tf_score = 0
+        idf_score = 0
+        field_norm_score = 0
+        coord_score = 0
+        query_norm_score = 0
+        for doc in search_results:
+            if doc['id'] == doc_id:
+                if doc['explanation'].has_key('children'):
+                    tree = self.find_node_in_score_tree(
+                        doc['explanation']['children'], weight, searchTerm)
+                    if tree.has_key('children'):
+                        tf_score, field_norm_score, idf_score, query_norm_score, \
+                            coord_score = self.extract_detailed_score_from_node(
+                            tree['children'])
+                    else:
+                        nodes = []
+                        nodes.append(tree)
+                        tf_score, field_norm_score, idf_score, query_norm_score, \
+                            coord_score = self.extract_detailed_score_from_node(
+                            nodes)
+                else:
+                    tf_score, field_norm_score, idf_score, query_norm_score, \
+                        coord_score = self.extract_detailed_score_from_node(
+                        doc['explanation'])
+
+        return tf_score, field_norm_score, idf_score, query_norm_score, coord_score
+
+    def find_node_in_score_tree(self, tree, weight, searchTerm):
+        """
+        Finds the node that contains the desired score component in the tree
+        structure containing the score explanation
+        """
+        while 1:
+            newSubnodes = []
+            for node in tree:
+                if (weight in node['message']) and (
+                            searchTerm in node['message']):
+                    self.__log.info("Found it")
+                    return node
+                if node.has_key('children'):
+                    if len(node['children']) == 0:
+                        break
+                    for subnode in node['children']:
+                        if (weight in subnode['message']) and (
+                                    searchTerm in subnode['message']):
+                            self.__log.info("Found it")
+                            return subnode
+                        else:
+                            if subnode.has_key('children'):
+                                for subsubnode in subnode['children']:
+                                    newSubnodes.append(subsubnode)
+            tree = copy.deepcopy(newSubnodes)
+        return None
+
+    def extract_detailed_score_from_node(self, tree):
+        """
+        Extracts the score components from the node containing it.
+        """
+        tf_score = 0
+        idf_score = 0
+        field_norm_score = 0
+        coord_score = 0
+        query_norm_score = 0
+        for item in tree:
+            if 'termFreq' in item['message']:
+                tf_score = item['value']
+            if 'fieldNorm' in item['message']:
+                field_norm_score = item['value']
+            if 'idf' in item['message']:
+                idf_score = item['value']
+            if 'queryNorm' in item['message']:
+                query_norm_score = item['value']
+            if 'coord' in item['message']:
+                coord_score = item['value']
+        return tf_score, field_norm_score, idf_score, query_norm_score, coord_score
 
 
 class CouchbaseCluster:
@@ -2344,18 +2447,21 @@ class CouchbaseCluster:
                                                  services=None)
         return tasks
 
-    def __async_failover(self, master=False, num_nodes=1, graceful=False):
+    def __async_failover(self, master=False, num_nodes=1, graceful=False, node=None):
         """Failover nodes from Cluster
         @param master: True if failover master node only.
         @param num_nodes: number of nodes to rebalance-out from cluster.
         @param graceful: True if graceful failover else False.
+        @param node: Specific node to be failed over
         """
         raise_if(
             len(self.__nodes) <= 1,
             FTSException(
                 "More than 1 node required in cluster to perform failover")
         )
-        if master:
+        if node:
+            self.__fail_over_nodes = [node]
+        elif master:
             self.__fail_over_nodes = [self.__master_node]
         else:
             self.__fail_over_nodes = self.__nodes[-num_nodes:]
@@ -2370,8 +2476,8 @@ class CouchbaseCluster:
 
         return task
 
-    def async_failover(self, num_nodes=1, graceful=False):
-        return self.__async_failover(num_nodes=num_nodes, graceful=graceful)
+    def async_failover(self, master=False, num_nodes=1, graceful=False,node=None):
+        return self.__async_failover(master=master, num_nodes=num_nodes, graceful=graceful,node=node)
 
     def failover_and_rebalance_master(self, graceful=False, rebalance=True):
         """Failover master node
@@ -2752,9 +2858,22 @@ class FTSBaseTest(unittest.TestCase):
         self.update_gen = None
         self.delete_gen = None
         self.sort_fields = self._input.param("sort_fields", None)
+        self.sort_fields_list = None
         if self.sort_fields:
-            self.sort_fields = self.sort_fields.split(',')
+            self.sort_fields_list = self.sort_fields.split(',')
+        self.advanced_sort = self._input.param("advanced_sort", False)
+        self.sort_by = self._input.param("sort_by", "score")
+        self.sort_missing = self._input.param("sort_missing", "last")
+        self.sort_desc = self._input.param("sort_desc", False)
+        self.sort_mode = self._input.param("sort_mode", "min")
         self.__fail_on_errors = self._input.param("fail-on-errors", True)
+        self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+        self.expected_docs = str(self._input.param("expected", None))
+        self.expected_docs_list = []
+        if (self.expected_docs) and (',' in self.expected_docs):
+            self.expected_docs_list = self.expected_docs.split(',')
+        else:
+            self.expected_docs_list.append(self.expected_docs)
 
     def __initialize_error_count_dict(self):
         """
@@ -3593,3 +3712,61 @@ class FTSBaseTest(unittest.TestCase):
         except Exception as ex:
             print ex
             return False
+
+    def build_sort_params(self):
+        """
+        This method builds the value for the sort param that is passed to the
+        query request. It handles simple or advanced sorting based on the
+        inputs passed in the conf file
+        :return: Value for the sort param
+        """
+        # TBD :
+        # Cases where there are multiple sort fields - one advanced, one simple
+        # Cases where there are multiple sort fields - one advanced using by 'field', and another using by 'id' or 'score'
+        sort_params = []
+        if self.advanced_sort or self.sort_fields_list:
+            if self.advanced_sort:
+                for sort_field in self.sort_fields_list:
+                    params = {}
+                    params["by"] = self.sort_by
+                    if self.sort_by == "field":
+                        params["field"] = sort_field
+                    params["mode"] = self.sort_mode
+                    params["desc"] = self.sort_desc
+                    params["missing"] = self.sort_missing
+                    sort_params.append(params)
+            else:
+                sort_params = self.sort_fields_list
+        else:
+            return None
+        return sort_params
+
+    def create_test_dataset(self, server, docs):
+        """
+        Creates documents using cbdocloader in the default bucket from a given
+        list of json data
+        :param server: Server on which docs are to be loaded
+        :param docs: List of json data
+        :return: None
+        """
+        remote = RemoteMachineShellConnection(server)
+        info = remote.extract_remote_info()
+        if info.type.lower() != 'windows':
+            self.log.info("Creating test dataset")
+            command = "cd /tmp; rm -rf dataset; mkdir -p dataset; cd dataset; mkdir docs; cd docs"
+            remote.execute_command(command)
+            i = 1
+            for doc in docs:
+                command = "cd /tmp/dataset/docs; echo \"%s\" > %s.json;" % (
+                doc, i)
+                i += 1
+                output, error = remote.execute_command(command)
+                for o in output:
+                    self.log.info(o)
+            command = "{0}/cbdocloader -c {1} -u {2} -p {3} -b default -d /tmp/dataset -m 100 -v".format(
+                self.cli_command_location,
+                server.ip, server.rest_username,
+                server.rest_password)
+            output, error = remote.execute_command(command)
+            for o in output:
+                self.log.info(o)

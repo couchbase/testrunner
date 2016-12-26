@@ -225,7 +225,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             raise
         finally:
             self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
-                                      create_index=False, drop_index=self.run_drop_index)
+                                      create_index=False, drop_index=True)
 
     def test_index_drop_folder_cleanup(self):
         index_dist_factor = 1

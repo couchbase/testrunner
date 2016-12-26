@@ -32,7 +32,7 @@ class SubdocSanityTests(unittest.TestCase):
         self.test_simple_dataset_array_push_last()
         self.test_simple_dataset_array_push_first()
         self.test_simple_dataset_counter()
-        self.test_simple_dataset_array_add_unqiue()
+        self.test_simple_dataset_array_add_unique()
         self.test_simple_dataset_counter()
 
     def test_simple_dataset_get(self):
@@ -246,7 +246,7 @@ class SubdocSanityTests(unittest.TestCase):
         #data_set.counter_all_paths(inserted_keys, path='array')
 
 
-    def test_simple_dataset_array_add_unqiue(self):
+    def test_simple_dataset_array_add_unique(self):
         num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Issue simple add array unique sub doc single path "
                       "dataset with {0} docs".format(num_docs))

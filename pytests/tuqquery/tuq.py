@@ -1371,10 +1371,131 @@ class QueryTests(BaseTestCase):
 
     def test_array_union_symdiff(self):
         for bucket in self.buckets:
-            self.query = 'select ARRAY_UNION(["skill1","skill2"],skills) as skills_new from {0}'.format(bucket.name)
-            self.run_cbq_query()
-            import pdb;pdb.set_trace()
+            self.query = 'select ARRAY_SORT(ARRAY_UNION(["skill1","skill2","skill2010","skill2011"],skills)) as skills_union from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            print actual_result['results']
+            #self.assertTrue(actual_result['results']==([{u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}]))
 
+            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF(["skill1","skill2","skill2010","skill2011"],skills)) as skills_diff1 from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            print actual_result['results']
+            #self.assertTrue(actual_result['results']==([{u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}]))
+            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF1(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff2 from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result1 = self.run_cbq_query()
+            self.assertTrue(actual_result1['results'] == [{u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}])
+            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFFN(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff3 from {0} order by meta().id limit 5'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            print actual_result['results']
+            #self.assertTrue(actual_result['results'] == [{u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}])
+
+
+    def test_let(self):
+        for bucket in self.buckets:
+            self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
+            actual_result = self.run_cbq_query()
+            print actual_result['results']
+            #self.assertTrue(actual_result['results']==([{u'default': {u'tasks_points': {u'task1': 1, u'task2': 1}, u'name': u'employee-9', u'mutated': 0, u'skills': [u'skill2010', u'skill2011'], u'join_day': 9, u'email': u'9-mail@couchbase.com', u'test_rate': 10.1, u'join_mo': 10, u'join_yr': 2011, u'_id': u'query-testemployee10153.1877827-0', u'VMs': [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], u'job_title': u'Engineer'}, u'x1': {u'name': 1}}]))
+
+    def test_correlated_queries(self):
+        for bucket in self.buckets:
+          if(bucket.name == "default"):
+            self.query = 'create index ix1 on %s(x,id)'%bucket.name
+            self.run_cbq_query()
+            self.query = 'insert into %s (KEY, VALUE) VALUES ("kk02",{"x":100,"y":101,"z":102,"id":"kk02"})'%(bucket.name)
+            self.run_cbq_query()
+
+            self.query = 'explain select d.x from {0} d where x in (select raw d.x from {0} b use keys ["kk02"])'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+            self.query = 'select d.x from {0} d where x in (select raw d.x from {0} b use keys ["kk02"])'.format(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.query = 'explain select d.x from {0} d where x IN (select raw d.x from {0} b use keys[d.id])'.format(bucket.name)
+            actual_result =self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+            self.query = 'select d.x from {0} d where x IN (select raw d.x from {0} b use keys[d.id])'.format(bucket.name)
+            actual_result =self.run_cbq_query()
+            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
+            actual_result =self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
+            actual_result =self.run_cbq_query()
+            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+
+            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+
+            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b use keys["kk02"] where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+
+            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b use keys["kk02"] where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+
+            self.query = 'explain select d.x,d.id from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+
+            self.query = 'select d.x,d.y from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            self.assertTrue( sorted(actual_result['results']) ==sorted([{u'y': 101, u'x': 100}]))
+            self.query = 'explain select d.x from {0} d where x IN (select raw (select raw d.x from {0} c  use keys[d.id] where d.x = b.x)[0] from {0} b  where b.x is not null)'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+
+            self.query = 'select d.x from {0} d where x IN (select raw (select raw d.x from {0} c  use keys[d.id] where d.x = b.x)[0] from {0} b  where b.x is not null)'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+
+            self.query = 'explain select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            #print plan
+            self.assertTrue("covers" in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='ix1')
+            self.query = 'select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
+            actual_result=self.run_cbq_query()
+            self.assertTrue( sorted(actual_result['results']) ==sorted([{u'x': 100, u's': [100]}]))
+            self.query = 'delete from %s use keys["kk02"]'%(bucket.name)
+            self.run_cbq_query()
+            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, "ix1", self.index_type)
+            self.run_cbq_query()
+
+    def test_object_concat_remove(self):
+        for bucket in self.buckets:
+            self.query = 'select object_concat({"name":"test"},{"test":123},tasks_points) as obj from %s order by meta().id limit 10;' % bucket.name
+            actual_result=self.run_cbq_query()
+            self.assertTrue(actual_result['results']==([{u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}]))
+            self.query = 'select OBJECT_REMOVE({"abc":1,"def":2,"fgh":3},"def")'
+            actual_result=self.run_cbq_query()
+            self.assertTrue(actual_result['results'],([{u'$1': {u'abc': 1, u'fgh': 3}}]))
 
 
 
@@ -2585,7 +2706,6 @@ class QueryTests(BaseTestCase):
         self.query = "select now_millis() as now"
         now = time.time()
         res = self.run_cbq_query()
-        print res
         self.assertFalse("error" in str(res).lower())
 
     def test_str_to_millis(self):
@@ -2793,14 +2913,9 @@ class QueryTests(BaseTestCase):
             " FROM %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            self.query = "SELECT reverse(name) || \" \" || reverse(job_title) as rev_employee" +\
-            " FROM %s" % (bucket.name)
 
-            actual_list1 = self.run_cbq_query()
             actual_result = sorted(actual_list['results'], key=lambda doc: (doc['employee']))
-            actual_result1 = sorted(actual_list1['results'], key=lambda doc: (doc['rev_employee']))
 
-            self.assertEqual(actual_result1,actual_result)
             expected_result = [{"employee" : doc["name"] + " " + doc["job_title"]}
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['employee']))
@@ -3109,6 +3224,7 @@ class QueryTests(BaseTestCase):
              self.query = "create index idx on %s(META())" %(bucket.name)
              self.run_cbq_query()
              self.query = "create index idx2 on {0}(META({0}))".format(bucket.name)
+             self.run_cbq_query()
              self.query = "SELECT  META() as meta_c FROM %s  ORDER BY meta_c limit 10" %(bucket.name)
              actual_result = self.run_cbq_query()
              self.assertTrue(actual_result['status']=="success")
@@ -3117,6 +3233,10 @@ class QueryTests(BaseTestCase):
              self.assertTrue(actual_result['status']=="success")
              self.query = "SELECT META(t1).id as id FROM default t1 JOIN default t2 ON KEYS t1.id;"
              self.assertTrue(actual_result['status']=="success")
+             self.query = "drop index %s.idx" %(bucket.name)
+             self.run_cbq_query()
+             self.query = "drop index %s.idx2" %(bucket.name)
+             self.run_cbq_query()
 
 
 
@@ -3780,19 +3900,15 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            self.query = "select name, join_date date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) " % (bucket.name)
+            self.query = "select name, join_date date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by meta().id limit 10" % (bucket.name)
 
             actual_list2 = self.run_cbq_query()
-            actual_result2 = sorted(actual_list2['results'])
+            actual_result2 = actual_list2['results']
             expected_result = [{"name" : doc["name"],
                                 "date" : '%s-%s' % (doc['join_yr'], doc['join_mo'])}
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
-            expected_result2 = [{"name" : doc["name"],
-                                "date" : '%s-%s' % (str(doc['join_yr'])[::-1], str(doc['join_mo']))[::-1]}
-                               for doc in self.full_list]
-
-            expected_result2 = sorted(expected_result2)
+            expected_result2 = [{u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}]
             self._verify_results(actual_result, expected_result)
             self._verify_results(actual_result2,expected_result2)
 

@@ -406,6 +406,7 @@ class RestConnection(object):
         return True
 
     def init_http_request(self, api):
+        content = None
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
             json_parsed = json.loads(content)
@@ -414,8 +415,11 @@ class RestConnection(object):
             else:
                 print("{0} with status {1}: {2}".format(api, status, json_parsed))
                 return json_parsed, False
-        except ValueError:
-            print("{0}: {1}".format(api, content))
+        except ValueError as e:
+            if content is not None:
+                print("{0}: {1}".format(api, content))
+            else:
+                print e
             return content, False
 
     def rename_node(self, hostname, username='Administrator', password='password'):
@@ -1920,6 +1924,7 @@ class RestConnection(object):
         if lww:
             init_params['conflictResolutionType'] = 'lww'
         params = urllib.urlencode(init_params)
+
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
 
@@ -2055,8 +2060,6 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-
-
     def set_cas_drift_threshold(self, bucket, ahead_threshold_in_millisecond, behind_threshold_in_millisecond):
 
         api = self.baseUrl + 'pools/default/buckets/{0}'. format( bucket )
@@ -2066,11 +2069,6 @@ class RestConnection(object):
         log.info("%s with param: %s" % (api, params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
-
-
-
-
-
 
     def stop_rebalance(self, wait_timeout=10):
         api = self.baseUrl + '/controller/stopRebalance'
@@ -2228,6 +2226,26 @@ class RestConnection(object):
     # Returns a boolean value on whether replication
     def is_replication_paused(self, src_bucket_name, dest_bucket_name):
         return self.get_xdcr_param(src_bucket_name, dest_bucket_name, 'pauseRequested')
+
+    def is_replication_paused_by_id(self, repl_id):
+        repl_id = repl_id.replace('/','%2F')
+        api = self.baseUrl + 'settings/replications/' + repl_id
+        status, content, header = self._http_request(api)
+        if not status:
+            raise XDCRException("Unable to retrieve pause resume status for replication {0}".
+                                format(repl_id))
+        repl_stats = json.loads(content)
+        return repl_stats['pauseRequested']
+
+    def pause_resume_repl_by_id(self, repl_id, param, value):
+        repl_id = repl_id.replace('/','%2F')
+        api = self.baseUrl + 'settings/replications/' + repl_id
+        params = urllib.urlencode({param: value})
+        status, _, _ = self._http_request(api, "POST", params)
+        if not status:
+            raise XDCRException("Unable to update {0}={1} setting for replication {2}".
+                            format(param, value, repl_id))
+        log.info("Updated {0}={1} on {2}".format(param, value, repl_id))
 
     def get_recent_xdcr_vb_ckpt(self, repl_id):
         command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
@@ -3442,7 +3460,7 @@ class NodeDiskStorage(object):
 
 class Bucket(object):
     def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
-                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid=""):
+                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False):
         self.name = name
         self.port = port
         self.type = type
@@ -3461,6 +3479,7 @@ class Bucket(object):
         self.eviction_policy = eviction_policy
         self.bucket_priority = bucket_priority
         self.uuid = uuid
+        self.lww = lww
 
     def __str__(self):
         return self.name

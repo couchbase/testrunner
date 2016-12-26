@@ -24,16 +24,18 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster = self.get_cb_cluster_by_name('C2')
 
         self.skip_ntp = self._input.param("skip_ntp", False)
+        self.clean_backup = self._input.param("clean_backup", False)
 
         if not self.skip_ntp:
             self._enable_ntp_and_sync()
 
     def tearDown(self):
         super(Lww, self).tearDown()
-        remote_client = RemoteMachineShellConnection(self._input.servers[6])
-        command = "rm -rf /data/lww-backup"
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.clean_backup:
+            remote_client = RemoteMachineShellConnection(self._input.servers[6])
+            command = "rm -rf /data/lww-backup"
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
         if not self.skip_ntp:
             self._disable_ntp()
 
@@ -202,14 +204,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -225,14 +227,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -248,14 +250,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -278,14 +280,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -319,17 +321,21 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
         self.sleep(10)
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
         self.sleep(10)
         self._wait_for_replication_to_catchup()
 
@@ -366,7 +372,7 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -381,12 +387,16 @@ class Lww(XDCRNewBaseTest):
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         self._upsert(conn=src_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -422,8 +432,8 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -438,13 +448,17 @@ class Lww(XDCRNewBaseTest):
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -480,8 +494,8 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -496,13 +510,17 @@ class Lww(XDCRNewBaseTest):
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         self._upsert(conn=src_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -536,8 +554,8 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -547,10 +565,11 @@ class Lww(XDCRNewBaseTest):
         self.sleep(10)
 
         dest_lww.remove(key='lww-0')
+        self.sleep(10)
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -578,8 +597,8 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -589,10 +608,11 @@ class Lww(XDCRNewBaseTest):
         self.sleep(10)
 
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         dest_lww.remove(key='lww-0')
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         try:
@@ -659,8 +679,8 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -671,13 +691,17 @@ class Lww(XDCRNewBaseTest):
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
         self._upsert(conn=src_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
+        self.sleep(10)
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10)
         self._upsert(conn=dst_def, doc_id='lww-0', old_key='key', new_key='key2', new_val='value2')
+        self.sleep(10)
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_def.get(key='lww-0')
@@ -711,7 +735,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -728,7 +752,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key3":"value3"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
@@ -771,7 +795,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -788,7 +812,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key3":"value3"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         self.sleep(30)
@@ -829,8 +853,8 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -844,8 +868,8 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.c1_cluster.rebalance_out_master()
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         self.sleep(30)
@@ -880,8 +904,8 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -895,8 +919,8 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.c1_cluster.failover_and_rebalance_master(graceful=True, rebalance=True)
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         self.sleep(30)
@@ -933,8 +957,8 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -974,8 +998,8 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key2', new_key='key3', new_val='value3')
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key3', new_key='key4', new_val='value4')
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -1007,14 +1031,14 @@ class Lww(XDCRNewBaseTest):
 
         src_conn.set_xdcr_param('default', 'default', 'optimisticReplicationThreshold', self._optimistic_threshold)
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -1149,8 +1173,8 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -1170,8 +1194,8 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -1217,8 +1241,8 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -1238,8 +1262,8 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -1283,8 +1307,8 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -1296,8 +1320,8 @@ class Lww(XDCRNewBaseTest):
         dest_lww.remove(key='lww-0')
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         try:
@@ -1344,8 +1368,8 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -1357,8 +1381,8 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         src_lww.remove(key='lww-0')
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
         obj = src_lww.get(key='lww-0')
@@ -1392,14 +1416,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -1415,14 +1439,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.async_perform_update_delete()
 
@@ -1448,14 +1472,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.async_perform_update_delete()
 
@@ -1490,14 +1514,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         task = self.c1_cluster.async_rebalance_in(num_nodes=1)
 
@@ -1521,14 +1545,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         task = self.c1_cluster.async_rebalance_out()
 
@@ -1557,14 +1581,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         graceful = self._input.param("graceful", False)
         self.recoveryType = self._input.param("recoveryType", None)
@@ -1619,7 +1643,7 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         zones = src_conn.get_zone_names().keys()
         source_zone = zones[0]
@@ -1640,7 +1664,7 @@ class Lww(XDCRNewBaseTest):
             gen = DocumentGenerator('lww-', '{{"age": {0}}}', xrange(100), start=0, end=self._num_items)
             self.c1_cluster.load_all_buckets_from_generator(gen)
 
-            self.c1_cluster.resume_all_replications()
+            self.c1_cluster.resume_all_replications_by_id()
 
             self._wait_for_replication_to_catchup(timeout=600)
         except Exception as e:
@@ -1808,14 +1832,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -1837,14 +1861,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -1871,7 +1895,7 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         self._change_time_zone(self.c2_cluster, time_zone="America/Chicago")
         self._change_time_zone(self.c3_cluster, time_zone="America/New_York")
@@ -1883,7 +1907,7 @@ class Lww(XDCRNewBaseTest):
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 
@@ -1932,14 +1956,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -1986,14 +2010,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2042,14 +2066,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2069,14 +2093,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2106,14 +2130,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2151,9 +2175,9 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c2_cluster.pause_all_replications()
-        self.c3_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c2_cluster.pause_all_replications_by_id()
+        self.c3_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -2168,9 +2192,9 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=c3_def, doc_id='lww-0', old_key='key', new_key='key2', new_val='value2')
         src_def.remove(key='lww-0')
 
-        self.c1_cluster.resume_all_replications()
-        self.c2_cluster.resume_all_replications()
-        self.c3_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c2_cluster.resume_all_replications_by_id()
+        self.c3_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2188,7 +2212,6 @@ class Lww(XDCRNewBaseTest):
         conn2.stop_couchbase()
         conn3 = RemoteMachineShellConnection(self.c3_cluster.get_master_node())
         conn3.stop_couchbase()
-
 
         self._enable_ntp_and_sync()
         self._disable_ntp()
@@ -2261,8 +2284,8 @@ class Lww(XDCRNewBaseTest):
         self.c3_cluster.load_all_buckets_from_generator(gen2)
         self._wait_for_replication_to_catchup()
 
-        self.c1_cluster.pause_all_replications()
-        self.c3_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
+        self.c3_cluster.pause_all_replications_by_id()
 
         self.sleep(30)
 
@@ -2276,8 +2299,8 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=c3_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self._upsert(conn=src_def, doc_id='lww-0', old_key='key', new_key='key2', new_val='value2')
 
-        self.c1_cluster.resume_all_replications()
-        self.c3_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
+        self.c3_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2331,14 +2354,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         max_cas_c1 = self._get_max_cas(node=self.c1_cluster.get_master_node(), bucket='default')
         max_cas_c2 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default')
@@ -2362,7 +2385,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
@@ -2373,7 +2396,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2414,7 +2437,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
@@ -2425,7 +2448,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
@@ -2464,7 +2487,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
@@ -2475,7 +2498,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self._wait_for_replication_to_catchup()
 
@@ -2522,7 +2545,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
@@ -2533,7 +2556,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
@@ -2578,7 +2601,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
@@ -2594,7 +2617,7 @@ class Lww(XDCRNewBaseTest):
         vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
         hlc_c2_1 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
         self.sleep(10)
@@ -2634,14 +2657,14 @@ class Lww(XDCRNewBaseTest):
 
         self.setup_xdcr()
         self.merge_all_buckets()
-        self.c1_cluster.pause_all_replications()
+        self.c1_cluster.pause_all_replications_by_id()
 
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.load_all_buckets_from_generator(gen2)
 
-        self.c1_cluster.resume_all_replications()
+        self.c1_cluster.resume_all_replications_by_id()
 
         self.verify_results()
 

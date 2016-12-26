@@ -246,7 +246,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         # RUN WORKER THREADS
         for bucket in self.buckets:
             for x in range(self.concurrent_threads*len(self.buckets)):
-                t = Process(target=self.worker_operation_run, args = (document_info_queue, error_queue, bucket, self.mutation_operation_type, self.force_operation_type))
+                # use thread instead of process because Process did not return an updated error queue
+                t = threading.Thread(target=self.worker_operation_run, args = (document_info_queue, error_queue, bucket, self.mutation_operation_type, self.force_operation_type))
                 t.start()
                 thread_list.append(t)
         if self.run_load_during_mutations:

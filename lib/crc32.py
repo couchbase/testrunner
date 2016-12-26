@@ -1,4 +1,4 @@
-#/* The crc32 functions and data was originally written by Spencer
+# /* The crc32 functions and data was originally written by Spencer
 # * Garrett <srg@quick.com> and was gleaned from the PostgreSQL source
 # * tree via the files contrib/ltree/crc32.[ch] and from FreeBSD at
 # * src/usr.bin/cksum/crc32.c.
@@ -73,7 +73,7 @@ crc32tab = [
 
 
 def crc32_hash(key):
-    crc = pow(2,32) - 1
+    crc = pow(2, 32) - 1
     for ch in key:
         crc = (crc >> 8) ^ crc32tab[int((crc ^ ord(ch)) & 0xff)]
     return ((~crc) >> 16) & 0x7fff

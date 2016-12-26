@@ -31,12 +31,12 @@ class Cluster(object):
 
         _task = BucketCreateTask(server, 'default', replicas, size,
                                  enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
-                                 bucket_priority=bucket_priority,lww=lww)
+                                 bucket_priority=bucket_priority, lww=lww)
         self.task_manager.schedule(_task)
         return _task
 
     def async_create_sasl_bucket(self, server, name, password, size, replicas, enable_replica_index=1,
-                                 eviction_policy='valueOnly', bucket_priority=None):
+                                 eviction_policy='valueOnly', bucket_priority=None, lww=False):
         """Asynchronously creates a sasl bucket
 
         Parameters:
@@ -50,7 +50,7 @@ class Cluster(object):
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, password=password,
                                  enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
-                                 bucket_priority=bucket_priority)
+                                 bucket_priority=bucket_priority, lww=lww)
         self.task_manager.schedule(_task)
         return _task
 
@@ -69,7 +69,7 @@ class Cluster(object):
         return _task
 
     def async_create_standard_bucket(self, server, name, port, size, replicas, enable_replica_index=1,
-                                     eviction_policy='valueOnly', bucket_priority=None):
+                                     eviction_policy='valueOnly', bucket_priority=None, lww=False):
         """Asynchronously creates a standard bucket
 
         Parameters:
@@ -83,7 +83,7 @@ class Cluster(object):
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, port,
                                  enable_replica_index=enable_replica_index,
-                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority)
+                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority, lww=lww)
         self.task_manager.schedule(_task)
         return _task
 
@@ -974,7 +974,7 @@ class Cluster(object):
 
         Parameters:
             servers - node used for connection (TestInputServer)
-            failover_nodes - servers to be failover. (TestInputServer)
+            failover_nodes - servers to be failovered, i.e. removed from the cluster. (TestInputServer)
             bucket - The name of the bucket to be flushed. (String)
 
         Returns:
@@ -1178,7 +1178,7 @@ class Cluster(object):
         return status
 
     def async_backup_cluster(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
-                             no_progress_bar=False, cli_command_location=''):
+                             no_progress_bar=False, cli_command_location='', cb_version=None):
         """
         Asynchronously starts backup cluster
 
@@ -1193,12 +1193,12 @@ class Cluster(object):
         :return: task with the output or error message
         """
         _task = EnterpriseBackupTask(cluster_host, backup_host, directory, name, resume, purge,
-                                     no_progress_bar, cli_command_location)
+                                     no_progress_bar, cli_command_location, cb_version)
         self.task_manager.schedule(_task)
         return _task
 
     def async_restore_cluster(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
-                 force_updates=False, no_progress_bar=False, cli_command_location=''):
+                 force_updates=False, no_progress_bar=False, cli_command_location='', cb_version=None):
         """
         Asynchronously start backup restore
         :param restore_host: cluster to be restored to
@@ -1214,7 +1214,7 @@ class Cluster(object):
         :return: task with the output or error message
         """
         _task = EnterpriseRestoreTask(restore_host, backup_host, backups, start, end, directory, name,
-                                      force_updates, no_progress_bar, cli_command_location)
+                                      force_updates, no_progress_bar, cli_command_location, cb_version)
         self.task_manager.schedule(_task)
         return _task
 
