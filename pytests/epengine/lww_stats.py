@@ -144,7 +144,7 @@ class LWWStatsTests(BaseTestCase):
         self.log.info('Date after is set backwards {0}'.format( output))
 
 
-        use_mc_bin_client = self.input.param("use_mc_bin_client", False)
+        use_mc_bin_client = self.input.param("use_mc_bin_client", True)
 
 
         if use_mc_bin_client:
@@ -273,10 +273,13 @@ class LWWStatsTests(BaseTestCase):
         vbId = (((zlib.crc32(test_key)) >> 16) & 0x7fff) & (self.vbuckets- 1)
 
 
+        #import pdb;pdb.set_trace()
+
         # verifying the case where we are within the threshold, do a set and del, neither should trigger
-        rc = mc_client.setWithMeta(test_key, 'test-value', 0, 0, 0, current_time_cas)
+        #mc_active.setWithMeta(key, '123456789', 0, 0, 123, cas)
+        rc = mc_client.setWithMeta(test_key, 'test-value', 0, 0, 1, current_time_cas)
         #rc = mc_client.setWithMetaLWW(test_key, 'test-value', 0, 0, current_time_cas)
-        rc = mc_client.delWithMetaLWW(test_key, 0, 0, current_time_cas+1)
+        #rc = mc_client.delWithMetaLWW(test_key, 0, 0, current_time_cas+1)
 
         vbucket_stats = mc_client.stats('vbucket-details')
         ahead_exceeded  = int( vbucket_stats['vb_' + str(vbId) + ':drift_ahead_threshold_exceeded'] )
@@ -308,7 +311,7 @@ class LWWStatsTests(BaseTestCase):
 
 
         rc = mc_client.setWithMeta(test_key, 'test-value', 0, 0, 0, cas)
-        rc = mc_client.delWithMetaLWW(test_key, 0, 0, cas+1)
+        #rc = mc_client.delWithMetaLWW(test_key, 0, 0, cas+1)
 
 
 
@@ -341,7 +344,7 @@ class LWWStatsTests(BaseTestCase):
         self.assertTrue( ep_active_hlc_drift > 0, 'ep_active_hlc_drift is 0, expected a positive value')
 
         # the actual drift count is a little more granular
-        expected_drift_threshold_exceed_count = 2
+        expected_drift_threshold_exceed_count = 1
         self.assertTrue( expected_drift_threshold_exceed_count == ep_clock_cas_drift_threshold_exceeded,
                          'ep_clock_cas_drift_threshold_exceeded is incorrect. Expected {0}, actual {1}'.
                              format(expected_drift_threshold_exceed_count,
