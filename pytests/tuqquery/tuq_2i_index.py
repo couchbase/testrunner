@@ -75,7 +75,7 @@ class QueriesIndexTests(QueryTests):
 
                self.query = 'select min(department) from {0} where department = "Support" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
-               self.assertTrue(actual_result['results'] ==  [{"$1": "Support"}])
+               self.assertTrue(actual_result['results'] ==  [{u'$1': u'Support'}])
 
                self.query = 'explain select count(1) from {0} where name = ['.format(bucket.name)+\
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}]'
