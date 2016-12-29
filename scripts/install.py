@@ -233,6 +233,13 @@ class Installer(object):
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = CB_REPO
+            elif "moxi-server" in names and version[:5] != "2.5.2":
+                print "version   ", version
+                """
+                moxi repo:
+                   http://172.23.120.24/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
+                """
+                build_repo = CB_REPO.replace("couchbase-server", "moxi") + version[:5] + "/"
             elif version[:5] not in COUCHBASE_VERSION_2 and \
                  version[:5] not in COUCHBASE_VERSION_3:
                 if version[:3] in CB_VERSION_NAME:

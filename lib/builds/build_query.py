@@ -352,10 +352,22 @@ class BuildQuery(object):
                                  build_details[:5], os_name, CB_RELEASE_REPO)
                 else:
                     if "2.5.2" in build_details[:5]:
-                        build.url = "{5}{0}/{1}_{4}_{2}.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type,
-                            build_details[:5], CB_RELEASE_REPO)
+                        if product == "moxi-server" and deliverable_type == "deb":
+                            build.url = "{5}{0}/{1}_{4}_{2}_openssl098.{3}".format(
+                                            build_version[:build_version.find('-')],
+                                            product,
+                                            os_architecture,
+                                            deliverable_type,
+                                            build_details[:5],
+                                            CB_RELEASE_REPO)
+                        else:
+                            build.url = "{5}{0}/{1}_{4}_{2}.{3}".format(
+                                            build_version[:build_version.find('-')],
+                                            product,
+                                            os_architecture,
+                                            deliverable_type,
+                                            build_details[:5],
+                                            CB_RELEASE_REPO)
                     else:
                         build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
                             .format(build_version[:build_version.find('-')],
