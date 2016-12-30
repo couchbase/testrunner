@@ -6,7 +6,7 @@ from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH,\
                           WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
-                          WIN_COUCHBASE_LOGS_PATH, COUCHBASE_FROM_4DOT6
+                          WIN_COUCHBASE_LOGS_PATH, COUCHBASE_FROM_4DOT6, WIN_TMP_PATH
 import logger
 import random
 import time
