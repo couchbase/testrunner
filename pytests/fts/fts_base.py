@@ -919,7 +919,10 @@ class FTSIndex:
                                                           facets=False,
                                                           sort_fields=None,
                                                           explain=False,
-                                                          show_results_from_item=0):
+                                                          show_results_from_item=0,
+                                                          highlight=False,
+                                                          highlight_style=None,
+                                                          highlight_fields=None):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = QUERY.JSON
         # query is a unicode dict
@@ -938,6 +941,12 @@ class FTSIndex:
             query_json['facets'] = self.construct_facets_definition()
         if sort_fields:
             query_json['sort'] = sort_fields
+        if highlight:
+            query_json['highlight'] = {}
+            if highlight_style:
+                query_json['highlight']['style'] = highlight_style
+            if highlight_fields:
+                query_json['highlight']['fields'] = highlight_fields
 
         return query_json
 
@@ -998,14 +1007,19 @@ class FTSIndex:
 
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
                       return_raw_hits=False, sort_fields=None,
-                      explain=False, show_results_from_item=0):
+                      explain=False, show_results_from_item=0,highlight=False,
+                      highlight_style=None, highlight_fields=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query,
                                                     sort_fields=sort_fields,
                                                     explain=explain,
-                                                    show_results_from_item=show_results_from_item)
+                                                    show_results_from_item=show_results_from_item,
+                                                    highlight=highlight,
+                                                    highlight_style=highlight_style,
+                                                    highlight_fields=highlight_fields)
+
         hits = -1
         matches = []
         doc_ids = []
@@ -1280,7 +1294,56 @@ class FTSIndex:
 
         return result
 
+    def validate_snippet_highlighting_in_result_content(self, contents, doc_id,
+                                                        field_names, terms,
+                                                        highlight_style=None):
+        '''
+        Validate the snippets and highlighting in the result content for a given
+        doc id
+        :param contents: Result contents
+        :param doc_id: Doc ID to check highlighting/snippet for
+        :param field_names: Field name for which term is to be validated
+        :param terms: search term which should be highlighted
+        :param highlight_style: Expected highlight style - ansi/html
+        :return: True/False
+        '''
+        validation = True
+        for content in contents:
+            if content['id'] == doc_id:
+                # Check if Location section is present for the document in the search results
+                if 'locations' in content:
+                    validation &= True
+                else:
+                    self.__log.info(
+                        "Locations not present in the search result")
+                    validation &= False
 
+                # Check if Fragments section is present in the document in the search results
+                # If present, check if the search term is highlighted
+                if 'fragments' in content:
+                    snippet = content['fragments'][field_names][0]
+
+                    # Replace the Ansi highlight tags with <mark> since the
+                    # ansi ones render themselves hence cannot be compared.
+                    if highlight_style == 'ansi':
+                        snippet = snippet.replace('\x1b[43m', '<mark>').replace(
+                            '\x1b[0m', '</mark>')
+                    search_term = '<mark>' + terms + '</marks>'
+
+                    found = snippet.find(search_term)
+
+                    if not found:
+                        self.__log.info("Search term not highlighted")
+                    validation &= found
+                else:
+                    self.__log.info(
+                        "Fragments not present in the search result")
+                    validation &= False
+
+        # If the test is a negative testcase to check if snippet, flip the result
+        if TestInputSingleton.input.param("negative_test", False):
+            validation = ~validation
+        return validation
 
     def get_score_from_query_result_content(self, contents, doc_id):
         for content in contents:
@@ -2874,6 +2937,15 @@ class FTSBaseTest(unittest.TestCase):
             self.expected_docs_list = self.expected_docs.split(',')
         else:
             self.expected_docs_list.append(self.expected_docs)
+        self.expected_results = self._input.param("expected_results", None)
+        self.highlight_style = self._input.param("highlight_style",None)
+        self.highlight_fields = self._input.param("highlight_fields",None)
+        self.highlight_fields_list = []
+        if (self.highlight_fields):
+            if (',' in self.highlight_fields):
+                self.highlight_fields_list = self.highlight_fields.split(',')
+            else:
+                self.highlight_fields_list.append(self.highlight_fields)
 
     def __initialize_error_count_dict(self):
         """

@@ -1238,3 +1238,53 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
+
+    def test_snippets_highlighting_of_search_term_in_results(self):
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        index.add_child_field_to_default_mapping("name", "text")
+        index.add_child_field_to_default_mapping("manages.reports", "text")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(10)
+        self.wait_for_indexing_complete()
+
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"match": "Safiya", "field": "name"}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True,
+                                                           highlight=True,
+                                                           highlight_style=self.highlight_style,
+                                                           highlight_fields=self.highlight_fields_list)
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Content: %s" % contents)
+                result = True
+                self.expected_results = json.loads(self.expected_results)
+                if hits:
+                    for expected_doc in self.expected_results:
+                        result &= index.validate_snippet_highlighting_in_result_content(
+                            contents, expected_doc['doc_id'],
+                            expected_doc['field_name'], expected_doc['term'],
+                            highlight_style=self.highlight_style)
+                    if not result:
+                        self.fail(
+                            "Testcase failed. Actual results do not match expected.")
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
