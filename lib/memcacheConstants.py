@@ -255,10 +255,13 @@ VB_SET_PKT_FMT = ">I"
 
 MAGIC_BYTE = 0x80
 REQ_MAGIC_BYTE = 0x80
+MEMCACHED_REQUEST_MAGIC = '\x80'
 RES_MAGIC_BYTE = 0x81
 
 # magic, opcode, keylen, extralen, datatype, vbucket, bodylen, opaque, cas
 REQ_PKT_FMT = ">BBHBBHIIQ"
+DATA_TYPE = '\x00'
+VBUCKET = '\x00\x00'
 
 
 # subdoc extras format - path len
