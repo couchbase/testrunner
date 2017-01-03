@@ -332,6 +332,7 @@ class MemcachedClient(object):
 
 
     def del_with_meta(self, key, exp, flags, seqno, cas, vbucket= -1,
+                      options=0,
                       add_extended_meta_data=False,
                       adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
@@ -339,7 +340,7 @@ class MemcachedClient(object):
 
         resp = self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
                        struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags,
-                                   exp, seqno, cas, memcacheConstants.FORCE_ACCEPT_WITH_META_OPS) )
+                                   exp, seqno, cas, options, 0) )
         return resp
 
 
