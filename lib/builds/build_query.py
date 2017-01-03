@@ -748,8 +748,12 @@ class BuildQuery(object):
                 distribution version:    centos release 6.5 (final)  """
             centos_version = "centos6"
 
-            if "centos" in distribution_version:
+            if "centos" in distribution_version or "red hat" in distribution_version:
                 if "centos 7" in distribution_version:
+                    centos_version = "centos7"
+                elif "red hat enterprise linux server release 6" in distribution_version:
+                    centos_version = "centos6"
+                elif "red hat enterprise linux server release 7" in distribution_version:
                     centos_version = "centos7"
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + centos_version + "." + build.architecture_type + \
