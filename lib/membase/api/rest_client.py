@@ -2723,9 +2723,9 @@ class RestConnection(object):
             if named_prepare and encoded_plan:
                 http = httplib2.Http()
                 if len(servers)>1:
-                    url = "http://%s:%s/query/service" % (servers[1].ip, port)
+                    url = "http://Administrator:password@%s:%s/query/service" % (servers[1].ip, port)
                 else:
-                    url = "http://%s:%s/query/service" % (self.ip, port)
+                    url = "http://Administrator:password@%s:%s/query/service" % (self.ip, port)
 
                 headers = {'Content-type': 'application/json'}
                 body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}

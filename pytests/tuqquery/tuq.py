@@ -4040,11 +4040,15 @@ class QueryTests(BaseTestCase):
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
                                                             "shell/cbq/cbq ","","","","","","")
             else:
-                os = self.shell.extract_remote_info().type.lower()
+                #os = self.shell.extract_remote_info().type.lower()
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
+                    if "system" in query:
+                        cmd =  "%s/cbq  -engine=http://%s:8091/ -q -u Administrator -p password" % (self.path,server.ip)
+                    else:
+                        cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
+
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     if not(output[0] == '{'):
                         output1 = '{'+str(output)
