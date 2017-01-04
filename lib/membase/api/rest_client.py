@@ -2723,9 +2723,9 @@ class RestConnection(object):
             if named_prepare and encoded_plan:
                 http = httplib2.Http()
                 if len(servers)>1:
-                    url = "http://Administrator:password@%s:%s/query/service" % (servers[1].ip, port)
+                    url = "http://%s:%s/query/service" % (servers[1].ip, port)
                 else:
-                    url = "http://Administrator:password@%s:%s/query/service" % (self.ip, port)
+                    url = "http://%s:%s/query/service" % (self.ip, port)
 
                 headers = {'Content-type': 'application/json'}
                 body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
@@ -2746,6 +2746,8 @@ class RestConnection(object):
                                                          query_params['creds'][0]['pass'].encode('utf-8'))
             api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
             log.info("%s"%api)
+            if "system" in query:
+                api = "http://Administrator:password@%s:%s/query/service?%s" % (self.ip, port, params)
         else:
             params = {key : query}
             if 'creds' in query_params and query_params['creds']:
