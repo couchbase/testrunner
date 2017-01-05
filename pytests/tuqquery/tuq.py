@@ -2637,8 +2637,8 @@ class QueryTests(BaseTestCase):
     def test_date_diff_millis(self):
         self.query = "select date_diff_millis(clock_millis(), date_add_millis(clock_millis(), 100, 'day'), 'day') as now"
         res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["now"] == -98,
-                        "Result expected: %s. Actual %s" % (-98, res["results"]))
+        self.assertTrue(res["results"][0]["now"] == -100,
+                        "Result expected: %s. Actual %s" % (-100, res["results"]))
 
     def test_date_diff_str(self):
         self.query = 'select date_diff_str("2014-08-24T01:33:59", "2014-08-24T07:33:59", "minute") as now'
