@@ -91,7 +91,8 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F",
                    "450":"A4BB2687-E63E-F424-F9F3-18D739053798",
                    "451":"B457D40B-E596-E1D4-417A-4DD6219B64B0",
                    "460":"C87D9A6D-C189-0C44-F1DF-91ADF99A9CCA",
-                   "470":"5F8BB367-A796-1104-05DE-00BCD7A787A5"}
+                   "470":"5F8BB367-A796-1104-05DE-00BCD7A787A5",
+                   "500":"5F8BB367-A796-1104-05DE-00BCD7A787A5"}
 """ This "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B" is for build 2.2.0-821 and earlier
     The new build register ID for 2.2.0-837 id is set in create_windows_capture_file
     in remote_util
