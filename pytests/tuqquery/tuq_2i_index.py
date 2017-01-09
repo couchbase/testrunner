@@ -21,6 +21,7 @@ class QueriesIndexTests(QueryTests):
             self.input.test_params["stop-on-failure"] = True
             self.log.error("MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED")
             self.fail('MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED')
+        self.rest = RestConnection(self.master)
 
     def suite_setUp(self):
         super(QueriesIndexTests, self).suite_setUp()
@@ -449,6 +450,7 @@ class QueriesIndexTests(QueryTests):
     def test_in_spans(self):
          for bucket in self.buckets:
             created_indexes = []
+            version = self.rest.get_nodes_self().version
             try:
                 idx = "idx"
                 self.query = "CREATE INDEX %s ON %s ( join_day )" %(idx,bucket.name)+\
@@ -472,7 +474,12 @@ class QueriesIndexTests(QueryTests):
 
                 plan3 = ExplainPlanHelper(actual_result)
                 self.assertTrue(len(plan3['~children'][0]['spans'])==1)
-                self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0]=="null")
+                # There is different expected behavior in 4.7 vs earlier versions
+                if float(version[:3]) >= 4.7:
+                    self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0] == 'array_min($1)')
+                else:
+                    self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0] == 'null')
+
                 self.query = 'explain select join_day from %s where join_day in  [] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan4 = ExplainPlanHelper(actual_result)
