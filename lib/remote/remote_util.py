@@ -12,6 +12,7 @@ from subprocess import Popen, PIPE
 import logger
 from builds.build_query import BuildQuery
 import testconstants
+from testconstants import VERSION_FILE
 from testconstants import WIN_REGISTER_ID
 from testconstants import MEMBASE_VERSIONS
 from testconstants import COUCHBASE_VERSIONS
@@ -27,7 +28,8 @@ from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
 from testconstants import RPM_DIS_NAME
-from testconstants import LINUX_DISTRIBUTION_NAME
+from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
+                          LINUX_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH
@@ -35,6 +37,9 @@ from testconstants import CB_VERSION_NAME
 from testconstants import CB_REPO
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
+
+from testconstants import LINUX_NONROOT_CB_BIN_PATH
+
 from membase.api.rest_client import RestConnection, RestHelper
 
 log = logger.Logger.get_logger()
@@ -130,8 +135,12 @@ class RemoteMachineShellConnection:
                  ip=''):
         self.username = username
         self.use_sudo = True
+        self.nonroot = False
         if self.username == 'root':
-           self.use_sudo = False
+            self.use_sudo = False
+        elif self.username != "Administrator":
+            self.use_sudo = False
+            self.nonroot = True
         # let's create a connection
         self._ssh_client = paramiko.SSHClient()
         self.ip = ip
@@ -156,8 +165,12 @@ class RemoteMachineShellConnection:
         self.username = serverInfo.ssh_username
         self.input = TestInput.TestInputParser.get_test_input(sys.argv)
         self.use_sudo = True
+        self.nonroot = False
         if self.username == 'root':
-           self.use_sudo = False
+            self.use_sudo = False
+        elif self.username != "Administrator":
+            self.use_sudo = False
+            self.nonroot = True
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
@@ -263,18 +276,22 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
-                fv, sv, bn = self.get_cbversion("linux")
-                if "centos 7" in self.info.distribution_version.lower() \
-                   and sv in COUCHBASE_FROM_WATSON:
-                    """from watson, systemd is used in centos 7 """
-                    log.info("this node is centos 7.x")
-                    o, r = self.execute_command("service couchbase-server start")
+                if self.nonroot:
+                    log.info("Start Couchbase Server with non root method")
+                    o, r = self.execute_command('%scouchbase-server \-- -noinput -detached '\
+                                                              % (LINUX_NONROOT_CB_BIN_PATH))
                     self.log_command_output(o, r)
                 else:
-                    o, r = self.execute_command("/etc/init.d/couchbase-server start")
-            else:
-                o, r = self.execute_command("/etc/init.d/membase-server start")
-            self.log_command_output(o, r)
+                    fv, sv, bn = self.get_cbversion("linux")
+                    if "centos 7" in self.info.distribution_version.lower() \
+                       and sv in COUCHBASE_FROM_WATSON:
+                        """from watson, systemd is used in centos 7 """
+                        log.info("this node is centos 7.x")
+                        o, r = self.execute_command("service couchbase-server start")
+                        self.log_command_output(o, r)
+                    else:
+                        o, r = self.execute_command("/etc/init.d/couchbase-server start")
+                        self.log_command_output(o, r)
         elif os == "mac":
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
@@ -291,19 +308,22 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
-                fv, sv, bn = self.get_cbversion("linux")
-                if "centos 7" in self.info.distribution_version.lower() \
-                   and sv in COUCHBASE_FROM_WATSON:
-                    """from watson, systemd is used in centos 7 """
-                    log.info("this node is centos 7.x")
-                    o, r = self.execute_command("service couchbase-server stop")
+                if self.nonroot:
+                    o, r = self.execute_command("%scouchbase-server -k" % LINUX_NONROOT_CB_BIN_PATH)
                     self.log_command_output(o, r)
                 else:
-                    o, r = self.execute_command("/etc/init.d/couchbase-server stop"\
-                                                                 , use_channel=True)
+                    fv, sv, bn = self.get_cbversion("linux")
+                    if "centos 7" in self.info.distribution_version.lower() \
+                       and sv in COUCHBASE_FROM_WATSON:
+                        """from watson, systemd is used in centos 7 """
+                        log.info("this node is centos 7.x")
+                        o, r = self.execute_command("service couchbase-server stop")
+                        self.log_command_output(o, r)
+                    else:
+                        o, r = self.execute_command("/etc/init.d/couchbase-server stop"\
+                                                                     , use_channel=True)
             else:
-                o, r = self.execute_command("/etc/init.d/membase-server stop")
-            self.log_command_output(o, r)
+                log.info("No Couchbase Server installed yet!")
         elif os == "mac":
             o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}'\
                                                                    | xargs kill -9")
@@ -460,22 +480,30 @@ class RemoteMachineShellConnection:
     def is_couchbase_installed(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
-                log.info("{0} **** The version file {1} {2}  exists".format(self.ip, testconstants.WIN_CB_PATH,testconstants.VERSION_FILE ))
+            if self.file_exists(testconstants.WIN_CB_PATH, VERSION_FILE):
+                log.info("{0} **** The version file {1} {2}  exists"\
+                          .format(self.ip, testconstants.WIN_CB_PATH, VERSION_FILE ))
                 # print running process on windows
                 RemoteMachineHelper(self).is_process_running('memcached')
                 RemoteMachineHelper(self).is_process_running('erl')
                 return True
         elif self.info.distribution_type.lower() == 'mac':
-            output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, testconstants.VERSION_FILE))
+            output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, VERSION_FILE))
             self.log_command_output(output, error)
             for line in output:
                 if line.find('No such file or directory') == -1:
                     return True
         elif self.info.type.lower() == "linux":
-            if self.file_exists(testconstants.LINUX_CB_PATH, testconstants.VERSION_FILE):
-                log.info("{0} **** The version file {1} {2}  exists".format(self.ip, testconstants.LINUX_CB_PATH,testconstants.VERSION_FILE ))
-                return True
+            if self.nonroot:
+                file_path = "/home/" + self.username + LINUX_CB_PATH
+                if self.file_exists(file_path, VERSION_FILE):
+                    log.info("non root couchbase installed at %s " % self.ip)
+                    return True
+            else:
+                if self.file_exists(LINUX_CB_PATH, VERSION_FILE):
+                    log.info("{0} **** The version file {1} {2}  exists".format(self.ip,
+                                                      LINUX_CB_PATH, VERSION_FILE ))
+                    return True
         return False
 
     def is_moxi_installed(self):
@@ -613,8 +641,16 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
             if skip_md5_check:
-                output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh'.format(filename, url))
-                self.log_command_output(output, error)
+                if self.nonroot:
+                    log.info("remove old couchbase server binary ")
+                    self.execute_command_raw('rm couchbase-server-*')
+                    output, error = self.execute_command_raw('pwd;' \
+                                    ' wget -q -O {0} {1};ls -lh'.format(filename, url))
+                    self.log_command_output(output, error)
+                else:
+                    output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh'\
+                                                                                  .format(filename, url))
+                    self.log_command_output(output, error)
             else:
                 log.info('get md5 sum for local and remote')
                 output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
@@ -626,7 +662,11 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
                 self.log_command_output(output, error)
             # check if the file exists there now ?
-            return self.file_exists('/tmp', filename)
+            if self.nonroot:
+                """ binary is saved at current user directory """
+                return self.file_exists('/home/%s' % self.username, filename)
+            else:
+                return self.file_exists('/tmp', filename)
             # for linux environment we can just
             # figure out what version , check if /tmp/ has the
             # binary and then return True if binary is installed
@@ -890,14 +930,13 @@ class RemoteMachineShellConnection:
     def find_build_version(self, path_to_version, version_file, product):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
-        version_file = testconstants.VERSION_FILE
-        if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
+        if self.file_exists(testconstants.WIN_CB_PATH, VERSION_FILE):
             path_to_version = testconstants.WIN_CB_PATH
         else:
             path_to_version = testconstants.WIN_MB_PATH
         try:
             log.info(path_to_version)
-            f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
+            f = sftp.open(os.path.join(path_to_version, VERSION_FILE), 'r+')
             tmp_str = f.read().strip()
             full_version = tmp_str.replace("-rel", "")
             if full_version == "1.6.5.4-win64":
@@ -1247,7 +1286,6 @@ class RemoteMachineShellConnection:
     def couchbase_upgrade_win(self, architecture, windows_name, version):
         task = "upgrade"
         bat_file = "upgrade.bat"
-        version_file = "VERSION.txt"
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb',\
                                                          version, task)
@@ -1275,11 +1313,11 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
         deleted = self.wait_till_file_deleted(testconstants.WIN_CB_PATH, \
-                                     version_file, timeout_in_seconds=600)
+                                     VERSION_FILE, timeout_in_seconds=600)
         if not deleted:
             log.error("Uninstall was failed at node {0}".format(self.ip))
             sys.exit()
-        self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, \
+        self.wait_till_file_added(testconstants.WIN_CB_PATH, VERSION_FILE, \
                                                      timeout_in_seconds=600)
         log.info("installed version: {0}".format(version))
         output, error = self.execute_command("cat "
@@ -1367,23 +1405,69 @@ class RemoteMachineShellConnection:
             log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
 
             # set default swappiness to 10 unless specify in params in all unix environment
-            output, error = self.execute_command('/sbin/sysctl vm.swappiness={0}'.format(swappiness))
-            success &= self.log_command_output(output, error, track_words)
+            if self.nonroot:
+                log.info("**** use root to run script/ssh.py to execute /sbin/sysctl vm.swappiness=0 "
+                              "enable coredump cbenable_core_dumps.sh /tmp")
+            else:
+                output, error = self.execute_command('/sbin/sysctl vm.swappiness={0}'.format(swappiness))
+                success &= self.log_command_output(output, error, track_words)
 
             if self.info.deliverable_type == 'rpm':
-                self.check_openssl_version(self.info.deliverable_type, openssl, build.product_version)
-                self.check_pkgconfig(self.info.deliverable_type, openssl)
-                if force:
-                    output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'.format(environment, build.name))
+                if self.nonroot:
+                    log.info("couchbase build name: %s  " % build.name)
+                    op, er = self.execute_command('rpm2cpio %s ' \
+                        '|  cpio --extract --make-directories --no-absolute-filenames ' \
+                             % build.name)
+                    self.log_command_output(op, er)
+                    op, er = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
+                                                  % LINUX_CB_PATH[1:])
+                    self.log_command_output(op, er)
+                    op, er = self.execute_command('pwd')
+                    self.log_command_output(op, er)
+                    """ command to start Couchbase Server in non root
+                        /home/nonroot_user/opt/couchbase/bin/couchbase-server \-- -noinput -detached
+                    """
+                    output, error = self.execute_command('/home/%s%scouchbase-server '\
+                                                         '\-- -noinput -detached '\
+                                                           % (self.username,
+                                                              LINUX_COUCHBASE_BIN_PATH))
                 else:
-                    output, error = self.execute_command('{0}rpm -i /tmp/{1}'.format(environment, build.name))
+                    self.check_openssl_version(self.info.deliverable_type, openssl,
+                                               build.product_version)
+                    self.check_pkgconfig(self.info.deliverable_type, openssl)
+                    if force:
+                        output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
+                                                             .format(environment, build.name))
+                    else:
+                        output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
+                                                             .format(environment, build.name))
             elif self.info.deliverable_type == 'deb':
-                self.check_openssl_version(self.info.deliverable_type, openssl, build.product_version)
-                self.install_missing_lib()
-                if force:
-                    output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'.format(environment, build.name))
+                if self.nonroot:
+                    log.info("couchbase build name: %s  " % build.name)
+                    op, er = self.execute_command('dpkg-deb -x %s $HOME ' % build.name)
+                    self.log_command_output(op, er)
+                    op, er = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
+                                                  % LINUX_CB_PATH[1:])
+                    self.log_command_output(op, er)
+                    op, er = self.execute_command('pwd')
+                    self.log_command_output(op, er)
+                    """ command to start Couchbase Server in non root in ubuntu the same
+                        as in centos above
+                    """
+                    output, error = self.execute_command('/home/%s%scouchbase-server '\
+                                                         '\-- -noinput -detached '\
+                                                           % (self.username,
+                                                              LINUX_COUCHBASE_BIN_PATH))
                 else:
-                    output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
+                    self.check_openssl_version(self.info.deliverable_type, openssl,
+                                               build.product_version)
+                    self.install_missing_lib()
+                    if force:
+                        output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'\
+                                                             .format(environment, build.name))
+                    else:
+                        output, error = self.execute_command('{0}dpkg -i /tmp/{1}'\
+                                                             .format(environment, build.name))
 
             if "SUSE" in self.info.distribution_type:
                 if error and error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server':
@@ -1391,17 +1475,21 @@ class RemoteMachineShellConnection:
                         error = []
 
             success &= self.log_command_output(output, error, track_words)
-            self.create_directory(path)
-            output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
-                                    format(server_type, abbr_product, path))
-            success &= self.log_command_output(output, error, track_words)
+            nonroot_path_start = ""
+            if not self.nonroot:
+                nonroot_path_start = "/"
+                self.create_directory(path)
+                output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
+                                                         format(server_type, abbr_product, path))
+                success &= self.log_command_output(output, error, track_words)
 
             if vbuckets:
                 output, error = self.execute_command("sed -i 's/ulimit "
                                                      "-c unlimited/ulimit "
                                                      "-c unlimited\\n    export "
-                                 "{0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
-                               format(server_type.upper(), vbuckets, server_type))
+                                 "{0}_NUM_VBUCKETS={1}/' {3}opt/{2}/etc/{2}_init.d".
+                                 format(server_type.upper(), vbuckets, server_type,
+                                        nonroot_path_start))
                 success &= self.log_command_output(output, error, track_words)
             if upr is not None:
                 protocol = "tap"
@@ -1409,21 +1497,24 @@ class RemoteMachineShellConnection:
                     protocol = "upr"
                 output, error = \
                 self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport"
-                                " COUCHBASE_REPL_TYPE={1}/' /opt/{0}/etc/{0}_init.d"\
-                                                      .format(server_type, protocol))
+                              " COUCHBASE_REPL_TYPE={1}/' {2}opt/{0}/etc/{0}_init.d"\
+                                                      .format(server_type, protocol,
+                                                              nonroot_path_start))
                 success &= self.log_command_output(output, error, track_words)
             if xdcr_upr == False:
                 output, error = \
                     self.execute_command("sed -i 's/ulimit -c unlimited/ulimit "
                              "-c unlimited\\n    export XDCR_USE_OLD_PATH={1}/'"
-                                                     "/opt/{0}/etc/{0}_init.d"\
-                                                    .format(server_type, "true"))
+                                                     "{2}opt/{0}/etc/{0}_init.d"\
+                                                    .format(server_type, "true",
+                                                            nonroot_path_start))
                 success &= self.log_command_output(output, error, track_words)
             if fts_query_limit:
                 output, error = \
                     self.execute_command("sed -i 's/export PATH/export PATH\\n"
-                        "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},ftsMossDebug=1,logStatsEvery=30,hideUI=false/'\
-                    /opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit)))
+                            "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},ftsMossDebug=1,logStatsEvery=30,hideUI=false/'\
+                            {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
+                                                              nonroot_path_start))
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
@@ -1777,7 +1868,6 @@ class RemoteMachineShellConnection:
                          "/opt/couchbase", "/data/*"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
                                   "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang"]
-        version_file = "VERSION.txt"
         self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
@@ -1809,15 +1899,15 @@ class RemoteMachineShellConnection:
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
-            if self.file_exists(version_path, version_file):
+            if self.file_exists(version_path, VERSION_FILE):
                 build_name, short_version, full_version = \
-                    self.find_build_version(version_path, version_file, product)
+                    self.find_build_version(version_path, VERSION_FILE, product)
             capture_iss_file = ""
             log.info("kill any in/uninstall process from version 3 in node %s"
                                                                         % self.ip)
             self.terminate_processes(self.info, \
                                      [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
-            exist = self.file_exists(version_path, version_file)
+            exist = self.file_exists(version_path, VERSION_FILE)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
                 cb_releases_version = ["2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
@@ -1825,7 +1915,7 @@ class RemoteMachineShellConnection:
                                        "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
                                        "3.1.3", "3.1.5"]
                 build_name, short_version, full_version = \
-                    self.find_build_version(version_path, version_file, product)
+                    self.find_build_version(version_path, VERSION_FILE, product)
                 build_repo = MV_LATESTBUILD_REPO
                 if full_version[:5] not in COUCHBASE_VERSION_2 and \
                    full_version[:5] not in COUCHBASE_VERSION_3:
@@ -1905,7 +1995,7 @@ class RemoteMachineShellConnection:
                         self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
                 deleted = self.wait_till_file_deleted(version_path, \
-                                            version_file, timeout_in_seconds=600)
+                                            VERSION_FILE, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
@@ -1949,45 +2039,91 @@ class RemoteMachineShellConnection:
                 log.info("*****No couchbase server on {0} server. Free to install" \
                                                                  .format(self.ip))
         elif type in LINUX_DISTRIBUTION_NAME:
+            """ check if couchbase server installed by root """
+            if self.nonroot:
+                test = self.file_exists(LINUX_CB_PATH, VERSION_FILE)
+                if self.file_exists(LINUX_CB_PATH, VERSION_FILE):
+                    os.system("ps aux | grep python | grep %d " % os.getpid())
+                    print " ***** ERROR: ***** \n"\
+                          " Couchbase Server was installed by root user. \n"\
+                          " Use root user to uninstall it at %s \n"\
+                          " This python process id: %d will be killed to stop the installation"\
+                         % (self.ip, os.getpid())
+                    os.system('kill %d' % os.getpid())
             # uninstallation command is different
             if type == "ubuntu":
-                if sv in COUCHBASE_FROM_VERSION_4:
-                    if self.is_enterprise(type):
-                        uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
-                                    .format("couchbase-server", "couchbase-server")
+                if self.nonroot:
+                    """ check if old files from root install left in server """
+                    if self.file_exists(LINUX_CB_PATH + "etc/couchdb/", "local.ini.debsave"):
+                        print " ***** ERROR: ***** \n"\
+                              "Couchbase Server files was left by root install at %s .\n"\
+                              "Use root user to delete them all at server %s "\
+                              " (rm -rf /opt/couchbase) to remove all couchbase folder.\n" \
+                              % (LINUX_CB_PATH, self.ip)
+                        sys.exit(1)
+                    self.stop_server()
+                    log.info("Remove couchbase server directories opt etc and usr ")
+                    output, error = self.execute_command("rm -rf opt etc usr")
+                    self.log_command_output(output, error)
+                    output, error = self.execute_command("rm -rf opt etc usr")
+                    self.log_command_output(output, error)
+                    self.execute_command("rm -rf couchbase-server-*")
+                    output, error = self.execute_command("ls -lh")
+                    self.log_command_output(output, error)
+                else:
+                    if sv in COUCHBASE_FROM_VERSION_4:
+                        if self.is_enterprise(type):
+                            uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                                        .format("couchbase-server", "couchbase-server")
+                        else:
+                            uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                                         .format("couchbase-server-community",
+                                                  "couchbase-server-community")
                     else:
                         uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
-                                     .format("couchbase-server-community",
-                                              "couchbase-server-community")
-                else:
-                    uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
                                      .format("couchbase-server", "couchbase-server")
-                output, error = self.execute_command(uninstall_cmd)
-                self.log_command_output(output, error)
+                    output, error = self.execute_command(uninstall_cmd)
+                    self.log_command_output(output, error)
             elif type in RPM_DIS_NAME:
                 """ Sometimes, vm left with unfinish uninstall/install process.
                     We need to kill them before doing uninstall """
-                output, error = self.execute_command("killall -9 rpm")
-                self.log_command_output(output, error)
-                output, error = self.execute_command("rm -f /var/lib/rpm/.rpm.lock")
-                self.log_command_output(output, error)
-                if sv in COUCHBASE_FROM_VERSION_4:
-                    if self.is_enterprise(type):
-                        uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
-                    else:
-                        uninstall_cmd = 'rpm -e {0}' \
-                                          .format("couchbase-server-community")
+                if self.nonroot:
+                    """ check if old files from root install left in server """
+                    if self.file_exists(LINUX_CB_PATH + "etc/couchdb/", "local.ini.rpmsave"):
+                        print "Couchbase Server files was left by root install at %s .\n"\
+                               "Use root user to delete them all at server %s "\
+                               " (rm -rf /opt/couchbase) to remove all couchbase folder.\n" \
+                               % (LINUX_CB_PATH, self.ip)
+                        sys.exit(1)
+                    self.stop_server()
+                    log.info("Remove couchbase server directories opt etc and usr ")
+                    output, error = self.execute_command("rm -rf opt etc usr")
+                    self.log_command_output(output, error)
+                    self.execute_command("rm -rf couchbase-server-*")
+                    output, error = self.execute_command("ls -lh")
+                    self.log_command_output(output, error)
                 else:
-                    uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
-                log.info('running rpm -e to remove couchbase-server')
-                output, error = self.execute_command(uninstall_cmd)
-                self.log_command_output(output, error)
+                    output, error = self.execute_command("killall -9 rpm")
+                    self.log_command_output(output, error)
+                    output, error = self.execute_command("rm -f /var/lib/rpm/.rpm.lock")
+                    self.log_command_output(output, error)
+                    if sv in COUCHBASE_FROM_VERSION_4:
+                        if self.is_enterprise(type):
+                            uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
+                        else:
+                            uninstall_cmd = 'rpm -e {0}' \
+                                          .format("couchbase-server-community")
+                    else:
+                        uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
+                    log.info('running rpm -e to remove couchbase-server')
+                    output, error = self.execute_command(uninstall_cmd)
+                    self.log_command_output(output, error)
             self.terminate_processes(self.info, terminate_process_list)
-            self.remove_folders(linux_folders)
-            self.kill_memcached()
-
-            output, error = self.execute_command("ipcrm")
-            self.log_command_output(output, error)
+            if not self.nonroot:
+                self.remove_folders(linux_folders)
+                self.kill_memcached()
+                output, error = self.execute_command("ipcrm")
+                self.log_command_output(output, error)
         elif self.info.distribution_type.lower() == 'mac':
             self.stop_server(os='mac')
             """ close Safari browser before uninstall """
@@ -2001,7 +2137,6 @@ class RemoteMachineShellConnection:
     def couchbase_win_uninstall(self, product, version, os_name, query):
         log.info('*****couchbase_win_uninstall****')
         builds, changes = query.get_all_builds(version=version)
-        version_file = 'VERSION.txt'
         bat_file = "uninstall.bat"
         task = "uninstall"
         deleted = False
@@ -2016,12 +2151,12 @@ class RemoteMachineShellConnection:
             name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
 
-        exist = self.file_exists(version_path, version_file)
+        exist = self.file_exists(version_path, VERSION_FILE)
         if exist:
             # call uninstall function to install couchbase server
             # Need to detect csse or cse when uninstall.
             log.info("Start uninstall cb server on this server")
-            build_name, rm_version = self.find_build_version(version_path, version_file)
+            build_name, rm_version = self.find_build_version(version_path, VERSION_FILE)
             log.info('build needed to do auto uninstall {0}'.format(build_name))
             # find installed build in tmp directory to match with currently installed version
             build_name = build_name.rstrip() + ".exe"
@@ -2051,7 +2186,7 @@ class RemoteMachineShellConnection:
             # run schedule task uninstall couchbase server
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
-            deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+            deleted = self.wait_till_file_deleted(version_path, VERSION_FILE, timeout_in_seconds=600)
             if not deleted:
                 log.error("Uninstall was failed at node {0}".format(self.ip))
                 sys.exit()
@@ -2079,7 +2214,6 @@ class RemoteMachineShellConnection:
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*"]
         terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
                                   "couchdb", "epmd"]
-        version_file = "VERSION.txt"
         self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
@@ -2094,11 +2228,11 @@ class RemoteMachineShellConnection:
             product_name = "membase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Membase/Server/"
 
-            exist = self.file_exists(version_path, version_file)
+            exist = self.file_exists(version_path, VERSION_FILE)
             log.info("Is VERSION file existed? {0}".format(exist))
             if exist:
                 log.info("VERSION file exists.  Start to uninstall")
-                build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
+                build_name, short_version, full_version = self.find_build_version(version_path, VERSION_FILE, product)
                 if "1.8.0" in full_version or "1.8.1" in full_version:
                     product_name = "couchbase-server-enterprise"
                     product = "cb"
@@ -2124,7 +2258,7 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                deleted = self.wait_till_file_deleted(version_path, VERSION_FILE, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
@@ -2753,17 +2887,23 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
             self.sleep(10, "Wait to stop service completely")
         if self.info.type.lower() == "linux":
-            fv, sv, bn = self.get_cbversion("linux")
-            if "centos 7" in self.info.distribution_version.lower() \
-                   and sv in COUCHBASE_FROM_WATSON:
-                """from watson, systemd is used in centos 7 """
-                log.info("this node is centos 7.x")
-                o, r = self.execute_command("service couchbase-server stop")
+            if self.nonroot:
+                log.info("Stop Couchbase Server with non root method")
+                o, r = self.execute_command('%scouchbase-server -k '\
+                                         % (LINUX_NONROOT_CB_BIN_PATH))
                 self.log_command_output(o, r)
             else:
-                o, r = self.execute_command("/etc/init.d/couchbase-server stop",\
-                                                     self.info, use_channel=True)
-                self.log_command_output(o, r)
+                fv, sv, bn = self.get_cbversion("linux")
+                if "centos 7" in self.info.distribution_version.lower() \
+                       and sv in COUCHBASE_FROM_WATSON:
+                    """from watson, systemd is used in centos 7 """
+                    log.info("this node is centos 7.x")
+                    o, r = self.execute_command("service couchbase-server stop")
+                    self.log_command_output(o, r)
+                else:
+                    o, r = self.execute_command("/etc/init.d/couchbase-server stop",\
+                                                         self.info, use_channel=True)
+                    self.log_command_output(o, r)
         if self.info.distribution_type.lower() == "mac":
             o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}'\
                                                                    | xargs kill -9")
@@ -2777,16 +2917,22 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("net start couchbaseserver")
             self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
-            fv, sv, bn = self.get_cbversion("linux")
-            if "centos 7" in self.info.distribution_version.lower() \
-                   and sv in COUCHBASE_FROM_WATSON:
-                """from watson, systemd is used in centos 7 """
-                log.info("this node is centos 7.x")
-                o, r = self.execute_command("service couchbase-server start")
+            if self.nonroot:
+                log.info("Start Couchbase Server with non root method")
+                o, r = self.execute_command('%scouchbase-server \-- -noinput -detached '\
+                                                           % (LINUX_NONROOT_CB_BIN_PATH))
                 self.log_command_output(o, r)
             else:
-                o, r = self.execute_command("/etc/init.d/couchbase-server start")
-                self.log_command_output(o, r)
+                fv, sv, bn = self.get_cbversion("linux")
+                if "centos 7" in self.info.distribution_version.lower() \
+                       and sv in COUCHBASE_FROM_WATSON:
+                    """from watson, systemd is used in centos 7 """
+                    log.info("this node is centos 7.x")
+                    o, r = self.execute_command("service couchbase-server start")
+                    self.log_command_output(o, r)
+                else:
+                    o, r = self.execute_command("/etc/init.d/couchbase-server start")
+                    self.log_command_output(o, r)
         if self.info.distribution_type.lower() == "mac":
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
@@ -3000,7 +3146,7 @@ class RemoteMachineShellConnection:
 
     def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
                                command_options='', cluster_ip="", cluster_port="8091", delete_backup=True):
-        backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        backup_command = "%scbbackup" % (LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
         self.extract_remote_info()
@@ -3035,7 +3181,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def restore_backupFile(self, login_info, backup_location, buckets):
-        restore_command = "%scbrestore" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        restore_command = "%scbrestore" % (LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
@@ -3113,7 +3259,7 @@ class RemoteMachineShellConnection:
         return headerInfo, bucketMap
 
     def execute_cbtransfer(self, source, destination, command_options=''):
-        transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
@@ -3129,12 +3275,12 @@ class RemoteMachineShellConnection:
         return output
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
-        cbdocloader_command = "%scbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbdocloader_command = "%scbdocloader" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
-                                                                            testconstants.LINUX_CB_PATH, file)
+                                                                            LINUX_CB_PATH, file)
         if self.info.distribution_type.lower() == 'mac':
             cbdocloader_command = "%scbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
             command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
@@ -3154,7 +3300,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbcollect_info(self, file):
-        cbcollect_command = "%scbcollect_info" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbcollect_command = "%scbcollect_info" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3168,7 +3314,7 @@ class RemoteMachineShellConnection:
 
     # works for linux only
     def execute_couch_dbinfo(self, file):
-        couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        couch_dbinfo_command = "%scouch_dbinfo" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             couch_dbinfo_command = "%scouch_dbinfo.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3181,7 +3327,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbepctl(self, bucket, persistence, param_type, param, value):
-        cbepctl_command = "%scbepctl" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbepctl_command = "%scbepctl" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbepctl_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3203,7 +3349,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbvdiff(self, bucket, node_str, password=None):
-        cbvdiff_command = "%scbvdiff" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbvdiff_command = "%scbvdiff" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbvdiff_command = "%scbvdiff.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3219,7 +3365,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbstats(self, bucket, command, keyname="", vbid=0):
-        cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3241,7 +3387,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def couchbase_cli(self, subcommand, cluster_host, options):
-        cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3258,7 +3404,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='', cluster_port=None, user='Administrator', password='password'):
-        cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3280,7 +3426,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket, item_size, command_options):
-        cbworkloadgen_command = "%scbworkloadgen" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbworkloadgen_command = "%scbworkloadgen" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
 
         if self.info.distribution_type.lower() == 'mac':
@@ -3302,7 +3448,7 @@ class RemoteMachineShellConnection:
         if command_options is not None:
             command_options_string = ' '.join(command_options)
 
-        cbhealthchecker_command = "%scbhealthchecker" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbhealthchecker_command = "%scbhealthchecker" % (LINUX_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cbhealthchecker_command = "%scbhealthchecker" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
@@ -3328,7 +3474,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_vbuckettool(self, keys, prefix=None):
-        command = "%stools/vbuckettool" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        command = "%stools/vbuckettool" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             command = "%stools/vbuckettool.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3520,21 +3666,33 @@ class RemoteMachineShellConnection:
     def get_cbversion(self, os_name):
         """ fv = a.b.c-xxxx, sv = a.b.c, bn = xxxx """
         fv = sv = bn = tmp = ""
+        nonroot_path_start = ""
+        if not self.nonroot:
+            nonroot_path_start = "/"
         if os_name != 'windows':
-            if self.file_exists("/opt/couchbase/", "VERSION.txt"):
-                output = self.read_remote_file("/opt/couchbase/","VERSION.txt")
+            output = ""
+            if self.nonroot:
+                if self.file_exists('/home/%s%s' % (self.username, LINUX_CB_PATH), VERSION_FILE):
+                    output = self.read_remote_file('/home/%s%s' % (self.username, LINUX_CB_PATH),
+                                                                   VERSION_FILE)
+                else:
+                    log.info("couchbase server at {0} may not installed yet"
+                                                           .format(self.ip))
+            else:
+                if self.file_exists(LINUX_CB_PATH, VERSION_FILE):
+                    output = self.read_remote_file(LINUX_CB_PATH, VERSION_FILE)
+                else:
+                    log.info("couchbase server at {0} may not installed yet"
+                                                           .format(self.ip))
+            if output:
                 for x in output:
                     x = x.strip()
-                    if x and x[:5] in COUCHBASE_VERSIONS and \
-                        "-" in x:
+                    if x and x[:5] in COUCHBASE_VERSIONS and "-" in x:
                         fv = x
                         tmp = x.split("-")
                         sv = tmp[0]
                         bn = tmp[1]
                     break
-            else:
-                log.info("couchbase server at {0} may not installed yet"
-                          .format(self.ip))
         else:
             log.info("only check cb version in unix enviroment")
         return fv, sv, bn

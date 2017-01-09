@@ -577,6 +577,10 @@ class CouchbaseServerInstaller(Installer):
         info = remote_client.extract_remote_info()
         type = info.type.lower()
         server = params["server"]
+        self.nonroot = False
+        if info.deliverable_type in ["rpm", "deb"]:
+            if server.ssh_username != "root":
+                self.nonroot = True
         if "swappiness" in params:
             swappiness = int(params["swappiness"])
         else:
@@ -622,9 +626,8 @@ class CouchbaseServerInstaller(Installer):
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:
-                    log.error('server {1} unable to download binaries : {0}' \
-                          .format(build.url, params["server"].ip))
-                    return False
+                    sys.exit('server {1} unable to download binaries : {0}' \
+                                     .format(build.url, params["server"].ip))
                 # TODO: need separate methods in remote_util for couchbase and membase install
                 path = server.data_path or '/tmp'
                 try:
