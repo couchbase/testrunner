@@ -4281,7 +4281,7 @@ class QueryTests(BaseTestCase):
         self.sleep(30, 'Sleep for some time prior to index creation')
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
-        if versions[0].startswith("4") or versions[0].startswith("3"):
+        if versions[0].startswith("4") or versions[0].startswith("3") or versions[0].startswith("5"):
             for bucket in self.buckets:
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
