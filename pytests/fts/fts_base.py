@@ -8,6 +8,7 @@ import copy
 import logger
 import logging
 import re
+import json
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -922,7 +923,9 @@ class FTSIndex:
                                                           show_results_from_item=0,
                                                           highlight=False,
                                                           highlight_style=None,
-                                                          highlight_fields=None):
+                                                          highlight_fields=None,
+                                                          consistency_level='',
+                                                          consistency_vectors={}):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = QUERY.JSON
         # query is a unicode dict
@@ -947,6 +950,15 @@ class FTSIndex:
                 query_json['highlight']['style'] = highlight_style
             if highlight_fields:
                 query_json['highlight']['fields'] = highlight_fields
+        if consistency_level is None:
+            del query_json['ctl']['consistency']['level']
+        else:
+            query_json['ctl']['consistency']['level'] = consistency_level
+        if consistency_vectors is None:
+            del query_json['ctl']['consistency']['vectors']
+        elif consistency_vectors !={}:
+            query_json['ctl']['consistency']['vectors'] = consistency_vectors
+
 
         return query_json
 
@@ -1007,8 +1019,9 @@ class FTSIndex:
 
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
                       return_raw_hits=False, sort_fields=None,
-                      explain=False, show_results_from_item=0,highlight=False,
-                      highlight_style=None, highlight_fields=None):
+                      explain=False, show_results_from_item=0, highlight=False,
+                      highlight_style=None, highlight_fields=None, consistency_level='',
+                      consistency_vectors={}):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -1018,7 +1031,9 @@ class FTSIndex:
                                                     show_results_from_item=show_results_from_item,
                                                     highlight=highlight,
                                                     highlight_style=highlight_style,
-                                                    highlight_fields=highlight_fields)
+                                                    highlight_fields=highlight_fields,
+                                                    consistency_level=consistency_level,
+                                                    consistency_vectors=consistency_vectors)
 
         hits = -1
         matches = []
@@ -1819,7 +1834,7 @@ class CouchbaseCluster:
         @param source_name : name of couchbase bucket or "" for alias
         @param index_type : 'fulltext-index' or 'fulltext-alias'
         @param index_params :  to specify advanced index mapping;
-                                dictionary overiding params in
+                                dictionary overriding params in
                                 INDEX_DEFAULTS.BLEVE_MAPPING or
                                 INDEX_DEFAULTS.ALIAS_DEFINITION depending on
                                 index_type
@@ -2946,6 +2961,14 @@ class FTSBaseTest(unittest.TestCase):
                 self.highlight_fields_list = self.highlight_fields.split(',')
             else:
                 self.highlight_fields_list.append(self.highlight_fields)
+        self.consistency_level = self._input.param("consistency_level", '')
+        if self.consistency_level.lower() == 'none':
+            self.consistency_level = None
+        self.consistency_vectors = self._input.param("consistency_vectors", {})
+        if self.consistency_vectors != {}:
+            self.consistency_vectors = eval(self.consistency_vectors)
+            if self.consistency_vectors is not None and self.consistency_vectors != '':
+                self.consistency_vectors = json.loads(self.consistency_vectors)
 
     def __initialize_error_count_dict(self):
         """

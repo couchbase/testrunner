@@ -485,9 +485,11 @@ class StableTopFTS(FTSBaseTest):
             query = json.loads(query)
         zero_results_ok = True
         for index in self._cb_cluster.get_indexes():
-            hits, _, _, _ = index.execute_query(query,
+            hits, matches, time_taken, status = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
-                                                expected_hits=expected_hits)
+                                                expected_hits=expected_hits,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
 
     def test_one_field_multiple_analyzer(self):
@@ -632,7 +634,9 @@ class StableTopFTS(FTSBaseTest):
             for index in self._cb_cluster.get_indexes():
                 hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
-                                                expected_hits=expected_hits)
+                                                expected_hits=expected_hits,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
                 self.log.info("Hits: %s" % hits)
         except Exception as err:
             self.log.error(err)

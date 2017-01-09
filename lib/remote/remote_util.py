@@ -163,7 +163,7 @@ class RemoteMachineShellConnection:
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
+        msg = 'connecting to {0} with username:{1} password:{2} ssh_key:{3}'
         log.info(msg.format(serverInfo.ip, serverInfo.ssh_username,
                             serverInfo.ssh_password, serverInfo.ssh_key))
         # added attempts for connection because of PID check failed.
