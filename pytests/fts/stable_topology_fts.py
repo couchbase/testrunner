@@ -101,6 +101,27 @@ class StableTopFTS(FTSBaseTest):
         self.run_default_index_query(query={"match_none": {}},
                                      expected_hits=0)
 
+    def test_match_consistency(self):
+        query = {"match_all": {}}
+        self.create_simple_default_index()
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                             zero_results_ok=zero_results_ok,
+                                             expected_hits=0,
+                                             consistency_level=self.consistency_level,
+                                             consistency_vectors=self.consistency_vectors
+                                            )
+            self.log.info("Hits: %s" % hits)
+            for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+                self.async_perform_update_delete(self.upd_del_fields)
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=self._num_items,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+
     def index_utf16_dataset(self):
         self.load_utf16_data()
         try:
