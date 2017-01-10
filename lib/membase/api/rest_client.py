@@ -766,7 +766,7 @@ class RestConnection(object):
     # authorization must be a base64 string of username:password
     def _create_headers_encoded_prepared(self):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
-        return {'Content-Type': 'Content-Type: application/json',
+        return {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization}
 
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
@@ -2741,7 +2741,7 @@ class RestConnection(object):
                 else:
                     url = "http://%s:%s/query/service" % (self.ip, port)
 
-                headers = {'Content-type': 'application/json'}
+                headers = self._create_headers_encoded_prepared()
                 body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
 
                 response, content = http.request(url, 'POST', headers=headers, body=json.dumps(body))
@@ -2760,8 +2760,6 @@ class RestConnection(object):
                                                          query_params['creds'][0]['pass'].encode('utf-8'))
             api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
             log.info("%s"%api)
-            if "system" in query:
-                api = "http://Administrator:password@%s:%s/query/service?%s" % (self.ip, port, params)
         else:
             params = {key : query}
             if 'creds' in query_params and query_params['creds']:
