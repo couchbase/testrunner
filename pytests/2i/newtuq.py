@@ -74,14 +74,14 @@ class QueryTests(BaseTestCase):
             buckets=self.buckets, item_flag=self.item_flag,
             n1ql_port=self.n1ql_port, full_docs_list=self.full_docs_list,
             log=self.log, input=self.input, master=self.master)
-        n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
-        self.log.info(n1ql_server)
-        #self.n1ql_helper._start_command_line_query(n1ql_server)
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.log.info(self.n1ql_node)
+        #self.n1ql_helper._start_command_line_query(self.n1ql_node)
         # sleep to avoid race condition during bootstrap
         if self.create_primary_index:
             try:
                 self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
-                 server=n1ql_server)
+                 server=self.n1ql_node)
             except Exception, ex:
                 self.log.info(ex)
                 raise ex
@@ -90,8 +90,8 @@ class QueryTests(BaseTestCase):
         self.check_gsi_logs_for_panic()
         if hasattr(self, 'n1ql_helper'):
             if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
-                n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
-                self.n1ql_helper.drop_primary_index(using_gsi=self.use_gsi_for_primary, server=n1ql_server)
+                self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+                self.n1ql_helper.drop_primary_index(using_gsi=self.use_gsi_for_primary, server=self.n1ql_node)
         if hasattr(self, 'shell'):
             if not self.skip_cleanup:
                 self.n1ql_helper._restart_indexer()

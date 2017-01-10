@@ -44,7 +44,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.generate_map_nodes_out_dist()
         self.memory_create_list = []
         self.memory_drop_list = []
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
         if self.index_loglevel:
