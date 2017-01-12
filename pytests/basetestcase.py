@@ -61,6 +61,13 @@ class BaseTestCase(unittest.TestCase):
             self.cluster = Cluster()
         self.pre_warmup_stats = {}
         self.cleanup = False
+        self.nonroot = False
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        if type.lower() != 'windows':
+            if self.master.ssh_username != "root":
+                self.nonroot = True
+        shell.disconnect()
         """ some tests need to bypass checking cb server at set up
             to run installation """
         self.skip_init_check_cbserver = \

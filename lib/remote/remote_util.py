@@ -3146,7 +3146,11 @@ class RemoteMachineShellConnection:
 
     def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
                                command_options='', cluster_ip="", cluster_port="8091", delete_backup=True):
-        backup_command = "%scbbackup" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            backup_command = "/home/%s%scbbackup" % (self.master.ssh_username,
+                                                    LINUX_COUCHBASE_BIN_PATH)
+        else:
+            backup_command = "%scbbackup" % (LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
         self.extract_remote_info()

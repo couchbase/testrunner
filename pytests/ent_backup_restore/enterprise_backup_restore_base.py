@@ -8,7 +8,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
-from testconstants import COUCHBASE_FROM_4DOT6
+from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -23,7 +23,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
-            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+            if self.nonroot:
+                self.cli_command_location = "/home/%s%s" % (self.master.ssh_username,
+                                                            LINUX_COUCHBASE_BIN_PATH)
+            else:
+                self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         elif info == 'windows':
             self.cmd_ext = ".exe"
