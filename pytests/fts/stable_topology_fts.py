@@ -1,9 +1,15 @@
-import json
-from fts_base import FTSBaseTest
-from lib.membase.api.rest_client import RestConnection
-from lib.membase.api.exception import FTSException, ServerUnavailableException
-from TestInput import TestInputSingleton
 import copy
+import json
+from threading import Thread
+
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
+
+from TestInput import TestInputSingleton
+from fts_base import FTSBaseTest
+from lib.membase.api.exception import FTSException, ServerUnavailableException
+from lib.membase.api.rest_client import RestConnection
+
 
 class StableTopFTS(FTSBaseTest):
 
@@ -120,6 +126,84 @@ class StableTopFTS(FTSBaseTest):
                                                 expected_hits=self._num_items,
                                                 consistency_level=self.consistency_level,
                                                 consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+
+    def test_match_consistency_error(self):
+        query = {"match_all": {}}
+        fts_node = self._cb_cluster.get_random_fts_node()
+        service_map = RestConnection(self._cb_cluster.get_master_node()).get_nodes_services()
+        # select FTS node to shutdown
+        for node_ip, services in service_map.iteritems():
+            ip = node_ip.split(':')[0]
+            node = self._cb_cluster.get_node(ip, node_ip.split(':')[1])
+            if node and 'fts' in services and 'kv' not in services:
+                fts_node = node
+                break
+        self.create_simple_default_index()
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=0,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+            try:
+                shell = RemoteMachineShellConnection(fts_node)
+                shell.stop_server()
+                for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+                    self.async_perform_update_delete(self.upd_del_fields)
+            finally:
+                shell = RemoteMachineShellConnection(fts_node)
+                shell.start_server()
+            # "status":"remote consistency error" => expected_hits=-1
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=-1,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert([fts_node], self, wait_if_warmup=True)
+            self.wait_for_indexing_complete()
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=self._num_items,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+
+    def test_match_consistency_long_timeout(self):
+        timeout = self._input.param("timeout", None)
+        query = {"match_all": {}}
+        self.create_simple_default_index()
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=0,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+            tasks = []
+            for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+                tasks.append(Thread(target=self.async_perform_update_delete, args=(self.upd_del_fields,)))
+            for task in tasks:
+                task.start()
+            num_items = self._num_items
+            if timeout is None or timeout <= 60000:
+                # Here we assume that the update takes more than 60 seconds
+                # when we use timeout <= 60 sec we get timeout error
+                # with None we have 60s by default
+                num_items = 0
+            try:
+                hits, _, _, _ = index.execute_query(query,
+                                                    zero_results_ok=zero_results_ok,
+                                                    expected_hits=num_items,
+                                                    consistency_level=self.consistency_level,
+                                                    consistency_vectors=self.consistency_vectors,
+                                                    timeout=timeout)
+            finally:
+                for task in tasks:
+                    task.join()
             self.log.info("Hits: %s" % hits)
 
     def index_utf16_dataset(self):

@@ -173,7 +173,8 @@ class QUERY:
                 "level": "",
                 "vectors": {}
             },
-            "timeout": 60000
+            # "timeout": 60000  Optional timeout( 10000 by default).
+            # it's better to get rid of hardcoding
         }
     }
 
@@ -916,7 +917,7 @@ class FTSIndex:
         rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_uuid(self.name)
 
-    def construct_cbft_query_json(self, query, fields=None, timeout=None,
+    def construct_cbft_query_json(self, query, fields=None, timeout=60000,
                                                           facets=False,
                                                           sort_fields=None,
                                                           explain=False,
@@ -936,8 +937,10 @@ class FTSIndex:
             query_json['size'] = int(max_matches)
         if show_results_from_item:
             query_json['from'] = int(show_results_from_item)
-        if timeout:
-            query_json['timeout'] = int(timeout)
+        if timeout is not None:
+            query_json['ctl']['timeout'] = int(timeout)
+        else:
+            del query_json['ctl']['timeout']
         if fields:
             query_json['fields'] = fields
         if facets:
@@ -956,10 +959,8 @@ class FTSIndex:
             query_json['ctl']['consistency']['level'] = consistency_level
         if consistency_vectors is None:
             del query_json['ctl']['consistency']['vectors']
-        elif consistency_vectors !={}:
+        elif consistency_vectors != {}:
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
-
-
         return query_json
 
     def construct_facets_definition(self):
@@ -1021,7 +1022,7 @@ class FTSIndex:
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}):
+                      consistency_vectors={}, timeout=60000):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -1033,7 +1034,8 @@ class FTSIndex:
                                                     highlight_style=highlight_style,
                                                     highlight_fields=highlight_fields,
                                                     consistency_level=consistency_level,
-                                                    consistency_vectors=consistency_vectors)
+                                                    consistency_vectors=consistency_vectors,
+                                                    timeout=timeout)
 
         hits = -1
         matches = []
@@ -1041,8 +1043,13 @@ class FTSIndex:
         time_taken = 0
         status = {}
         try:
+            if timeout == 0:
+                # force limit in 10 min in case timeout=0(no timeout)
+                rest_timeout = 600
+            else:
+                rest_timeout = timeout/1000 + 10
             hits, matches, time_taken, status = \
-                self.__cluster.run_fts_query(self.name, query_dict)
+                self.__cluster.run_fts_query(self.name, query_dict, timeout=rest_timeout)
         except ServerUnavailableException:
             # query time outs
             raise ServerUnavailableException
@@ -1877,7 +1884,7 @@ class CouchbaseCluster:
         for index in self.__indexes:
             index.delete()
 
-    def run_fts_query(self, index_name, query_dict, node=None):
+    def run_fts_query(self, index_name, query_dict, node=None, timeout=70):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -1891,7 +1898,7 @@ class CouchbaseCluster:
                         % (json.dumps(query_dict, ensure_ascii=False),
                            node.ip, node.fts_port))
         total_hits, hit_list, time_taken, status = \
-            RestConnection(node).run_fts_query(index_name, query_dict)
+            RestConnection(node).run_fts_query(index_name, query_dict, timeout=timeout)
         return total_hits, hit_list, time_taken, status
 
     def run_fts_query_with_facets(self, index_name, query_dict, node=None):

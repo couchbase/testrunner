@@ -2409,7 +2409,7 @@ class RestConnection(object):
                                                 self.password))
         return status
 
-    def run_fts_query(self, index_name, query_json):
+    def run_fts_query(self, index_name, query_json, timeout=70):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
         headers = self._create_capi_headers_with_auth(
@@ -2420,7 +2420,7 @@ class RestConnection(object):
             "POST",
             json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             headers,
-            timeout=70)
+            timeout=timeout)
 
         if status:
             content = json.loads(content)
