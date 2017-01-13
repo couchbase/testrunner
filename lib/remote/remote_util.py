@@ -1353,6 +1353,7 @@ class RemoteMachineShellConnection:
         log.info('*****install server ***')
         server_type = None
         success = True
+        start_server_after_install = True
         track_words = ("warning", "error", "fail")
         if build.name.lower().find("membase") != -1:
             server_type = 'membase'
@@ -1402,6 +1403,7 @@ class RemoteMachineShellConnection:
                 environment = ""
             else:
                 environment = "INSTALL_DONT_START_SERVER=1 "
+                start_server_after_install = False
             log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
 
             # set default swappiness to 10 unless specify in params in all unix environment
@@ -1419,18 +1421,19 @@ class RemoteMachineShellConnection:
                         '|  cpio --extract --make-directories --no-absolute-filenames ' \
                              % build.name)
                     self.log_command_output(op, er)
-                    op, er = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
-                                                  % LINUX_CB_PATH[1:])
-                    self.log_command_output(op, er)
+                    output, error = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
+                                                         % LINUX_CB_PATH[1:])
+                    self.log_command_output(output, error)
                     op, er = self.execute_command('pwd')
                     self.log_command_output(op, er)
                     """ command to start Couchbase Server in non root
                         /home/nonroot_user/opt/couchbase/bin/couchbase-server \-- -noinput -detached
                     """
-                    output, error = self.execute_command('/home/%s%scouchbase-server '\
-                                                         '\-- -noinput -detached '\
-                                                           % (self.username,
-                                                              LINUX_COUCHBASE_BIN_PATH))
+                    if start_server_after_install:
+                        output, error = self.execute_command('/home/%s%scouchbase-server '\
+                                                             '\-- -noinput -detached '\
+                                                              % (self.username,
+                                                                 LINUX_COUCHBASE_BIN_PATH))
                 else:
                     self.check_openssl_version(self.info.deliverable_type, openssl,
                                                build.product_version)
@@ -1446,18 +1449,19 @@ class RemoteMachineShellConnection:
                     log.info("couchbase build name: %s  " % build.name)
                     op, er = self.execute_command('dpkg-deb -x %s $HOME ' % build.name)
                     self.log_command_output(op, er)
-                    op, er = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
-                                                  % LINUX_CB_PATH[1:])
-                    self.log_command_output(op, er)
+                    output, error = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
+                                                          % LINUX_CB_PATH[1:])
+                    self.log_command_output(output, error)
                     op, er = self.execute_command('pwd')
                     self.log_command_output(op, er)
                     """ command to start Couchbase Server in non root in ubuntu the same
                         as in centos above
                     """
-                    output, error = self.execute_command('/home/%s%scouchbase-server '\
-                                                         '\-- -noinput -detached '\
-                                                           % (self.username,
-                                                              LINUX_COUCHBASE_BIN_PATH))
+                    if start_server_after_install:
+                        output, error = self.execute_command('/home/%s%scouchbase-server '\
+                                                             '\-- -noinput -detached '\
+                                                               % (self.username,
+                                                                  LINUX_COUCHBASE_BIN_PATH))
                 else:
                     self.check_openssl_version(self.info.deliverable_type, openssl,
                                                build.product_version)
