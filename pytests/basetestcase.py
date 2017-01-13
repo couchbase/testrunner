@@ -1148,7 +1148,7 @@ class BaseTestCase(unittest.TestCase):
     def change_port(self, new_port="9090", current_port='8091'):
         nodes = RestConnection(self.master).node_statuses()
         remote_client = RemoteMachineShellConnection(self.master)
-        options = "--cluster-init-port=%s" % new_port
+        options = "--cluster-port=%s" % new_port
         cli_command = "cluster-edit"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
                                                             cluster_host="localhost:%s" % current_port,

@@ -245,9 +245,9 @@ class CreateBucketTests(BaseTestCase):
         set_index_storage_type = ""
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
             set_index_storage_type = " --index-storage-setting=memopt "
-        options = '--cluster-init-username="Administrator" \
-                        --cluster-init-password="password" \
-                        --cluster-init-port=8091 \
+        options = '--cluster-username="Administrator" \
+                        --cluster-password="password" \
+                        --cluster-port=8091 \
                         --cluster-ramsize=300 \
                         --cluster-index-ramsize=300 \
                         --services=data,index,query %s ' % set_index_storage_type

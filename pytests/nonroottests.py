@@ -122,8 +122,8 @@ class NonRootTests(unittest.TestCase):
         if self._os == "centos" or self._os == "ubuntu":
             _1 = "cd /home/{0}/opt/couchbase &&".format(master.ssh_username)
             _2 = " ./bin/couchbase-cli cluster-init -c localhost:8091"
-            _3 = " --cluster-init-username={0} --cluster-init-password={1}".format(master.rest_username, master.rest_password)
-            _4 = " --cluster-init-port=8091 --cluster-init-ramsize=1000"
+            _3 = " --cluster-username={0} --cluster-password={1}".format(master.rest_username, master.rest_password)
+            _4 = " --cluster-port=8091 --cluster-ramsize=1000"
             command_to_init = _1 + _2 + _3 + _4
             o, e = shell.execute_non_sudo_command(command_to_init)
             shell.log_command_output(o, e)
