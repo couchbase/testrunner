@@ -224,10 +224,6 @@ class TestRepoManager(object):
                                   'type': test_type,
                                   'conf': conf}
 
-                    # sort tests
-                    cb_tests.sort()
-                    repo_tests.sort()
-
                     # detect new/removed tests
                     base_repo_tests = CG.split_test_base(repo_tests)
                     base_cb_tests = CG.split_test_base(cb_tests)

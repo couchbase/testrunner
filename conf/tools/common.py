@@ -96,19 +96,16 @@ class Generics(object):
         """
 
         base_tests = []
-        index = 0
-        last_test_base = None
+        history = []
         for test_name in test_list:
             test_base = test_name.split(',')[0]
             test = test_base
-            if test_base == last_test_base:
+            if test_base in history:
                 # is duplicate
-                test = "%s.%d" % (test, index)
-            else:
-                index = 0
+                count = history.count(test_base)
+                test = "%s.%d" % (test, count)
+            history.append(test_base)
             base_tests.append(test)
-            last_test_base = test_base
-            index += 1
 
         return base_tests
 
