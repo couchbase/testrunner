@@ -2772,7 +2772,7 @@ class RestConnection(object):
                 log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
             if "system" in query:
-                api = "http:Administrator:password@//%s:%s/query?%s" % (self.ip, port, params)
+                api = "http://Administrator:password@%s:%s/query?%s" % (self.ip, port, params)
 
 
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
