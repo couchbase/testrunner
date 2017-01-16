@@ -458,6 +458,7 @@ class RebalanceTask(Task):
         self.start_time = time.time()
 
     def check(self, task_manager):
+        status = None
         progress = -100
         try:
             if self.monitor_vbuckets_shuffling:
@@ -475,7 +476,8 @@ class RebalanceTask(Task):
                             self.log.error(msg)
                             self.log.error("Old vbuckets: %s, new vbuckets %s" % (self.old_vbuckets, new_vbuckets))
                             raise Exception(msg)
-            progress = self.rest._rebalance_progress()
+            (status, progress) = self.rest._rebalance_status_and_progress()
+            self.log.info("Rebalance - status: %s, progress: %s", status, progress)
             # if ServerUnavailableException
             if progress == -100:
                 self.retry_get_progress += 1
@@ -499,7 +501,9 @@ class RebalanceTask(Task):
             """ for mix cluster, rebalance takes longer """
             self.log.info("rebalance in mix cluster")
             retry_get_process_num = 40
-        if progress != -1 and progress != 100:
+        # we need to wait for status to be 'none' (i.e. rebalance actually finished and
+        # not just 'running' and at 100%) before we declare ourselves done
+        if progress != -1 and status != 'none':
             if self.retry_get_progress < retry_get_process_num:
                 task_manager.schedule(self, 10)
             else:

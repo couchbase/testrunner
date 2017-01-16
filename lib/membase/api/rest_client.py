@@ -1406,23 +1406,39 @@ class RestConnection(object):
         else:
             return None
 
-    def _rebalance_progress(self):
+    def _rebalance_status_and_progress(self):
+        """
+        Returns a 2-tuple capturing the rebalance status and progress, as follows:
+            ('running', progress) - if rebalance is running
+            ('none', 100)         - if rebalance is not running (i.e. assumed done)
+            (None, -100)          - if there's an error getting the rebalance progress
+                                    from the server
+            (None, -1)            - if the server responds but there's no information on
+                                    what the status of rebalance is
+
+        The progress is computed as a average of the progress of each node
+        rounded to 2 decimal places.
+
+        Throws RebalanceFailedException if rebalance progress returns an error message
+        """
         avg_percentage = -1
+        rebalance_status = None
         api = self.baseUrl + "pools/default/rebalanceProgress"
         try:
             status, content, header = self._http_request(api)
         except ServerUnavailableException as e:
             log.error(e)
-            return -100
+            return None, -100
         json_parsed = json.loads(content)
         if status:
             if "status" in json_parsed:
+                rebalance_status = json_parsed["status"]
                 if "errorMessage" in json_parsed:
                     msg = '{0} - rebalance failed'.format(json_parsed)
                     log.error(msg)
                     self.print_UI_logs()
                     raise RebalanceFailedException(msg)
-                elif json_parsed["status"] == "running":
+                elif rebalance_status == "running":
                     total_percentage = 0
                     count = 0
                     for key in json_parsed:
@@ -1441,8 +1457,10 @@ class RestConnection(object):
                     avg_percentage = 100
         else:
             avg_percentage = -100
-        return avg_percentage
+        return rebalance_status, avg_percentage
 
+    def _rebalance_progress(self):
+        return self._rebalance_status_and_progress()[1]
 
     def log_client_error(self, post):
         api = self.baseUrl + 'logClientError'
