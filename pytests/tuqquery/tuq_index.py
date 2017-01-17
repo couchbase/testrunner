@@ -885,16 +885,17 @@ class QueriesViewsTests(QueryTests):
 
 	    plan = ExplainPlanHelper(res)
             print plan
-            #import pdb;pdb.set_trace()
+            # import pdb;pdb.set_trace()
             self.log.info('-'*100)
             if (query.find("CREATE INDEX") < 0):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
                         else plan["~children"][0]
                 print result
-                #import pdb;pdb.set_trace()
+                # import pdb;pdb.set_trace()
                 if not(result['scans'][0]['#operator']=='DistinctScan'):
-                    self.assertTrue(result["#operator"] == 'IntersectScan',
-                                    "Index should be intersect scan and is %s" % (plan))
+                    if not (result["#operator"] == 'UnionScan'):
+                        self.assertTrue(result["#operator"] == 'IntersectScan',
+                                        "Index should be intersect scan and is %s" % (plan))
                     # actual_indexes = []
                     # for scan in result['scans']:
                     #     print scan
@@ -905,10 +906,12 @@ class QueriesViewsTests(QueryTests):
                     #         actual_indexes.append([result['scans'][0]['scan']['index']])
                     #     else:
                     #          actual_indexes.append(scan['index'])
-
-
-                    actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
-                            for scan in result['scans']]
+                    if result["#operator"] == 'UnionScan':
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                          for results in result['scans'] for scan in results['scans']]
+                    else:
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                for scan in result['scans']]
 
                     print actual_indexes
 
