@@ -3429,7 +3429,8 @@ class RemoteMachineShellConnection:
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        cluster_param = (" --cluster={0}".format(cluster_host), "")[cluster_host is None]
+        cluster_param = (" --cluster=http://{0}".format(cluster_host),
+                         "")[cluster_host is None]
         if cluster_param is not None:
             cluster_param += (":{0}".format(cluster_port), "")[cluster_port is None]
 
