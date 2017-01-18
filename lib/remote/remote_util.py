@@ -23,14 +23,16 @@ from testconstants import COUCHBASE_VERSIONS
 from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
-from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_FROM_VERSION_3,\
+                          COUCHBASE_FROM_SPOCK
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
-from testconstants import WIN_COUCHBASE_BIN_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH,\
+                          WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH
 from testconstants import CB_VERSION_NAME
@@ -480,9 +482,9 @@ class RemoteMachineShellConnection:
     def is_couchbase_installed(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            if self.file_exists(testconstants.WIN_CB_PATH, VERSION_FILE):
+            if self.file_exists(WIN_CB_PATH, VERSION_FILE):
                 log.info("{0} **** The version file {1} {2}  exists"\
-                          .format(self.ip, testconstants.WIN_CB_PATH, VERSION_FILE ))
+                          .format(self.ip, WIN_CB_PATH, VERSION_FILE ))
                 # print running process on windows
                 RemoteMachineHelper(self).is_process_running('memcached')
                 RemoteMachineHelper(self).is_process_running('erl')
@@ -930,8 +932,8 @@ class RemoteMachineShellConnection:
     def find_build_version(self, path_to_version, version_file, product):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
-        if self.file_exists(testconstants.WIN_CB_PATH, VERSION_FILE):
-            path_to_version = testconstants.WIN_CB_PATH
+        if self.file_exists(WIN_CB_PATH, VERSION_FILE):
+            path_to_version = WIN_CB_PATH
         else:
             path_to_version = testconstants.WIN_MB_PATH
         try:
@@ -1312,13 +1314,13 @@ class RemoteMachineShellConnection:
         # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
-        deleted = self.wait_till_file_deleted(testconstants.WIN_CB_PATH, \
-                                     VERSION_FILE, timeout_in_seconds=600)
+        deleted = self.wait_till_file_deleted(WIN_CB_PATH, \
+                       VERSION_FILE, timeout_in_seconds=600)
         if not deleted:
             log.error("Uninstall was failed at node {0}".format(self.ip))
             sys.exit()
-        self.wait_till_file_added(testconstants.WIN_CB_PATH, VERSION_FILE, \
-                                                     timeout_in_seconds=600)
+        self.wait_till_file_added(WIN_CB_PATH, VERSION_FILE, \
+                                       timeout_in_seconds=600)
         log.info("installed version: {0}".format(version))
         output, error = self.execute_command("cat "
                        "'/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
@@ -1577,7 +1579,7 @@ class RemoteMachineShellConnection:
             remote_path = testconstants.WIN_MB_PATH
             abbr_product = "mb"
         elif build.name.lower().find("couchbase") != -1:
-            remote_path = testconstants.WIN_CB_PATH
+            remote_path = WIN_CB_PATH
             abbr_product = "cb"
 
         if remote_path is None:
@@ -3414,7 +3416,9 @@ class RemoteMachineShellConnection:
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='', cluster_port=None, user='Administrator', password='password'):
         cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
+        f, s, b = self.get_cbversion("unix")
         if self.info.type.lower() == 'windows':
+            f, s, b = self.get_cbversion("windows")
             cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
@@ -3425,6 +3429,9 @@ class RemoteMachineShellConnection:
 
         user_param = (" -u {0}".format(user), "")[user is None]
         passwd_param = (" -p {0}".format(password), "")[password is None]
+        if f[:5] in COUCHBASE_FROM_SPOCK:
+            user_param = (" --cluster-username {0}".format(user), "")[user is None]
+            passwd_param = (" --cluster-password {0}".format(password), "")[password is None]
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [COMMAND] [CLUSTER:[PORT]] [USER] [PASWORD] [OPTIONS]
         command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
@@ -3503,7 +3510,7 @@ class RemoteMachineShellConnection:
         return o, r
 
     def remove_win_backup_dir(self):
-        win_paths = [testconstants.WIN_CB_PATH, testconstants.WIN_MB_PATH]
+        win_paths = [WIN_CB_PATH, testconstants.WIN_MB_PATH]
         for each_path in win_paths:
             backup_files = []
             files = self.list_files(each_path)
@@ -3675,10 +3682,10 @@ class RemoteMachineShellConnection:
         """ fv = a.b.c-xxxx, sv = a.b.c, bn = xxxx """
         fv = sv = bn = tmp = ""
         nonroot_path_start = ""
+        output = ""
         if not self.nonroot:
             nonroot_path_start = "/"
         if os_name != 'windows':
-            output = ""
             if self.nonroot:
                 if self.file_exists('/home/%s%s' % (self.username, LINUX_CB_PATH), VERSION_FILE):
                     output = self.read_remote_file('/home/%s%s' % (self.username, LINUX_CB_PATH),
@@ -3692,17 +3699,21 @@ class RemoteMachineShellConnection:
                 else:
                     log.info("couchbase server at {0} may not installed yet"
                                                            .format(self.ip))
-            if output:
-                for x in output:
-                    x = x.strip()
-                    if x and x[:5] in COUCHBASE_VERSIONS and "-" in x:
-                        fv = x
-                        tmp = x.split("-")
-                        sv = tmp[0]
-                        bn = tmp[1]
-                    break
-        else:
-            log.info("only check cb version in unix enviroment")
+        elif os_name == "windows":
+            if self.file_exists(WIN_CB_PATH, VERSION_FILE):
+                output = self.read_remote_file(WIN_CB_PATH, VERSION_FILE)
+            else:
+                log.info("couchbase server at {0} may not installed yet"
+                                                        .format(self.ip))
+        if output:
+            for x in output:
+                x = x.strip()
+                if x and x[:5] in COUCHBASE_VERSIONS and "-" in x:
+                    fv = x
+                    tmp = x.split("-")
+                    sv = tmp[0]
+                    bn = tmp[1]
+                break
         return fv, sv, bn
 
     def set_cbauth_env(self, server):

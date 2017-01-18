@@ -10,7 +10,8 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH
-from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6
+from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6,\
+                          COUCHBASE_FROM_SPOCK
 from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
@@ -247,14 +248,15 @@ class CreateBucketTests(BaseTestCase):
         set_index_storage_type = ""
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
             set_index_storage_type = " --index-storage-setting=memopt "
-        options = '--cluster-username="Administrator" \
-                        --cluster-password="password" \
-                        --cluster-port=8091 \
-                        --cluster-ramsize=300 \
-                        --cluster-index-ramsize=300 \
-                        --services=data,index,query %s ' % set_index_storage_type
+        options = ' --cluster-port=8091 \
+                    --cluster-ramsize=300 \
+                    --cluster-index-ramsize=300 \
+                    --services=data,index,query %s ' % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
-        self.assertEqual(o[0], "SUCCESS: init/edit localhost")
+        if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
+            self.assertEqual(o[0], 'SUCCESS: Cluster initialized')
+        else:
+            self.assertEqual(o[0], "SUCCESS: init/edit localhost")
 
         shell = RemoteMachineShellConnection(self.master)
         shell.execute_command("{0}cbdocloader -u Administrator -p password \
