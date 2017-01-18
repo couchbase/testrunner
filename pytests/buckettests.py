@@ -230,10 +230,12 @@ class CreateBucketTests(BaseTestCase):
         if time.time() >= end_time_i and len(index_name) < index_count:
             self.log.info("index list {0}".format(index_name))
             self.fail("some indexing may not complete")
-        elif len(index_name) == 8:
+        elif len(index_name) == index_count:
             self.log.info("travel-sample bucket is created and complete indexing")
             self.log.info("index list in travel-sample bucket: {0}"
                                        .format(index_name))
+        else:
+            self.log.info("There is extra index %s" % index_name)
 
     def test_cli_travel_sample_bucket(self):
         sample = "travel-sample"
@@ -306,6 +308,8 @@ class CreateBucketTests(BaseTestCase):
             self.log.info("travel-sample bucket is created and complete indexing")
             self.log.info("index list in travel-sample bucket: {0}"
                                        .format(index_name))
+        else:
+            self.log.info("There is extra index %s" % index_name)
 
     def _get_cb_version(self):
         rest = RestConnection(self.master)
