@@ -96,6 +96,8 @@ class ImportExportTests(CliBaseTest):
                         field_separator_flag = ""
                         if self.imex_type == "csv":
                             format_flag = ""
+                            if self.format_type is None:
+                                self.format_type = ""
                             if self.field_separator != "comma":
                                 if self.field_separator == "tab":
                                     """ we test tab separator in this case """
