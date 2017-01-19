@@ -408,7 +408,7 @@ class CouchbaseCliTest(CliBaseTest):
                                                               password="password")
                 server_added = False
                 output_msg = "SUCCESS: Server added"
-                if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                if self.cb_version[:3] == "4.6":
                     output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
                                                          self.servers[num + 1].port)
                 if len(output) >= 1:

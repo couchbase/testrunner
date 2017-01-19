@@ -3429,7 +3429,7 @@ class RemoteMachineShellConnection:
 
         user_param = (" -u {0}".format(user), "")[user is None]
         passwd_param = (" -p {0}".format(password), "")[password is None]
-        if f[:5] in COUCHBASE_FROM_SPOCK:
+        if f[:5] in COUCHBASE_FROM_SPOCK and cli_command == "cluster-init":
             user_param = (" --cluster-username {0}".format(user), "")[user is None]
             passwd_param = (" --cluster-password {0}".format(password), "")[password is None]
         # now we can run command in format where all parameters are optional

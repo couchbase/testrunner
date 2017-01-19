@@ -41,7 +41,7 @@ class CliBaseTest(BaseTestCase):
         """ cli output message """
         self.cli_bucket_create_msg = "SUCCESS: Bucket created"
         self.cli_rebalance_msg = "SUCCESS: Rebalance complete"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        if self.cb_version[:3] == "4.6":
             self.cli_bucket_create_msg = "SUCCESS: bucket-create"
             self.cli_rebalance_msg = "SUCCESS: rebalanced cluster"
         self.os = 'linux'
