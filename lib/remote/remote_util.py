@@ -3270,6 +3270,9 @@ class RemoteMachineShellConnection:
 
     def execute_cbtransfer(self, source, destination, command_options=''):
         transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            transfer_command = '/home/%s%scbtransfer' % (self.username,
+                                                         LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
@@ -3278,7 +3281,10 @@ class RemoteMachineShellConnection:
 
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
         if self.info.type.lower() == 'windows':
-            command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
+            command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command,
+                                                          source,
+                                                          destination,
+                                                          command_options)
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
         log.info("done execute cbtransfer")
