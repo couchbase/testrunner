@@ -3292,15 +3292,16 @@ class RemoteMachineShellConnection:
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
         cbdocloader_command = "%scbdocloader" % (LINUX_COUCHBASE_BIN_PATH)
+        linux_couchbase_path = LINUX_CB_PATH
         if self.nonroot:
             cbdocloader_command = "/home/%s%scbdocloader" % (self.username,
                                                              LINUX_COUCHBASE_BIN_PATH)
-            LINUX_CB_PATH = "/home/%s%s" % (self.username, LINUX_CB_PATH)
+            linux_couchbase_path = "/home/%s%s" % (self.username, LINUX_CB_PATH)
         self.extract_remote_info()
         command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
-                                                                            LINUX_CB_PATH, file)
+                                                                            linux_couchbase_path, file)
         if self.info.distribution_type.lower() == 'mac':
             cbdocloader_command = "%scbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
             command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
