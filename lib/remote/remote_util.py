@@ -3292,6 +3292,10 @@ class RemoteMachineShellConnection:
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
         cbdocloader_command = "%scbdocloader" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cbdocloader_command = "/home/%s%scbdocloader" % (self.username,
+                                                             LINUX_COUCHBASE_BIN_PATH)
+            LINUX_CB_PATH = "/home/%s%s" % (self.username, LINUX_CB_PATH)
         self.extract_remote_info()
         command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
@@ -3317,6 +3321,9 @@ class RemoteMachineShellConnection:
 
     def execute_cbcollect_info(self, file):
         cbcollect_command = "%scbcollect_info" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cbcollect_command = "/home/%s%scbcollect_info" % (self.username,
+                                                              LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3382,6 +3389,9 @@ class RemoteMachineShellConnection:
 
     def execute_cbstats(self, bucket, command, keyname="", vbid=0):
         cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cbstat_command = "/home/%s%scbstats" % (self.username,
+                                                    LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3404,6 +3414,9 @@ class RemoteMachineShellConnection:
 
     def couchbase_cli(self, subcommand, cluster_host, options):
         cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cb_client = "/home/%s%scouchbase-cli" % (self.username,
+                                                     LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3419,8 +3432,12 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='', cluster_port=None, user='Administrator', password='password'):
+    def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='',
+                              cluster_port=None, user='Administrator', password='password'):
         cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cb_client = "/home/%s%scouchbase-cli" % (self.username,
+                                                     LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         f, s, b = self.get_cbversion("unix")
         if self.info.type.lower() == 'windows':
@@ -3447,8 +3464,12 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket, item_size, command_options):
+    def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket,
+                                                     item_size, command_options):
         cbworkloadgen_command = "%scbworkloadgen" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cbworkloadgen_command = "/home/%s%scbworkloadgen" % (self.username,
+                                                                 LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
 
         if self.info.distribution_type.lower() == 'mac':
@@ -3457,9 +3478,11 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == 'windows':
             cbworkloadgen_command = "%scbworkloadgen.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
-        command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command, self.ip, self.port,
-                                                                          ratio, num_items, bucket, item_size,
-                                                                          command_options, username, password)
+        command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+                                                                          self.ip, self.port,
+                                                                          ratio, num_items, bucket,
+                                                                          item_size, command_options,
+                                                                          username, password)
 
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
@@ -3497,6 +3520,9 @@ class RemoteMachineShellConnection:
 
     def execute_vbuckettool(self, keys, prefix=None):
         command = "%stools/vbuckettool" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            command = "/home/%s%stools/vbuckettool" % (self.username,
+                                                       LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             command = "%stools/vbuckettool.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
