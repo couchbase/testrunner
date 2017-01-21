@@ -35,6 +35,9 @@ from testconstants import WIN_COUCHBASE_BIN_PATH,\
                           WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH
+
+from testconstants import MAC_CB_PATH
+
 from testconstants import CB_VERSION_NAME
 from testconstants import CB_REPO
 from testconstants import CB_RELEASE_APT_GET_REPO
@@ -490,7 +493,7 @@ class RemoteMachineShellConnection:
                 RemoteMachineHelper(self).is_process_running('erl')
                 return True
         elif self.info.distribution_type.lower() == 'mac':
-            output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, VERSION_FILE))
+            output, error = self.execute_command('ls %s%s' % (MAC_CB_PATH, VERSION_FILE))
             self.log_command_output(output, error)
             for line in output:
                 if line.find('No such file or directory') == -1:
@@ -3291,31 +3294,58 @@ class RemoteMachineShellConnection:
         return output
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
+        f, s, b = self.get_cbversion(self.info.type.lower())
         cbdocloader_command = "%scbdocloader" % (LINUX_COUCHBASE_BIN_PATH)
+        cluster_flag = "-n"
+        bucket_quota_flag = "-s"
+        data_set_location_flag = " "
+        if f[:5] in COUCHBASE_FROM_SPOCK:
+            cluster_flag = "-c"
+            bucket_quota_flag = "-m"
+            data_set_location_flag = "-d"
         linux_couchbase_path = LINUX_CB_PATH
         if self.nonroot:
             cbdocloader_command = "/home/%s%scbdocloader" % (self.username,
                                                              LINUX_COUCHBASE_BIN_PATH)
             linux_couchbase_path = "/home/%s%s" % (self.username, LINUX_CB_PATH)
         self.extract_remote_info()
-        command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
-                                                                            username, password, self.ip,
-                                                                            self.port, bucket, memory_quota,
-                                                                            linux_couchbase_path, file)
+        command = "%s -u %s -p %s %s %s:%s -b %s %s %s %s %ssamples/%s.zip"\
+                                                                     % (cbdocloader_command,
+                                                                        username, password,
+                                                                        cluster_flag,
+                                                                        self.ip,
+                                                                        self.port, bucket,
+                                                                        bucket_quota_flag,
+                                                                        memory_quota,
+                                                                        data_set_location_flag,
+                                                                        linux_couchbase_path,
+                                                                        file)
         if self.info.distribution_type.lower() == 'mac':
             cbdocloader_command = "%scbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
-            command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
-                                                                            username, password, self.ip,
-                                                                            self.port, bucket, memory_quota,
-                                                                            testconstants.MAC_CB_PATH, file)
+            command = "%s -u %s -p %s %s %s:%s -b %s %s %s %s %ssamples/%s.zip"\
+                                                                     % (cbdocloader_command,
+                                                                        username, password,
+                                                                        cluster_flag,
+                                                                        self.ip,
+                                                                        self.port, bucket,
+                                                                        bucket_quota_flag,
+                                                                        memory_quota,
+                                                                        data_set_location_flag,
+                                                                        MAC_CB_PATH, file)
 
         if self.info.type.lower() == 'windows':
             cbdocloader_command = "%scbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
             WIN_COUCHBASE_SAMPLES_PATH = "C:/Program\ Files/Couchbase/Server/samples/"
-            command = "%s -u %s -p %s -n %s:%s -b %s -s %s %s%s.zip" % (cbdocloader_command,
-                                                                        username, password, self.ip,
-                                                                        self.port, bucket, memory_quota,
-                                                                        WIN_COUCHBASE_SAMPLES_PATH, file)
+            command = "%s -u %s -p %s %s %s:%s -b %s %s %s %s %s%s.zip" % (cbdocloader_command,
+                                                                        username, password,
+                                                                        cluster_flag,
+                                                                        self.ip,
+                                                                        self.port, bucket,
+                                                                        bucket_quota_flag,
+                                                                        memory_quota,
+                                                                        data_set_location_flag,
+                                                                        WIN_COUCHBASE_SAMPLES_PATH,
+                                                                        file)
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
