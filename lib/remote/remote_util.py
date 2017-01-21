@@ -3339,19 +3339,28 @@ class RemoteMachineShellConnection:
     # works for linux only
     def execute_couch_dbinfo(self, file):
         couch_dbinfo_command = "%scouch_dbinfo" % (LINUX_COUCHBASE_BIN_PATH)
+        cb_data_path = "/"
+        if self.nonroot:
+            couch_dbinfo_command = "/home/%s%scouch_dbinfo" % (self.username,
+                                                               LINUX_COUCHBASE_BIN_PATH)
+            cb_data_path = "/home/%s/" % self.username
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             couch_dbinfo_command = "%scouch_dbinfo.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        command =  couch_dbinfo_command +' -i /opt/couchbase/var/lib/couchbase/data/*/*[0-9] >' + file
+        command =  couch_dbinfo_command +' -i %sopt/couchbase/var/lib/couchbase/data/*/*[0-9] >' \
+                                              % cb_data_path + file
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
         return output, error
 
     def execute_cbepctl(self, bucket, persistence, param_type, param, value):
         cbepctl_command = "%scbepctl" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cbepctl_command = "/home/%s%scbepctl" % (self.self.username,
+                                                     LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbepctl_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
@@ -3374,6 +3383,9 @@ class RemoteMachineShellConnection:
 
     def execute_cbvdiff(self, bucket, node_str, password=None):
         cbvdiff_command = "%scbvdiff" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cbvdiff_command = "/home/%s%scbvdiff" % (self.username,
+                                                     LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             cbvdiff_command = "%scbvdiff.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
