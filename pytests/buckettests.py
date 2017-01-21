@@ -35,6 +35,11 @@ class CreateBucketTests(BaseTestCase):
         shell.disconnect()
         self.sample_path = LINUX_COUCHBASE_SAMPLE_PATH
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        if self.nonroot:
+            self.sample_path = "/home/%s%s" % (self.master.ssh_username,
+                                               LINUX_COUCHBASE_SAMPLE_PATH)
+            self.bin_path = "/home/%s%s" % (self.master.ssh_username,
+                                            LINUX_COUCHBASE_BIN_PATH)
         if type.lower() == 'windows':
             self.sample_path = WIN_COUCHBASE_SAMPLE_PATH
             self.bin_path = WIN_COUCHBASE_BIN_PATH
@@ -259,9 +264,21 @@ class CreateBucketTests(BaseTestCase):
             self.assertEqual(o[0], "SUCCESS: init/edit localhost")
 
         shell = RemoteMachineShellConnection(self.master)
+        cluster_flag = "-n"
+        bucket_quota_flag = "-s"
+        data_set_location_flag = " "
+        if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
+            cluster_flag = "-c"
+            bucket_quota_flag = "-m"
+            data_set_location_flag = "-d"
         shell.execute_command("{0}cbdocloader -u Administrator -p password \
-                      -n {1} -b travel-sample -s 100 {2}travel-sample.zip" \
-                   .format(self.bin_path, self.master.ip, self.sample_path))
+                      {3} {1} -b travel-sample {4} 100 {5} {2}travel-sample.zip" \
+                                                      .format(self.bin_path,
+                                                       self.master.ip,
+                                                       self.sample_path,
+                                                       cluster_flag,
+                                                       bucket_quota_flag,
+                                                       data_set_location_flag))
         shell.disconnect()
 
         buckets = RestConnection(self.master).get_buckets()
