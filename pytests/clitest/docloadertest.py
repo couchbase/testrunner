@@ -44,7 +44,7 @@ class docloaderTests(CliBaseTest):
             self.log.info("cluster version: %s " % self.short_v)
             self.log.info("delete all buckets to create new bucket")
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-            self.sleep(7)
+            self.sleep(12)
             output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
                                                               self.couchbase_password,
                                                                    self.load_filename,
@@ -57,7 +57,7 @@ class docloaderTests(CliBaseTest):
         self.shell.delete_files(self.load_filename)
 
         if self.os != "windows":
-            command = "unzip %ssamples/%s.zip" % (LINUX_CB_PATH,
+            command = "unzip %ssamples/%s.zip" % (self.base_cb_path,
                                                   self.load_filename)
             if self.os == 'mac':
                 command = "unzip %ssamples/%s.zip" % (MAC_CB_PATH,

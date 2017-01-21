@@ -9,7 +9,7 @@ from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
     WIN_COUCHBASE_SAMPLE_PATH, \
     WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
     WIN_COUCHBASE_LOGS_PATH, WIN_TMP_PATH, \
-    WIN_BACKUP_PATH, LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, \
+    WIN_BACKUP_PATH, LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, LINUX_CB_PATH,\
     MAC_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 
 log = logger.Logger.get_logger()
@@ -59,6 +59,17 @@ class CliBaseTest(BaseTestCase):
         self.des_file = ""
         self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
         self.log_path = LINUX_COUCHBASE_LOGS_PATH
+        self.base_cb_path = LINUX_CB_PATH
+        """ non root path """
+        if self.nonroot:
+            self.cli_command_path = "/home/%s%s" % (self.master.ssh_username,
+                                                    LINUX_COUCHBASE_BIN_PATH)
+            self.sample_files_path = "/home/%s%s" % (self.master.ssh_username,
+                                                     LINUX_COUCHBASE_SAMPLE_PATH)
+            self.log_path = "/home/%s%s" % (self.master.ssh_username,
+                                            LINUX_COUCHBASE_LOGS_PATH)
+            self.base_cb_path = "/home/%s%s" % (self.master.ssh_username,
+                                                LINUX_CB_PATH)
         if type == 'windows':
             self.os = 'windows'
             self.cmd_ext = ".exe"
