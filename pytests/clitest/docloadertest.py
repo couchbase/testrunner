@@ -44,7 +44,7 @@ class docloaderTests(CliBaseTest):
             self.log.info("cluster version: %s " % self.short_v)
             self.log.info("delete all buckets to create new bucket")
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-            self.sleep(12)
+            self.sleep(15)
             output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
                                                               self.couchbase_password,
                                                                    self.load_filename,

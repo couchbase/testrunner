@@ -3389,7 +3389,7 @@ class RemoteMachineShellConnection:
     def execute_cbepctl(self, bucket, persistence, param_type, param, value):
         cbepctl_command = "%scbepctl" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cbepctl_command = "/home/%s%scbepctl" % (self.self.username,
+            cbepctl_command = "/home/%s%scbepctl" % (self.username,
                                                      LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
