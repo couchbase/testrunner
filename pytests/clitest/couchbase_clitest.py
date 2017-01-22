@@ -13,7 +13,7 @@ from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_SPOCK, \
-    COUCHBASE_FROM_SHERLOCK,\
+                          COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_4DOT6
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
@@ -2372,7 +2372,13 @@ class XdcrCLITest(CliBaseTest):
         output, _, xdcr_cluster_name, xdcr_hostname, cli_command, options = \
                                                          self.__xdcr_setup_create()
         if error_expected_in_command != "create":
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME",\
+            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK \
+                                   and xdcr_cluster_name == "remote":
+                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"]\
+                                         .replace("init/edit CLUSTERNAME",
+                                                  "Cluster reference created"), output[0])
+            else:
+                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME",\
                               (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
         else:
             output_error = self.input.param("output_error", "[]")
@@ -2400,7 +2406,13 @@ class XdcrCLITest(CliBaseTest):
         if xdcr_cluster_name:
             options = options.replace("--create ", "--edit ")
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
+            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK \
+                                   and xdcr_cluster_name == "remote":
+                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
+                                         .replace("init/edit CLUSTERNAME",
+                                                  "Cluster reference edited"), output[0])
+            else:
+                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
                                      .replace("CLUSTERNAME", (xdcr_cluster_name, "")\
                                             [xdcr_cluster_name is None]), output[0])
         if not xdcr_cluster_name:
@@ -2412,7 +2424,13 @@ class XdcrCLITest(CliBaseTest):
             options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
         output, _ = self.__execute_cli(cli_command=cli_command, options=options)
         if error_expected_in_command != "delete":
-            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
+            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK \
+                                   and xdcr_cluster_name == "remote":
+                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
+                                         .replace("delete CLUSTERNAME",
+                                                  "Cluster reference deleted"), output[0])
+            else:
+                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
                         .replace("CLUSTERNAME", (xdcr_cluster_name, "remote cluster")\
                                              [xdcr_cluster_name is None]), output[0])
         else:
