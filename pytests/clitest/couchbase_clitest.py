@@ -2400,6 +2400,11 @@ class XdcrCLITest(CliBaseTest):
                 elif "Error: hostname (ip) is missing" in element:
                     self.log.info("match {0}".format(element))
                     return True
+                elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                    if "ERROR: --xdcr-hostname is required to create a cluster connections" \
+                                                                   in element:
+                        self.log.info("match {0}".format(element))
+                        return True
             self.assertFalse("output string did not match")
 
         # MB-8570 can't edit xdcr-setup through couchbase-cli
@@ -2578,7 +2583,11 @@ class XdcrCLITest(CliBaseTest):
         options = "--regenerate-cert={0}".format(xdcr_cert)
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
-        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"]\
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+            self.assertEqual("SUCCESS: Certificate regenerate and copied to '%s'"\
+                                                            % xdcr_cert, output[0])
+        else:
+            self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"]\
                                         .replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 

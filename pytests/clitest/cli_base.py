@@ -70,6 +70,7 @@ class CliBaseTest(BaseTestCase):
                                             LINUX_COUCHBASE_LOGS_PATH)
             self.base_cb_path = "/home/%s%s" % (self.master.ssh_username,
                                                 LINUX_CB_PATH)
+            self.root_path = "/home/%s/" % self.master.ssh_username
         if type == 'windows':
             self.os = 'windows'
             self.cmd_ext = ".exe"
