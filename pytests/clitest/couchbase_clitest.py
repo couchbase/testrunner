@@ -2405,6 +2405,9 @@ class XdcrCLITest(CliBaseTest):
                                                                    in element:
                         self.log.info("match {0}".format(element))
                         return True
+                    elif "ERROR: _ - Authentication failed. Verify username and password." \
+                                                                   in element:
+                        self.log.info("match {0}".format(element))
             self.assertFalse("output string did not match")
 
         # MB-8570 can't edit xdcr-setup through couchbase-cli
@@ -2453,12 +2456,12 @@ class XdcrCLITest(CliBaseTest):
                 expect_error = ("['ERROR: unable to delete xdcr remote site localhost "
                                   "(404) Object Not Found', 'unknown remote cluster']")
                 if output_error == expect_error:
-                    output_error = "ERROR: unable to delete xdcr remote site"
+                    output_error = "ERROR: _ - unknown remote cluster"
                 self.assertTrue(self._check_output(output_error, output))
             else:
                 if output_error == \
                       "['ERROR: unable to delete xdcr remote site localhost (404) Object Not Found',"\
-                      " 'unknown remote cluster']" and  self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                      " 'unknown remote cluster']" and  self.cb_version[:3] == "4.6":
                     output_error = \
                       "['ERROR: unable to delete xdcr remote site localhost (400) Bad Request',\
                                                              '{\"_\":\"unknown remote cluster\"}']"
@@ -2505,7 +2508,12 @@ class XdcrCLITest(CliBaseTest):
                                                enable_replica_index=self.enable_replica_index)
         output, _ = self.__execute_cli(cli_command, options)
         if not error_expected:
-            self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
+            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+                self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"].replace(
+                                       "start replication", "XDCR replication created"),
+                                       output[0])
+            else:
+                self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
         else:
             return
 
