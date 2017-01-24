@@ -1,16 +1,17 @@
-from lib.mc_bin_client import MemcachedClient, MemcachedError
-from lib.memcacheConstants import *
-from couchbase_helper.documentgenerator import BlobGenerator
-from lib.couchbase_helper.subdoc_helper import SubdocHelper
-from lib.couchbase_helper.random_gen import RandomDataGenerator
+import Queue
+import copy
+import json
+import threading
+from multiprocessing import Process
+
+import couchbase.subdocument as SD
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached
-from multiprocessing import Process
+
+from lib.couchbase_helper.random_gen import RandomDataGenerator
+from lib.couchbase_helper.subdoc_helper import SubdocHelper
 from subdoc_base import SubdocBaseTest
-import Queue
-import copy, json
-import threading
-import random
+
 
 class SubdocAutoTestGenerator(SubdocBaseTest):
     def setUp(self):
@@ -69,9 +70,9 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
         for path in pairs.keys():
             try:
-            	self.exists(self.client, data_key, path)
-            except Exception, ex:
-            	error_result[path] = str(ex)
+                self.exists(self.client, data_key, path, xattr=self.xattr)
+            except Exception as ex:
+                error_result[path] = str(ex)
         self.assertTrue(len(error_result) == 0, error_result)
 
     def test_seq_mutations_dict(self):
@@ -97,7 +98,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             p = Process(target=self.test_seq_mutations, args =(queue, number_of_times, prefix, json_document, self.buckets[bucket_number]))
             p.start()
             process_list.append(p)
-        for x in process_list:
+        for p in process_list:
             p.join()
         if self.verify_result:
             filename = "/tmp/"+self.randomDataGenerator.random_uuid()+"_dump_failure.txt"
@@ -109,7 +110,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
     def test_seq_mutations(self, queue, number_of_times, prefix, json_document, bucket):
         client = self.direct_client(self.master, bucket)
         for x in range(number_of_times):
-            error_result = {}
             self.number_of_operations =  self.input.param("number_of_operations",50)
             data_key = prefix+self.randomDataGenerator.random_uuid()
             self.set(client, data_key, json_document)
@@ -256,16 +256,14 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             t.join()
         for t in self.load_thread_list:
             if t.is_alive():
-                if t != None:
+                if t is not None:
                     t.signal = False
         # ERROR ANALYSIS
-        error_msg =""
-        error_count = 0
+        queue_size = error_queue.qsize()
+        filename = '/tmp/dump_failure_{0}.txt'.format(self.randomDataGenerator.random_uuid())
         if not error_queue.empty():
-            # Dump Re-run file
-            filename = '/tmp/dump_failure_{0}.txt'.format(self.randomDataGenerator.self.randomDataGenerator.random_uuid())
             self._dump_data(filename, error_queue)
-            self.assertTrue(queue_size == 0, "error count {0}, see error dump {1}".format(queue_size, filename))
+        self.assertTrue(queue_size == 0, "number of failures {0}, check file {1}".format(error_queue.qsize(), filename))
 
     ''' Generate Sample data for testing '''
     def push_document_info(self, number_of_documents, document_info_queue):
@@ -289,7 +287,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         mutation_operation_type = "any",
         force_operation_type = None):
         client = self.direct_client(self.master, bucket)
-        while (not queue.empty()):
+        while not queue.empty():
             document_info = queue.get()
             document_key = document_info["document_key"]
             json_document = document_info["json_document"]
@@ -478,7 +476,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             else:
                 jsonDump = json.dumps(value)
                 client.set(key, 0, 0, jsonDump)
-        except Exception as e:
+        except Exception:
             raise
 # SUB DOC COMMANDS
 
@@ -488,10 +486,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" delete ----> {0} ".format(path))
             if self.use_sdk_client:
-                client.remove_in(key, path)
+                client.mutate_in(key, SD.remove(path, xattr=self.xattr))
             else:
                 client.delete_sd(key, path)
-        except Exception as e:
+        except Exception:
             raise
 
     def replace(self, client, key = '', path = '', value = None):
@@ -499,13 +497,13 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" replace ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
-                client.replace_in(key, path, value)
+                client.mutate_in(key, SD.replace(path, value, xattr=self.xattr))
             else:
                 client.replace_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise
 
-    def get_all(self, client, key = ''):
+    def get_all(self, client, key = '', path = '', value = None):
         try:
             if self.verbose_func_usage:
                 self.log.info(" get ----> {0} ".format(key))
@@ -515,7 +513,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             else:
                 r, v, d = client.get(key)
                 return json.loads(d)
-        except Exception as e:
+        except Exception:
             raise
 
     def get(self, client, key = '', path = '', value = None):
@@ -523,21 +521,21 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" get ----> {0} :: {1}".format(key, path))
             if self.use_sdk_client:
-                r, v, d = client.get_in(key, path)
+                d = client.cb.retrieve_in(key, path).get(0)[1]
                 return d
             else:
                 r, v, d = client.get_sd(key, path)
                 return json.loads(d)
-        except Exception as e:
+        except Exception:
             raise
 
-    def exists(self, client, key = '', path = '', expected_value = None):
+    def exists(self, client, key = '', path = '', value = None):
         try:
             if self.use_sdk_client:
-                return client.exists_in(key, path)
+                client.lookup_in(key, SD.exists(path)) # xattr not supported?
             else:
                 client.exists_sd(key, path)
-        except Exception as e:
+        except Exception:
             raise
 
     def counter(self, client, key = '', path = '', value = None):
@@ -545,10 +543,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" counter ----> {0} :: {1} + {2}".format(key, path, value))
             if self.use_sdk_client:
-                return client.counter_in(key, path, value)
+                client.cb.mutate_in(key, SD.counter(path, int(value), xattr=self.xattr))
             else:
                 client.counter_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise
 
 # DICTIONARY SPECIFIC COMMANDS
@@ -557,10 +555,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" dict_add ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
-                client.insert_in(key, path, value)
+                client.mutate_in(key, SD.insert(path, value, xattr=self.xattr))
             else:
                 client.dict_add_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise
 
     def dict_upsert(self, client, key = '', path = '', value = None):
@@ -568,10 +566,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" dict_upsert ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
-                client.upsert_in(key, path, value)
+                client.mutate_in(key, SD.upsert(path, value, xattr=self.xattr))
             else:
                 client.dict_upsert_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise
 
 
@@ -581,10 +579,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" array_add_last ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
-                client.arrayappend_in(key, path, value)
+                client.mutate_in(key, SD.array_append(path, value, xattr=self.xattr))
             else:
                 client.array_push_last_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise
 
     def array_add_first(self, client, key = '', path = '', value = None):
@@ -592,10 +590,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" array_add_first ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
-                client.arrayprepend_in(key, path, value)
+                client.mutate_in(key, SD.array_prepend(path, value, xattr=self.xattr))
             else:
                 client.array_push_first_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise
 
     def array_add_unique(self, client, key = '', path = '', value = None):
@@ -603,10 +601,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" array_add_unique ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
-                client.arrayaddunique_in(key, path, value)
+                client.mutate_in(key, SD.array_addunique(path, value, xattr=self.xattr))
             else:
                 client.array_add_unique_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise
 
     def array_add_insert(self, client, key = '', path = '', value = None):
@@ -614,8 +612,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" array_add_insert ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
-                client.arrayinsert_in(key, path, value)
+                client.mutate_in(key, SD.array_insert(path, value, xattr=self.xattr))
             else:
                 client.array_add_insert_sd(key, path, value)
-        except Exception as e:
+        except Exception:
             raise

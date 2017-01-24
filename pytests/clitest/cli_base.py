@@ -138,6 +138,11 @@ class CliBaseTest(BaseTestCase):
             if len(self.servers) > 1 and int(self.nodes_init) == 1:
                 servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
                 self.cluster.rebalance(self.servers[:1], servers_in, [])
+        for bucket in self.buckets:
+            testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
+            rolelist = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
+            self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+
 
     def tearDown(self):
         if not self.input.param("skip_cleanup", True):

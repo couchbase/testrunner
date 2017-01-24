@@ -8,7 +8,8 @@ import time
 from couchbase import FMT_AUTO
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from couchbase.bucket import Bucket as CouchbaseBucket
-from couchbase.exceptions import CouchbaseError,BucketNotFoundError
+from couchbase.cluster import Cluster, ClassicAuthenticator, PasswordAuthenticator
+from couchbase.exceptions import CouchbaseError, BucketNotFoundError
 from mc_bin_client import MemcachedError
 from couchbase.n1ql import N1QLQuery, N1QLRequest
 
@@ -25,6 +26,7 @@ class SDKClient(object):
         self.connection_string = \
             self._createString(scheme = scheme, bucket = bucket, hosts = hosts,
                                certpath = certpath, uhm_options = uhm_options)
+        self.bucket = bucket
         self.password = password
         self.quiet = quiet
         self.transcoder = transcoder
@@ -34,8 +36,8 @@ class SDKClient(object):
 
     def _createString(self, scheme ="couchbase", bucket = None, hosts = ["localhost"], certpath = None, uhm_options = ""):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ",""))
-        if bucket != None:
-            connection_string = "{0}/{1}".format(connection_string, bucket)
+        # if bucket != None:
+        #     connection_string = "{0}/{1}".format(connection_string, bucket)
         if uhm_options != None:
             connection_string = "{0}?{1}".format(connection_string, uhm_options)
         if scheme == "couchbases":
@@ -47,10 +49,10 @@ class SDKClient(object):
 
     def _createConn(self):
         try:
-            self.cb = CouchbaseBucket(self.connection_string, password = self.password,
-                                  quiet = self.quiet, transcoder = self.transcoder)
-            self.default_timeout = self.cb.timeout
-        except BucketNotFoundError as e:
+            cluster = Cluster(self.connection_string, bucket_class=CouchbaseBucket)
+            cluster.authenticate(PasswordAuthenticator(self.bucket, 'password'))
+            self.cb = cluster.open_bucket(self.bucket)
+        except BucketNotFoundError:
              raise
 
     def reconnect(self):

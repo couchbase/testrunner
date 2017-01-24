@@ -1,14 +1,10 @@
 import logger
-import unittest
 
-from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.cluster import Cluster
-from basetestcase import BaseTestCase
-from remote.remote_util import RemoteMachineShellConnection
 
 from membase.helper.subdoc_helper import SubdocHelper
 from subdoc_sanity import SubdocSanityTests, SimpleDataSet, DeeplyNestedDataSet
-from random import randint
+
 
 class SubdocErrorTests(SubdocSanityTests):
     def setUp(self):
@@ -214,7 +210,6 @@ class SubdocErrorTests(SubdocSanityTests):
 
     def error_gets(self, inserted_keys, path, error, field  = "field", result = {}):
         for in_key in inserted_keys:
-            num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.get_sd(in_key, path)
                 print data
@@ -224,10 +219,8 @@ class SubdocErrorTests(SubdocSanityTests):
             else:
                 result[field]  = "There were no errors. Error expected: %s" % error
 
-
     def error_exists(self, inserted_keys, path, error, field  = "field", result = {}):
         for in_key in inserted_keys:
-            num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.exists_sd(in_key, path)
                 print data
@@ -239,7 +232,6 @@ class SubdocErrorTests(SubdocSanityTests):
 
     def error_add_dict(self, inserted_keys, add_str, path, error, field  = "field", result = {}):
         for in_key in inserted_keys:
-            num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.dict_add_sd(in_key, path, add_str)
                 print data
@@ -251,7 +243,6 @@ class SubdocErrorTests(SubdocSanityTests):
 
     def error_upsert_dict(self, inserted_keys, add_str, path, error, field  = "field", result = {}):
         for in_key in inserted_keys:
-            num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.dict_upsert_sd(in_key, path, add_str)
                 result[field] = "There were no errors. Error expected: %s" % error
@@ -262,7 +253,6 @@ class SubdocErrorTests(SubdocSanityTests):
 
     def error_delete(self, inserted_keys, path, error, field  = "field", result = {}):
         for in_key in inserted_keys:
-            num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.delete_sd(in_key, path)
                 print data
@@ -274,7 +264,6 @@ class SubdocErrorTests(SubdocSanityTests):
 
     def error_replace(self, inserted_keys, path, error, replace_str, field  = "field", result = {}):
         for in_key in inserted_keys:
-            num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.replace_sd(in_key, path, replace_str)
                 print data

@@ -550,6 +550,9 @@ class XDCRRemoteClusterRef:
             self.__src_cluster.get_name(), self.__dest_cluster.get_name(),
             self.__name)
 
+    def get_cb_clusters(self):
+        return self.__cb_clusters
+
     def get_src_cluster(self):
         return self.__src_cluster
 
@@ -1047,7 +1050,6 @@ class CouchbaseCluster:
     def get_cluster(self):
         return self.__clusterop
 
-
     def get_kv_gen(self):
         raise_if(
             self.__kv_gen is None,
@@ -1194,21 +1196,23 @@ class CouchbaseCluster:
     def create_sasl_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH):
+            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False):
         """Create sasl buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
         @param num_replicas: number of replicas (1-3).
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
+        @param lww: conflict_resolution_type.
         """
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
             sasl_params = self._create_bucket_params(server=self.__master_node, password='password',
-                                                                size=bucket_size, replicas=num_replicas,
-                                                                eviction_policy=eviction_policy,
-                                                                bucket_priority=bucket_priority)
+                                                     size=bucket_size, replicas=num_replicas,
+                                                     eviction_policy=eviction_policy,
+                                                     bucket_priority=bucket_priority,
+                                                     lww=lww)
             bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name,password='password',
                                                                           bucket_params=sasl_params))
 
@@ -1217,7 +1221,8 @@ class CouchbaseCluster:
                     name=name, authType="sasl", saslPassword="password",
                     num_replicas=num_replicas, bucket_size=bucket_size,
                     eviction_policy=eviction_policy,
-                    bucket_priority=bucket_priority
+                    bucket_priority=bucket_priority,
+                    lww=lww
                 ))
 
         for task in bucket_tasks:
@@ -1226,13 +1231,14 @@ class CouchbaseCluster:
     def create_standard_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH):
+            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False):
         """Create standard buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
         @param num_replicas: number of replicas (1-3).
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
+        @param lww: conflict_resolution_type.
         """
         bucket_tasks = []
         for i in range(num_buckets):
@@ -1242,7 +1248,8 @@ class CouchbaseCluster:
                 size=bucket_size,
                 replicas=num_replicas,
                 eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority)
+                bucket_priority=bucket_priority,
+                lww=lww)
 
             bucket_tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
                                                                               bucket_params=standard_params))
@@ -1257,7 +1264,8 @@ class CouchbaseCluster:
                     bucket_size=bucket_size,
                     port=STANDARD_BUCKET_PORT + i,
                     eviction_policy=eviction_policy,
-                    bucket_priority=bucket_priority
+                    bucket_priority=bucket_priority,
+                    lww=lww
                 ))
 
         for task in bucket_tasks:
@@ -1266,20 +1274,22 @@ class CouchbaseCluster:
     def create_default_bucket(
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH
+            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False
     ):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
+        @param lww: conflict_resolution_type.
         """
         bucket_params=self._create_bucket_params(
             server=self.__master_node,
             size=bucket_size,
             replicas=num_replicas,
             eviction_policy=eviction_policy,
-            bucket_priority=bucket_priority
+            bucket_priority=bucket_priority,
+            lww=lww
         )
         self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
@@ -1290,7 +1300,8 @@ class CouchbaseCluster:
                 num_replicas=num_replicas,
                 bucket_size=bucket_size,
                 eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority
+                bucket_priority=bucket_priority,
+                lww=lww
             ))
 
     def get_buckets(self):
@@ -2583,15 +2594,11 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__topology = self._input.param("ctopology", TOPOLOGY.CHAIN)
         # complex topology tests (> 2 clusters must specify chain_length >2)
         self.__chain_length = self._input.param("chain_length", 2)
-        self.__rep_type = self._input.param(
-            "replication_type",
-            REPLICATION_PROTOCOL.XMEM)
+        self.__rep_type = self._input.param("replication_type",REPLICATION_PROTOCOL.XMEM)
         self.__num_sasl_buckets = self._input.param("sasl_buckets", 0)
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
 
-        self.__eviction_policy = self._input.param(
-            "eviction_policy",
-            'valueOnly')
+        self.__eviction_policy = self._input.param("eviction_policy",'valueOnly')
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
         self.__lww = self._input.param("lww", 0)
@@ -2617,9 +2624,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             "demand_encryption",
             False)
         self._num_replicas = self._input.param("replicas", 1)
-        self._create_default_bucket = self._input.param(
-            "default_bucket",
-            True)
+        self._create_default_bucket = self._input.param("default_bucket",True)
         self._rdirection = self._input.param("rdirection",
                             REPLICATION_DIRECTION.UNIDIRECTION)
         self._num_items = self._input.param("items", 1000)
@@ -2634,16 +2639,12 @@ class XDCRNewBaseTest(unittest.TestCase):
         if self._del_clusters:
             self._del_clusters = self._del_clusters.split('-')
         self._expires = self._input.param("expires", 0)
-        self._wait_for_expiration = self._input.param(
-            "wait_for_expiration",
-            True)
+        self._wait_for_expiration = self._input.param("wait_for_expiration",True)
         self._warmup = self._input.param("warm", "").split('-')
         self._rebalance = self._input.param("rebalance", "").split('-')
         self._failover = self._input.param("failover", "").split('-')
         self._wait_timeout = self._input.param("timeout", 60)
-        self._disable_compaction = self._input.param(
-            "disable_compaction",
-            "").split('-')
+        self._disable_compaction = self._input.param("disable_compaction","").split('-')
         self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._checkpoint_interval = self._input.param("checkpoint_interval",60)
         self._optimistic_threshold = self._input.param("optimistic_threshold", 256)
@@ -2722,6 +2723,35 @@ class XDCRNewBaseTest(unittest.TestCase):
             else:
                 FloatingServers._serverlist.append(server)
 
+    def get_cluster_op(self):
+        return self.__cluster_op
+
+    def add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
+        """
+           From spock, couchbase server is built with some users that handles
+           some specific task such as:
+               cbadminbucket
+           Default added user is cbadminbucket with admin role
+        """
+        if testuser is None:
+            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                'password': 'password'}]
+        if rolelist is None:
+            rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                      'roles': 'admin'}]
+        if node is None:
+            node = self.master
+
+        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
+                                                                       node.ip))
+        RbacBase().create_user_source(testuser, 'builtin', node)
+        self.sleep(10)
+
+        self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
+                                                                testuser[0]["name"]))
+        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
+        self.sleep(10)
+
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
         @return: CouchbaseCluster object
@@ -2739,6 +2769,11 @@ class XDCRNewBaseTest(unittest.TestCase):
     def get_cb_clusters(self):
         return self.__cb_clusters
 
+    def get_lww(self):
+        return self.__lww
+
+    def get_report_error_list(self):
+        return self.__report_error_list
 
     def __calculate_bucket_size(self, cluster_quota, num_buckets):
 
@@ -2757,8 +2792,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         elif num_buckets > 0:
             bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
         return bucket_size
-
-
 
     def __create_buckets(self):
         # if mixed priority is set by user, set high priority for sasl and
@@ -2781,19 +2814,20 @@ class XDCRNewBaseTest(unittest.TestCase):
                     bucket_size,
                     self._num_replicas,
                     eviction_policy=self.__eviction_policy,
-                    bucket_priority=bucket_priority)
+                    bucket_priority=bucket_priority,
+                    lww=self.__lww)
 
             cb_cluster.create_sasl_buckets(
                 bucket_size, num_buckets=self.__num_sasl_buckets,
                 num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
-                bucket_priority=bucket_priority)
+                bucket_priority=bucket_priority, lww=self.__lww)
 
             cb_cluster.create_standard_buckets(
                 bucket_size, num_buckets=self.__num_stand_buckets,
                 num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
-                bucket_priority=bucket_priority)
+                bucket_priority=bucket_priority, lww=self.__lww)
 
     def create_buckets_on_cluster(self, cluster_name):
         # if mixed priority is set by user, set high priority for sasl and

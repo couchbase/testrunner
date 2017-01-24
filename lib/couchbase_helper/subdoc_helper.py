@@ -87,7 +87,6 @@ class SubdocHelper():
             operation = self.pick_dict_operations(pairs[key], operation = force_operation_type)
           else:
             operation = self.pick_array_operations(pairs[key], operation = force_operation_type)
-          new_path  = None
           copy_of_original_dataset = copy.deepcopy(data_set)
           if operation["mutate"] == True:
             function = getattr(self, operation["python"])
