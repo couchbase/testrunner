@@ -3352,6 +3352,7 @@ class RestConnection(object):
             return status, json.loads(content)
 
     def create_index_with_rest(self, create_info):
+        log.info("CREATE INDEX USING REST WITH PARAMETERS: " + str(create_info))
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         api = self.index_baseUrl + 'api/indexes?create=true'
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3405,16 +3406,45 @@ class RestConnection(object):
         return json.loads(content)
 
     def full_table_scan_gsi_index_with_rest(self, id, body):
+        if "limit" not in body.keys():
+            body["limit"] = 30000
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = 'api/index/{0}?scanall=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
-        status, content, header = self._http_request(api, 'GET', headers=headers,
-                                                     params=json.dumps(params).encode("ascii", "ignore"))
+        status, content, header = self._http_request(
+            api, 'GET', headers=headers,
+            params=json.dumps(params).encode("ascii", "ignore"))
         if not status:
             raise Exception(content)
-        return json.loads(json.dumps(content))
+        #Below line is there because of MB-20758
+        content = content.split("[]")[0]
+        # Following line is added since the content uses chunked encoding
+        chunkless_content = content.replace("][", ", \n")
+        return json.loads(chunkless_content)
+
+    def multiscan_for_gsi_index_with_rest(self, id, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = 'api/index/{0}?multiscan=true'.format(id)
+        api = self.index_baseUrl + url
+        headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
+        params = json.loads("{0}".format(body).replace('\'', '"').replace(
+            'True', 'true').replace('False', 'false'))
+        params = json.dumps(params).encode("ascii", "ignore").replace("\\\\", "\\")
+        log.info(json.dumps(params).encode("ascii", "ignore"))
+        status, content, header = self._http_request(api, 'GET', headers=headers,
+                                                     params=params)
+        if not status:
+            raise Exception(content)
+        #Below line is there because of MB-20758
+        content = content.split("[]")[0]
+        # Following line is added since the content uses chunked encoding
+        chunkless_content = content.replace("][", ", \n")
+        if chunkless_content:
+            return json.loads(chunkless_content)
+        else:
+            return content
 
 
 class MembaseServerVersion:
