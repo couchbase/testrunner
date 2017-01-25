@@ -7,6 +7,7 @@ import re
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
+from membase.api.esrest_client import EsRestConnection
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
@@ -21,7 +22,7 @@ from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 from tasks.future import TimeoutError
 
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 
@@ -1556,21 +1557,37 @@ class CouchbaseCluster:
         tasks = []
         for bucket in self.__buckets:
             if op_type == OPS.UPDATE:
-                self.__kv_gen[OPS.UPDATE] = BlobGenerator(
-                    self.__kv_gen[OPS.CREATE].name,
-                    self.__kv_gen[OPS.CREATE].seed,
-                    self.__kv_gen[OPS.CREATE].value_size,
-                    start=0,
-                    end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                    self.__kv_gen[OPS.UPDATE] = BlobGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].seed,
+                        self.__kv_gen[OPS.CREATE].value_size,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                    self.__kv_gen[OPS.UPDATE] = DocumentGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].template,
+                        self.__kv_gen[OPS.CREATE].args,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
                 gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
             elif op_type == OPS.DELETE:
-                self.__kv_gen[OPS.DELETE] = BlobGenerator(
-                    self.__kv_gen[OPS.CREATE].name,
-                    self.__kv_gen[OPS.CREATE].seed,
-                    self.__kv_gen[OPS.CREATE].value_size,
-                    start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
-                        100 - perc) / 100),
-                    end=self.__kv_gen[OPS.CREATE].end)
+                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                    self.__kv_gen[OPS.DELETE] = BlobGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].seed,
+                        self.__kv_gen[OPS.CREATE].value_size,
+                        start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
+                            100 - perc) / 100),
+                        end=self.__kv_gen[OPS.CREATE].end)
+                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                    self.__kv_gen[OPS.DELETE] = DocumentGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].template,
+                        self.__kv_gen[OPS.CREATE].args,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
                 gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
             else:
                 raise XDCRException("Unknown op_type passed: %s" % op_type)
@@ -2466,7 +2483,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cleanup_previous()
         self.__init_clusters()
         self.__set_free_servers()
-        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
+        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
+                and str(self.__class__).find('capiXDCR') == -1:
             self.__create_buckets()
 
     def __init_parameters(self):
@@ -2637,12 +2655,13 @@ class XDCRNewBaseTest(unittest.TestCase):
             quota_percent = None
 
         dgm_run = self._input.param("dgm_run", 0)
+        bucket_size = 0
         if dgm_run:
             # buckets cannot be created if size<100MB
             bucket_size = 256
-        elif quota_percent is not None:
-             bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
-        else:
+        elif quota_percent is not None and num_buckets > 0:
+            bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
+        elif num_buckets > 0:
             bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
         return bucket_size
 
@@ -3239,6 +3258,33 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
 
+    def _wait_for_es_replication_to_catchup(self, timeout=300):
+
+        _count1 = _count2 = 0
+        for cb_cluster in self.__cb_clusters:
+            cb_cluster.run_expiry_pager()
+
+        # 5 minutes by default
+        end_time = time.time() + timeout
+
+        for cb_cluster in self.__cb_clusters:
+            rest1 = RestConnection(cb_cluster.get_master_node())
+            for remote_cluster in cb_cluster.get_remote_clusters():
+                rest2 = EsRestConnection(remote_cluster.get_dest_cluster().get_master_node())
+                for bucket in cb_cluster.get_buckets():
+                    while time.time() < end_time :
+                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                        _count2 = rest2.fetch_bucket_stats(bucket_name=bucket.name).itemCount
+                        if _count1 == _count2:
+                            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
+                            break
+                        self.sleep(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
+                                       "Waiting for replication to catch up ..".
+                                   format(bucket.name, _count1, _count2))
+                    else:
+                        self.fail("Not all items replicated in {0} sec for {1} "
+                                "bucket. on source cluster:{2}, on dest:{3}".\
+                            format(timeout, bucket.name, _count1, _count2))
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
