@@ -2291,11 +2291,33 @@ class XdcrCLITest(CliBaseTest):
     SSL_MANAGE_SUCCESS = {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
                            'regenerate': "SUCCESS: regenerate certificate to \'PATH\'"
                            }
+
     def setUp(self):
         TestInputSingleton.input.test_params["default_bucket"] = False
         super(XdcrCLITest, self).setUp()
         self.__user = "Administrator"
         self.__password = "password"
+        self.log.info("===== Setup destination cluster =====")
+        if self.dest_nodes and len(self.dest_nodes) > 1:
+            self.cluster.async_rebalance(self.dest_nodes,self.dest_nodes[1:],
+                                                                 []).result()
+
+        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
+            XdcrCLITest.XDCR_SETUP_SUCCESS = {
+                          "create": "SUCCESS: Cluster reference created",
+                          "edit": "SUCCESS: Cluster reference edited",
+                          "delete": "SUCCESS: Cluster reference deleted"
+            }
+            XdcrCLITest.XDCR_REPLICATE_SUCCESS = {
+                          "create": "SUCCESS: XDCR replication created",
+                          "delete": "SUCCESS: XDCR replication deleted",
+                          "pause": "SUCCESS: XDCR replication paused",
+                          "resume": "SUCCESS: XDCR replication resume"
+            }
+            XdcrCLITest.SSL_MANAGE_SUCCESS = \
+                          {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
+                           'regenerate': "SUCCESS: Certificate regenerate and copied to \'PATH\'"
+                          }
 
     def tearDown(self):
         for server in self.servers:
@@ -2328,7 +2350,7 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name),\
                                                 "")[xdcr_cluster_name is None]
         if xdcr_hostname is not None:
-            options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
+            options += " --xdcr-hostname={0}".format(self.dest_nodes[0].ip)
         options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
         options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
         options += (" --xdcr-demand-encryption={0}".format(demand_encyrption))
@@ -2337,7 +2359,7 @@ class XdcrCLITest(CliBaseTest):
             if wrong_cert:
                 cluster_host = "localhost"
             else:
-                cluster_host = self.servers[xdcr_hostname].ip
+                cluster_host = self.dest_master.ip
             cert_info = "--retrieve-cert"
             if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
                 cert_info = "--cluster-cert-info"
@@ -2372,13 +2394,7 @@ class XdcrCLITest(CliBaseTest):
         output, _, xdcr_cluster_name, xdcr_hostname, cli_command, options = \
                                                          self.__xdcr_setup_create()
         if error_expected_in_command != "create":
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK \
-                                   and xdcr_cluster_name == "remote":
-                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"]\
-                                         .replace("init/edit CLUSTERNAME",
-                                                  "Cluster reference created"), output[0])
-            else:
-                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME",\
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME",\
                               (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
         else:
             output_error = self.input.param("output_error", "[]")
@@ -2401,26 +2417,25 @@ class XdcrCLITest(CliBaseTest):
                     self.log.info("match {0}".format(element))
                     return True
                 elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                    if "ERROR: --xdcr-hostname is required to create a cluster connections" \
+                    if "ERROR: _ - Error checking if target cluster supports SANs in cerificates."\
+                                                                                        in element:
+                        self.log.info("match {0}".format(element))
+                        return True
+                    elif "ERROR: --xdcr-hostname is required to create a cluster connections" \
                                                                    in element:
                         self.log.info("match {0}".format(element))
                         return True
                     elif "ERROR: _ - Authentication failed. Verify username and password." \
                                                                    in element:
                         self.log.info("match {0}".format(element))
+                        return True
             self.assertFalse("output string did not match")
 
         # MB-8570 can't edit xdcr-setup through couchbase-cli
         if xdcr_cluster_name:
             options = options.replace("--create ", "--edit ")
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK \
-                                   and xdcr_cluster_name == "remote":
-                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
-                                         .replace("init/edit CLUSTERNAME",
-                                                  "Cluster reference edited"), output[0])
-            else:
-                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"]\
                                      .replace("CLUSTERNAME", (xdcr_cluster_name, "")\
                                             [xdcr_cluster_name is None]), output[0])
         if not xdcr_cluster_name:
@@ -2432,13 +2447,7 @@ class XdcrCLITest(CliBaseTest):
             options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
         output, _ = self.__execute_cli(cli_command=cli_command, options=options)
         if error_expected_in_command != "delete":
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK \
-                                   and xdcr_cluster_name == "remote":
-                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
-                                         .replace("delete CLUSTERNAME",
-                                                  "Cluster reference deleted"), output[0])
-            else:
-                self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"]\
                         .replace("CLUSTERNAME", (xdcr_cluster_name, "remote cluster")\
                                              [xdcr_cluster_name is None]), output[0])
         else:
@@ -2508,12 +2517,7 @@ class XdcrCLITest(CliBaseTest):
                                                enable_replica_index=self.enable_replica_index)
         output, _ = self.__execute_cli(cli_command, options)
         if not error_expected:
-            if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"].replace(
-                                       "start replication", "XDCR replication created"),
-                                       output[0])
-            else:
-                self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
+            self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
         else:
             return
 
@@ -2591,11 +2595,7 @@ class XdcrCLITest(CliBaseTest):
         options = "--regenerate-cert={0}".format(xdcr_cert)
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-            self.assertEqual("SUCCESS: Certificate regenerate and copied to '%s'"\
-                                                            % xdcr_cert, output[0])
-        else:
-            self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"]\
+        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"]\
                                         .replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 

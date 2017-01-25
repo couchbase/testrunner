@@ -12,6 +12,11 @@ from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
     WIN_BACKUP_PATH, LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, LINUX_CB_PATH,\
     MAC_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 
+from couchbase_helper.cluster import Cluster
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+
+
 log = logger.Logger.get_logger()
 
 
@@ -23,6 +28,10 @@ class CliBaseTest(BaseTestCase):
         super(CliBaseTest, self).setUp()
         self.r = random.Random()
         self.vbucket_count = 1024
+        self.cluster = Cluster()
+        self.clusters_dic = self.input.clusters
+        self.dest_nodes = self.clusters_dic[1]
+        self.dest_master = self.dest_nodes[0]
         self.shell = RemoteMachineShellConnection(self.master)
         self.rest = RestConnection(self.master)
         self.import_back = self.input.param("import_back", False)
@@ -118,7 +127,18 @@ class CliBaseTest(BaseTestCase):
         for zone in zones:
             if zone != "Group 1":
                 rest.delete_zone(zone)
+        self.clusters_dic = self.input.clusters
+        self.dest_nodes = self.clusters_dic[1]
+        self.dest_master = self.dest_nodes[0]
+        if self.dest_nodes and len(self.dest_nodes) > 1:
+            self.log.info("======== clean up destination cluster =======")
+            rest = RestConnection(self.dest_nodes[0])
+            rest.remove_all_remote_clusters()
+            rest.remove_all_replications()
+            BucketOperationHelper.delete_all_buckets_or_assert(self.dest_nodes, self)
+            ClusterOperationHelper.cleanup_cluster(self.dest_nodes)
         super(CliBaseTest, self).tearDown()
+
 
     """ in sherlock, there is an extra value called runCmd in the 1st element """
     def del_runCmd_value(self, output):
