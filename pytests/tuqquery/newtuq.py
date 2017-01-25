@@ -55,6 +55,7 @@ class QueryTests(BaseTestCase):
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
+        self.threadFailure = False
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", None)
         else:
@@ -141,6 +142,331 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   Monitoring Test Cases
+##############################################################################################
+
+    def test_simple_cluster_monitoring(self):
+        self.test_monitoring(test='simple')
+
+    def test_purge_completed(self):
+        self.test_monitoring(test='purge')
+
+    def test_filter_by_node(self):
+        self.test_monitoring(test='filter')
+
+    # def test_server_failure(self):
+    #     self.test_monitoring(test='simple')
+    #
+    #     result = self.run_cbq_query('select * from system:completed_requests')
+    #     print (json.dumps(result, sort_keys=True, indent=3))
+    #
+    #     remote = RemoteMachineShellConnection(self.servers[1])
+    #     remote.stop_server()
+    #
+    #     time.sleep(30)
+    #
+    #     result = self.run_cbq_query('select * from system:completed_requests')
+    #     print (json.dumps(result, sort_keys=True, indent=3))
+    #     self.assertTrue(result['metrics']['resultCount'] == 1)
+    #
+    #     #Check to see that completed_requests will now ignore the information from the downed node
+    #     remote.start_server()
+    #     time.sleep(30)
+    #     logging.info('CHECKING THAT COMPLETED_REQUESTS DOES NOT CONTAIN INFORMATION FROM THE NODE THAT WAS TAKEN OFFLINE')
+    #     result = self.run_cbq_query('select * from system:completed_requests')
+    #     print result
+
+##############################################################################################
+#
+#   Monitoring Helper Functions
+##############################################################################################
+
+    # Run basic cluster monitoring checks (outlined in the helper function) by executing 2 queries in parallel, must be
+    # run with a sufficient number of docs to be an effective test (docs-per-day >=3).
+    def test_monitoring(self, test):
+        for bucket in self.buckets:
+            logging.info('Purging Completed Request Log')
+            self.run_cbq_query('delete from system:completed_requests')
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertTrue(result['metrics']['resultCount'] == 0)
+            result = self.run_cbq_query('select * from system:active_requests')
+            logging.info("Checking that no requests are running")
+            self.assertTrue(result['metrics']['resultCount'] == 1)
+            e = threading.Event()
+            if test == 'simple':
+                t50 = threading.Thread(name='run_simple_monitoring', target=self.run_simple_monitoring_check,
+                                       args=(e, 2))
+            elif test == 'purge':
+                t50 = threading.Thread(name='run_purge', target=self.run_purge_completed_requests,
+                                       args=(e, 2))
+            elif test == 'filter':
+                t50 = threading.Thread(name='run_filter_by_node', target=self.run_filter_by_node,
+                                       args=(e, 2))
+                t52 = threading.Thread(name='run_third_query', target=self.run_parallel_query,
+                                       args=[self.servers[1]])
+                t53 = threading.Thread(name='run_fourth_query', target=self.run_parallel_query,
+                                       args=[self.servers[1]])
+            t51 = threading.Thread(name='run_second_query', target=self.run_parallel_query,
+                                   args=[self.servers[2]])
+            t50.start()
+            t51.start()
+            if test == 'filter':
+                t52.start()
+                t53.start()
+            e.set()
+            query = 'select * from %s' % bucket.name
+            self.run_cbq_query(query, server=self.servers[1])
+            logging.debug('event is set')
+            t50.join(100)
+            t51.join(100)
+            if test == 'filter':
+                t52.join(100)
+                t53.join(100)
+            self.assertFalse(self.threadFailure)
+            query_template = 'FROM %s select $str0, $str1 ORDER BY $str0,$str1 ASC' % bucket.name
+            actual_result, expected_result = self.run_query_from_template(query_template)
+            self._verify_results(actual_result['results'], expected_result)
+
+    def run_parallel_query(self, server):
+        logging.info('parallel query is active')
+        query = 'select * from default'
+        self.run_cbq_query(query, server=server)
+
+    '''Runs the basic cluster monitoring checks: (2 queries will be run when calling this method, each query will be
+                                                  called from a different node)
+            -check if the running queries are in system:active_requests
+            -check if the queries' node fields accurately reflect the node they were started from
+            -check if a query can be accessed from system:active_requests using its requestId
+            -check if a query can be killed from system:active_requests using its requestId
+                -once the query is killed check if it is in system:completed_requests
+            -check if the queries appear in system:completed_requests when they complete.'''
+    def run_simple_monitoring_check(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                # check if the running queries are in system:active_requests
+                logging.info('CHECKING SYSTEM:ACTIVE_REQUESTS FOR THE RUNNING QUERIES')
+                result = self.run_cbq_query('select * from system:active_requests')
+                if not result['metrics']['resultCount'] == 3:
+                    self.threadFailure = True
+                    logging.error(
+                        'NOT ALL ACTIVE QUERIES ARE IN ACTIVE_REQUESTS, THERE SHOULD BE 3 QUERIES ACTIVE. %s'
+                        ' QUERIES ARE ACTIVE.' % result['metrics']['resultCount'])
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+                # check if the queries' node fields accurately reflect the node they were started from
+                logging.info("VERIFYING THAT ACTIVE_REQUESTS HAVE THE QUERIES MARKED WITH THE CORRECT NODES")
+                node1 = self.run_cbq_query('select * from system:active_requests where node  =  "%s"'
+                                           % self.servers[1].ip)
+                if not node1['metrics']['resultCount'] == 1:
+                    self.threadFailure = True
+                    logging.error('THE QUERY ON THE REQUESTED NODE: "%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
+                                  % self.servers[1].ip)
+                    print node1
+                    return
+                node2 = self.run_cbq_query('select * from system:active_requests where node  =  "%s"'
+                                           % self.servers[2].ip)
+                if not node2['metrics']['resultCount'] == 1:
+                    self.threadFailure = True
+                    logging.error('THE QUERY ON THE REQUESTED NODE: "%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
+                                  % self.servers[2].ip)
+                    print node2
+                    return
+
+                # check if a query can be accessed from system:active_requests using its requestId
+                logging.info("CHECKING IF A QUERY CAN BE ACCESSED VIA ITS requestId")
+                requestId = result['results'][1]['active_requests']['requestId']
+                result = self.run_cbq_query('select * from system:active_requests where requestId  =  "%s"'
+                                            % requestId)
+                if not result['metrics']['resultCount'] == 1:
+                    self.threadFailure = True
+                    logging.error('THE QUERY FOR requestId "%s" IS NOT IN ACTIVE_REQUESTS' % requestId)
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+                # check if a query can be killed from system:active_requests using its requestId
+                logging.info("CHECKING IF A QUERY CAN BE KILLED")
+                self.run_cbq_query('delete from system:active_requests where requestId  =  "%s"' % requestId)
+                result = self.run_cbq_query('select * from system:active_requests  where requestId  =  "%s"'
+                                            % requestId)
+                if not result['metrics']['resultCount'] == 0:
+                    self.threadFailure = True
+                    logging.error('THE QUERY FOR requestId "%s" WAS NOT KILLED AND IS STILL IN ACTIVE_REQUESTS'
+                                  % requestId)
+                    return
+
+                # once the query is killed check if it is in system:completed_requests
+                result = self.run_cbq_query('select * from system:completed_requests where requestId = "%s"'
+                                            % requestId)
+                if not result['metrics']['resultCount'] == 1:
+                    self.threadFailure = True
+                    logging.error('THE QUERY FOR requestId "%s" WAS REMOVED FROM ACTIVE_REQUESTS BUT NOT PUT INTO '
+                                  'COMPLETED_REQUESTS' % requestId)
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+                time.sleep(30)
+                # check if the queries appear in system:completed_requests when they complete.
+                logging.info('CHECKING IF ALL COMPLETED QUERIES ARE IN SYSTEM:COMPLETED_REQUESTS')
+                result = self.run_cbq_query('select * from system:completed_requests')
+                if not result['metrics']['resultCount'] == 2:
+                    self.threadFailure = True
+                    logging.error('THE QUERIES EITHER DID NOT COMPLETE RUNNING OR WERE NOT ADDED TO '
+                                  'SYSTEM:COMPLETED_REQUESTS')
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+    '''Runs basic completed_requests deletions
+            -check if you can delete the whole log
+            -check if you can delete by node
+            -check if you can delete by requestId'''
+    def run_purge_completed_requests(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                time.sleep(30)
+                logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS HAS QUERIES IN IT')
+                result = self.run_cbq_query('select * from system:completed_requests')
+                if not result['metrics']['resultCount'] == 2:
+                    self.threadFailure = True
+                    logging.error('THERE ARE NO ITEMS INSIDE SYSTEM:COMPLETED_REQUESTS')
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+                # check if the queries appear in system:completed_requests when they complete.
+                logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS CAN BE PURGED')
+                self.run_cbq_query("delete from system:completed_requests")
+                result = self.run_cbq_query('select * from system:completed_requests')
+                if not result['metrics']['resultCount'] == 0:
+                    self.threadFailure = True
+                    logging.error('DELETE FAILED, THERE ARE STILL ITEMS INSIDE SYSTEM:COMPLETED_REQUESTS')
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+                query1 = threading.Thread(name='run_first_query', target=self.run_parallel_query,
+                                       args=[self.servers[1]])
+                query2 = threading.Thread(name='run_first_query', target=self.run_parallel_query,
+                                       args=[self.servers[1]])
+                query3 = threading.Thread(name='run_third_query', target=self.run_parallel_query,
+                                       args=[self.servers[2]])
+                query4 = threading.Thread(name='run_fourth_query', target=self.run_parallel_query,
+                                       args=[self.servers[2]])
+                query1.start()
+                query2.start()
+                query3.start()
+                query4.start()
+
+                query1.join(100)
+                query2.join(100)
+                query3.join(100)
+                query4.join(100)
+
+                # check if the queries can be purged selectively
+                logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS CAN BE PURGED BY NODE')
+                self.run_cbq_query('delete from system:completed_requests where node = "%s"' % self.servers[2].ip)
+                result = self.run_cbq_query('select * from system:completed_requests')
+                if not result['metrics']['resultCount'] == 2:
+                    self.threadFailure = True
+                    logging.error('DELETE FAILED, THERE ARE STILL ITEMS FROM NODE: "%s"'
+                                  'INSIDE SYSTEM:COMPLETED_REQUESTS' % self.servers[2].ip)
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+                # check if the queries can be purged by requestId
+                logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS CAN BE PURGED BY REQUESTID')
+                requestId = result['results'][0]['completed_requests']['requestId']
+                self.run_cbq_query('delete from system:completed_requests where requestId = "%s"' % requestId)
+                result = self.run_cbq_query('select * from system:completed_requests')
+                if not result['metrics']['resultCount'] == 1:
+                    self.threadFailure = True
+                    logging.error('DELETE FAILED, THE QUERY FOR REQUESTID: "%s" IS STILL '
+                                  'INSIDE SYSTEM:COMPLETED_REQUESTS' % requestId)
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    return
+
+    '''Checks to see if active_requests and completed_requests can be filtered by node'''
+    def run_filter_by_node(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                logging.info('CHECKING IF SYSTEM:ACTIVE_REQUESTS RESULTS CAN BE FILTERED BY NODE')
+                result = self.run_cbq_query('select * from system:active_requests')
+                node1 = self.run_cbq_query('select * from system:active_requests where node = "%s"'
+                                           % self.servers[2].ip)
+                if not node1['metrics']['resultCount'] == 1:
+                    self.threadFailure = True
+                    logging.error('THE RESULTS OF THE QUERY ARE INCORRECT')
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    print node1
+                    return
+
+                node2 = self.run_cbq_query('select * from system:active_requests where node = "%s"'
+                                           % self.servers[1].ip)
+                if not node2['metrics']['resultCount'] == 3:
+                    self.threadFailure = True
+                    logging.error('THE RESULTS OF THE QUERY ARE INCORRECT')
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    print node2
+                    return
+
+                time.sleep(30)
+
+                logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS RESULTS CAN BE FILTERED BY NODE')
+                result = self.run_cbq_query('select * from system:completed_requests')
+                node1 = self.run_cbq_query('select * from system:completed_requests where node = "%s"'
+                                           % self.servers[2].ip)
+                if not node1['metrics']['resultCount'] == 1:
+                    self.threadFailure = True
+                    logging.error('THE RESULTS OF THE QUERY ARE INACCURATE')
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    print node1
+                    return
+
+                node2 = self.run_cbq_query('select * from system:completed_requests where node = "%s"'
+                                           % self.servers[1].ip)
+                if not node2['metrics']['resultCount'] == 3:
+                    self.threadFailure = True
+                    logging.error('THE RESULTS OF THE QUERY ARE INACCURATE')
+                    print (json.dumps(result, sort_keys=True, indent=3))
+                    print node2
+                    return
+
+    def run_active_requests(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                result = self.run_cbq_query("select * from system:active_requests")
+                print result
+                self.assertTrue(result['metrics']['resultCount'] == 1)
+                requestId = result['requestID']
+                result = self.run_cbq_query(
+                    'delete from system:active_requests where requestId  =  "%s"' % requestId)
+                time.sleep(20)
+                result = self.run_cbq_query(
+                    'select * from system:active_requests  where requestId  =  "%s"' % requestId)
+                self.assertTrue(result['metrics']['resultCount'] == 0)
+                result = self.run_cbq_query("select * from system:completed_requests")
+                print result
+                requestId = result['requestID']
+                result = self.run_cbq_query(
+                    'delete from system:completed_requests where requestId  =  "%s"' % requestId)
+                time.sleep(10)
+                result = self.run_cbq_query(
+                    'select * from system:completed_requests where requestId  =  "%s"' % requestId)
+                print result
+                self.assertTrue(result['metrics']['resultCount'] == 0)
+
+##############################################################################################
+#
 #   SIMPLE CHECKS
 ##############################################################################################
     def test_simple_check(self):
@@ -173,30 +499,6 @@ class QueryTests(BaseTestCase):
             if self.monitoring:
                 e.set()
                 t2.join(100)
-
-    def run_active_requests(self,e,t):
-        while not e.isSet():
-            logging.debug('wait_for_event_timeout starting')
-            event_is_set = e.wait(t)
-            logging.debug('event set: %s', event_is_set)
-            if event_is_set:
-                 result = self.run_cbq_query("select * from system:active_requests")
-                 print result
-                 self.assertTrue(result['metrics']['resultCount'] == 1)
-                 requestId = result['requestID']
-                 result = self.run_cbq_query('delete from system:active_requests where RequestId  =  "%s"' % requestId)
-                 time.sleep(20)
-                 result = self.run_cbq_query('select * from system:active_requests  where RequestId  =  "%s"' % requestId)
-                 self.assertTrue(result['metrics']['resultCount'] == 0)
-                 result = self.run_cbq_query("select * from system:completed_requests")
-                 print result
-                 requestId = result['requestID']
-                 result = self.run_cbq_query('delete from system:completed_requests where RequestId  =  "%s"' % requestId)
-                 time.sleep(10)
-                 result = self.run_cbq_query('select * from system:completed_requests where RequestId  =  "%s"' % requestId)
-                 print result
-                 self.assertTrue(result['metrics']['resultCount'] == 0)
-
 
     def test_simple_negative_check(self):
         queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3' :
@@ -884,7 +1186,7 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
                 res = self.run_cbq_query()
                 self.sleep(10)
-                print res
+                #print res
                 if self.monitoring:
                     self.query = "delete from system:completed_requests"
                     self.run_cbq_query()
@@ -904,12 +1206,12 @@ class QueryTests(BaseTestCase):
                 if self.monitoring:
                         self.query = "select * from system:active_requests"
                         result = self.run_cbq_query()
-                        print result
+                        #print result
                         self.assertTrue(result['metrics']['resultCount'] == 1)
                         self.query = "select * from system:completed_requests"
                         time.sleep(20)
                         result = self.run_cbq_query()
-                        print result
+                        #print result
 
 
 
