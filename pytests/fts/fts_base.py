@@ -817,6 +817,8 @@ class FTSIndex:
     def add_doc_config_to_index_definition(self, mode):
         """
         Add Document Type Configuration to Index Definition
+        Note: These regexps have been constructed keeping
+        travel-sample dataset in mind (keys like 'airline_1023')
         """
         doc_config = {}
 
@@ -826,10 +828,12 @@ class FTSIndex:
 
         if mode == 'docid_regexp2':
             doc_config['mode'] = 'docid_regexp'
+            # a seq of 6 or more letters
             doc_config['docid_regexp'] = "\\b[a-z]{6,}"
 
         if mode == 'docid_regexp_neg1':
             doc_config['mode'] = 'docid_regexp'
+            # a seq of 8 or more letters
             doc_config['docid_regexp'] = "\\b[a-z]{8,}"
 
         if mode == 'docid_prefix':
@@ -961,6 +965,7 @@ class FTSIndex:
             del query_json['ctl']['consistency']['vectors']
         elif consistency_vectors != {}:
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
+        print query_json
         return query_json
 
     def construct_facets_definition(self):
@@ -2532,6 +2537,18 @@ class CouchbaseCluster:
                                                  services=None)
         return tasks
 
+    def failover(self, master=False, num_nodes=1,
+                                     graceful=False):
+        """synchronously failover nodes from Cluster
+        @param master: True if failover master node only.
+        @param num_nodes: number of nodes to rebalance-out from cluster.
+        @param graceful: True if graceful failover else False.
+        """
+        task = self.__async_failover(master=master,
+                                     num_nodes=num_nodes,
+                                     graceful=graceful)
+        task.result()
+
     def __async_failover(self, master=False, num_nodes=1, graceful=False, node=None):
         """Failover nodes from Cluster
         @param master: True if failover master node only.
@@ -3102,6 +3119,7 @@ class FTSBaseTest(unittest.TestCase):
             Loads the default JSON dataset
             see JsonDocGenerator in documentgenerator.py
         """
+        self.log.info("Beginning data load ...")
         if not num_items:
             num_items = self._num_items
         if not self._dgm_run:
@@ -3293,7 +3311,7 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
-    def wait_for_indexing_complete(self):
+    def wait_for_indexing_complete(self, item_count=None):
         """
         Wait for index_count for any index to stabilize
         """
@@ -3321,6 +3339,8 @@ class FTSBaseTest(unittest.TestCase):
                                      index.name,
                                      index_doc_count,
                                      self.es.get_index_count('es_index')))
+                if item_count and index_doc_count > item_count:
+                    break
 
                 if bucket_doc_count == index_doc_count:
                     break

@@ -385,6 +385,54 @@ class StableTopFTS(FTSBaseTest):
         _, defn = index.get_index_defn()
         self.log.info(defn['indexDef'])
 
+    def update_index_during_large_indexing(self):
+        """
+            MB-22410 - Updating index with a large dirty write queue
+            items = 5M
+        """
+        self.load_employee_dataset()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_index(bucket, 'sample_index')
+        # wait till half the keys are indexed
+        self.wait_for_indexing_complete(self._num_items/2)
+        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
+        # see if the index is query-able with half items
+        self.wait_for_indexing_complete(self._num_items/2)
+        hits, _, _, _ = index.execute_query(self.sample_query,
+                                         zero_results_ok=False)
+        self.log.info("Hits: %s" % hits)
+        # see if the index is still query-able with all 5M
+        self.wait_for_indexing_complete()
+        hits, _, _, _ = index.execute_query(self.sample_query,
+                                         zero_results_ok=False)
+        self.log.info("Hits: %s" % hits)
+
+    def delete_index_during_large_indexing(self):
+        """
+            MB-22410 - Deleting index with a large dirty write queue is slow
+            items = 5M
+        """
+        self.load_employee_dataset()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_index(bucket, 'sample_index')
+        # wait till half the keys are indexed
+        self.wait_for_indexing_complete(self._num_items/2)
+        index.delete()
+        self.sleep(5)
+        try:
+            _, defn = index.get_index_defn()
+            self.log.info(defn)
+            self.fail("ERROR: Index definition still exists after deletion! "
+                      "%s" %defn['indexDef'])
+        except Exception as e:
+            self.log.info("Expected exception caught: %s" % e)
+
     def edit_index_negative(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
