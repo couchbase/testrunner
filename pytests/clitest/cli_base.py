@@ -30,8 +30,14 @@ class CliBaseTest(BaseTestCase):
         self.vbucket_count = 1024
         self.cluster = Cluster()
         self.clusters_dic = self.input.clusters
-        self.dest_nodes = self.clusters_dic[1]
-        self.dest_master = self.dest_nodes[0]
+        if self.clusters_dic:
+            if len(self.clusters_dic) > 1:
+                self.dest_nodes = self.clusters_dic[1]
+                self.dest_master = self.dest_nodes[0]
+            elif len(self.clusters_dic) == 1:
+                self.log.error("=== need 2 cluster to setup xdcr in ini file ===")
+        else:
+            self.log.error("**** Cluster config is setup in ini file. ****")
         self.shell = RemoteMachineShellConnection(self.master)
         self.rest = RestConnection(self.master)
         self.import_back = self.input.param("import_back", False)
@@ -129,8 +135,14 @@ class CliBaseTest(BaseTestCase):
             if zone != "Group 1":
                 rest.delete_zone(zone)
         self.clusters_dic = self.input.clusters
-        self.dest_nodes = self.clusters_dic[1]
-        self.dest_master = self.dest_nodes[0]
+        if self.clusters_dic:
+            if len(self.clusters_dic) > 1:
+                self.dest_nodes = self.clusters_dic[1]
+                self.dest_master = self.dest_nodes[0]
+            elif len(self.clusters_dic) == 1:
+                self.log.error("=== need 2 cluster to setup xdcr in ini file ===")
+        else:
+            self.log.error("**** Cluster config is setup in ini file. ****")
         if self.dest_nodes and len(self.dest_nodes) > 1:
             self.log.info("======== clean up destination cluster =======")
             rest = RestConnection(self.dest_nodes[0])
