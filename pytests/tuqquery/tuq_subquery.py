@@ -71,18 +71,13 @@ class QuerySubqueryTests(QueryTests):
     def test_delete_subquery(self):
         self.query = 'insert into {0} (key k,value doc)  select to_string(email)|| UUID() as k , hobbies as doc from {0} where email is not missing and VMs[0].os is not missing and hobbies is not missing'.format("default")
         actual_result = self.run_cbq_query()
-        print actual_result['metrics']
-        import pdb;pdb.set_trace()
-        #self.assertTrue(actual_result['metrics']['mutationCount']==82320)
+        self.assertTrue(actual_result['metrics']['mutationCount']==82320)
         self.query = 'delete from {0} d where "sports" IN (select RAW OBJECT_NAMES(h)[0] FROM d.hobby h)'.format("default")
         actual_result = self.run_cbq_query()
-        print actual_result['metrics']
-        import pdb;pdb.set_trace()
-        #self.assertTrue(actual_result['metrics']['mutationCount']==82320)
+        self.assertTrue(actual_result['metrics']['mutationCount']==82320)
         self.query = 'DELETE FROM {0} a WHERE  "centos" IN (SELECT RAW VMs.os FROM a.VMs)'.format("default")
         actual_result = self.run_cbq_query()
-        print actual_result['metrics']
-        #self.assertTrue(actual_result['metrics']['mutationCount']==0)
+        self.assertTrue(actual_result['metrics']['mutationCount']==82320)
 
 
     def test_update_subquery_in_where_clause(self):
@@ -170,6 +165,7 @@ class QuerySubqueryTests(QueryTests):
         self.query = 'SELECT name, id FROM default WHERE EXISTS (SELECT 1 FROM default.VMs WHERE VMs.memory > 10)' \
                      ' order by meta().id limit 2'
         actual_result = self.run_cbq_query()
+        self.assertTrue(actual_result['results']==[{u'id': u'000185e4-bee7-4247-a19f-b329938d46ff'}, {u'id': u'00023b10-7275-4160-8fe9-b0545d492a34'}])
 
 
     def test_correlated_queries_predicate_not_exists(self):
@@ -177,20 +173,15 @@ class QuerySubqueryTests(QueryTests):
                      ' WHERE VMs.memory < 10) order by meta().id limit 2'
         self.run_cbq_query()
         actual_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results']==[{u'id': u'000094fe-77b1-489a-8530-0b84037a971e'}, {u'id': u'00014448-0eb4-4b17-bb7e-f51c85d94e09'}])
+        self.assertTrue(actual_result['results']==[{u'id': u'000185e4-bee7-4247-a19f-b329938d46ff'}, {u'id': u'00023b10-7275-4160-8fe9-b0545d492a34'}])
 
     def test_correlated_queries_in_clause(self):
         self.query = 'SELECT name, id FROM default WHERE "windows" IN (SELECT RAW VMs.os FROM default.VMs) order by meta().id limit 2'
         actual_result = self.run_cbq_query()
-        print actual_result['results']
-        import pdb;pdb.set_trace()
-       # self.assertTrue(actual_result['results']==[{u'id': u'391b78fd-6c18-4225-86a2-573e3df16118', u'name': [{u'FirstName': u'employeefirstname-9'}, {u'MiddleName': u'employeemiddlename-9'}, {u'LastName': u'employeelastname-9'}]}, {u'id': u'1a62218b-1758-4c65-825a-a747f7c4babf', u'name': [{u'FirstName': u'employeefirstname-9'}, {u'MiddleName': u'employeemiddlename-9'}, {u'LastName': u'employeelastname-9'}]}])
+        self.assertTrue(actual_result['results']==[{u'id': u'000185e4-bee7-4247-a19f-b329938d46ff'}, {u'id': u'00023b10-7275-4160-8fe9-b0545d492a34'}])
         self.query = 'SELECT name, id FROM default WHERE 10 < (SELECT RAW VMs.memory FROM default.VMs)  order by meta().id limit 2'
         actual_result = self.run_cbq_query()
-        print actual_result['results']
-        import pdb;pdb.set_trace()
-
-       # self.assertTrue(actual_result['results']==[{u'id': u'000012b9-9fd1-4a7b-843e-68cee1c17ad6'}, {u'id': u'0000bf73-9b54-4919-b2ad-34e6fbc6f247'}])
+        self.assertTrue(actual_result['results']==[{u'id': u'000185e4-bee7-4247-a19f-b329938d46ff'}, {u'id': u'00023b10-7275-4160-8fe9-b0545d492a34'}])
 
 
 
@@ -209,10 +200,10 @@ class QuerySubqueryTests(QueryTests):
 
 
     def test_subquery_explain(self):
-        self.query = 'explain SELECT name, id FROM default WHERE "windows" IN (SELECT RAW VMs.os FROM default.VMs)'
+        self.query = 'explain SELECT q FROM {"p":[{"x":11},{"x":12}],"q":"abc","r":null}.q'
         actual_result = self.run_cbq_query()
-        print actual_result['results']
-        #self.assertTrue(actual_result['results']==[])
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['#operator']=='ExpressionScan')
 
 
 
