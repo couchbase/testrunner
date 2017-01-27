@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import copy
 import urllib
 import uuid
 import time
@@ -168,6 +169,8 @@ class RemoteMachineShellConnection:
     def __init__(self, serverInfo):
         # let's create a connection
         self.username = serverInfo.ssh_username
+        self.password = serverInfo.ssh_password
+        self.ssh_key = serverInfo.ssh_key
         self.input = TestInput.TestInputParser.get_test_input(sys.argv)
         self.use_sudo = True
         self.nonroot = False
@@ -218,6 +221,40 @@ class RemoteMachineShellConnection:
                                                    {0}".format(e, self.ip))
                     exit(1)
         log.info("Connected to {0}".format(serverInfo.ip))
+
+    """
+        In case of non root user, we need to switch to root to
+        run command
+    """
+    def connect_with_user(self, user="root"):
+        max_attempts_connect = 2
+        attempt = 0
+        while True:
+            try:
+                log.info("Connect to node: %s as user: %s" % (self.ip, user))
+                if self.remote and self.ssh_key == '':
+                    self._ssh_client.connect(hostname=self.ip,
+                                             username=user,
+                                             password=self.password)
+                break
+            except paramiko.AuthenticationException:
+                log.error("Authentication for root failed")
+                exit(1)
+            except paramiko.BadHostKeyException:
+                log.error("Invalid Host key")
+                exit(1)
+            except Exception as e:
+                if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
+                        attempt != max_attempts_connect:
+                    log.error("Can't establish SSH session to node {1} as root:\
+                              {0}. Will try again in 1 sec".format(e, self.ip))
+                    attempt += 1
+                    time.sleep(1)
+                else:
+                    log.error("Can't establish SSH session to node {1} :\
+                                                   {0}".format(e, self.ip))
+                    exit(1)
+        log.info("Connected to {0} as {1}".format(self.ip, user))
 
     def sleep(self, timeout=1, message=""):
         log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
@@ -581,10 +618,17 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe out"')
             self.log_command_output(output, error)
         else:
-            output, error = self.execute_command('/sbin/iptables -F')
+            command_1 = "/sbin/iptables -F"
+            command_2 = "/sbin/iptables -t nat -F"
+            if self.nonroot:
+                self.connect_with_user()
+            output, error = self.execute_command(command_1)
             self.log_command_output(output, error)
-            output, error = self.execute_command('/sbin/iptables -t nat -F')
+            output, error = self.execute_command(command_2)
             self.log_command_output(output, error)
+            self.connect_with_user(user=self.username)
+            if self.nonroot:
+                self.connect_with_user(user=self.username)
 
     def download_binary(self, url, deliverable_type, filename, latest_url=None, skip_md5_check=True):
         self.extract_remote_info()
@@ -2064,6 +2108,8 @@ class RemoteMachineShellConnection:
                           " Use root user to uninstall it at %s \n"\
                           " This python process id: %d will be killed to stop the installation"\
                          % (self.ip, os.getpid())
+                    self.sleep(5, "==== delay kill pid %d in 5 seconds to printout message ==="\
+                                                                                 % os.getpid())
                     os.system('kill %d' % os.getpid())
             # uninstallation command is different
             if type == "ubuntu":
@@ -3867,6 +3913,7 @@ class RemoteUtilHelper(object):
 
     @staticmethod
     def enable_firewall(server, bidirectional=False, xdcr=False):
+        """ Check if user is root or non root in unix """
         shell = RemoteMachineShellConnection(server)
         shell.info = shell.extract_remote_info()
         if shell.info.type.lower() == "windows":
@@ -3881,23 +3928,32 @@ class RemoteUtilHelper(object):
             else:
                 log.error("erlang process failed to suspend")
         else:
+            copy_server = copy.deepcopy(server)
+            command_1 = "/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT"
+            command_2 = "/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT"
+            command_3 = "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
+            if shell.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME \
+                             and server.ssh_username != "root":
+                copy_server.ssh_username = "root"
+                shell.disconnect()
+                log.info("=== connect to server with user %s " % copy_server.ssh_username)
+                shell = RemoteMachineShellConnection(copy_server)
+                o, r = shell.execute_command("whoami")
+                shell.log_command_output(o, r)
             # Reject incoming connections on port 1000->65535
-            o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT")
+            o, r = shell.execute_command(command_1)
             shell.log_command_output(o, r)
-
             # Reject outgoing connections on port 1000->65535
             if bidirectional:
-                o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT")
+                o, r = shell.execute_command(command_2)
                 shell.log_command_output(o, r)
-
             if xdcr:
-                o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+                o, r = shell.execute_command(command_3)
                 shell.log_command_output(o, r)
-
             log.info("enabled firewall on {0}".format(server))
             o, r = shell.execute_command("/sbin/iptables --list")
             shell.log_command_output(o, r)
-        shell.disconnect()
+            shell.disconnect()
 
     @staticmethod
     def common_basic_setup(servers):
