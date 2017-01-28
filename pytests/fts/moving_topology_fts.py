@@ -946,6 +946,7 @@ class MovingTopFTS(FTSBaseTest):
     def update_index_during_failover(self):
         """
          Perform indexing + failover + index defn change in parallel
+         for D,D+F,F cluster
         """
         self.load_data()
         self.create_fts_indexes_all_buckets()
@@ -960,7 +961,6 @@ class MovingTopFTS(FTSBaseTest):
                                    name="failover",
                                    args=())
         fail_thread.start()
-        self.sleep(15)
         index = self._cb_cluster.get_fts_index_by_name('default_index_1')
         new_plan_param = {"maxPartitionsPerPIndex": 2}
         index.index_definition['planParams'] = \
@@ -980,8 +980,53 @@ class MovingTopFTS(FTSBaseTest):
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _, _, _ = index.execute_query(
+            self.query,
+            expected_hits=index.get_src_bucket_doc_count())
+        self.log.info("Hits: %s" % hits)
+
+    def update_index_during_failover_and_rebalance(self):
+        """
+         Perform indexing + failover + index defn change in parallel
+        """
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._num_items/2)
+        fail_thread = Thread(
+            target=self._cb_cluster.failover_and_rebalance_nodes(),
+            name="failover",
+            args=())
+        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
+        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        update_index_thread = Thread(target=index.update(),
+                                   name="update_index",
+                                   args=())
+        fail_thread.start()
+        update_index_thread.start()
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
+        fail_thread.join()
+        update_index_thread.join()
         hits, _, _, _ = index.execute_query(self.query)
         self.log.info("Hits: %s" % hits)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _, _, _ = index.execute_query(
+            self.query,
+            expected_hits=index.get_src_bucket_doc_count())
+        self.log.info("Hits: %s" % hits)
+
 
     def partial_rollback(self):
         bucket = self._cb_cluster.get_bucket_by_name("default")

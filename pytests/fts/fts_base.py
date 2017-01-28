@@ -965,7 +965,6 @@ class FTSIndex:
             del query_json['ctl']['consistency']['vectors']
         elif consistency_vectors != {}:
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
-        print query_json
         return query_json
 
     def construct_facets_definition(self):
