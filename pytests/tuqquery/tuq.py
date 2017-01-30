@@ -1,6 +1,7 @@
 import os
 import pprint
-import logger
+import logging
+import threading
 import json
 import uuid
 import copy
@@ -112,6 +113,9 @@ class QueryTests(BaseTestCase):
         if (self.analytics):
             self.setup_analytics()
             self.sleep(30,'wait for analytics setup')
+        if self.monitoring:
+            self.run_cbq_query('delete from system:prepareds')
+            self.run_cbq_query('delete from system:completed_requests')
         #if self.ispokemon:
             #self.set_indexer_pokemon_settings()
 
@@ -352,7 +356,6 @@ class QueryTests(BaseTestCase):
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
             print result
-
 
     def test_any_external(self):
         for bucket in self.buckets:
@@ -598,8 +601,6 @@ class QueryTests(BaseTestCase):
 
     def test_prepared_like_wildcards(self):
         if self.monitoring:
-            self.query = "delete from system:prepareds"
-            result = self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             print result
@@ -707,8 +708,6 @@ class QueryTests(BaseTestCase):
 
     def test_prepared_group_by_aggr_fn(self):
         if self.monitoring:
-            self.query = "delete from system:prepareds"
-            result = self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==0)
@@ -2250,8 +2249,6 @@ class QueryTests(BaseTestCase):
 
     def test_named_prepared_between(self):
         if self.monitoring:
-            self.query = "delete from system:prepareds"
-            self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             print result
@@ -3957,21 +3954,21 @@ class QueryTests(BaseTestCase):
                 else:
                     self.fail("There was no errors. Error expected: %s" % error)
 
-    def prepared_common_body(self):
+    def prepared_common_body(self,server=None):
         self.isprepared = True
-        result_no_prepare = self.run_cbq_query()['results']
+        result_no_prepare = self.run_cbq_query(server=server)['results']
         if self.named_prepare:
             if 'concurrent' not in self.named_prepare:
                 self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
             query = "PREPARE %s from %s" % (self.named_prepare,self.query)
         else:
             query = "PREPARE %s" % self.query
-        prepared = self.run_cbq_query(query=query)['results'][0]
+        prepared = self.run_cbq_query(query=query,server=server)['results'][0]
         if self.encoded_prepare and len(self.servers) > 1:
             encoded_plan=prepared['encoded_plan']
-            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan)['results']
+            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan,server=server)['results']
         else:
-            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
+            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True,server=server)['results']
         if(self.cover):
             self.assertTrue("IndexScan in %s" % result_with_prepare)
             self.assertTrue("covers in %s" % result_with_prepare)
