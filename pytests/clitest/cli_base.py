@@ -8,7 +8,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
     WIN_COUCHBASE_SAMPLE_PATH, \
     WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
-    WIN_COUCHBASE_LOGS_PATH, WIN_TMP_PATH, \
+    WIN_COUCHBASE_LOGS_PATH, WIN_TMP_PATH, WIN_TMP_PATH_RAW, \
     WIN_BACKUP_PATH, LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, LINUX_CB_PATH,\
     MAC_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 
@@ -92,6 +92,7 @@ class CliBaseTest(BaseTestCase):
             self.cmd_ext = ".exe"
             self.root_path = WIN_ROOT_PATH
             self.tmp_path = WIN_TMP_PATH
+            self.tmp_path_raw = WIN_TMP_PATH_RAW
             self.cmd_backup_path = WIN_BACKUP_C_PATH
             self.backup_path = WIN_BACKUP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
@@ -139,17 +140,17 @@ class CliBaseTest(BaseTestCase):
             if len(self.clusters_dic) > 1:
                 self.dest_nodes = self.clusters_dic[1]
                 self.dest_master = self.dest_nodes[0]
+                if self.dest_nodes and len(self.dest_nodes) > 1:
+                    self.log.info("======== clean up destination cluster =======")
+                    rest = RestConnection(self.dest_nodes[0])
+                    rest.remove_all_remote_clusters()
+                    rest.remove_all_replications()
+                    BucketOperationHelper.delete_all_buckets_or_assert(self.dest_nodes, self)
+                    ClusterOperationHelper.cleanup_cluster(self.dest_nodes)
             elif len(self.clusters_dic) == 1:
                 self.log.error("=== need 2 cluster to setup xdcr in ini file ===")
         else:
-            self.log.error("**** Cluster config is setup in ini file. ****")
-        if self.dest_nodes and len(self.dest_nodes) > 1:
-            self.log.info("======== clean up destination cluster =======")
-            rest = RestConnection(self.dest_nodes[0])
-            rest.remove_all_remote_clusters()
-            rest.remove_all_replications()
-            BucketOperationHelper.delete_all_buckets_or_assert(self.dest_nodes, self)
-            ClusterOperationHelper.cleanup_cluster(self.dest_nodes)
+            self.log.info("**** If run xdcr test, need cluster config is setup in ini file. ****")
         super(CliBaseTest, self).tearDown()
 
 
