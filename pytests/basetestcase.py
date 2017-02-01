@@ -63,8 +63,8 @@ class BaseTestCase(unittest.TestCase):
         self.cleanup = False
         self.nonroot = False
         shell = RemoteMachineShellConnection(self.master)
-        type = shell.extract_remote_info().distribution_type
-        if type.lower() != 'windows':
+        self.os_info = shell.extract_remote_info().type.lower()
+        if self.os_info != 'windows':
             if self.master.ssh_username != "root":
                 self.nonroot = True
         shell.disconnect()

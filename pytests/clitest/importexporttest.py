@@ -105,7 +105,7 @@ class ImportExportTests(CliBaseTest):
                                 else:
                                     field_separator_flag = "--field-separator %s "\
                                                               % self.field_separator
-                        key_gen = "%index%"
+                        key_gen = "key::%index%"
                         imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                     " -b %s -d %s%s %s %s -g %s %s "\
                               % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -123,6 +123,8 @@ class ImportExportTests(CliBaseTest):
                         self.shell.execute_command("mkdir %sexport " % self.tmp_path)
                         export_file = self.ex_path + bucket.name
                         if self.imex_type == "json":
+                            if self.cmd_ext:
+                                export_file = export_file.replace("/cygdrive/c", "c:")
                             exp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                             " -b %s -f %s -o %s"\
                                   % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -159,9 +161,9 @@ class ImportExportTests(CliBaseTest):
                 if len(self.buckets) >= 1:
                     if self.imex_type == "json":
                         for bucket in self.buckets:
-                            key_gen = "%index%"
+                            key_gen = "key::%index%"
                             """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                        -b default -d file:///tmp/export/default -f list -g %index%  """
+                        -b default -d file:///tmp/export/default -f list -g key::%index%  """
                             imp_cmd_str = "%s%s%s %s -c %s:%s -u Administrator -p password "\
                                                                  "-b %s -d %s%s -f %s -g %s"\
                                      % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -186,6 +188,8 @@ class ImportExportTests(CliBaseTest):
                 if len(self.buckets) >= 1:
                     for bucket in self.buckets:
                         export_file = self.ex_path + bucket.name
+                        if self.cmd_ext:
+                            export_file = export_file.replace("/cygdrive/c", "c:")
                         exe_cmd_str = "%s%s%s %s -c %s:%s -u Administrator "\
                                              "-p password -b %s -f %s -o %s"\
                                     % (self.cli_command_path, self.test_type,
@@ -222,7 +226,7 @@ class ImportExportTests(CliBaseTest):
             import_file = json_list_1000_lines
                                   =lines,....
             ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                        -b default -d file:///tmp/export/default -f list -g %index% """
+                -b default -d file:///tmp/export/default -f list -g key::%index% """
         server = copy.deepcopy(self.servers[0])
         self.sample_file = self.input.param("sample_file", None)
         self.cluster_flag = self.input.param("cluster_flag", "-c")
@@ -233,14 +237,17 @@ class ImportExportTests(CliBaseTest):
         self.format_flag = self.input.param("format_flag", "-f")
         self.generate_flag = self.input.param("generate_flag", "-g")
         self.output_flag = self.input.param("output_flag", "-o")
+        data_path = self.tmp_path
+        if self.cmd_ext:
+            data_path = self.tmp_path_raw
         if self.test_type == "import":
             cmd = "cbimport"
             cmd_str = "%s%s%s %s %s %s %s Administrator %s password %s default %s "\
-                                      "file://%sdefault  %s lines %s %%index%%"\
+                                     "file://%sdefault  %s lines %s key::%%index%%"\
                             % (self.cli_command_path, cmd, self.cmd_ext,
                            self.imex_type, self.cluster_flag, server.ip,
                            self.user_flag, self.password_flag, self.bucket_flag,
-                           self.dataset_flag, self.tmp_path, self.format_flag,
+                           self.dataset_flag, data_path, self.format_flag,
                            self.generate_flag)
         elif self.test_type == "export":
             cmd = "cbexport"
@@ -293,7 +300,7 @@ class ImportExportTests(CliBaseTest):
                 self.fail("%s could not detect missing '-b or --bucket' flag"
                                                           % self.test_type)
         if self.dataset_flag == "" and self.test_type == "import":
-            if "Expected flag: file://%sdefault" % self.tmp_path in output \
+            if "Expected flag: file://%sdefault" % data_path in output \
                              and "Required Flags:" in output:
                 self.log.info("%s detected missing '-d or --dataset' flag"
                                                           % self.test_type)
@@ -388,16 +395,18 @@ class ImportExportTests(CliBaseTest):
                 self.shell.execute_command("rm -rf ~/log")
             elif self.logs_flag == "absolute_path":
                 logs_path = self.tmp_path + "logs/" + self.logs_flag
+        if self.cmd_ext:
+            if logs_path and logs_path.startswith("/cygdrive/"):
+                logs_path = logs_path.replace("/cygdrive/c", "c:")
         if self.test_type == "import":
             cmd = "cbimport"
             self._remote_copy_import_file(self.import_file)
             if self.imex_type == "json":
                 for bucket in self.buckets:
-                    key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
                         -b default -d file:///tmp/export/default -f list -g %index%  """
                     imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
-                                  "-d %s%s -f %s -g %%index%% %s %s %s %s %s %s"\
+                                  "-d %s%s -f %s -g key::%%index%% %s %s %s %s %s %s"\
                              % (self.cli_command_path, cmd, self.cmd_ext,
                                             self.imex_type, server.ip, bucket.name,
                                     import_method, self.des_file, self.format_type,
@@ -538,6 +547,8 @@ class ImportExportTests(CliBaseTest):
             if len(self.buckets) >= 1:
                 for bucket in self.buckets:
                     export_file = self.ex_path + bucket.name
+                    if self.cmd_ext:
+                        export_file = export_file.replace("/cygdrive/c", "c:")
                     exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                      server.ip, username, password, bucket.name,
@@ -562,7 +573,7 @@ class ImportExportTests(CliBaseTest):
                 self.cluster.create_default_bucket(import_servers[2], "250", self.num_replicas,
                                                enable_replica_index=self.enable_replica_index,
                                                eviction_policy=self.eviction_policy)
-                imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d file://%s -f %s -g %s"\
+                imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d file://%s -f %s -g key::%%%s%%"\
                               % (self.cli_command_path, "cbimport", self.cmd_ext, self.imex_type,
                                  import_servers[2].ip, username, password, "default",
                                  import_file, self.format_type, "index")
@@ -604,9 +615,11 @@ class ImportExportTests(CliBaseTest):
                         else:
                             field_separator_flag = "--field-separator %s " % self.field_separator
                 for bucket in self.buckets:
-                    key_gen = "%index%"
+                    key_gen = "key::%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                    -b default -d file:///tmp/export/default -f list -g %index%  """
+                    -b default -d file:///tmp/export/default -f list -g key::%index%  """
+                    if self.cmd_ext:
+                        des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                           server.ip, username, password, bucket.name,
