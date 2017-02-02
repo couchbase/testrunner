@@ -241,7 +241,7 @@ def main():
 
                 if haveTestToLaunch:
                     # build the dashboard descriptor
-                    dashboardDescriptor = testsToLaunch[i]['subcomponent']
+                    dashboardDescriptor = urllib.quote(testsToLaunch[i]['subcomponent'])
                     if options.dashboardReportedParameters is not None:
                         for o in options.dashboardReportedParameters.split(','):
                             dashboardDescriptor += '_' + o.split('=')[1]
