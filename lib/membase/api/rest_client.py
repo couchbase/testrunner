@@ -2727,6 +2727,32 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'PUT', params)
         return status
 
+    def set_completed_requests_collection_duration(self, server, min_time):
+        http = httplib2.Http()
+        n1ql_port = 8093
+        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        body = {"completed-threshold": min_time}
+        headers = self._create_headers_with_auth('Administrator','password')
+        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
+        return response,content
+
+    def set_completed_requests_max_entries(self, server, no_entries):
+        http = httplib2.Http()
+        n1ql_port = 8093
+        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        body = {"completed-limit": no_entries}
+        headers = self._create_headers_with_auth('Administrator','password')
+        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
+        return response,content
+
+    def get_query_vitals(self,server):
+        http = httplib2.Http()
+        n1ql_port = 8093
+        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/vitals"
+        headers = self._create_headers_with_auth('Administrator', 'password')
+        response, content = http.request(api, "GET", headers=headers)
+        return response, content
+
     def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
         key = 'prepared' if is_prepared else 'statement'
