@@ -50,10 +50,7 @@ class EsRestConnection(RestConnection):
         return ES.index_stats()
 
     def get_indices(self):
-        schema = self.conn.indices.get_mapping()
-        indices_full_list = schema.get_all_indices()
-        just_indices = [index for index in indices_full_list if not index.startswith(".")]
-        return just_indices
+        return self.conn.indices.get_indices()
 
     def get_indices_as_buckets(self, doc_type='couchbaseDocument'):
         buckets = []
@@ -79,7 +76,7 @@ class EsRestConnection(RestConnection):
 
         return buckets
 
-    def get_bucket(self, bucket_name, doc_type='couchbaseDocument'):
+    def get_bucket(self, bucket_name, doc_type):
         for bucket in self.get_indices_as_buckets(doc_type):
             if bucket.name == bucket_name:
                 return bucket
@@ -190,14 +187,14 @@ class EsRestConnection(RestConnection):
         q = query.MatchAllQuery()
 
         docs = self.conn.search(q,indices=indices,doc_types='couchbaseDocument')
-        res_docs = []
+        docs = []
 
         for row in docs:
             if keys_only:
                 row = row['meta']['id']
-            res_docs.append(row)
+            docs.append(row)
 
-        return res_docs
+        return docs
 
     # check if a key exists by checking all known nodes
     # See - CBES-17
@@ -216,9 +213,9 @@ class EsRestConnection(RestConnection):
 
         return doc
 
-    def fetch_bucket_stats(self, bucket_name='default'):
-        bucket = self.get_bucket(bucket_name=bucket_name)
-        return bucket.stats
+    def fetch_bucket_stats(self, bucket='default', zoom='minute'):
+
+        return { "op" : { "samples" : { "xdc_ops" : [0] } } }
 
     def start_replication(self, *args, **kwargs):
         return "es",self.ip
