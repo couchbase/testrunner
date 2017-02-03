@@ -1,13 +1,14 @@
 import time
 import unittest
 import urllib
-import random
+import random, copy
 import testconstants
 from TestInput import TestInputSingleton
 
 from cwc.cwc_base import CWCBaseTest
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import COUCHBASE_FROM_WATSON
 
 
 
@@ -28,6 +29,26 @@ class CWCTests(CWCBaseTest):
     def test_start_collect_log(self):
         rest = RestConnection(self.master)
         shell = RemoteMachineShellConnection(self.master)
+        """ add service nodes to cluster.  Test will add with or without data service in """
+        if self.add_services:
+            self.add_services = [x.replace(":", ",")  or  x for x in self.add_services]
+            if len(self.servers) > 1:
+                nodes = rest.get_nodes()
+                cwc_servers = copy.deepcopy(self.servers)
+                if len(self.add_services) == 1:
+                    self._add_service_node(cwc_servers, len(self.add_services),
+                                                    services=self.add_services)
+                elif len(self.add_services) > 1 and \
+                             (len(nodes) + len(self.add_services)) <= len(cwc_servers):
+                    for service in self.add_services:
+                        nodes = rest.get_nodes()
+                        self._add_service_node(cwc_servers, len(self.add_services),
+                                                                services=[service])
+                elif (len(nodes) + len(self.add_services)) > len(cwc_servers):
+                    self.fail("Not enough servers to add services nodes")
+            else:
+                self.log.error("Need more than 2 servers to run this test")
+
         if "*" not in str(self.collect_nodes) and self.nodes_init > 1:
             self.collect_nodes = self._generate_random_collecting_node(rest)
         status, content = rest.start_cluster_logs_collection(nodes=self.collect_nodes, \
@@ -48,6 +69,33 @@ class CWCTests(CWCBaseTest):
             shell.disconnect()
         else:
             self.fail("ERROR:  {0}".format(content))
+
+    """
+        Add node to cluster with different services
+    """
+    def _add_service_node(self, cwc_servers, serices_add, services="kv"):
+        if serices_add == 1:
+            total_servers = cwc_servers[:3]
+        elif services_add > 1:
+            total_servers = cwc_servers[:len(nodes) + 1]
+        add_node_rest = RestConnection(cwc_servers[len(nodes)])
+        try:
+            add_node_rest.force_eject_node()
+            status = add_node_rest.init_node_services(
+                                        hostname=cwc_servers[len(nodes)].ip,
+                                        services=services)
+            init_node = self.cluster.async_init_node(cwc_servers[len(nodes)])
+            self.log.info("===== add node %s with service %s =====" \
+                                                       % (cwc_servers[len(nodes)].ip,
+                                                          services))
+            self.cluster.rebalance(total_servers, [cwc_servers[len(nodes)]], \
+                                                        [], services=services)
+        except Exception, e:
+            if e:
+                print e
+        if status:
+            if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+                add_node_rest.set_indexer_storage_mode(storageMode="memory_optimized")
 
     def _monitor_collecting_log(self, rest, timeout):
         start_time = time.time()
@@ -97,8 +145,9 @@ class CWCTests(CWCBaseTest):
     def _verify_log_file(self, rest):
         progress, status, perNode = rest.get_cluster_logs_collection_status()
         node_failed_to_collect = []
+        nodes = rest.get_nodes()
         for node in perNode:
-            for server in self.servers[:self.nodes_init]:
+            for server in self.servers[:len(nodes)]:
                 if server.ip in node or (self.nodes_init == 1 \
                                          and "127.0.0.1" in node):
                     shell = RemoteMachineShellConnection(server)
