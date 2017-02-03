@@ -556,7 +556,13 @@ class RemoteMachineShellConnection:
             log.info("This url {0} is live".format(url))
             live_url = True
         else:
-            log.error("This url {0} is failed to connect".format(url))
+            log.error("\n===============\n"
+                      "        This url {0} \n"
+                      "        is failed to connect.\n"
+                      "        Check version in params to make sure it correct pattern or build number.\n"
+                      "===============\n".format(url))
+            os.system("ps aux | grep python | grep %d " % os.getpid())
+            os.system('kill %d' % os.getpid())
         return live_url
 
     def download_build(self, build):

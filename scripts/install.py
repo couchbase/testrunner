@@ -3,7 +3,7 @@
 # TODO: add installer support for membasez
 
 import getopt
-import copy
+import copy, re
 import logging
 import os
 import sys
@@ -28,7 +28,7 @@ from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
-                          CB_RELEASE_BUILDS
+                          CB_RELEASE_BUILDS, COUCHBASE_VERSIONS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
 from testconstants import WIN_COUCHBASE_PORT_CONFIG_PATH, WIN_COUCHBASE_OLD_CONFIG_PATH
@@ -1078,6 +1078,36 @@ def main():
             usage()
 
         input = TestInput.TestInputParser.get_test_input(sys.argv)
+        """
+           Terminate the installation process instantly if user put in
+           incorrect build pattern.  Correct pattern should be
+           x.x.x-xxx
+           x.x.x-xxxx
+           xx.x.x-xxx
+           xx.x.x-xxxx
+           where x is a number from 0 to 9
+        """
+        correct_build_format = False
+        if "version" in input.test_params:
+            build_version = input.test_params["version"]
+            build_pattern = re.compile("\d\d?\.\d\.\d-\d{3,4}$")
+            if input.test_params["version"][:5] in COUCHBASE_VERSIONS and \
+                bool(build_pattern.match(build_version)):
+                correct_build_format = True
+        if not correct_build_format:
+            log.info("\n========\n"
+                     "         Incorrect build pattern.\n"
+                     "         It should be 0.0.0-111 or 0.0.0-1111 format\n"
+                     "         Or \n"
+                     "         Build version %s does not support yet\n"
+                     "         Or \n"
+                     "         There is No build %s in build repo\n"
+                     "========"
+                     % (build_version[:5],
+                        build_version.split("-")[1] if "-" in build_version else "Need build number"))
+            os.system("ps aux | grep python | grep %d " % os.getpid())
+            os.system('kill %d' % os.getpid())
+
         if not input.servers:
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
