@@ -3240,41 +3240,31 @@ class RestConnection(object):
     Returns - status, content and header for the command executed
     '''
     def executeLDAPCommand(self, authOperation, currAdmins, currROAdmins, exclude=None):
-        log.info ("Executing LDAP command")
         api = self.baseUrl + "settings/saslauthdAuth"
 
         if (exclude is None):
-            log.info ("into execlude is None")
+            log.info ("into exclude is None")
             params = urllib.urlencode({
                                             'enabled': authOperation,
                                             'admins': '{0}'.format(currAdmins),
                                             'roAdmins':'{0}'.format(currROAdmins),
-            #                                'username': '{0}'.format(self.username),
-            #                                'password': '{0}'.format(self.password)
                                             })
         else:
-            log.info ("Into execlude for value of fullAdmin {0}".format(exclude))
+            log.info ("Into exclude for value of fullAdmin {0}".format(exclude))
             if (exclude == 'fullAdmin'):
                 params = urllib.urlencode({
                                             'enabled': authOperation,
                                             'roAdmins':'{0}'.format(currROAdmins),
-            #                                'username': '{0}'.format(self.username),
-            #                                'password': '{0}'.format(self.password)
                                             })
             else:
-                log.info ("Into execlude for value of fullAdmin {0}".format(exclude))
+                log.info ("Into exclude for value of fullAdmin {0}".format(exclude))
                 params = urllib.urlencode({
                                             'enabled': authOperation,
                                             'admins': '{0}'.format(currAdmins),
-            #                                'username': '{0}'.format(self.username),
-            #                                'password': '{0}'.format(self.password)
                                             })
 
 
         status, content, header = self._http_request(api, 'POST', params)
-        log.info (" Status of LDAP Command is - {0}".format(status))
-        log.info (" Content of LDAP Command is - {0}".format(content))
-        log.info (" Header of LDAP Command is - {0}".format(header))
         return content
     '''
     validateLogin - Validate if user can login using a REST API
@@ -3324,19 +3314,6 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         log.info ("Status of executeValidateCredentials command - {0}".format(status))
         return status, json.loads(content)
-
-    def _set_user_roles(self,rest,user_name,payload):
-        url = "settings/rbac/users/" + user_name
-        param = payload
-        api = rest.baseUrl + url
-        status, content, header = rest._http_request(api, 'PUT', param)
-        return status, content, header
-
-    def _delete_user(self,rest,user_name):
-        url = "/settings/rbac/users/" + user_name
-        api = rest.baseUrl + url
-        status, content, header = rest._http_request(api, 'DELETE')
-        return status, content, header
 
     '''
     Audit Commands
@@ -3471,6 +3448,102 @@ class RestConnection(object):
             return json.loads(chunkless_content)
         else:
             return content
+
+    'Get list of all roles that exist in the system'
+    def retrive_all_user_role(self):
+        url = "/settings/rbac/roles"
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'GET')
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    'Get list of current users and rols assigned to them'
+    def retrieve_user_roles(self):
+        url = "/settings/rbac/users"
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'GET')
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+    Add/Update user role assignment
+    user_id=userid of the user to act on
+    payload=name=<nameofuser>&roles=admin,cluster_admin'''
+    def set_user_roles(self, user_id, payload):
+        url = "settings/rbac/users/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'PUT', payload)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+    Delete user from couchbase role assignment
+    user_id=userid of user to act on'''
+    def delete_user_roles(self, user_id):
+        url = "/settings/rbac/users/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'DELETE')
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+    Return list of permission with True/False if user has permission or not
+    user_id = userid for checking permission
+    password = password for userid
+    permission_set=cluster.bucket[default].stats!read,cluster.bucket[default]!write
+    '''
+    def check_user_permission(self, user_id, password, permission_set):
+        url = "pools/default/checkPermissions/"
+        api = self.baseUrl + url
+        authorization = base64.encodestring('%s:%s' % (user_id, password))
+        header = {'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': 'Basic %s' % authorization,
+              'Accept': '*/*'}
+        status, content, header = self._http_request(api, 'POST', params=permission_set, headers=header)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+    Add/Update user role assignment
+    user_id=userid of the user to act on
+    payload=name=<nameofuser>&roles=admin,cluster_admin&password=<password>
+    if roles=<empty> user will be created with no roles'''
+    def add_set_builtin_user(self, user_id, payload):
+        url = "settings/rbac/users/builtin/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'PUT', payload)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+    Delete built-in user
+    '''
+    def delete_builtin_user(self, user_id):
+        url = "settings/rbac/users/builtin/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'DELETE')
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+    Add/Update user role assignment
+    user_id=userid of the user to act on
+    password=<new password>'''
+    def change_password_builtin_user(self, user_id, password):
+        url = "controller/changePassword/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'POST', password)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
 
 
 class MembaseServerVersion:
