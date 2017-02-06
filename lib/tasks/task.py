@@ -30,13 +30,6 @@ from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6
 
-from decorator import decorator
-from memcached.helper.kvstore import Synchronized
-from multiprocessing import Process, cpu_count
-import gevent
-from gevent import Greenlet
-
-
 try:
     CHECK_FLAG = False
     if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
@@ -59,71 +52,6 @@ PENDING = 'PENDING'
 EXECUTING = 'EXECUTING'
 CHECKING = 'CHECKING'
 FINISHED = 'FINISHED'
-
-
-@decorator
-def concurrenttest(method, *args, **kwargs):
-    work_iterator = args[1]
-    workers =[]
-    for value in work_iterator:
-        start, endpoint, counter = value
-        workers.append(Greenlet.spawn(method, args[0], (start, endpoint)))
-    return workers
-
-@decorator
-def parallel(method, *args, **kwargs):
-    def create_pool(generator, numworker):
-        start, end = generator.getrange()
-        processtask = (end - start) / numworker
-        for i in range(numworker):
-            endpoint = start + processtask
-            if i == numworker - 1:
-                endpoint = end
-
-            yield start, endpoint, i
-            start += processtask
-
-    log = logger.Logger.get_logger()
-    workers = []
-    num_workers = cpu_count().real
-    if getattr(VBucketAwareMemcached, 'is_mc_bin_client', None):
-        num_workers = 1
-    generator = args[1]
-    parallelmethod = args[2]
-    for value in create_pool(generator, num_workers):
-        start, endpoint, counter = value
-        distributed_work = {'start': start, 'end': endpoint, 'counter': counter}
-        '''
-         The unlock_create or batch_create method takes generator as first argument
-         using the decorator we replace that
-         '''
-        worker_process = Process(target=method, args=(args[0], distributed_work, args[2]))
-        '''
-        Dont use deamon = True
-        worker_process.daemon = True
-        '''
-        workers.append(worker_process)
-        worker_process.start()
-        log.info(" worker - {} started". format(worker_process.name))
-
-    if parallelmethod:
-        '''
-        This parallel method is for KV related doc,
-        for JSON doc loading where we do not do any kV store this is not needed
-        '''
-        num_threads = 8
-        green_workers = parallelmethod(create_pool(generator,num_threads))
-    '''
-     reassigning gnerator
-    '''
-    for worker in workers:
-        worker.join()
-        log.info(" worker - {} joined". format(worker.name))
-
-    if parallelmethod:
-        gevent.joinall(green_workers)
-        log.info(" All load to kvstore threads are joined")
-
 
 class Task(Future):
     def __init__(self, name):
@@ -176,7 +104,6 @@ class NodeInitializeTask(Task):
         self.maxParallelReplicaIndexers = maxParallelReplicaIndexers
         self.services = services
         self.gsi_type = gsi_type
-
 
     def execute(self, task_manager):
         try:
@@ -318,6 +245,7 @@ class BucketCreateTask(Task):
                 self.state = FINISHED
                 self.set_exception(e)
             return
+
 
         version = rest.get_nodes_self().version
         try:
@@ -723,7 +651,6 @@ class XdcrStatsWaitTask(StatsWaitTask):
         self.set_result(True)
 
 class GenericLoadingTask(Thread, Task):
-
     def __init__(self, server, bucket, kv_store, batch_size=1, pause_secs=1, timeout_secs=60):
         Thread.__init__(self)
         Task.__init__(self, "load_gen_task")
@@ -731,10 +658,7 @@ class GenericLoadingTask(Thread, Task):
         self.batch_size = batch_size
         self.pause = pause_secs
         self.timeout = timeout_secs
-        self.server = server
-        self.bucket = bucket
-        self.rest = RestConnection(self.server)
-        self.client = VBucketAwareMemcached(self.rest, self.bucket)
+        self.client = VBucketAwareMemcached(RestConnection(server), bucket)
 
     def execute(self, task_manager):
         self.start()
@@ -744,7 +668,8 @@ class GenericLoadingTask(Thread, Task):
         pass
 
     def run(self):
-        self.next()
+        while self.has_next() and not self.done():
+            self.next()
         self.state = FINISHED
         self.set_result(True)
 
@@ -754,58 +679,52 @@ class GenericLoadingTask(Thread, Task):
     def next(self):
         raise NotImplementedError
 
-    @concurrenttest
-    def load_kvstore_parallel(self, work_range):
-        start, end = work_range
-        if isinstance(self.generator, BatchedDocumentGenerator):
-            localgen = copy.deepcopy(self.generator.get_docgen())
-        else:
-            localgen = copy.deepcopy(self.generator)
-
-        localgen.setrange({'start': start, 'end': end})
-        while localgen.has_next():
-            try:
-                key, value = localgen.next()
-                partition = self.kv_store.acquire_partition(key)["partition"]
-                if self.only_store_hash:
-                    value = str(crc32.crc32_hash(value))
-                partition.set(key, value, self.exp, self.flag)
-            except Exception as e:
-                raise e
-
-    @parallel
-    def _unlocked_create(self, distributed_work, parallelmethod = None):
-        '''
-        Being in Process copy of self.generator will be created
-        '''
-        localgenerator = self.generator
-        localgenerator.setrange(distributed_work)
-        if getattr(VBucketAwareMemcached, 'is_mc_bin_client', None):
-            client = self.client
-        else:
-            client = VBucketAwareMemcached(RestConnection(self.server), self.bucket)
-        while self.has_next():
-            try:
-                key, value = localgenerator.next()
-                client.set(key, self.exp, self.flag, value)
-            except Exception as e:
-               raise e
-
-    def _unlocked_read(self, partition, key, value=None):
+    def _unlocked_create(self, partition, key, value, is_base64_value=False):
         try:
-            self.client.get(key)
+            value_json = json.loads(value)
+            if isinstance(value_json, dict):
+                value_json['mutated'] = 0
+            value = json.dumps(value_json)
+        except ValueError:
+            index = random.choice(range(len(value)))
+            if not is_base64_value:
+                value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+        except TypeError:
+            value = json.dumps(value)
+
+        try:
+            self.client.set(key, self.exp, self.flag, value)
+            if self.only_store_hash:
+                value = str(crc32.crc32_hash(value))
+            partition.set(key, value, self.exp, self.flag)
+        except Exception as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+    def _unlocked_read(self, partition, key):
+        try:
+            o, c, d = self.client.get(key)
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                 pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
 
-    def _unlocked_read_replica(self, key, partition=None, value=None):
-            self.client.getr(key)
+    def _unlocked_replica_read(self, partition, key):
+        try:
+            o, c, d = self.client.getr(key)
+        except Exception as error:
+            self.state = FINISHED
+            self.set_exception(error)
 
-    def _unlocked_update(self, key, partition, value=None):
+    def _unlocked_update(self, partition, key):
+        value = None
         try:
             o, c, value = self.client.get(key)
             if value is None:
                 return
+
             value_json = json.loads(value)
             value_json['mutated'] += 1
             value = json.dumps(value_json)
@@ -814,28 +733,44 @@ class GenericLoadingTask(Thread, Task):
                 # there is no such item, we do not know what value to set
                 return
             else:
+                self.state = FINISHED
                 self.log.error("%s, key: %s update operation." % (error, key))
+                self.set_exception(error)
                 return
         except ValueError:
             if value is None:
                 return
             index = random.choice(range(len(value)))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+        except BaseException as error:
+            self.state = FINISHED
+            self.set_exception(error)
 
-        self.client.set(key, self.exp, self.flag, value)
-        if self.only_store_hash:
-            value = str(crc32.crc32_hash(value))
-        partition.set(key, value, self.exp, self.flag)
+        try:
+            self.client.set(key, self.exp, self.flag, value)
+            if self.only_store_hash:
+                value = str(crc32.crc32_hash(value))
+            partition.set(key, value, self.exp, self.flag)
+        except BaseException as error:
+            self.state = FINISHED
+            self.set_exception(error)
 
-    def _unlocked_delete(self, key, partition, value=None):
+    def _unlocked_delete(self, partition, key):
         try:
             self.client.delete(key)
             partition.delete(key)
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                 pass
+            else:
+                self.state = FINISHED
+                self.log.error("%s, key: %s delete operation." % (error, key))
+                self.set_exception(error)
+        except BaseException as error:
+            self.state = FINISHED
+            self.set_exception(error)
 
-    def _unlocked_append(self, key, partition, value=None):
+    def _unlocked_append(self, partition, key, value):
         try:
             o, c, old_value = self.client.get(key)
             if value is None:
@@ -849,75 +784,112 @@ class GenericLoadingTask(Thread, Task):
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                 # there is no such item, we do not know what value to set
                 return
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+                return
         except ValueError:
             o, c, old_value = self.client.get(key)
             index = random.choice(range(len(value)))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
             old_value += value
+        except BaseException as error:
+            self.state = FINISHED
+            self.set_exception(error)
 
-        self.client.append(key, value)
-        if self.only_store_hash:
-            old_value = str(crc32.crc32_hash(old_value))
-        partition.set(key, old_value)
+        try:
+            self.client.append(key, value)
+            if self.only_store_hash:
+                old_value = str(crc32.crc32_hash(old_value))
+            partition.set(key, old_value)
+        except BaseException as error:
+            self.state = FINISHED
+            self.set_exception(error)
 
-    @parallel
-    def _batch_create(self, distributed_work, parallel_method=None):
-        localgenerator = self.generator
-        localgenerator._doc_gen.setrange(distributed_work)
-        if getattr(VBucketAwareMemcached, 'is_mc_bin_client', None):
-            client = self.client
-        else:
-            client = VBucketAwareMemcached(RestConnection(self.server), self.bucket)
-        while self.has_next():
-            key_val = localgenerator.next_batch()
-            client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=True)
+    # start of batch methods
+    def _create_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_create(key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
+            self.state = FINISHED
+            self.set_exception(error)
 
-    def _batch_update(self, partition_keys_dic, key_val):
-        self._process_values_for_update(partition_keys_dic, key_val)
-        self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
-        self._populate_kvstore(partition_keys_dic, key_val)
 
-    def _batch_delete(self, partition_keys_dic, key_val):
-        for part, keys in partition_keys_dic.items():
-            with Synchronized(dict(part)) as partition:
-                for key in keys:
-                    try:
-                        self.client.delete(key)
-                        partition.delete(key)
-                    except MemcachedError as error:
-                        if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
-                            pass
+    def _update_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_update(partition_keys_dic, key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+
+    def _delete_batch(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            for key in keys:
+                try:
+                    self.client.delete(key)
+                    partition.delete(key)
+                except MemcachedError as error:
+                    if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                        pass
+                    else:
+                        self.state = FINISHED
+                        self.set_exception(error)
+                        return
+                except (ServerUnavailableException, socket.error, EOFError, AttributeError) as error:
+                    self.state = FINISHED
+                    self.set_exception(error)
+
 
     def _read_batch(self, partition_keys_dic, key_val):
-        self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+        try:
+            o, c, d = self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+        except MemcachedError as error:
+                self.state = FINISHED
+                self.set_exception(error)
 
     def _process_values_for_create(self, key_val):
         for key, value in key_val.items():
-            key_val[key] = value
+            try:
+                value_json = json.loads(value)
+                value_json['mutated'] = 0
+                value = json.dumps(value_json)
+            except ValueError:
+                index = random.choice(range(len(value)))
+                value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            finally:
+                key_val[key] = value
 
     def _process_values_for_update(self, partition_keys_dic, key_val):
-        for part, keys in partition_keys_dic.items():
-            with Synchronized(dict(part)) as partition:
-                for key in keys:
-                    value = partition.get_valid(key)
-                    if value is None:
-                        del key_val[key]
-                        continue
-                    try:
-                        value = key_val[key]  # new updated value, however it is not their in orginal code "LoadDocumentsTask"
-                        value_json = json.loads(value)
-                        value_json['mutated'] += 1
-                        value = json.dumps(value_json)
-                    except ValueError:
-                        index = random.choice(range(len(value)))
-                        value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
-                    finally:
-                        key_val[key] = value
+        for partition, keys in partition_keys_dic.items():
+            for key in keys:
+                value = partition.get_valid(key)
+                if value is None:
+                    del key_val[key]
+                    continue
+                try:
+                    value = key_val[key]  # new updated value, however it is not their in orginal code "LoadDocumentsTask"
+                    value_json = json.loads(value)
+                    value_json['mutated'] += 1
+                    value = json.dumps(value_json)
+                except ValueError:
+                    index = random.choice(range(len(value)))
+                    value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+                finally:
+                    key_val[key] = value
+
 
     def _populate_kvstore(self, partition_keys_dic, key_val):
-        for part, keys in partition_keys_dic.items():
-            tmp_part = dict(part)
-            self._populate_kvstore_partition(tmp_part["partition"], keys, key_val)
+        for partition, keys in partition_keys_dic.items():
+            self._populate_kvstore_partition(partition, keys, key_val)
+
+    def _release_locks_on_kvstore(self):
+        for part in self._partitions_keyvals_dic.keys:
+            self.kv_store.release_lock(part)
 
     def _populate_kvstore_partition(self, partition, keys, key_val):
         for key in keys:
@@ -947,26 +919,44 @@ class LoadDocumentsTask(GenericLoadingTask):
         return self.generator.has_next()
 
     def next(self):
-        function = "_unlocked_" if self.batch_size == 1 else '_batch_'
-        function += self.op_type
-        try:
-            if self.op_type == "create":
-                if self.kv_store is None:
-                    self.load_kvstore_parallel = None
-                getattr(self, function)(self.generator, self.load_kvstore_parallel)
+        if self.batch_size == 1:
+            key, value = self.generator.next()
+            partition = self.kv_store.acquire_partition(key)
+            if self.op_type == 'create':
+                is_base64_value = (self.generator.__class__.__name__ == 'Base64Generator')
+                self._unlocked_create(partition, key, value, is_base64_value=is_base64_value)
+            elif self.op_type == 'read':
+                self._unlocked_read(partition, key)
+            elif self.op_type == 'read_replica':
+                self._unlocked_replica_read(partition, key)
+            elif self.op_type == 'update':
+                self._unlocked_update(partition, key)
+            elif self.op_type == 'delete':
+                self._unlocked_delete(partition, key)
+            elif self.op_type == 'append':
+                self._unlocked_append(partition, key, value)
             else:
-                while self.has_next():
-                    if self.batch_size == 1:
-                        key, value = self.generator.next()
-                        partition = self.kv_store.acquire_partition(key)
-                        with Synchronized(partition) as tmp_part:
-                            getattr(self, function)(key, tmp_part, value)
-                    else:
-                        key_value = self.generator.next_batch()
-                        partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
-                        getattr(self, function)(partition_keys_dic, key_value)
-        except (BaseException, MemcachedError) as error:
-            self.set_exception(error)
+                self.state = FINISHED
+                self.set_exception(Exception("Bad operation type: %s" % self.op_type))
+            self.kv_store.release_partition(key)
+
+        else:
+            # do batch things
+            key_value = self.generator.next_batch()
+            partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
+            if self.op_type == 'create':
+                self._create_batch(partition_keys_dic, key_value)
+            elif self.op_type == 'update':
+                self._update_batch(partition_keys_dic, key_value)
+            elif self.op_type == 'delete':
+                self._delete_batch(partition_keys_dic, key_value)
+            elif self.op_type == 'read':
+                self._read_batch(partition_keys_dic, key_value)
+            else:
+                self.state = FINISHED
+                self.set_exception(Exception("Bad operation type: %s" % self.op_type))
+            self.kv_store.release_partitions(partition_keys_dic.keys())
+
 
 
 class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
@@ -990,27 +980,26 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             self.buckets = bucket
 
     def run(self):
-        try:
+        if self.op_types:
+            if len(self.op_types) != len(self.generators):
+                self.state = FINISHED
+                self.set_exception(Exception("not all generators have op_type!"))
+        if self.buckets:
+            if len(self.op_types) != len(self.buckets):
+                self.state = FINISHED
+                self.set_exception(Exception("not all generators have bucket specified!"))
+        iterator = 0
+        for generator in self.generators:
+            self.generator = generator
             if self.op_types:
-                if len(self.op_types) != len(self.generators):
-                    self.state = FINISHED
-                    self.set_exception(Exception("not all generators have op_type!"))
+                self.op_type = self.op_types[iterator]
             if self.buckets:
-                if len(self.op_types) != len(self.buckets):
-                    self.state = FINISHED
-                    self.set_exception(Exception("not all generators have bucket specified!"))
-            iterator = 0
-            for generator in self.generators:
-                self.generator = generator
-                if self.op_types:
-                    self.op_type = self.op_types[iterator]
-                if self.buckets:
-                    self.bucket = self.buckets[iterator]
+                self.bucket = self.buckets[iterator]
+            while self.has_next() and not self.done():
                 self.next()
-                iterator += 1
-        finally:
-            self.state = FINISHED
-            self.set_result(True)
+            iterator += 1
+        self.state = FINISHED
+        self.set_result(True)
 
 
 class ESLoadGeneratorTask(Task):
@@ -1026,27 +1015,21 @@ class ESLoadGeneratorTask(Task):
         self.iterator = 0
         self.log.info("Starting to load data into Elastic Search ...")
 
-    @parallel
-    def load_data(self, generator, parallel_method=None):
-        start, _ = generator.getrange()
-        while generator.has_next():
-            key, doc = generator.next()
-            doc = json.loads(doc)
-            self.es_instance.load_data(self.index_name,
-                                       json.dumps(doc, encoding='utf-8'),
-                                       doc['type'],
-                                       key)
-            start += 1
-            if math.fmod(start, 100) == 0.0:
-                self.log.info("{0} documents loaded into ES".
-                              format(self.iterator))
-
     def check(self, task_manager):
         self.state = FINISHED
         self.set_result(True)
 
     def execute(self, task_manager):
-        self.load_data(self.generator)
+        for key, doc in self.generator:
+            doc = json.loads(doc)
+            self.es_instance.load_data(self.index_name,
+                                       json.dumps(doc, encoding='utf-8'),
+                                       doc['type'],
+                                       key)
+            self.iterator += 1
+            if math.fmod(self.iterator, 500) == 0.0:
+                self.log.info("{0} documents loaded into ES".
+                              format(self.iterator))
         self.state = FINISHED
         self.set_result(True)
 
@@ -1075,8 +1058,7 @@ class ESBulkLoadGeneratorTask(Task):
         es_bulk_docs = []
         loaded = 0
         batched = 0
-        while self.generator.has_next():
-            key, doc = self.generator.next()
+        for key, doc in self.generator:
             doc = json.loads(doc)
             es_doc = {
                 self.op_type: {
@@ -1207,6 +1189,141 @@ class ESRunQueryCompare(Task):
         return self.es.search(index_name=self.es_index_name, query=query)
 
 
+# This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
+class BatchedLoadDocumentsTask(GenericLoadingTask):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=60):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+        self.batch_generator = BatchedDocumentGenerator(generator, batch_size)
+        self.op_type = op_type
+        self.exp = exp
+        self.flag = flag
+        self.only_store_hash = only_store_hash
+        self.batch_size = batch_size
+        self.pause = pause_secs
+        self.timeout = timeout_secs
+        self.bucket = bucket
+        self.server = server
+
+    def has_next(self):
+        has = self.batch_generator.has_next()
+        if math.fmod(self.batch_generator._doc_gen.itr, 50000) == 0.0 or not has:
+            self.log.info("Batch {0} documents queued #: {1} with exp:{2} @ {3}, bucket {4}".\
+                          format(self.op_type,
+                                 (self.batch_generator._doc_gen.itr - self.batch_generator._doc_gen.start),
+                                 self.exp,
+                                 self.server.ip,
+                                 self.bucket))
+        return has
+
+    def next(self):
+        key_value = self.batch_generator.next_batch()
+        partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
+        if self.op_type == 'create':
+            self._create_batch(partition_keys_dic, key_value)
+        elif self.op_type == 'update':
+            self._update_batch(partition_keys_dic, key_value)
+        elif self.op_type == 'delete':
+            self._delete_batch(partition_keys_dic, key_value)
+        elif self.op_type == 'read':
+            self._read_batch(partition_keys_dic, key_value)
+        else:
+            self.state = FINISHED
+            self.set_exception(Exception("Bad operation type: %s" % self.op_type))
+        self.kv_store.release_partitions(partition_keys_dic.keys())
+
+
+    def _create_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_create(key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+
+    def _update_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_update(partition_keys_dic, key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+
+    def _delete_batch(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            for key in keys:
+                try:
+                    self.client.delete(key)
+                    partition.delete(key)
+                except MemcachedError as error:
+                    if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                        pass
+                    else:
+                        self.state = FINISHED
+                        self.set_exception(error)
+                        return
+                except (ServerUnavailableException, socket.error, EOFError, AttributeError) as error:
+                    self.state = FINISHED
+                    self.set_exception(error)
+
+
+    def _read_batch(self, partition_keys_dic, key_val):
+        try:
+            o, c, d = self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+        except MemcachedError as error:
+                self.state = FINISHED
+                self.set_exception(error)
+
+    def _process_values_for_create(self, key_val):
+        for key, value in key_val.items():
+            try:
+                value_json = json.loads(value)
+                value_json['mutated'] = 0
+                value = json.dumps(value_json)
+            except ValueError:
+                index = random.choice(range(len(value)))
+                value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            finally:
+                key_val[key] = value
+
+    def _process_values_for_update(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            for key in keys:
+                value = partition.get_valid(key)
+                if value is None:
+                    del key_val[key]
+                    continue
+                try:
+                    value = key_val[key]  # new updated value, however it is not their in orginal code "LoadDocumentsTask"
+                    value_json = json.loads(value)
+                    value_json['mutated'] += 1
+                    value = json.dumps(value_json)
+                except ValueError:
+                    index = random.choice(range(len(value)))
+                    value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+                finally:
+                    key_val[key] = value
+
+
+    def _populate_kvstore(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            self._populate_kvstore_partition(partition, keys, key_val)
+
+    def _release_locks_on_kvstore(self):
+        for part in self._partitions_keyvals_dic.keys:
+            self.kv_store.release_lock(part)
+
+    def _populate_kvstore_partition(self, partition, keys, key_val):
+        for key in keys:
+            if self.only_store_hash:
+                key_val[key] = str(crc32.crc32_hash(key_val[key]))
+            partition.set(key, key_val[key], self.exp, self.flag)
+
+
+
 class WorkloadTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
@@ -1236,15 +1353,17 @@ class WorkloadTask(GenericLoadingTask):
             self._delete_random_key()
 
     def _get_random_key(self):
-        part, part_num = self.kv_store.acquire_random_partition()
-        with Synchronized(part) as partition:
-            if partition is None:
-                return
-            key = partition.get_random_valid_key()
-            if key is None:
-                return
+        partition, part_num = self.kv_store.acquire_random_partition()
+        if partition is None:
+            return
 
-            self._unlocked_read(partition, key)
+        key = partition.get_random_valid_key()
+        if key is None:
+            self.kv_store.release_partition(part_num)
+            return
+
+        self._unlocked_read(partition, key)
+        self.kv_store.release_partition(part_num)
 
     def _create_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition(False)
@@ -1253,13 +1372,16 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_deleted_key()
         if key is None:
+            self.kv_store.release_partition(part_num)
             return
 
         value = partition.get_deleted(key)
         if value is None:
+            self.kv_store.release_partition(part_num)
             return
 
         self._unlocked_create(partition, key, value)
+        self.kv_store.release_partition(part_num)
 
     def _update_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition()
@@ -1268,9 +1390,11 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_valid_key()
         if key is None:
+            self.kv_store.release_partition(part_num)
             return
 
         self._unlocked_update(partition, key)
+        self.kv_store.release_partition(part_num)
 
     def _delete_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition()
@@ -1279,10 +1403,11 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_valid_key()
         if key is None:
+            self.kv_store.release_partition(part_num)
             return
 
         self._unlocked_delete(partition, key)
-
+        self.kv_store.release_partition(part_num)
 
 class ValidateDataTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, replica_to_read=None):
@@ -1314,65 +1439,67 @@ class ValidateDataTask(GenericLoadingTask):
         if self.itr < self.num_valid_keys:
             self._check_valid_key(self.valid_keys[self.itr])
         else:
-            print self.itr, self.deleted_keys
             self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys])
         self.itr += 1
 
     def _check_valid_key(self, key):
-        part = self.kv_store.acquire_partition(key)
-        with Synchronized(part) as partition:
-            value = partition.get_valid(key)
-            flag = partition.get_flag(key)
-            if value is None or flag is None:
-                return
+        partition = self.kv_store.acquire_partition(key)
 
-            try:
-                if self.replica_to_read is None:
-                    o, c, d = self.client.get(key)
-                else:
-                    o, c, d = self.client.getr(key, replica_index=self.replica_to_read)
-                if self.only_store_hash:
-                    if crc32.crc32_hash(d) != int(value):
-                        self.state = FINISHED
-                        self.set_exception(Exception('Key: %s, Bad hash result: %d != %d for key %s' % (key, crc32.crc32_hash(d), int(value), key)))
-                else:
-                    #value = json.dumps(value)
-                    if d != value:
-                        self.state = FINISHED
-                        self.set_exception(Exception('Key: %s, Bad result: %s != %s for key %s' % (key, json.dumps(d), value, key)))
-                if CHECK_FLAG and o != flag:
-                    self.state = FINISHED
-                    self.set_exception(Exception('Key: %s, Bad result for flag value: %s != the value we set: %s' % (key, o, flag)))
+        value = partition.get_valid(key)
+        flag = partition.get_flag(key)
+        if value is None or flag is None:
+            self.kv_store.release_partition(key)
+            return
 
-            except MemcachedError as error:
-                if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
-                    pass
-                else:
+        try:
+            if self.replica_to_read is None:
+                o, c, d = self.client.get(key)
+            else:
+                o, c, d = self.client.getr(key, replica_index=self.replica_to_read)
+            if self.only_store_hash:
+                if crc32.crc32_hash(d) != int(value):
                     self.state = FINISHED
-                    self.set_exception(error)
-            except Exception as error:
-                self.log.error("Unexpected error: %s" % str(error))
+                    self.set_exception(Exception('Key: %s, Bad hash result: %d != %d for key %s' % (key, crc32.crc32_hash(d), int(value), key)))
+            else:
+                value = json.dumps(value)
+                if d != json.loads(value):
+                    self.state = FINISHED
+                    self.set_exception(Exception('Key: %s, Bad result: %s != %s for key %s' % (key, json.dumps(d), value, key)))
+            if CHECK_FLAG and o != flag:
+                self.state = FINISHED
+                self.set_exception(Exception('Key: %s, Bad result for flag value: %s != the value we set: %s' % (key, o, flag)))
+
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                pass
+            else:
                 self.state = FINISHED
                 self.set_exception(error)
+        except Exception as error:
+            self.log.error("Unexpected error: %s" % str(error))
+            self.state = FINISHED
+            self.set_exception(error)
+        self.kv_store.release_partition(key)
 
     def _check_deleted_key(self, key):
-        with Synchronized(self.kv_store.acquire_partition(key)) as partition:
-            try:
-                self.client.delete(key)
-                if partition.get_valid(key) is not None:
-                    self.state = FINISHED
-                    self.set_exception(Exception('Not Deletes: %s' % (key)))
-            except MemcachedError as error:
-                if error.status == ERR_NOT_FOUND:
-                    pass
-                else:
-                    self.state = FINISHED
-                    self.set_exception(error)
-            except Exception as error:
-                if error.rc != NotFoundError:
-                    self.state = FINISHED
-                    self.set_exception(error)
+        partition = self.kv_store.acquire_partition(key)
 
+        try:
+            self.client.delete(key)
+            if partition.get_valid(key) is not None:
+                self.state = FINISHED
+                self.set_exception(Exception('Not Deletes: %s' % (key)))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+        except Exception as error:
+            if error.rc != NotFoundError:
+                self.state = FINISHED
+                self.set_exception(error)
+        self.kv_store.release_partition(key)
 
 class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None):
@@ -1431,23 +1558,23 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
             self.set_exception(error)
 
     def _check_deleted_key(self, key):
-        with Synchronized(self.kv_store.acquire_partition(key)) as partition:
-            try:
-                self.client.delete(key)
-                if partition.get_valid(key) is not None:
-                    self.state = FINISHED
-                    self.set_exception(Exception('ACTIVE CHECK :: Not Deletes: %s' % (key)))
-            except MemcachedError as error:
-                if error.status == ERR_NOT_FOUND:
-                    pass
-                else:
-                    self.state = FINISHED
-                    self.set_exception(error)
-            except Exception as error:
-                if error.rc != NotFoundError:
-                    self.state = FINISHED
-                    self.set_exception(error)
-
+        partition = self.kv_store.acquire_partition(key)
+        try:
+            self.client.delete(key)
+            if partition.get_valid(key) is not None:
+                self.state = FINISHED
+                self.set_exception(Exception('ACTIVE CHECK :: Not Deletes: %s' % (key)))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+        except Exception as error:
+            if error.rc != NotFoundError:
+                self.state = FINISHED
+                self.set_exception(error)
+        self.kv_store.release_partition(key)
 
 class BatchedValidateDataTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, batch_size=100, timeout_sec=5):
@@ -1492,15 +1619,18 @@ class BatchedValidateDataTask(GenericLoadingTask):
             key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec)
         except ValueError, error:
             self.state = FINISHED
+            self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
         except BaseException, error:
+        # handle all other exception, for instance concurrent.futures._base.TimeoutError
             self.state = FINISHED
+            self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
-        for part, keys in partition_keys_dic.items():
-            with Synchronized(dict(part)) as partition:
-                self._check_validity(partition, keys, key_vals)
+        for partition, keys in partition_keys_dic.items():
+            self._check_validity(partition, keys, key_vals)
+        self.kv_store.release_partitions(partition_keys_dic.keys())
 
     def _check_validity(self, partition, keys, key_vals):
 
@@ -1529,22 +1659,25 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 self.set_exception(error)
 
     def _check_deleted_key(self, key):
-        with Synchronized(self.kv_store.acquire_partition(key)) as partition:
-            try:
-                self.client.delete(key)
-                if partition.get_valid(key) is not None:
-                    self.state = FINISHED
-                    self.set_exception(Exception('Not Deletes: %s' % (key)))
-            except MemcachedError as error:
-                if error.status == ERR_NOT_FOUND:
-                    pass
-                else:
-                    self.state = FINISHED
-                    self.set_exception(error)
-            except Exception as error:
-                if error.rc != NotFoundError:
-                    self.state = FINISHED
-                    self.set_exception(error)
+        partition = self.kv_store.acquire_partition(key)
+        try:
+            self.client.delete(key)
+            if partition.get_valid(key) is not None:
+                self.state = FINISHED
+                self.set_exception(Exception('Not Deletes: %s' % (key)))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                pass
+            else:
+                self.state = FINISHED
+                self.kv_store.release_partitions(key)
+                self.set_exception(error)
+        except Exception as error:
+            if error.rc != NotFoundError:
+                self.state = FINISHED
+                self.kv_store.release_partitions(key)
+                self.set_exception(error)
+        self.kv_store.release_partition(key)
 
 
 class VerifyRevIdTask(GenericLoadingTask):
@@ -1676,7 +1809,7 @@ class VerifyMetaDataTask(GenericLoadingTask):
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
-        self.keys_not_found = {self.client.rest.ip: []}
+        self.keys_not_found = {self.client.rest.ip: [], self.client.rest.ip: []}
         self.itr = 0
         self.err_count = 0
         self.max_err_count = max_err_count
@@ -1754,7 +1887,7 @@ class GetMetaDataTask(GenericLoadingTask):
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
-        self.keys_not_found = {self.client.rest.ip: []}
+        self.keys_not_found = {self.client.rest.ip: [], self.client.rest.ip: []}
         self.itr = 0
         self.err_count = 0
         self.max_err_count = 100
@@ -3407,6 +3540,7 @@ class ViewQueryVerificationTask(Task):
             except QueryViewException as e:
                 self.set_exception(e)
                 self.state = FINISHED
+
 
             msg = "Checking view query results: (%d keys expected) vs (%d keys returned)" % \
                 (len(self.expected_rows), len(self.results['rows']))

@@ -728,7 +728,6 @@ class WorkerThread(threading.Thread):
 
 
 class VBucketAwareMemcached(object):
-    is_mc_bin_client = True
     def __init__(self, rest, bucket, info=None):
         self.log = logger.Logger.get_logger()
         self.info = info

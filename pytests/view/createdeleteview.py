@@ -268,7 +268,7 @@ class CreateDeleteViewTests(BaseTestCase):
         rest = RestConnection(self.master)
         query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
         for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
-            num_items = sum([len(kv_store) if kv_store else 0 for kv_store in bucket.kvs.values()])
+            num_items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             self.log.info("DDoc Data Validation Started on bucket {0}. Expected Data Items {1}".format(bucket, num_items))
             for ddoc_name, view_list in self.ddoc_view_map.items():
                 for view in view_list:
