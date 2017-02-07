@@ -75,6 +75,7 @@ class QueryTests(BaseTestCase):
         self.cluster_ops = self.input.param("cluster_ops",False)
         self.isprepared = False
         self.server = self.master
+        self.cbas_node = self.input.cbas
         self.rest = RestConnection(self.server)
         #self.coverage = self.input.param("coverage",False)
         self.cover = self.input.param("cover", False)
@@ -149,7 +150,7 @@ class QueryTests(BaseTestCase):
             f = open(filename,'w')
             f.write(data)
             f.close()
-            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+            url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
             os.system(cmd)
             os.remove(filename)
@@ -171,14 +172,14 @@ class QueryTests(BaseTestCase):
     def setup_analytics(self):
         data = 'use Default;' + "\n"
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.cbas_node.ip)  + "\n"
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
             data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
         f.close()
-        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
         os.system(cmd)
         os.remove(filename)
