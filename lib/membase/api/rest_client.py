@@ -2727,6 +2727,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'PUT', params)
         return status
 
+    '''Start Monitoring/Profiling Rest Calls'''
     def set_completed_requests_collection_duration(self, server, min_time):
         http = httplib2.Http()
         n1ql_port = 8093
@@ -2745,6 +2746,33 @@ class RestConnection(object):
         response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
         return response,content
 
+    def set_profiling(self, server, setting):
+        http = httplib2.Http()
+        n1ql_port = 8093
+        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        body = {"profile": setting}
+        headers = self._create_headers_with_auth('Administrator','password')
+        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
+        return response,content
+
+    def set_profiling_controls(self, server, setting):
+        http = httplib2.Http()
+        n1ql_port = 8093
+        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        body = {"controls": setting}
+        headers = self._create_headers_with_auth('Administrator','password')
+        response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
+        return response,content
+
+    def get_query_admin_settings(self,server):
+        http = httplib2.Http()
+        n1ql_port = 8093
+        api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
+        headers = self._create_headers_with_auth('Administrator', 'password')
+        response, content = http.request(api, "GET", headers=headers)
+        result = json.loads(content)
+        return result
+
     def get_query_vitals(self,server):
         http = httplib2.Http()
         n1ql_port = 8093
@@ -2752,6 +2780,7 @@ class RestConnection(object):
         headers = self._create_headers_with_auth('Administrator', 'password')
         response, content = http.request(api, "GET", headers=headers)
         return response, content
+    '''End Monitoring/Profiling Rest Calls'''
 
     def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
