@@ -1895,8 +1895,17 @@ class RestConnection(object):
                       evictionPolicy='valueOnly',
                       lww=False):
 
+
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
+
+
+        # short term workaround for ephemeral buckets. Create a membase bucket and do the diag/eval
+        # and then restart memcached
+        haveEphemeral = False
+        if bucketType == 'ephemeral':
+            bucketType = 'membase'
+            haveEphemeral = True
 
         # this only works for default bucket ?
         if bucket == 'default':
@@ -1958,6 +1967,12 @@ class RestConnection(object):
             log.error("Tried to create the bucket for {0} secs.. giving up".
                       format(maxwait))
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
+
+        # short term change until the REST call is ready
+        if haveEphemeral:   # do the diag eval
+            command = 'ns_bucket:update_bucket_props("default", [{extra_config_string, "bucket_type=ephemeral"}]).'
+            self.diag_eval(command)
+
 
         create_time = time.time() - create_start_time
         log.info("{0:.02f} seconds to create bucket {1}".
@@ -3654,6 +3669,7 @@ class Bucket(object):
         self.bucket_priority = bucket_priority
         self.uuid = uuid
         self.lww = lww
+
 
     def __str__(self):
         return self.name

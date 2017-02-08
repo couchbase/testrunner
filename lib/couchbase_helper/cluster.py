@@ -18,7 +18,7 @@ class Cluster(object):
         self.task_manager.start()
 
     def async_create_default_bucket(self, server, size, replicas=1, enable_replica_index=1, eviction_policy='valueOnly',
-                                    bucket_priority = None,lww=False):
+                                    bucket_priority = None,lww=False,bucket_type='membase'):
         """Asynchronously creates the default bucket
 
         Parameters:
@@ -31,12 +31,12 @@ class Cluster(object):
 
         _task = BucketCreateTask(server, 'default', replicas, size,
                                  enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
-                                 bucket_priority=bucket_priority, lww=lww)
+                                 bucket_priority=bucket_priority, lww=lww,bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task
 
     def async_create_sasl_bucket(self, server, name, password, size, replicas, enable_replica_index=1,
-                                 eviction_policy='valueOnly', bucket_priority=None, lww=False):
+                                 eviction_policy='valueOnly', bucket_priority=None, lww=False, bucket_type='membase'):
         """Asynchronously creates a sasl bucket
 
         Parameters:
@@ -50,26 +50,13 @@ class Cluster(object):
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, password=password,
                                  enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
-                                 bucket_priority=bucket_priority, lww=lww)
+                                 bucket_priority=bucket_priority, lww=lww, bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_failover(self, servers=[], failover_nodes=[], graceful=False, use_hostnames=False):
-        """Asynchronously failover a set of nodes
-
-        Parameters:
-            servers - servers used for connection. (TestInputServer)
-            failover_nodes - The set of servers that will under go failover .(TestInputServer)
-            graceful = True/False. True - graceful, False - hard. (Boolean)
-
-        Returns:
-            FailOverTask - A task future that is a handle to the scheduled task."""
-        _task = FailoverTask(servers, to_failover = failover_nodes, graceful = graceful, use_hostnames=use_hostnames)
-        self.task_manager.schedule(_task)
-        return _task
 
     def async_create_standard_bucket(self, server, name, port, size, replicas, enable_replica_index=1,
-                                     eviction_policy='valueOnly', bucket_priority=None, lww=False):
+                                     eviction_policy='valueOnly', bucket_priority=None, lww=False, bucket_type='membase'):
         """Asynchronously creates a standard bucket
 
         Parameters:
@@ -83,7 +70,8 @@ class Cluster(object):
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, port,
                                  enable_replica_index=enable_replica_index,
-                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority, lww=lww)
+                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority,
+                                 lww=lww, bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task
 
@@ -103,6 +91,11 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+
+
+
+
+
     def async_bucket_delete(self, server, bucket='default'):
         """Asynchronously deletes a bucket
 
@@ -115,6 +108,22 @@ class Cluster(object):
         _task = BucketDeleteTask(server, bucket)
         self.task_manager.schedule(_task)
         return _task
+
+
+    def async_failover(self, servers=[], failover_nodes=[], graceful=False, use_hostnames=False):
+        """Asynchronously failover a set of nodes
+
+        Parameters:
+            servers - servers used for connection. (TestInputServer)
+            failover_nodes - The set of servers that will under go failover .(TestInputServer)
+            graceful = True/False. True - graceful, False - hard. (Boolean)
+
+        Returns:
+            FailOverTask - A task future that is a handle to the scheduled task."""
+        _task = FailoverTask(servers, to_failover = failover_nodes, graceful = graceful, use_hostnames=use_hostnames)
+        self.task_manager.schedule(_task)
+        return _task
+
 
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
@@ -266,7 +275,7 @@ class Cluster(object):
 
     def create_default_bucket(self, server, size, replicas=1, timeout=600,
                               enable_replica_index=1, eviction_policy='valueOnly',
-                              bucket_priority = None,lww=False):
+                              bucket_priority = None,lww=False, bucket_type='membase'):
         """Synchronously creates the default bucket
 
         Parameters:
@@ -281,10 +290,11 @@ class Cluster(object):
                                                  enable_replica_index=enable_replica_index,
                                                  eviction_policy=eviction_policy,
                                                  bucket_priority = bucket_priority,
-                                                 lww=lww)
+                                                 lww=lww, bucket_type=bucket_type)
         return _task.result(timeout)
 
-    def create_sasl_bucket(self, server, name, password, size, replicas, timeout=None, bucket_priority=None):
+    def create_sasl_bucket(self, server, name, password, size, replicas, timeout=None, bucket_priority=None,
+                           bucket_type='membase'):
         """Synchronously creates a sasl bucket
 
         Parameters:
@@ -296,11 +306,13 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = self.async_create_sasl_bucket(server, name, password, replicas, size, bucket_priority = bucket_priority)
+        _task = self.async_create_sasl_bucket(server, name, password, replicas, size, bucket_priority = bucket_priority,
+                                              bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
-    def create_standard_bucket(self, server, name, port, size, replicas, timeout=None, bucket_priority=None):
+    def create_standard_bucket(self, server, name, port, size, replicas, timeout=None, bucket_priority=None,
+                               bucket_type='membase'):
         """Synchronously creates a standard bucket
 
         Parameters:
@@ -312,7 +324,8 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = self.async_create_standard_bucket(server, name, port, size, replicas, bucket_priority=bucket_priority)
+        _task = self.async_create_standard_bucket(server, name, port, size, replicas, bucket_priority=bucket_priority,
+                                                  bucket_type=bucket_type)
         return _task.result(timeout)
 
     def bucket_delete(self, server, bucket='default', timeout=None):
