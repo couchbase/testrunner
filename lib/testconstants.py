@@ -111,6 +111,7 @@ INDEX_QUOTA = 512
 FTS_QUOTA = 256
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
 LINUX_NONROOT_CB_BIN_PATH = "~/opt/couchbase/bin/"
+NR_INSTALL_LOCATION_FILE = "nonroot_install_location.txt"
 LINUX_COUCHBASE_PORT_CONFIG_PATH = "/opt/couchbase/etc/couchbase"
 LINUX_COUCHBASE_OLD_CONFIG_PATH = "/opt/couchbase/var/lib/couchbase/config/"
 LINUX_COUCHBASE_SAMPLE_PATH = "/opt/couchbase/samples/"

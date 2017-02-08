@@ -74,6 +74,9 @@ Examples:
  # to install latest release of couchbase server via repo (apt-get and yum)
   install.py -i /tmp/ubuntu.ini -p product=cb,linux_repo=true
 
+ # to install non-root non default path, add nr_install_dir params
+   install.py -i /tmp/ubuntu.ini -p product=cb,version=5.0.0-1900,nr_install_dir=testnow1
+
 """
     sys.exit(err)
 

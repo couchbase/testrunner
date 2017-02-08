@@ -44,7 +44,8 @@ from testconstants import CB_REPO
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 
-from testconstants import LINUX_NONROOT_CB_BIN_PATH
+from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
+                          NR_INSTALL_LOCATION_FILE
 
 from membase.api.rest_client import RestConnection, RestHelper
 
@@ -142,6 +143,10 @@ class RemoteMachineShellConnection:
         self.username = username
         self.use_sudo = True
         self.nonroot = False
+        """ in nonroot, we could extract Couchbase Server at
+            any directory that non root user could create
+        """
+        self.nr_home_path = "/home/%s/" % self.username
         if self.username == 'root':
             self.use_sudo = False
         elif self.username != "Administrator":
@@ -174,6 +179,7 @@ class RemoteMachineShellConnection:
         self.input = TestInput.TestInputParser.get_test_input(sys.argv)
         self.use_sudo = True
         self.nonroot = False
+        self.nr_home_path = "/home/%s/" % self.username
         if self.username == 'root':
             self.use_sudo = False
         elif self.username != "Administrator":
@@ -320,8 +326,8 @@ class RemoteMachineShellConnection:
             if self.is_couchbase_installed():
                 if self.nonroot:
                     log.info("Start Couchbase Server with non root method")
-                    o, r = self.execute_command('%scouchbase-server \-- -noinput -detached '\
-                                                              % (LINUX_NONROOT_CB_BIN_PATH))
+                    o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
+                                              % (self.nr_home_path, LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
@@ -351,7 +357,9 @@ class RemoteMachineShellConnection:
         elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
                 if self.nonroot:
-                    o, r = self.execute_command("%scouchbase-server -k" % LINUX_NONROOT_CB_BIN_PATH)
+                    o, r = self.execute_command("%s%scouchbase-server -k"
+                                                % (self.nr_home_path,
+                                                   LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
@@ -537,7 +545,13 @@ class RemoteMachineShellConnection:
                     return True
         elif self.info.type.lower() == "linux":
             if self.nonroot:
-                file_path = "/home/" + self.username + LINUX_CB_PATH
+                if self.file_exists("/home/%s/" % self.username, NR_INSTALL_LOCATION_FILE):
+                    output, error = self.execute_command("cat %s" % NR_INSTALL_LOCATION_FILE)
+                    if output and output[0]:
+                        log.info("Couchbase Server was installed in non default path %s"
+                                                                            % output[0])
+                        self.nr_home_path = output[0]
+                file_path = self.nr_home_path + LINUX_CB_PATH
                 if self.file_exists(file_path, VERSION_FILE):
                     log.info("non root couchbase installed at %s " % self.ip)
                     return True
@@ -697,10 +711,34 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             if skip_md5_check:
                 if self.nonroot:
+                    output, error = self.execute_command("ls -lh ")
+                    self.log_command_output(output, error)
                     log.info("remove old couchbase server binary ")
-                    self.execute_command_raw('rm couchbase-server-*')
-                    output, error = self.execute_command_raw('pwd;' \
-                                    ' wget -q -O {0} {1};ls -lh'.format(filename, url))
+                    if self.file_exists("/home/%s/" % self.username, NR_INSTALL_LOCATION_FILE):
+                        output, error = self.execute_command("cat %s"
+                                             % NR_INSTALL_LOCATION_FILE)
+                        if output and output[0]:
+                            log.info("Couchbase Server was installed in non default path %s"
+                                                                            % output[0])
+                        self.nr_home_path = output[0]
+                    self.execute_command_raw('cd %s;rm couchbase-server-*'
+                                                      % self.nr_home_path)
+                    if "nr_install_dir" in self.input.test_params and \
+                                           self.input.test_params["nr_install_dir"]:
+                        self.nr_home_path = self.nr_home_path + self.input.test_params["nr_install_dir"]
+                        op, er = self.execute_command("echo %s > %s" % (self.nr_home_path,
+                                                              NR_INSTALL_LOCATION_FILE))
+                        self.log_command_output(op, er)
+                        op, er = self.execute_command("rm -rf %s" % self.nr_home_path)
+                        self.log_command_output(op, er)
+                        op, er = self.execute_command("mkdir %s" % self.nr_home_path)
+                        self.log_command_output(op, er)
+                    output, error = self.execute_command("ls -lh ")
+                    self.log_command_output(output, error)
+                    output, error = self.execute_command_raw('cd {2}; pwd;'
+                                                             ' wget -q -O {0} {1};ls -lh'
+                                                             .format(filename, url,
+                                                                     self.nr_home_path))
                     self.log_command_output(output, error)
                 else:
                     output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh'\
@@ -719,7 +757,7 @@ class RemoteMachineShellConnection:
             # check if the file exists there now ?
             if self.nonroot:
                 """ binary is saved at current user directory """
-                return self.file_exists('/home/%s' % self.username, filename)
+                return self.file_exists(self.nr_home_path, filename)
             else:
                 return self.file_exists('/tmp', filename)
             # for linux environment we can just
@@ -875,6 +913,8 @@ class RemoteMachineShellConnection:
                     sftp.close()
                     return True
                 elif name.filename == filename and int(name.st_size) == 0:
+                    if name.filename == NR_INSTALL_LOCATION_FILE:
+                        continue
                     log.info("File {0} will be deleted".format(filename))
                     sftp.remove(remotepath + filename)
             sftp.close()
@@ -1401,6 +1441,9 @@ class RemoteMachineShellConnection:
             could not reused to uninstall or install cb server """
         self.delete_file(WIN_TMP_PATH, version[:10] + ".exe")
 
+    """
+        This method install Couchbase Server
+    """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
                        fts_query_limit=None):
@@ -1471,27 +1514,26 @@ class RemoteMachineShellConnection:
 
             if self.info.deliverable_type == 'rpm':
                 if self.nonroot:
-                    log.info("couchbase build name: %s  " % build.name)
-                    op, er = self.execute_command('rpm2cpio %s ' \
+                    op, er = self.execute_command('cd %s; rpm2cpio %s ' \
                         '|  cpio --extract --make-directories --no-absolute-filenames ' \
-                             % build.name)
+                                                       % (self.nr_home_path, build.name))
                     self.log_command_output(op, er)
-                    output, error = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
-                                                         % LINUX_CB_PATH[1:])
+                    output, error = self.execute_command('cd %s%s; ./bin/install/reloc.sh `pwd` ' \
+                                                         % (self.nr_home_path, LINUX_CB_PATH))
                     self.log_command_output(output, error)
-                    op, er = self.execute_command('pwd')
+                    op, er = self.execute_command('cd %s;pwd' % self.nr_home_path)
                     self.log_command_output(op, er)
                     """ command to start Couchbase Server in non root
                         /home/nonroot_user/opt/couchbase/bin/couchbase-server \-- -noinput -detached
                     """
+                    output, error = self.execute_command("ls -lh ")
+                    self.log_command_output(output, error)
                     if start_server_after_install:
-                        output, error = self.execute_command('/home/%s%scouchbase-server '\
+                        output, error = self.execute_command('%s%scouchbase-server '\
                                                              '\-- -noinput -detached '\
-                                                              % (self.username,
+                                                              % (self.nr_home_path,
                                                                  LINUX_COUCHBASE_BIN_PATH))
                 else:
-                    self.check_openssl_version(self.info.deliverable_type, openssl,
-                                               build.product_version)
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if force:
                         output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
@@ -1501,11 +1543,12 @@ class RemoteMachineShellConnection:
                                                              .format(environment, build.name))
             elif self.info.deliverable_type == 'deb':
                 if self.nonroot:
-                    log.info("couchbase build name: %s  " % build.name)
-                    op, er = self.execute_command('dpkg-deb -x %s $HOME ' % build.name)
+                    op, er = self.execute_command('cd %s; dpkg-deb -x %s %s '
+                                                % (self.nr_home_path, build.name,
+                                                   self.nr_home_path))
                     self.log_command_output(op, er)
-                    output, error = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
-                                                          % LINUX_CB_PATH[1:])
+                    output, error = self.execute_command('cd %s%s; ./bin/install/reloc.sh `pwd`'\
+                                                               % (self.nr_home_path, LINUX_CB_PATH))
                     self.log_command_output(output, error)
                     op, er = self.execute_command('pwd')
                     self.log_command_output(op, er)
@@ -1513,13 +1556,11 @@ class RemoteMachineShellConnection:
                         as in centos above
                     """
                     if start_server_after_install:
-                        output, error = self.execute_command('/home/%s%scouchbase-server '\
+                        output, error = self.execute_command('%s%scouchbase-server '\
                                                              '\-- -noinput -detached '\
-                                                               % (self.username,
+                                                               % (self.nr_home_path,
                                                                   LINUX_COUCHBASE_BIN_PATH))
                 else:
-                    self.check_openssl_version(self.info.deliverable_type, openssl,
-                                               build.product_version)
                     self.install_missing_lib()
                     if force:
                         output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'\
@@ -2111,6 +2152,13 @@ class RemoteMachineShellConnection:
                     self.sleep(5, "==== delay kill pid %d in 5 seconds to printout message ==="\
                                                                                  % os.getpid())
                     os.system('kill %d' % os.getpid())
+                if self.file_exists(self.nr_home_path, NR_INSTALL_LOCATION_FILE):
+                    output, error = self.execute_command("cat %s"
+                                             % NR_INSTALL_LOCATION_FILE)
+                    if output and output[0]:
+                        log.info("Couchbase Server was installed in non default path %s"
+                                                                            % output[0])
+                        self.nr_home_path = output[0]
             # uninstallation command is different
             if type == "ubuntu":
                 if self.nonroot:
@@ -2123,14 +2171,6 @@ class RemoteMachineShellConnection:
                               % (LINUX_CB_PATH, self.ip)
                         sys.exit(1)
                     self.stop_server()
-                    log.info("Remove couchbase server directories opt etc and usr ")
-                    output, error = self.execute_command("rm -rf opt etc usr")
-                    self.log_command_output(output, error)
-                    output, error = self.execute_command("rm -rf opt etc usr")
-                    self.log_command_output(output, error)
-                    self.execute_command("rm -rf couchbase-server-*")
-                    output, error = self.execute_command("ls -lh")
-                    self.log_command_output(output, error)
                 else:
                     if sv in COUCHBASE_FROM_VERSION_4:
                         if self.is_enterprise(type):
@@ -2157,12 +2197,6 @@ class RemoteMachineShellConnection:
                                % (LINUX_CB_PATH, self.ip)
                         sys.exit(1)
                     self.stop_server()
-                    log.info("Remove couchbase server directories opt etc and usr ")
-                    output, error = self.execute_command("rm -rf opt etc usr")
-                    self.log_command_output(output, error)
-                    self.execute_command("rm -rf couchbase-server-*")
-                    output, error = self.execute_command("ls -lh")
-                    self.log_command_output(output, error)
                 else:
                     output, error = self.execute_command("killall -9 rpm")
                     self.log_command_output(output, error)
@@ -2193,6 +2227,29 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf /Applications/Couchbase\ Server.app")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -rf ~/Library/Application\ Support/Couchbase")
+            self.log_command_output(output, error)
+        if self.nonroot:
+            if self.nr_home_path != "/home/%s/" % self.username:
+                log.info("remove all non default install dir")
+                output, error = self.execute_command("rm -rf %s"
+                                                        % self.nr_home_path)
+                self.log_command_output(output, error)
+            else:
+                log.info("Remove only Couchbase Server directories opt etc and usr ")
+                output, error = self.execute_command("cd %s;rm -rf opt etc usr"
+                                                           % self.nr_home_path)
+                self.log_command_output(output, error)
+                self.execute_command("cd %s;rm -rf couchbase-server-*"
+                                                      % self.nr_home_path)
+                output, error = self.execute_command("cd %s;ls -lh"
+                                                      % self.nr_home_path)
+                self.log_command_output(output, error)
+            if "nr_install_dir" not in self.input.test_params:
+                self.nr_home_path = "/home/%s/" % self.username
+                output, error = self.execute_command(" :> %s"
+                                             % NR_INSTALL_LOCATION_FILE)
+                self.log_command_output(output, error)
+            output, error = self.execute_command("ls -lh")
             self.log_command_output(output, error)
 
     def couchbase_win_uninstall(self, product, version, os_name, query):
@@ -2914,7 +2971,6 @@ class RemoteMachineShellConnection:
         if o:
             return o
 
-        
     def get_memcache_pid(self):
          self.extract_remote_info()
          if self.info.type == 'Linux':
@@ -2950,8 +3006,9 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == "linux":
             if self.nonroot:
                 log.info("Stop Couchbase Server with non root method")
-                o, r = self.execute_command('%scouchbase-server -k '\
-                                         % (LINUX_NONROOT_CB_BIN_PATH))
+                o, r = self.execute_command('%s%scouchbase-server -k '\
+                                         % (self.nr_home_path,
+                                            LINUX_COUCHBASE_BIN_PATH))
                 self.log_command_output(o, r)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
@@ -2980,8 +3037,9 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == "linux":
             if self.nonroot:
                 log.info("Start Couchbase Server with non root method")
-                o, r = self.execute_command('%scouchbase-server \-- -noinput -detached '\
-                                                           % (LINUX_NONROOT_CB_BIN_PATH))
+                o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
+                                                           % (self.nr_home_path,
+                                                              LINUX_COUCHBASE_BIN_PATH))
                 self.log_command_output(o, r)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
