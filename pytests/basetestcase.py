@@ -590,7 +590,7 @@ class BaseTestCase(unittest.TestCase):
             if self.standard_bucket_priority != None:
                 bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
 
-            bucket_tasks.append(self.cluster.async_create__bucket(server, bucket_name,
+            bucket_tasks.append(self.cluster.async_create_standard_bucket(server, bucket_name,
                                                                           STANDARD_BUCKET_PORT + i,
                                                                           bucket_size,
                                                                           self.num_replicas,
