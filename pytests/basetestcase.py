@@ -558,7 +558,7 @@ class BaseTestCase(unittest.TestCase):
                                                                           eviction_policy=self.eviction_policy,
                                                                           bucket_priority=bucket_priority,
                                                                           lww=self.lww,
-                                                                          type=self.bucket_type))
+                                                                          bucket_type=self.bucket_type))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size,
