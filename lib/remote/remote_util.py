@@ -233,6 +233,9 @@ class RemoteMachineShellConnection:
         run command
     """
     def connect_with_user(self, user="root"):
+        if self.info.distribution_type.lower() == "mac":
+            log.info("This is Mac Server.  Skip re-connect to it as %s" % user)
+            return
         max_attempts_connect = 2
         attempt = 0
         while True:
