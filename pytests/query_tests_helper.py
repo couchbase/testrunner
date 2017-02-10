@@ -21,15 +21,6 @@ class QueryHelperTests(BaseTestCase):
         self.use_gsi_for_secondary = self.input.param(
             "use_gsi_for_secondary", True)
         self.scan_consistency = self.input.param("scan_consistency", "request_plus")
-#         for server in self.servers:
-#             rest = RestConnection(server)
-#             temp = rest.cluster_status()
-#             log.info("Initial status of {0} cluster is {1}".format(server.ip, temp['nodes'][0]['status']))
-#             while (temp['nodes'][0]['status'] == 'warmup'):
-#                 log.info("Waiting for cluster to become healthy")
-#                 self.sleep(5)
-#                 temp = rest.cluster_status()
-#             log.info ("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
         self.shell = RemoteMachineShellConnection(self.master)
         self.buckets = RestConnection(self.master).get_buckets()
         self.docs_per_day = self.input.param("doc-per-day", 49)
@@ -49,43 +40,20 @@ class QueryHelperTests(BaseTestCase):
         self.full_docs_list = self.generate_full_docs_list(self.gens_load)
         self.gen_results = TuqGenerators(self.log,
                                          full_set=self.full_docs_list)
-
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
-        if self.n1ql_server:
-            if self.doc_ops:
-                self.ops_dist_map = self.calculate_data_change_distribution(
-                    create_per=self.create_ops_per, update_per=self.update_ops_per,
-                    delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
-                    start=0, end=self.docs_per_day)
-                log.info(self.ops_dist_map)
-                self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
-                self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
-            # Define Helper Method which will be used for running n1ql queries, create index, drop index
-            self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                          max_verify=self.max_verify,
-                                          buckets=self.buckets,
-                                          item_flag=self.item_flag,
-                                          n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list,
-                                          log=self.log, input=self.input,
-                                          master=self.master)
-            log.info(self.n1ql_server)
-            if self.create_primary_index:
-                self.n1ql_helper.create_primary_index(
-                    using_gsi=self.use_gsi_for_primary)
-            query_definition_generator = SQLDefinitionGenerator()
-            if self.dataset == "default" or self.dataset == "employee":
-                self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
-            if self.dataset == "simple":
-                self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
-            if self.dataset == "sabre":
-                self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
-            if self.dataset == "bigdata":
-                self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
-            if self.dataset == "array":
-                self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
-            self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        query_definition_generator = SQLDefinitionGenerator()
+        if self.dataset == "default" or self.dataset == "employee":
+            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
+        if self.dataset == "simple":
+            self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
+        if self.dataset == "sabre":
+            self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
+        if self.dataset == "bigdata":
+            self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
+        if self.dataset == "array":
+            self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
 
     def tearDown(self):
         super(QueryHelperTests, self).tearDown()
@@ -196,6 +164,31 @@ class QueryHelperTests(BaseTestCase):
                                                             server=self.n1ql_server)
         self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
+    def _create_primary_index(self):
+        if self.n1ql_server:
+            if self.doc_ops:
+                self.ops_dist_map = self.calculate_data_change_distribution(
+                    create_per=self.create_ops_per, update_per=self.update_ops_per,
+                    delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
+                    start=0, end=self.docs_per_day)
+                log.info(self.ops_dist_map)
+                self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
+                self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
+            # Define Helper Method which will be used for running n1ql queries, create index, drop index
+            self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                          max_verify=self.max_verify,
+                                          buckets=self.buckets,
+                                          item_flag=self.item_flag,
+                                          n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list,
+                                          log=self.log, input=self.input,
+                                          master=self.master
+                                          )
+            log.info(self.n1ql_server)
+            if self.create_primary_index:
+                self.n1ql_helper.create_primary_index(
+                    using_gsi=self.use_gsi_for_primary, server=self.n1ql_server)
+
     def query_using_index(self, bucket, query_definition, expected_result=None, scan_consistency=None,
                           scan_vector=None, verify_results=True):
         if not scan_consistency:
@@ -236,6 +229,7 @@ class QueryHelperTests(BaseTestCase):
 
     def run_async_index_operations(self, operation_type):
         if operation_type == "create_index":
+            self._create_primary_index()
             for bucket in self.buckets:
                 for query_definition in self.query_definitions:
                     self.create_index(bucket=bucket, query_definition=query_definition)
