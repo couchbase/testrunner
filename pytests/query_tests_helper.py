@@ -49,41 +49,43 @@ class QueryHelperTests(BaseTestCase):
         self.full_docs_list = self.generate_full_docs_list(self.gens_load)
         self.gen_results = TuqGenerators(self.log,
                                          full_set=self.full_docs_list)
-        if self.doc_ops:
-            self.ops_dist_map = self.calculate_data_change_distribution(
-                create_per=self.create_ops_per , update_per=self.update_ops_per ,
-                delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
-                start=0, end=self.docs_per_day)
-            log.info(self.ops_dist_map)
-            self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
-            self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
-        # Define Helper Method which will be used for running n1ql queries, create index, drop index
-        self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                      max_verify=self.max_verify,
-                                      buckets=self.buckets,
-                                      item_flag=self.item_flag,
-                                      n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list,
-                                      log=self.log, input=self.input,
-                                      master=self.master)
+
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
-        log.info(self.n1ql_server)
-        if self.create_primary_index:
-            self.n1ql_helper.create_primary_index(
-                using_gsi=self.use_gsi_for_primary)
-        query_definition_generator = SQLDefinitionGenerator()
-        if self.dataset == "default" or self.dataset == "employee":
-            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
-        if self.dataset == "simple":
-            self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
-        if self.dataset == "sabre":
-            self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
-        if self.dataset == "bigdata":
-            self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
-        if self.dataset == "array":
-            self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
-        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        if self.n1ql_server:
+            if self.doc_ops:
+                self.ops_dist_map = self.calculate_data_change_distribution(
+                    create_per=self.create_ops_per, update_per=self.update_ops_per,
+                    delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
+                    start=0, end=self.docs_per_day)
+                log.info(self.ops_dist_map)
+                self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
+                self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
+            # Define Helper Method which will be used for running n1ql queries, create index, drop index
+            self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                          max_verify=self.max_verify,
+                                          buckets=self.buckets,
+                                          item_flag=self.item_flag,
+                                          n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list,
+                                          log=self.log, input=self.input,
+                                          master=self.master)
+            log.info(self.n1ql_server)
+            if self.create_primary_index:
+                self.n1ql_helper.create_primary_index(
+                    using_gsi=self.use_gsi_for_primary)
+            query_definition_generator = SQLDefinitionGenerator()
+            if self.dataset == "default" or self.dataset == "employee":
+                self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
+            if self.dataset == "simple":
+                self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
+            if self.dataset == "sabre":
+                self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
+            if self.dataset == "bigdata":
+                self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
+            if self.dataset == "array":
+                self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+            self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
 
     def tearDown(self):
         super(QueryHelperTests, self).tearDown()
