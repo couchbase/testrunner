@@ -932,7 +932,7 @@ class FTSIndex:
                                                           consistency_level='',
                                                           consistency_vectors={}):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
-        query_json = QUERY.JSON
+        query_json = copy.deepcopy(QUERY.JSON)
         # query is a unicode dict
         query_json['query'] = query
         query_json['indexName'] = self.name
