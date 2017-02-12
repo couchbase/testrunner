@@ -2005,7 +2005,7 @@ class CouchbaseCliTest(CliBaseTest):
         else:
             self.log.info("readonly account does not support on this version")
 
-    def test_directory_backup_structure(self):
+    def test_directory_backup_stuctrue(self):
         """ directory of backup stuctrure should be like
             /backup_path/date/date-mode/ as in
             /tmp/backup/2016-08-19T185902Z/2016-08-19T185902Z-full/
@@ -2018,11 +2018,10 @@ class CouchbaseCliTest(CliBaseTest):
         num_backup_bucket = self.input.param("num_backup_bucket", "all")
         num_sasl_buckets = self.input.param("num_sasl_buckets", 1)
         self.bucket_size = 200
-        bucket_params=self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy)
-        self.cluster.create_default_bucket(bucket_params)
+        self.cluster.create_default_bucket(self.master, self.bucket_size,
+                                                       self.num_replicas,
+                                enable_replica_index=self.enable_replica_index,
+                                          eviction_policy=self.eviction_policy)
         self._create_sasl_buckets(self.master, num_sasl_buckets)
         self.buckets = RestConnection(self.master).get_buckets()
         if load_all is None:
@@ -2511,15 +2510,11 @@ class XdcrCLITest(CliBaseTest):
 
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         if from_bucket:
-            bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                              replicas=self.num_replicas,
-                                                              enable_replica_index=self.enable_replica_index)
-            self.cluster.create_default_bucket(bucket_params)
+            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
+                                               enable_replica_index=self.enable_replica_index)
         if to_bucket:
-            bucket_params = self._create_bucket_params(server=self.servers[xdcr_hostname], size=self.bucket_size,
-                                                              replicas=self.num_replicas,
-                                                              enable_replica_index=self.enable_replica_index)
-            self.cluster.create_default_bucket(bucket_params)
+            self.cluster.create_default_bucket(self.servers[xdcr_hostname], self.bucket_size, self.num_replicas,
+                                               enable_replica_index=self.enable_replica_index)
         output, _ = self.__execute_cli(cli_command, options)
         if not error_expected:
             self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])

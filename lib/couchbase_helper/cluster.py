@@ -17,59 +17,84 @@ class Cluster(object):
         self.task_manager = TaskManager("Cluster_Thread")
         self.task_manager.start()
 
-    def async_create_default_bucket(self, bucket_params):
+    def async_create_default_bucket(self, server, size, replicas=1, enable_replica_index=1, eviction_policy='valueOnly',
+                                    bucket_priority = None,lww=False,bucket_type='membase'):
         """Asynchronously creates the default bucket
 
         Parameters:
-            bucket_params - a dictionary containing bucket creation parameters. (Dict)
+            server - The server to create the bucket on. (TestInputServer)
+            size - The size of the bucket to be created. (int)
+            replicas - The number of replicas for this bucket. (int)
+
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
-        bucket_params['bucket_name'] = 'default'
-        _task = BucketCreateTask(bucket_params)
+
+        _task = BucketCreateTask(server, 'default', replicas, size,
+                                 enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
+                                 bucket_priority=bucket_priority, lww=lww,bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_create_sasl_bucket(self, name, password, bucket_params):
+    def async_create_sasl_bucket(self, server, name, password, size, replicas, enable_replica_index=1,
+                                 eviction_policy='valueOnly', bucket_priority=None, lww=False, bucket_type='membase'):
         """Asynchronously creates a sasl bucket
 
         Parameters:
-            bucket_params - a dictionary containing bucket creation parameters. (Dict)
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            password - The password for this bucket. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
 
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
-        bucket_params['bucket_name'] = name
-        bucket_params['password'] = password
-        _task = BucketCreateTask(bucket_params)
+        _task = BucketCreateTask(server, name, replicas, size, password=password,
+                                 enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
+                                 bucket_priority=bucket_priority, lww=lww, bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_create_standard_bucket(self, name, port, bucket_params):
-        """Asynchronously creates a standard bucket
-        Parameters:
-            bucket_params - A dictionary containing a list of bucket creation parameters. (Dict)
-        Returns:
-            BucketCreateTask - A task future that is a handle to the scheduled task."""
 
-        bucket_params['bucket_name'] = name
-        bucket_params['port'] = port
-        _task = BucketCreateTask(bucket_params)
-        self.task_manager.schedule(_task)
-        return _task
-
-    def async_create_memcached_bucket(self, name, port, bucket_params):
+    def async_create_standard_bucket(self, server, name, port, size, replicas, enable_replica_index=1,
+                                     eviction_policy='valueOnly', bucket_priority=None, lww=False, bucket_type='membase'):
         """Asynchronously creates a standard bucket
 
         Parameters:
-            bucket_params - A dictionary containing a list of bucket creation parameters. (Dict)
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
 
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
-        bucket_params['bucket_name'] = name
-        bucket_params['port'] = port
-        bucket_params['bucket_type'] = 'memcached'
-        _task = BucketCreateTask(bucket_params)
+        _task = BucketCreateTask(server, name, replicas, size, port,
+                                 enable_replica_index=enable_replica_index,
+                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority,
+                                 lww=lww, bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task
+
+    def async_create_memcached_bucket(self, server, name, port, size, replicas):
+        """Asynchronously creates a standard bucket
+
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
+
+        Returns:
+            BucketCreateTask - A task future that is a handle to the scheduled task."""
+        _task = BucketCreateTask(server, name, replicas, size, port, bucket_type="memcached")
+        self.task_manager.schedule(_task)
+        return _task
+
+
+
+
+
 
     def async_bucket_delete(self, server, bucket='default'):
         """Asynchronously deletes a bucket
@@ -248,38 +273,59 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def create_default_bucket(self, bucket_params, timeout=600):
+    def create_default_bucket(self, server, size, replicas=1, timeout=600,
+                              enable_replica_index=1, eviction_policy='valueOnly',
+                              bucket_priority = None,lww=False, bucket_type='membase'):
         """Synchronously creates the default bucket
 
         Parameters:
-            bucket_params - A dictionary containing a list of bucket creation parameters. (Dict)
+            server - The server to create the bucket on. (TestInputServer)
+            size - The size of the bucket to be created. (int)
+            replicas - The number of replicas for this bucket. (int)
 
         Returns:
             boolean - Whether or not the bucket was created."""
 
-        _task = self.async_create_default_bucket(bucket_params)
+        _task = self.async_create_default_bucket(server, size, replicas,
+                                                 enable_replica_index=enable_replica_index,
+                                                 eviction_policy=eviction_policy,
+                                                 bucket_priority = bucket_priority,
+                                                 lww=lww, bucket_type=bucket_type)
         return _task.result(timeout)
 
-    def create_sasl_bucket(self, name, password,bucket_params, timeout=None):
+    def create_sasl_bucket(self, server, name, password, size, replicas, timeout=None, bucket_priority=None,
+                           bucket_type='membase'):
         """Synchronously creates a sasl bucket
 
         Parameters:
-            bucket_params - A dictionary containing a list of bucket creation parameters. (Dict)
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            password - The password for this bucket. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
 
         Returns:
             boolean - Whether or not the bucket was created."""
-
-        _task = self.async_create_sasl_bucket(name, password, bucket_params)
+        _task = self.async_create_sasl_bucket(server, name, password, replicas, size, bucket_priority = bucket_priority,
+                                              bucket_type=bucket_type)
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
-    def create_standard_bucket(self, name, port, bucket_params, timeout=None):
+    def create_standard_bucket(self, server, name, port, size, replicas, timeout=None, bucket_priority=None,
+                               bucket_type='membase'):
         """Synchronously creates a standard bucket
+
         Parameters:
-            bucket_params - A dictionary containing a list of bucket creation parameters. (Dict)
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
+
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = self.async_create_standard_bucket(name, port, bucket_params)
+        _task = self.async_create_standard_bucket(server, name, port, size, replicas, bucket_priority=bucket_priority,
+                                                  bucket_type=bucket_type)
         return _task.result(timeout)
 
     def bucket_delete(self, server, bucket='default', timeout=None):
@@ -936,7 +982,7 @@ class Cluster(object):
         _task = self.async_compact_view(server, design_doc_name, bucket, with_rebalance)
         return _task.result(timeout)
 
-    def failover(self, servers=[], failover_nodes=[], graceful=False, use_hostnames=False,timeout=None):
+    def failover(self, servers=[], failover_nodes=[], graceful=False, use_hostnames=False):
         """Synchronously flushes a bucket
 
         Parameters:
@@ -947,7 +993,7 @@ class Cluster(object):
         Returns:
             boolean - Whether or not the bucket was flushed."""
         _task = self.async_failover(servers, failover_nodes, graceful, use_hostnames)
-        return _task.result(timeout)
+        return _task.result()
 
     def async_bucket_flush(self, server, bucket='default'):
         """Asynchronously flushes a bucket
@@ -1007,7 +1053,7 @@ class Cluster(object):
         return _task
 
     def cbrecovery(self, src_server, dest_server, bucket_src='', bucket_dest='', username='', password='',
-                 username_dest='', password_dest='', verbose=False, wait_completed=True,timeout=None):
+                 username_dest='', password_dest='', verbose=False, wait_completed=True):
         """Synchronously run and monitor cbrecovery
 
         Parameters:
@@ -1024,7 +1070,7 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the cbrecovery completed successfully"""
-        _task = self.async_cbrecovery(src_server, dest_server, bucket_src, bucket_dest, username, password,
+        _task = self.async_cbrecovery(server, src_server, dest_server, bucket_src, bucket_dest, username, password,
                  username_dest, password_dest, verbose, wait_completed)
         return _task.result(timeout)
 
