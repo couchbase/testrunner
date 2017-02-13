@@ -28,6 +28,7 @@ from scripts.collect_server_info import cbcollectRunner, couch_dbinfo_Runner
 from scripts.measure_sched_delays import SchedDelays
 from scripts.getcoredumps import Getcoredumps, Clearcoredumps
 import signal
+import shutil
 
 
 def usage(err=None):
@@ -218,6 +219,14 @@ def get_server_logs(input, path):
         except Exception as e:
             print "unable to obtain diags from %s %s" % (diag_url, e)
 
+def get_logs_cluster_run(input, path, ns_server_path):
+    print "grabbing logs (cluster-run)"
+    path = path or "."
+    logs_path = ns_server_path + os.sep + "logs"
+    try:
+        shutil.make_archive(path + os.sep + "logs", 'zip', logs_path)
+    except Exception as e:
+        print "NOT POSSIBLE TO GRAB LOGS (CLUSTER_RUN)"
 
 def get_cbcollect_info(input, path):
     for server in input.servers:
@@ -417,6 +426,12 @@ def main():
             # the test has failed or has errors
             if "get-logs" in TestInputSingleton.input.test_params:
                 get_server_logs(TestInputSingleton.input, logs_folder)
+
+            if "get-logs-cluster-run" in TestInputSingleton.input.test_params:
+                if TestInputSingleton.input.param("get-logs-cluster-run", True):
+                    # Generate path to ns_server directory
+                    ns_server_path = os.path.normpath(abs_path + os.sep + os.pardir + os.sep + "ns_server")
+                    get_logs_cluster_run(TestInputSingleton.input, logs_folder, ns_server_path)
 
             if "get-cbcollect-info" in TestInputSingleton.input.test_params:
                 if TestInputSingleton.input.param("get-cbcollect-info", True):
