@@ -1016,7 +1016,7 @@ class StableTopFTS(FTSBaseTest):
                 hits, raw_hits, _, _ = index.execute_query(query=query,
                                                            zero_results_ok=zero_results_ok,
                                                            expected_hits=expected_hits,
-                                                           sort_fields=self.sort_fields,
+                                                           sort_fields=self.sort_fields_list,
                                                            return_raw_hits=True)
 
                 self.log.info("Hits: %s" % hits)
