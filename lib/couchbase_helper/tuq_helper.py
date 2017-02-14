@@ -637,3 +637,85 @@ class N1QLHelper():
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
         self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
+
+    def verify_indexes_redistributed(self, map_before_rebalance, map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False):
+        # verify that number of indexes before and after rebalance are same
+        no_of_indexes_before_rebalance = 0
+        no_of_indexes_after_rebalance = 0
+        for bucket in map_before_rebalance:
+            no_of_indexes_before_rebalance += len(map_before_rebalance[bucket])
+        for bucket in map_after_rebalance:
+            no_of_indexes_after_rebalance += len(map_after_rebalance[bucket])
+        self.log.info("Number of indexes before rebalance : {0}".format(no_of_indexes_before_rebalance))
+        self.log.info("Number of indexes after rebalance  : {0}".format(no_of_indexes_after_rebalance))
+        if no_of_indexes_before_rebalance != no_of_indexes_after_rebalance:
+            self.log.info("some indexes are missing after rebalance")
+            raise Exception("some indexes are missing after rebalance")
+
+        # verify that index names before and after rebalance are same
+        index_names_before_rebalance = []
+        index_names_after_rebalance = []
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                index_names_before_rebalance.append(index)
+        for bucket in map_after_rebalance:
+            for index in map_after_rebalance[bucket]:
+                index_names_after_rebalance.append(index)
+        self.log.info("Index names before rebalance : {0}".format(sorted(index_names_before_rebalance)))
+        self.log.info("Index names after rebalance  : {0}".format(sorted(index_names_after_rebalance)))
+        if sorted(index_names_before_rebalance) != sorted(index_names_after_rebalance):
+            self.log.info("number of indexes are same but index names don't match")
+            raise Exception("number of indexes are same but index names don't match")
+
+        # verify that rebalanced out nodes are not present
+        host_names_before_rebalance = []
+        host_names_after_rebalance = []
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                host_names_before_rebalance.append(map_before_rebalance[bucket][index]['hosts'])
+        indexer_nodes_before_rebalance = sorted(set(host_names_before_rebalance))
+        for bucket in map_after_rebalance:
+            for index in map_after_rebalance[bucket]:
+                host_names_after_rebalance.append(map_after_rebalance[bucket][index]['hosts'])
+        indexer_nodes_after_rebalance = sorted(set(host_names_after_rebalance))
+        self.log.info("Host names of indexer nodes before rebalance : {0}".format(indexer_nodes_before_rebalance))
+        self.log.info("Host names of indexer nodes after rebalance  : {0}".format(indexer_nodes_after_rebalance))
+        # indexes need to redistributed in case of rebalance out, not necessarily in case of rebalance in
+        if nodes_out and indexer_nodes_before_rebalance == indexer_nodes_after_rebalance:
+            self.log.info("Even after rebalance some of rebalanced out nodes still have indexes")
+            raise Exception("Even after rebalance some of rebalanced out nodes still have indexes")
+        for node_out in nodes_out:
+            if node_out in indexer_nodes_after_rebalance:
+                self.log.info("rebalanced out node still present after rebalance {0} : {1}".format(node_out,
+                                                                                                   indexer_nodes_after_rebalance))
+                raise Exception("rebalanced out node still present after rebalance")
+        if swap_rebalance:
+            for node_in in nodes_in:
+                # strip of unnecessary data for comparison
+                ip_address = str(node_in).replace("ip:", "").replace(" port", "").replace(" port:8091", "").replace(
+                    " ssh_username:root", "")
+                if ip_address not in indexer_nodes_after_rebalance:
+                    self.log.info("swap rebalanced in node is not distributed any indexes")
+                    raise Exception("swap rebalanced in node is not distributed any indexes")
+
+        # Rebalance is not guaranteed to achieve a balanced cluster.
+        # The indexes will be distributed in a manner to satisfy the resource requirements of each index.
+        # Hence printing the index distribution just for logging/debugging purposes
+        index_distribution_map_before_rebalance = {}
+        index_distribution_map_after_rebalance = {}
+        for node in host_names_before_rebalance:
+            index_distribution_map_before_rebalance[node] = index_distribution_map_before_rebalance.get(node, 0) + 1
+        for node in host_names_after_rebalance:
+            index_distribution_map_after_rebalance[node] = index_distribution_map_after_rebalance.get(node, 0) + 1
+        self.log.info("Distribution of indexes before rebalance")
+        for k, v in index_distribution_map_before_rebalance.iteritems():
+            print k, v
+        self.log.info("Distribution of indexes after rebalance")
+        for k, v in index_distribution_map_after_rebalance.iteritems():
+            print k, v
+
+
+
+
+
+
