@@ -3100,7 +3100,7 @@ class FTSBaseTest(unittest.TestCase):
             total_quota,
             num_buckets)
 
-        bucket_type = TestInputSingleton.input.param("bucket_type", None)
+        bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
 
         if self._create_default_bucket:
             self._cb_cluster.create_default_bucket(
