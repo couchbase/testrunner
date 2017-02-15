@@ -696,6 +696,14 @@ class BaseTestCase(unittest.TestCase):
             task.result()
         self.buckets = []
 
+    def _all_buckets_flush(self):
+        flush_tasks = []
+        for bucket in self.buckets:
+            flush_tasks.append(self.cluster.async_bucket_flush(self.master, bucket.name))
+
+        for task in flush_tasks:
+            task.result()
+
     def _verify_stats_all_buckets(self, servers, master=None, timeout=60):
         stats_tasks = []
         if not master:
