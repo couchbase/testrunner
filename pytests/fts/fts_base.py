@@ -1730,10 +1730,46 @@ class CouchbaseCluster:
             if cluster_shutdown:
                 self.__clusterop.shutdown(force=True)
 
+    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
+                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                             bucket_priority=None, flush_enabled=1, lww=False):
+        """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            bucket_name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            password - The password for this bucket. (String)
+            size - The size of the bucket to be created. (int)
+            enable_replica_index - can be 0 or 1, 1 enables indexing of replica bucket data (int)
+            replicas - The number of replicas for this bucket. (int)
+            eviction_policy - The eviction policy for the bucket, can be valueOnly or fullEviction. (String)
+            bucket_priority - The priority of the bucket:either none, low, or high. (String)
+            bucket_type - The type of bucket. (String)
+            flushEnabled - Enable or Disable the flush functionality of the bucket. (int)
+            lww = determine the conflict resolution type of the bucket. (Boolean)
+
+        Returns:
+            bucket_params - A dictionary containing the parameters needed to create a bucket."""
+
+        bucket_params = {}
+        bucket_params['server'] = server
+        bucket_params['replicas'] = replicas
+        bucket_params['size'] = size
+        bucket_params['port'] = port
+        bucket_params['password'] = password
+        bucket_params['bucket_type'] = bucket_type
+        bucket_params['enable_replica_index'] = enable_replica_index
+        bucket_params['eviction_policy'] = eviction_policy
+        bucket_params['bucket_priority'] = bucket_priority
+        bucket_params['flush_enabled'] = flush_enabled
+        bucket_params['lww'] = lww
+        return bucket_params
+
     def create_sasl_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH):
+            bucket_priority=BUCKET_PRIORITY.HIGH,
+            bucket_type=None):
         """Create sasl buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1744,14 +1780,17 @@ class CouchbaseCluster:
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
-            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(
-                self.__master_node,
-                name,
-                'password',
-                bucket_size,
-                num_replicas,
+            sasl_params = self._create_bucket_params(
+                server=self.__master_node,
+                password='password',
+                size=bucket_size,
+                replicas=num_replicas,
                 eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+                bucket_priority=bucket_priority,
+                bucket_type=bucket_type)
+
+            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name,password='password',
+                                                                          bucket_params=sasl_params))
             self.__buckets.append(
                 Bucket(
                     name=name, authType="sasl", saslPassword="password",
@@ -1767,7 +1806,8 @@ class CouchbaseCluster:
             self, bucket_size, name=None, num_buckets=1,
             port=None, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH):
+            bucket_priority=BUCKET_PRIORITY.HIGH,
+            bucket_type=None):
         """Create standard buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1783,14 +1823,19 @@ class CouchbaseCluster:
         for i in range(num_buckets):
             if not (num_buckets == 1 and name):
                 name = "standard_bucket_" + str(i + 1)
-            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(
-                self.__master_node,
-                name,
-                start_port + i,
-                bucket_size,
-                num_replicas,
+            standard_params = self._create_bucket_params(
+                server=self.__master_node,
+                size=bucket_size,
+                replicas=num_replicas,
                 eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+                bucket_priority=bucket_priority,
+                bucket_type=bucket_type)
+
+            bucket_tasks.append(
+                self.__clusterop.async_create_standard_bucket(
+                    name=name, port=STANDARD_BUCKET_PORT+i,
+                    bucket_params=standard_params))
+
             self.__buckets.append(
                 Bucket(
                     name=name,
@@ -1800,7 +1845,8 @@ class CouchbaseCluster:
                     bucket_size=bucket_size,
                     port=start_port + i,
                     eviction_policy=eviction_policy,
-                    bucket_priority=bucket_priority
+                    bucket_priority=bucket_priority,
+
                 ))
 
         for task in bucket_tasks:
@@ -1809,20 +1855,23 @@ class CouchbaseCluster:
     def create_default_bucket(
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH):
+            bucket_priority=BUCKET_PRIORITY.HIGH,
+            bucket_type=None):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
         """
-        self.__clusterop.create_default_bucket(
-            self.__master_node,
-            bucket_size,
-            num_replicas,
+        bucket_params=self._create_bucket_params(
+            server=self.__master_node,
+            size=bucket_size,
+            replicas=num_replicas,
             eviction_policy=eviction_policy,
-            bucket_priority=bucket_priority
+            bucket_priority=bucket_priority,
+            bucket_type=bucket_type
         )
+        self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
             Bucket(
                 name=BUCKET_NAME.DEFAULT,
@@ -3051,58 +3100,34 @@ class FTSBaseTest(unittest.TestCase):
             total_quota,
             num_buckets)
 
+        bucket_type = TestInputSingleton.input.param("bucket_type", None)
+
         if self._create_default_bucket:
             self._cb_cluster.create_default_bucket(
                 bucket_size,
                 self._num_replicas,
                 eviction_policy=self.__eviction_policy,
-                bucket_priority=bucket_priority)
+                bucket_priority=bucket_priority,
+                bucket_type=bucket_type)
 
         self._cb_cluster.create_sasl_buckets(
             bucket_size, num_buckets=self.__num_sasl_buckets,
             num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
-            bucket_priority=bucket_priority)
+            bucket_priority=bucket_priority,
+            bucket_type=bucket_type)
 
         self._cb_cluster.create_standard_buckets(
             bucket_size, num_buckets=self.__num_stand_buckets,
             num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
-            bucket_priority=bucket_priority)
+            bucket_priority=bucket_priority,
+            bucket_type=bucket_type)
 
     def create_buckets_on_cluster(self):
         # if mixed priority is set by user, set high priority for sasl and
         # standard buckets
-        if self.__mixed_priority:
-            bucket_priority = 'high'
-        else:
-            bucket_priority = None
-        num_buckets = self.__num_sasl_buckets + \
-                      self.__num_stand_buckets + int(self._create_default_bucket)
-
-        total_quota = self._cb_cluster.get_mem_quota()
-        bucket_size = self.__calculate_bucket_size(
-            total_quota,
-            num_buckets)
-
-        if self._create_default_bucket:
-            self._cb_cluster.create_default_bucket(
-                bucket_size,
-                self._num_replicas,
-                eviction_policy=self.__eviction_policy,
-                bucket_priority=bucket_priority)
-
-        self._cb_cluster.create_sasl_buckets(
-            bucket_size, num_buckets=self.__num_sasl_buckets,
-            num_replicas=self._num_replicas,
-            eviction_policy=self.__eviction_policy,
-            bucket_priority=bucket_priority)
-
-        self._cb_cluster.create_standard_buckets(
-            bucket_size, num_buckets=self.__num_stand_buckets,
-            num_replicas=self._num_replicas,
-            eviction_policy=self.__eviction_policy,
-            bucket_priority=bucket_priority)
+        self.__create_buckets()
 
     def load_sample_buckets(self, server, bucketName):
         from lib.remote.remote_util import RemoteMachineShellConnection
