@@ -154,7 +154,7 @@ class NewUpgradeBaseTest(QueryHelperTests):
             params['type'] = self.initial_build_type
         if community_to_enterprise:
             params['type'] = self.upgrade_build_type
-        self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
+        self.log.info("will install {0} on {1}".format(params['version'], [s.ip for s in servers]))
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
             success = True
