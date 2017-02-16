@@ -59,19 +59,25 @@ class QueryCurlTests(QueryTests):
         expected_result = self.run_cbq_query('select * from default limit 5')
         self.assertTrue(json_curl['results'][0]['result']['results'] == expected_result['results'])
 
-    '''Test needs debugging'''
+    '''Basic Test that tests if curl works inside the where clause of a query'''
     def test_where(self):
         url = "'http://%s:8093/query/service'" % self.master.ip
-        n1ql_query = 'select * from default limit 5'
+        n1ql_query = 'select raw d from default d limit 5&metrics=false&signature=false'
         select_query = "select * "
         from_query="from default d "
-        where_query="where d.name in curl('POST', "+ url +", {'data' : 'statement=%s'}).results " % n1ql_query
+        where_query="where curl('POST', "+ url +", {'data' : 'statement=%s'}).results[0].name == 'employee-9' " % n1ql_query
         curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+where_query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        expected_result = self.run_cbq_query('select * from default')
-        self.assertTrue(json_curl['results'][0]['result']['results'] == expected_result['results'])
+        # This should be equiv to select * from default d where true, so all docs should be present, assuming doc-per-day = 1
+        self.assertTrue(json_curl['metrics']['resultCount'] == 2016)
 
-    '''Basic test for having curl in the select and from clause'''
+        where_query="where curl('POST', "+ url +", {'data' : 'statement=%s'}).results[0].name == 'Ajay' " % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+where_query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        # This should be equiv to select * from default d where false, so no docs should be present
+        self.assertTrue(json_curl['metrics']['resultCount'] == 0)
+
+    '''Basic test for having curl in the select and from clause at the same time'''
     def test_select_and_from(self):
         url = "'http://%s:8093/query/service'" % self.master.ip
         n1ql_query = 'select * from default limit 5'
@@ -83,17 +89,52 @@ class QueryCurlTests(QueryTests):
         expected_result = self.run_cbq_query('select * from default limit 5')
         self.assertTrue(json_curl['results'][0]['$1']['results'] == expected_result['results'])
 
-    '''Test needs debugging'''
+    def test_select_and_where(self):
+        url = "'http://%s:8093/query/service'" % self.master.ip
+        n1ql_query = 'select d from default d limit 5'
+        where_n1ql_query = 'select raw d from default d limit 5&metrics=false&signature=false'
+        select_query = "select curl('POST', " + url + ", {'data' : 'statement=%s'}) " % n1ql_query
+        from_query="from default "
+        where_query="where curl('POST', "+ url +", {'data' : 'statement=%s'}).results[0].name == 'employee-9' " \
+                                                % where_n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+where_query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        import pdb; pdb.set_trace()
+        # self.assertTrue(json_curl['metrics']['resultCount'] == 1)
+        #
+        # where_query = "where curl('POST', " + url + ", {'data' : 'statement=%s'}).results[0].name == 'Ajay' " % where_n1ql_query
+        # curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+where_query,'', '', '', '', '')
+        # json_curl = self.convert_to_json(curl)
+        # self.assertTrue(json_curl['metrics']['resultCount'] == 0)
+
+    '''Basic test for having curl in the from and where clause at the same time'''
+    def test_from_and_where(self):
+        url = "'http://%s:8093/query/service'" % self.master.ip
+        n1ql_query = 'select d from default d limit 5'
+        where_n1ql_query = 'select raw d from default d limit 5&metrics=false&signature=false'
+        select_query = "select * "
+        from_query="from curl('POST', "+ url +", {'data' : 'statement=%s'}) result " % n1ql_query
+        where_query="where curl('POST', "+ url +", {'data' : 'statement=%s'}).results[0].name == 'employee-9' " % where_n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+where_query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['metrics']['resultCount'] == 1)
+
+        where_query = "where curl('POST', " + url + ", {'data' : 'statement=%s'}).results[0].name == 'Ajay' " % where_n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+where_query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['metrics']['resultCount'] == 0)
+
+    '''Basic test that tests if curl works while inside a subquery'''
     def test_curl_subquery(self):
         url = "'http://%s:8093/query/service'" % self.master.ip
         n1ql_query = 'select * from default limit 5'
         select_query = "select * "
         from_query="from default d "
-        where_query="where in (select * from curl('POST', "+ url +", {'data' : 'statement=%s'}) result) " % n1ql_query
+        where_query="where d.name in (select raw result.results[0].default.name  from curl('POST', 'http://172.23.106.24:8093/query/service', {'data' : 'statement=%s'}) result) " % n1ql_query
         curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+where_query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        expected_result = self.run_cbq_query('select * from default limit 5')
-        self.assertTrue(json_curl['results'][0]['result']['results'] == expected_result['results'])
+        expected_result = self.run_cbq_query("select * from default d where d.name == 'employee-9'")
+        self.assertTrue(json_curl['results'] == expected_result['results'])
 
 ##############################################################################################
 #
