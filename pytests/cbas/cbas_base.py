@@ -4,6 +4,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from lib.couchbase_helper.analytics_helper import *
 from couchbase_helper.documentgenerator import DocumentGenerator
+import urllib
 
 
 class CBASBaseTest(BaseTestCase):
@@ -41,6 +42,7 @@ class CBASBaseTest(BaseTestCase):
         self.skip_drop_dataset = self.input.param('skip_drop_dataset', False)
 
         self.query_id = self.input.param('query_id',None)
+        self.mode = self.input.param('mode',None)
 
         # Drop any existing buckets and datasets
         self.cleanup_cbas()
@@ -64,7 +66,7 @@ class CBASBaseTest(BaseTestCase):
         Creates a bucket on CBAS
         """
         cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"name\":\"" + cb_bucket_name + "\",\"nodes\":\"" + cb_server_ip + "\"};"
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_create_bucket, self.master)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
@@ -85,7 +87,7 @@ class CBASBaseTest(BaseTestCase):
         if where_field and where_value:
             cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";".format(
                 cbas_dataset_name, cbas_bucket_name, where_field, where_value)
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_create_dataset, self.master)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
@@ -101,7 +103,7 @@ class CBASBaseTest(BaseTestCase):
         Connects to a CBAS bucket
         """
         cmd_connect_bucket = "connect bucket " + cbas_bucket_name + " with {\"password\":\"" + cb_bucket_password + "\"};"
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_connect_bucket, self.master)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
@@ -124,7 +126,7 @@ class CBASBaseTest(BaseTestCase):
             cmd_disconnect_bucket = "disconnect bucket {0};".format(
                 cbas_bucket_name)
 
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_disconnect_bucket, self.master)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
@@ -139,7 +141,7 @@ class CBASBaseTest(BaseTestCase):
         Drop dataset from CBAS
         """
         cmd_drop_dataset = "drop dataset {0};".format(cbas_dataset_name)
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_drop_dataset, self.master)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
@@ -154,7 +156,7 @@ class CBASBaseTest(BaseTestCase):
         Drop a CBAS bucket
         """
         cmd_drop_bucket = "drop bucket {0};".format(cbas_bucket_name)
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_drop_bucket, self.master)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
@@ -164,12 +166,17 @@ class CBASBaseTest(BaseTestCase):
             else:
                 return True
 
-    def execute_statement_on_cbas(self, statement, server):
+    def execute_statement_on_cbas(self, statement, server, mode=None):
         """
         Executes a statement on CBAS using the REST API
         """
         shell = RemoteMachineShellConnection(server)
-        output, error = shell.execute_command(
+        if mode:
+            output, error = shell.execute_command(
+                """curl -s --data pretty=true --data mode={2} --data-urlencode 'statement={1}' http://{0}:8095/analytics/service -v""".format(
+                    self.cbas_node.ip, statement, mode))
+        else:
+            output, error = shell.execute_command(
             """curl -s --data pretty=true --data-urlencode 'statement={1}' http://{0}:8095/analytics/service -v""".format(
                 self.cbas_node.ip, statement))
         response = ""
@@ -189,7 +196,55 @@ class CBASBaseTest(BaseTestCase):
         else:
             results = None
 
-        return response["status"], response["metrics"], errors, results
+        if "handle" in response:
+            handle = response["handle"]
+        else:
+            handle = None
+
+        return response["status"], response["metrics"], errors, results, handle
+
+    def retrieve_result_using_handle(self, server, handle):
+        """
+        Retrieves result from the /analytics/results endpoint
+        """
+        shell = RemoteMachineShellConnection(server)
+        requestURI = "{{\"handle\":{0}}}".format(str(handle))
+        requestURI = urllib.quote(requestURI)
+        requestURI = "http://{0}:8095/analytics/result?handle=".format(self.cbas_node.ip) + requestURI
+
+        output, error = shell.execute_command("""curl -v {0}""".format(requestURI))
+
+        response = ""
+        for line in output:
+            response = response + line
+        response = json.loads(response)
+        shell.disconnect()
+
+        return response
+
+    def retrieve_request_status_using_handle(self, server, handle):
+        """
+        Retrieves status of a request from /analytics/status endpoint
+        """
+        shell = RemoteMachineShellConnection(server)
+        requestURI = "{{\"handle\":{0}}}".format(str(handle))
+        requestURI = urllib.quote(requestURI)
+        requestURI = "http://{0}:8095/analytics/status?handle=".format(
+            self.cbas_node.ip) + requestURI
+
+        output, error = shell.execute_command(
+            """curl -v {0}""".format(requestURI))
+
+        response = ""
+        for line in output:
+            response = response + line
+        response = json.loads(response)
+        shell.disconnect()
+
+        if response['status']:
+            return response['status']
+        else:
+            return None
 
     def validate_error_in_response(self, status, errors):
         """
@@ -210,7 +265,7 @@ class CBASBaseTest(BaseTestCase):
             # Disconnect from all connected buckets
             #cmd_get_buckets = "select BucketName from Metadata.`Bucket`;"
             cmd_get_buckets = "select Name from Metadata.`Bucket`;"
-            status, metrics, errors, results = self.execute_statement_on_cbas(
+            status, metrics, errors, results, _ = self.execute_statement_on_cbas(
                 cmd_get_buckets, self.master)
             if (results != None) & (len(results) > 0):
                 for row in results:
@@ -223,7 +278,7 @@ class CBASBaseTest(BaseTestCase):
 
             # Drop all datasets
             cmd_get_datasets = "select DatasetName from Metadata.`Dataset` where DataverseName != \"Metadata\";"
-            status, metrics, errors, results = self.execute_statement_on_cbas(
+            status, metrics, errors, results, _ = self.execute_statement_on_cbas(
                 cmd_get_datasets, self.master)
             if (results != None) & (len(results) > 0):
                 for row in results:
@@ -233,7 +288,7 @@ class CBASBaseTest(BaseTestCase):
                 self.log.info("********* No datasets to drop *********")
 
             # Drop all buckets
-            status, metrics, errors, results = self.execute_statement_on_cbas(
+            status, metrics, errors, results, _ = self.execute_statement_on_cbas(
                 cmd_get_buckets, self.master)
             if (results != None) & (len(results) > 0):
                 for row in results:
@@ -274,7 +329,7 @@ class CBASBaseTest(BaseTestCase):
         cmd_get_num_items = "select count(*) from %s;" % dataset_name
         cmd_get_num_mutated_items = "select count(*) from %s where mutated>0;" % dataset_name
 
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_get_num_items, self.master)
         if status != "success":
             self.log.error("Query failed")
@@ -282,7 +337,7 @@ class CBASBaseTest(BaseTestCase):
             self.log.info("No. of items in CBAS dataset {0} : {1}".format(dataset_name,results[0]['$1']))
             total_items = results[0]['$1']
 
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             cmd_get_num_mutated_items, self.master)
         if status != "success":
             self.log.error("Query failed")
@@ -319,3 +374,22 @@ class CBASBaseTest(BaseTestCase):
             return True
         else:
             return False
+
+    def convert_execution_time_into_ms(self, time):
+        """
+        Converts the execution time into ms
+        """
+        match = re.match(r"([0-9]+.[0-9]+)([a-zA-Z]+)", time, re.I)
+        if match:
+            items = match.groups()
+
+            if items[1] == "s":
+                return float(items[0])*1000
+            if items[1] == "ms":
+                return float(items[0])
+            if items[1] == "m":
+                return float(items[0])*1000*60
+            if items[1] == "h":
+                return float(items[0])*1000*60*60
+        else:
+            return None
