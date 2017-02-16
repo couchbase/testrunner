@@ -15,8 +15,8 @@ from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 
 class N1QLHelper():
-    def __init__(self, version = None, master = None, shell = None, use_rest = None, max_verify = 0, buckets = [],
-        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None,database = None):
+    def __init__(self, version = None, master = None, shell = None,  max_verify = 0, buckets = [],
+        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None,database = None,use_rest = None):
         self.version = version
         self.shell = shell
         self.max_verify = max_verify
@@ -25,7 +25,7 @@ class N1QLHelper():
         self.n1ql_port = n1ql_port
         self.input = input
         self.log = log
-        self.use_rest = True
+        self.use_rest = use_rest
         self.full_docs_list = full_docs_list
         self.master = master
         self.database = database
@@ -85,17 +85,26 @@ class N1QLHelper():
             #                                            end_msg='tuq_client>')
             # else:
             #os = self.shell.extract_remote_info().type.lower()
-            shell = RemoteMachineShellConnection(server)
             #query = query.replace('"', '\\"')
             #query = query.replace('`', '\\`')
             #if os == "linux":
+            shell = RemoteMachineShellConnection(server)
+            #cbqpath = '%scbq' % "/opt/couchbase/bin/"
+            url = "'http://%s:8093/query/service'" % server.ip
             cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+            query = query.replace('"','\\"')
+            if "#primary" in query:
+                query = query.replace("'#primary'",'\\"#primary\\"')
+            query = "select curl('POST', "+ url +", {'data' : 'statement=%s'})" % query
+            print query
             output = shell.execute_commands_inside(cmd,query,"","","","","")
             print "--------------------------------------------------------------------------------------------------------------------------------"
             print output
-            result = json.loads(output)
+            new_curl = json.dumps(output[47:])
+            string_curl = json.loads(new_curl)
+            result = json.loads(string_curl)
             print result
-            result = self._parse_query_output(output)
+            #result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
             length_display = len(error_result)
@@ -117,7 +126,7 @@ class N1QLHelper():
         if actual_result != expected_result:
             raise Exception(msg)
 
-    def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+    def _verify_results_rqg(self, subquery,aggregate=False,n1ql_result = [], sql_result = [], hints = ["a1"]):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -138,7 +147,22 @@ class N1QLHelper():
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
                                             len(actual_result), len(expected_result), extra_msg))
         msg = "The number of rows match but the results mismatch, please check"
-        if self._sort_data(actual_result) != self._sort_data(expected_result):
+        if subquery:
+            for x,y in zip(actual_result,expected_result):
+              if aggregate:
+                productId = x['ABC'][0]['$1']
+              else:
+                productId =   x['ABC'][0]['productId']
+              if(productId != y['ABC']) or x['datetime_field1']!=y['datetime_field1'] \
+                        or x['primary_key_id']!=y['primary_key_id'] or x['varchar_field1']!=y['varchar_field1'] \
+                        or x['decimal_field1']!=y['decimal_field1'] or x['char_field1']!=y['char_field1'] \
+                        or x['int_field1']!=y['int_field1'] or x['bool_field1']!=y['bool_field1']:
+                            print "actual_result is %s" %actual_result
+                            print "expected result is %s" %expected_result
+                            extra_msg = self._get_failure_message(expected_result, actual_result)
+                            raise Exception(msg+"\n "+extra_msg)
+        else:
+         if self._sort_data(actual_result) != self._sort_data(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception(msg+"\n "+extra_msg)
 
@@ -405,7 +429,7 @@ class N1QLHelper():
             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
-    def create_primary_index(self, using_gsi = True, server = None):
+    def create_primary_index(self,using_gsi = True, server = None):
         if server == None:
             server = self.master
         for bucket in self.buckets:
@@ -416,7 +440,8 @@ class N1QLHelper():
                 #     self.query += " WITH {'index_type': 'memdb'}"
             if not using_gsi:
                 self.query += " USING VIEW "
-            try:
+            if self.use_rest:
+             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if not check:
                     self.run_cbq_query(server = server,query_params={'timeout' : '900s'})
@@ -425,7 +450,7 @@ class N1QLHelper():
                         raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
                 else:
                     raise Exception(" Primary Index Already present, This looks like a bug !!!")
-            except Exception, ex:
+             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
                 raise ex
 

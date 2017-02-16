@@ -76,6 +76,7 @@ class RQGTests(BaseTestCase):
         self.ram_quota = self.input.param("ram_quota",512)
         self.drop_index = self.input.param("drop_index",False)
         self.drop_bucket = self.input.param("drop_bucket",False)
+        self.subquery = self.input.param("subquery",False)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -87,6 +88,8 @@ class RQGTests(BaseTestCase):
         self.indexer_memQuota = self.input.param("indexer_memQuota",1024)
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
+        if self.subquery:
+            self.items = 500
         if not(self.use_rest):
             self._ssh_client = paramiko.SSHClient()
             self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -275,8 +278,9 @@ class RQGTests(BaseTestCase):
                     n1ql_queries = list,
                     define_gsi_index = self.use_secondary_index,
                     gen_expected_result = False)
-            if self.use_secondary_index:
-                self._generate_secondary_indexes_in_batches(list)
+            if (self.subquery==False):
+                if self.use_secondary_index:
+                    self._generate_secondary_indexes_in_batches(list)
             # Create threads and run the batch
             for test_case in list:
                 test_case_input = test_case
@@ -630,11 +634,33 @@ class RQGTests(BaseTestCase):
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
         n1ql_query = data["n1ql"]
+        sql_query = data["sql"]
+        aggregate = False
+        subquery=self.subquery
+
 
         if (n1ql_query.find("simple_table")>0) and ((self.database+"_"+"simple_table") not in n1ql_query):
             n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+        if (subquery == True):
+             n1ql_query = n1ql_query.replace(self.database+"_"+"simple_table_2","t_5.simple_table_2")
+             n1ql_query = n1ql_query.replace("t_5.t_5.simple_table_2","t_5.simple_table_2")
 
-        sql_query = data["sql"]
+        if (subquery == True):
+            if "qty" in n1ql_query:
+                n1ql_query = n1ql_query.replace("t_2.qty","qty")
+                n1ql_query = n1ql_query.replace("qty","t_2.qty")
+            if "sum" in n1ql_query:
+                n1ql_query = n1ql_query.replace("sum(t_1.productId)","sum(t_1.qty)")
+                sql_query = sql_query.replace("sum(t_1.productId)","sum(t_1.qty)")
+            n1ql_query = n1ql_query.replace("t_5.simple_table_2 t_1.price","t_1.price")
+            sql_query = sql_query.replace("simple_table_2 t_1.price","t_1.price")
+            n1ql_query = n1ql_query + " order by meta().id limit 5"
+            sql_query = sql_query + " order by t_5.primary_key_id limit 5"
+
+            if ("sum" in n1ql_query or "min" in n1ql_query or "max" in n1ql_query or "count" in n1ql_query):
+                aggregate = True
+
+
         indexes = data["indexes"]
         table_name = data["bucket"]
         expected_result = data["expected_result"]
@@ -645,22 +671,22 @@ class RQGTests(BaseTestCase):
         result_run["test_case_number"] = test_case_number
         if self.set_limit > 0 and n1ql_query.find("DISTINCT") > 0:
             result_limit = self.query_helper._add_limit_to_query(n1ql_query,self.set_limit)
-            query_index_run = self._run_queries_and_verify(n1ql_query = result_limit , sql_query = sql_query, expected_result = expected_result)
+            query_index_run = self._run_queries_and_verify(aggregate,subquery,n1ql_query = result_limit , sql_query = sql_query, expected_result = expected_result)
             result_run["run_query_with_limit"] = query_index_run
         if  expected_result == None:
             expected_result = self._gen_expected_result(sql_query,test_case_number)
             data["expected_result"] = expected_result
-        query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
+        query_index_run = self._run_queries_and_verify(aggregate,subquery,n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
         result_run["run_query_without_index_hint"] = query_index_run
         if self.run_query_with_primary:
             index_info = {"name":"`#primary`","type":"GSI"}
             query = self.query_helper._add_index_hints_to_query(n1ql_query, [index_info])
-            query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
+            query_index_run = self._run_queries_and_verify(aggregate,subquery,n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
             result_run["run_query_with_primary"] = query_index_run
         if self.run_query_with_secondary:
             for index_name in indexes.keys():
                 query = self.query_helper._add_index_hints_to_query(n1ql_query, [indexes[index_name]])
-                query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
+                query_index_run = self._run_queries_and_verify(aggregate,subquery,n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
                 key = "run_query_with_index_name::{0}".format(index_name)
                 result_run[key] = query_index_run
         if self.run_explain_with_hints:
@@ -902,7 +928,7 @@ class RQGTests(BaseTestCase):
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
             try:
-                self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+                self.n1ql_helper._verify_results_rqg(subquery=False,aggregate=False,sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
                 self.log.info(ex)
                 return {"success":False, "result": str(ex)}
@@ -911,7 +937,7 @@ class RQGTests(BaseTestCase):
             return {"success":False, "result": str(ex)}
 
 
-    def _run_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
+    def _run_queries_and_verify(self,agggregate ,subquery,n1ql_query = None, sql_query = None, expected_result = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         result_run = {}
@@ -942,7 +968,7 @@ class RQGTests(BaseTestCase):
                         return {"success":True, "result": "Pass"}
                 return {"success":False, "result": str("different results")}
             try:
-                self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+                self.n1ql_helper._verify_results_rqg(subquery,agggregate,sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
                 self.log.info(ex)
                 return {"success":False, "result": str(ex)}
@@ -1011,7 +1037,7 @@ class RQGTests(BaseTestCase):
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
             try:
-                self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+                self.n1ql_helper._verify_results_rqg(subquery=False,aggregate=False,sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
                 self.log.info(ex)
                 return False, ex
@@ -1082,7 +1108,7 @@ class RQGTests(BaseTestCase):
         self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
         self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
         try:
-            self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+            self.n1ql_helper._verify_results_rqg(subquery=False,aggregate=False,sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
         except Exception, ex:
             self.log.info(ex)
             return False, ex
@@ -1196,21 +1222,27 @@ class RQGTests(BaseTestCase):
 
     def _initialize_n1ql_helper(self):
         self.n1ql_helper = N1QLHelper(version = "sherlock", shell = None,
-            use_rest = True, max_verify = self.max_verify,
+            max_verify = self.max_verify,
             buckets = self.buckets, item_flag = None,
             n1ql_port = self.n1ql_server.n1ql_port, full_docs_list = [],
-            log = self.log, input = self.input, master = self.master,database = self.database)
+            log = self.log, input = self.input, master = self.master,database = self.database,use_rest=self.use_rest)
 
     def _initialize_mysql_client(self):
         if self.reset_database:
             self.client = MySQLClient(host = self.mysql_url,
                 user_id = self.user_id, password = self.password)
-            path  = "b/resources/rqg/{0}/database_definition/definition.sql".format(self.database)
+            if self.subquery:
+                path  = "b/resources/rqg/{0}/database_definition/definition-subquery.sql".format(self.database)
+            else:
+                path  = "b/resources/rqg/{0}/database_definition/definition.sql".format(self.database)
             self.database = self.database+"_"+str(self.query_helper._random_int())
             populate_data = False
             if not self.populate_with_replay:
                 populate_data = True
-            self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data, number_of_tables  = self.number_of_buckets)
+            if self.subquery:
+                self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data, number_of_tables  = 1)
+            else:
+                 self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data, number_of_tables  = self.number_of_buckets)
             self._copy_table_for_merge()
         else:
             self.client = MySQLClient(database = self.database, host = self.mysql_url,
@@ -1642,7 +1674,8 @@ class RQGTests(BaseTestCase):
                 new_bucket_list.append(self.database+"_"+"copy_simple_table")
             else:
                 new_bucket_list.append(self.database + "_" + bucket)
-
+                if self.subquery:
+                    break;
 
         # Create New Buckets
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
@@ -1665,9 +1698,14 @@ class RQGTests(BaseTestCase):
             columns, rows = self.client._execute_query(query = query)
             self.record_db[bucket_name] = self.client._gen_json_from_results_with_primary_key(columns, rows,
                 primary_key = table_key_map[bucket_name])
-            for bucket in self.newbuckets:
-                if bucket.name == self.database+"_"+bucket_name:
-                    self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
+            if self.subquery:
+               for bucket in self.newbuckets:
+                 if bucket.name == self.database+"_"+bucket_name:
+                     self.load_subquery_test_data(bucket)
+            else:
+              for bucket in self.newbuckets:
+                  if bucket.name == self.database+"_"+bucket_name:
+                         self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
     def _populate_delta_buckets(self, table_name = "simple_table"):
         if table_name != "simple_table":
@@ -1687,5 +1725,60 @@ class RQGTests(BaseTestCase):
         except Exception, ex:
             self.log.info(ex)
 
+    def load_subquery_test_data(self, bucket):
+        query = 'select primary_key_id from simple_table_1'
+        result = self.client._execute_sub_query(query)
+        primary_key_values = result
+        query = 'CREATE TABLE IF NOT EXISTS {0}.`simple_table_2` ' \
+                '(`order_id` VARCHAR(100) NOT NULL,`qty` INT(11) NULL DEFAULT NULL,`productId` VARCHAR(1000) NOT NULL' \
+                ',`price` DECIMAL(10,0) NOT NULL,`primary_key_id` VARCHAR(100) NOT NULL,PRIMARY KEY (`order_id`),' \
+                'FOREIGN KEY (`primary_key_id`) REFERENCES `simple_table_1`(`primary_key_id`))'.format(self.database)
+        self.client._db_execute_query(query)
+        for primary_key_value in primary_key_values:
+            query = 'select varchar_field1 from simple_table_1 where primary_key_id = {0}'.format(primary_key_value)
+            result = self.client._execute_sub_query(query)
+            varchar_field = result
+            query = 'select decimal_field1 from simple_table_1 where primary_key_id = {0}'.format(primary_key_value)
+            result = self.client._execute_sub_query(query)
+            decimal_field_value = result
+            query = 'select int_field1 from simple_table_1 where primary_key_id = {0}'.format(primary_key_value)
+            result = self.client._execute_sub_query(query)
+            int_field_value = result
+            query = 'select datetime_field1 from simple_table_1 where primary_key_id  = {0}'.format(primary_key_value)
+            result = self.client._execute_sub_query(query)
+            datetime_field_value = result
+            query = 'select bool_field1 from simple_table_1 where primary_key_id  = {0}'.format(primary_key_value)
+            result = self.client._execute_sub_query(query)
+            bool_field_value = bool(result)
+            # if bool_field_value == 1:
+            #     bool_field_value = True
+            # else:
+            #     bool_field_value = False
+            query = 'select varchar_field1 from simple_table_1  where primary_key_id  = {0}'.format(primary_key_value)
+            result = self.client._execute_sub_query(query)
+            varchar_value = result
+            query = 'select char_field1 from simple_table_1  where primary_key_id  = {0}'.format(primary_key_value)
+            result = self.client._execute_sub_query(query)
+            char_value = result
+            orderid1="order-"+ varchar_field
+            orderid2="order-"+(self.query_helper._random_char()+"_"+str(self.query_helper._random_int()))+varchar_field
+            price1 = self.query_helper._random_float()+10
+            price2 = self.query_helper._random_float()+100
+            qty1 =  self.query_helper._random_int()
+            qty2 =  self.query_helper._random_int()
+            query = 'insert into simple_table_2 (order_id,qty,productId,price,primary_key_id) values ("%s",%s,"snack",%s,%s)'%(orderid1,qty1,
+                                                                                                                             price1,primary_key_value)
+            self.client._insert_execute_query(query)
+            query = 'insert into simple_table_2 (order_id,qty,productId,price,primary_key_id) values ("%s",%s,"lunch",%s,%s)'%(orderid2,qty2,
+                                                                                                                             price2,primary_key_value)
+            self.client._insert_execute_query(query)
+            n1ql_insert_template = 'INSERT INTO %s (KEY, VALUE) VALUES' \
+            ' ("%s", {"primary_key_id": "%s" ,"decimal_field1":%s,"int_field1":%s,"datetime_field1":"%s","bool_field1":%s,"varchar_field1":"%s","char_field1":"%s","simple_table_2":[{"order_id":"%s","qty":%s,"productId":"snack","price":%s,"primary_key_id":"%s"},' \
+                                   '{"order_id":"%s","qty":%s,"productId":"lunch","price":%s,"primary_key_id":"%s"}] } )'\
+                                   %(bucket.name,primary_key_value,
+                                    primary_key_value,decimal_field_value,int_field_value,
+                                    datetime_field_value,bool_field_value,varchar_value,char_value,orderid1,qty1,price1,primary_key_value,
+                                    orderid2,qty2,price2,primary_key_value)
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_insert_template, server = self.n1ql_server)
 
 

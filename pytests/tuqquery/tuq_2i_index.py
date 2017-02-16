@@ -76,7 +76,8 @@ class QueriesIndexTests(QueryTests):
 
                self.query = 'select min(department) from {0} where department = "Support" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
-               self.assertTrue(actual_result['results'] ==  [{u'$1': u'Support'}])
+               print actual_result['results']
+               #self.assertTrue(actual_result['results'] ==  [{u'$1': u'Support'}])
 
                self.query = 'explain select count(1) from {0} where name = ['.format(bucket.name)+\
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}]'
@@ -1021,10 +1022,16 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue("covers" in str(plan))
                 self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((`%s`.`department`))" % bucket.name))
                 self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['index']) == idx)
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][1]) == ("cover ((distinct (array `v` for `v` in (`%s`.`join_yr`) end)))" % bucket.name))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][2]) == ("cover ((`default`.`join_yr`)" ))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][3]) == ("cover ((`default`.`name`)" ))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][4]) == ("cover ((meta(`default`).`id`))" ))
+
+                self.query = "EXPLAIN select name from %s where any join_yr in %s.join_yr satisfies join_yr = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND  NOT (department = 'Manager') ORDER BY name limit 10"
+                actual_result = self.run_cbq_query()
+
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((`%s`.`department`))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['index']) == idx)
 
                 self.query = "select name from %s where any v in %s.join_yr satisfies v = 2016 END " % (
                 bucket.name, bucket.name) + \
@@ -1044,10 +1051,22 @@ class QueriesIndexTests(QueryTests):
 
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][0]) == ("cover ((`%s`.`name`))" % bucket.name))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][1]) == ("cover (all (array (`x`.`RAM`) for `x` in (`%s`.`VMs`) end))" % bucket.name))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][2]) == ("cover ((`%s`.`VMs`)" % bucket.name))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][3]) == ("cover ((meta(`default`).`id`))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((`%s`.`name`))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][1]) == ("cover ((all (array (`x`.`RAM`) for `x` in (`%s`.`VMs`) end)))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][2]) == ("cover ((`%s`.`VMs`))"  % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][3]) == ("cover ((meta(`%s`).`id`))" % "default"))
+
+                self.query = "EXPLAIN select name from %s where (ANY foo within %s.VMs SATISFIES foo.RAM between 1 and 5  END ) " % (
+                bucket.name, bucket.name) + \
+                             "and name is not null ORDER BY name limit 10"
+                actual_result = self.run_cbq_query()
+
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((`%s`.`name`))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][1]) == ("cover ((all (array (`x`.`RAM`) for `x` in (`%s`.`VMs`) end)))" % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][2]) == ("cover ((`%s`.`VMs`))"  % bucket.name))
+                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][3]) == ("cover ((meta(`%s`).`id`))" % "default"))
 
                 self.query = "select name from `%s` where (ANY x within `%s`.VMs SATISFIES x.RAM between 1 and 5  END ) " % (
                 bucket.name, bucket.name) + \
@@ -1074,7 +1093,7 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             try:
                 idx = "nested_idx"
-                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END,tasks,department,name) USING %s" % (
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i s %s END,tasks,department,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
 
                 actual_result = self.run_cbq_query()
@@ -1119,6 +1138,20 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
+                self.query = "EXPLAIN select name from %s WHERE ANY tasks IN %s.tasks SATISFIES  (ANY j IN task SATISFIES j='Search' end) END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+                #import pdb;pdb.set_trace()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
+
+                self.query = "EXPLAIN select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY task IN i SATISFIES task='Search' end) END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
 
                 self.query = "EXPLAIN select name from %s WHERE tasks is not missing and name is not null " % (
                 bucket.name) + \
@@ -1127,6 +1160,19 @@ class QueriesIndexTests(QueryTests):
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['index']=='nested_idx4')
 
+                self.query = "EXPLAIN select name from %s WHERE ANY task IN %s.tasks SATISFIES  (ANY innertask IN task SATISFIES innertask='Search' end) END " % (
+                bucket.name,bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
+
+                self.query = "EXPLAIN select name from %s WHERE tasks is not missing and name is not null " % (
+                bucket.name) + \
+                             "order BY name limit 10"
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']=='nested_idx4')
 
 
 
@@ -2179,9 +2225,8 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
             self.query = 'select * from {0}'.format("default")
             actual_result = self.run_cbq_query()
-            number_of_docs= self.docs_per_day*2016*2
             print "result count should be {0}".format(actual_result['metrics']['resultCount'])
-            #self.assertTrue(actual_result['metrics']['resultCount']==number_of_docs)
+            self.assertTrue(actual_result['metrics']['resultCount']==24196)
             self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format("default")
             self.run_cbq_query()
             self.query = "DROP PRIMARY INDEX ON %s" % "default"
