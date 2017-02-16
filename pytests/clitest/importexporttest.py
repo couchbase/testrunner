@@ -148,7 +148,7 @@ class ImportExportTests(CliBaseTest):
             """ change default port from 8091 to 9000 """
             port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
                                     % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
-                                          "cluster-edit", server.ip, default_port, new_port)
+                                          "setting-cluster", server.ip, default_port, new_port)
             output, error = self.shell.execute_command(port_cmd)
             if self._check_output("SUCCESS", output):
                 self.log.info("Port was changed from 8091 to 9000")
@@ -207,7 +207,7 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("change port back to default port 8091")
                 port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
                         % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
-                           "cluster-edit", server.ip, new_port, default_port)
+                           "setting-cluster", server.ip, new_port, default_port)
                 output, error = self.shell.execute_command(port_cmd)
             if test_failed:
                 self.fail("Test failed.  Check exception throw above.")
@@ -664,9 +664,9 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("compare 2 json files")
                 if self.format_type == "lines":
                     sample_file = open("resources/imex/json_%s_lines" % options["docs"])
-                    samples = sample_file.readlines()
+                    samples = sample_file.read().splitlines()
                     export_file = open("/tmp/export/"+ export_file_name)
-                    exports = export_file.readlines()
+                    exports = export_file.read().splitlines()
                     if sorted(samples) == sorted(exports):
                         self.log.info("export and sample json mathch")
                     else:
