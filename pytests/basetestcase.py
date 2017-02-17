@@ -485,6 +485,7 @@ class BaseTestCase(unittest.TestCase):
         Returns:
             bucket_params - A dictionary containing the parameters needed to create a bucket."""
 
+
         bucket_params = {}
         bucket_params['server'] = server
         bucket_params['replicas'] = replicas
@@ -518,13 +519,6 @@ class BaseTestCase(unittest.TestCase):
         self._create_standard_buckets(self.master, self.standard_buckets)
         self._create_memcached_buckets(self.master, self.memcached_buckets)
 
-        # very short term workaround to make ephemeral bucket work, will be removed when the REST call is ready
-        if self.bucket_type == 'ephemeral':
-            for s in self.servers:
-                shell = RemoteMachineShellConnection(s)
-                result = shell.kill_memcached()
-        self.sleep(10)
-        # end of workaround
 
     def _get_bucket_size(self, mem_quota, num_buckets):
         # min size is 100MB now

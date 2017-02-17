@@ -1900,12 +1900,6 @@ class RestConnection(object):
         params = urllib.urlencode({})
 
 
-        # short term workaround for ephemeral buckets. Create a membase bucket and do the diag/eval
-        # and then restart memcached
-        haveEphemeral = False
-        if bucketType == 'ephemeral':
-            bucketType = 'membase'
-            haveEphemeral = True
 
         # this only works for default bucket ?
         if bucket == 'default':
@@ -1968,10 +1962,7 @@ class RestConnection(object):
                       format(maxwait))
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
 
-        # short term change until the REST call is ready
-        if haveEphemeral:   # do the diag eval
-            command = 'ns_bucket:update_bucket_props("default", [{extra_config_string, "bucket_type=ephemeral"}]).'
-            self.diag_eval(command)
+
 
 
         create_time = time.time() - create_start_time
