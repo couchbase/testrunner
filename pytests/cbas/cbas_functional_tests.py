@@ -262,3 +262,74 @@ class CBASFunctionalTests(CBASBaseTest):
 
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
+
+    def test_or_predicate_evaluation(self):
+        ds_name = "filtered_travel_ds"
+        predicates = self.input.param("predicates", None).replace("&eq",
+                                                                  "=").replace(
+            "&qt", "\"")
+        self.log.info("predicates = %s", predicates)
+
+        # Delete Default bucket and load travel-sample bucket
+        self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
+
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                                      cbas_dataset_name=self.cbas_dataset_name)
+
+        # Create a dataset on the CBAS bucket with filters
+        statement_create_dataset = "create shadow dataset {0} on {1}".format(
+            ds_name, self.cbas_bucket_name)
+        if predicates:
+            statement_create_dataset += " where {0}".format(predicates) + ";"
+        else:
+            statement_create_dataset += ";"
+
+        status, metrics, errors, results = self.execute_statement_on_cbas(
+            statement_create_dataset, self.master)
+        if errors:
+            self.log.info("Statement = %s", statement_create_dataset)
+            self.log.info(errors)
+            self.fail("Error while creating Dataset with OR predicates")
+
+        # Connect to Bucket
+        self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+
+        # Allow ingestion to complete
+        self.sleep(60)
+
+        stmt_count_records_on_full_ds = "select count(*) from {0}".format(
+            self.cbas_dataset_name)
+        if predicates:
+            stmt_count_records_on_full_ds += " where {0}".format(
+                predicates) + ";"
+        else:
+            stmt_count_records_on_full_ds += ";"
+
+        stmt_count_records_on_filtered_ds = "select count(*) from {0};".format(
+            ds_name)
+
+        # Run query on full dataset with filters applied in the query
+        status, metrics, errors, results = self.execute_statement_on_cbas(
+            stmt_count_records_on_full_ds, self.master)
+        count_full_ds = results[0]["$1"]
+        self.log.info("**Count of records in full dataset = %s", count_full_ds)
+
+        # Run query on the filtered dataset to retrieve all records
+        status, metrics, errors, results = self.execute_statement_on_cbas(
+            stmt_count_records_on_filtered_ds, self.master)
+        count_filtered_ds = results[0]["$1"]
+        self.log.info("**Count of records in filtered dataset ds1 = %s",
+                      count_filtered_ds)
+
+        # Validate if the count of records in both cases is the same
+        if count_filtered_ds != count_full_ds:
+            self.fail("Count not matching for full dataset with filters in "
+                      "query vs. filtered dataset")
