@@ -1093,7 +1093,7 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             try:
                 idx = "nested_idx"
-                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i s %s END,tasks,department,name) USING %s" % (
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END,tasks,department,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
 
                 actual_result = self.run_cbq_query()
@@ -1138,20 +1138,31 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
-                self.query = "EXPLAIN select name from %s WHERE ANY tasks IN %s.tasks SATISFIES  (ANY j IN task SATISFIES j='Search' end) END " % (
-                bucket.name,bucket.name) + \
-                             "order BY name limit 10"
+                idx5 = "nested_idx5"
+                self.query = ' CREATE INDEX %s ON %s((distinct (array (i.RAM) for i in VMs end))) ' %(idx5,bucket.name)+\
+                             'WHERE (_id = "query-testemployee10153.1877827-0")'
                 actual_result = self.run_cbq_query()
-                #import pdb;pdb.set_trace()
-		plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
+                self._wait_for_index_online(bucket, idx5)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx5)
 
-                self.query = "EXPLAIN select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY task IN i SATISFIES task='Search' end) END " % (
-                bucket.name,bucket.name) + \
-                             "order BY name limit 10"
+                self.query = 'explain SELECT VMs FROM %s  WHERE ANY i IN VMs SATISFIES i.RAM = 10 END AND _id="query-testemployee10153.1877827-0"' %(bucket.name)
                 actual_result = self.run_cbq_query()
-		plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['scan']['index']==idx5)
+         #        self.query = "EXPLAIN select name from %s WHERE ANY tasks IN %s.tasks SATISFIES  (ANY j IN task SATISFIES j='Search' end) END " % (
+         #        bucket.name,bucket.name) + \
+         #                     "order BY name limit 10"
+         #        actual_result = self.run_cbq_query()
+		# plan = ExplainPlanHelper(actual_result)
+         #        self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
+
+         #        self.query = "EXPLAIN select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY task IN i SATISFIES task='Search' end) END " % (
+         #        bucket.name,bucket.name) + \
+         #                     "order BY name limit 10"
+         #        actual_result = self.run_cbq_query()
+		# plan = ExplainPlanHelper(actual_result)
+                #self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='nested_idx2')
 
                 self.query = "EXPLAIN select name from %s WHERE tasks is not missing and name is not null " % (
                 bucket.name) + \
@@ -1190,7 +1201,6 @@ class QueriesIndexTests(QueryTests):
                 bucket.name,bucket.name) + \
                              "AND  NOT (department = 'Manager') order BY name limit 10"
                 actual_result = self.run_cbq_query()
-
                 self.query = "select name from %s use index(`#primary`) WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
                 bucket.name,bucket.name) + \
                              "AND  NOT (department = 'Manager') order BY name limit 10"

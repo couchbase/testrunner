@@ -470,7 +470,7 @@ class QueryHelper(object):
                     table_name_alias = table_map[table_name]["alias_name"]
                 else:
                     table_name = table_name_list[0]
-                    table_name_alias = table_map[table_name]["alias_name"]+self._random_char()
+                    table_name_alias = table_map[table_name]["alias_name"]+self._random_alphabet_string()
                 primary_key_field = table_map[table_name]["primary_key_field"]
                 data = token
                 data = data.replace("BUCKET_NAME",(table_name+" "+table_name_alias))

@@ -1231,7 +1231,7 @@ class RQGTests(BaseTestCase):
         if self.reset_database:
             self.client = MySQLClient(host = self.mysql_url,
                 user_id = self.user_id, password = self.password)
-            if self.subquery:
+            if (self.subquery==True):
                 path  = "b/resources/rqg/{0}/database_definition/definition-subquery.sql".format(self.database)
             else:
                 path  = "b/resources/rqg/{0}/database_definition/definition.sql".format(self.database)
@@ -1239,7 +1239,7 @@ class RQGTests(BaseTestCase):
             populate_data = False
             if not self.populate_with_replay:
                 populate_data = True
-            if self.subquery:
+            if (self.subquery==True):
                 self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data, number_of_tables  = 1)
             else:
                  self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data, number_of_tables  = self.number_of_buckets)
