@@ -71,6 +71,32 @@ class KVStore(object):
             self.cache[itr]["lock"].release()
         return valid_keys, deleted_keys
 
+    def get_partitions(self):
+        partitions = []
+        for itr in range(self.num_locks):
+            partitions.append({"itr": itr,
+                               "partition": self.cache[itr]["partition"]})
+        return partitions
+
+    def merge_partition(self, itr, partition):
+
+        # merge valid
+        for key in partition.valid_key_set():
+            self_partition = self.cache[itr]["partition"]
+            if self_partition.get_key(key) is None:
+                item = partition.get_key(key)
+                self.cache[itr]["partition"].set(
+                    key,
+                    item["value"],
+                    item["expires"],
+                    item["flag"])
+
+    def merge_all_partitions(self, partitions):
+        for partition in partitions:
+            self.merge_partition(
+                partition["itr"],
+                partition["partition"])
+
     def __len__(self):
         return sum([len(self.cache[itr]["partition"]) for itr in range(self.num_locks)])
 
