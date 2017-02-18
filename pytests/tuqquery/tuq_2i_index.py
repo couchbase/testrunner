@@ -1189,7 +1189,7 @@ class QueriesIndexTests(QueryTests):
 
                 self.query = "EXPLAIN select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
                 bucket.name,bucket.name) + \
-                             "AND  NOT (department = 'Manager') order BY name limit 10"
+                             "ND  NOT (department = 'Manager') order BY name limit 10"
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
@@ -3456,8 +3456,8 @@ class QueriesIndexTests(QueryTests):
                     res = self.run_cbq_query()
                     plan = ExplainPlanHelper(res)
                 self.assertTrue(plan["~children"][0]['index'] == index_name,"correct index is not used")
-                self.assertTrue(plan["~children"][0]['spans'][0]["Range"]["High"][0]=="\"xy{\"")
-                self.assertTrue(plan["~children"][0]['spans'][0]["Range"]["Low"][0]=="\"xyz\"")
+                self.assertTrue(plan["~children"][0]['spans'][0]["range"][0]["high"]=="\"xy{\"")
+                self.assertTrue(plan["~children"][0]['spans'][0]["range"][0]["low"]=="\"xyz\"")
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
@@ -3521,7 +3521,11 @@ class QueriesIndexTests(QueryTests):
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
                     self.query = "explain select  name,skills[0] as skills  from %s where skills[0]='skill2010' and join_yr=2010 and ( VMs[0].os IN ['ubuntu','windows','linux'] OR VMs[0].os IN ['ubuntu','windows','linux'] ) order by _id asc LIMIT 10 OFFSET 0;" % (bucket.name)
-                    self.test_explain_union(index_name)
+                    actual_result=self.run_cbq_query()
+                    plan = ExplainPlanHelper(actual_result)
+                    self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan2")
+                    self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["index"] == index_name)
+                    #self.test_explain_union(index_name)
                     self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux','linux'] order by name LIMIT 15 OFFSET 0;" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     expected_result = [{"name" : doc["name"],"skills" : doc["skills"][0]}
