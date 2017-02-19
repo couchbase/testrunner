@@ -113,7 +113,7 @@ class QueryTests(BaseTestCase):
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
         except Exception, ex:
-            self.log.info(ex)
+            self.log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
     def generate_ops_docs(self, num_items, start=0):
@@ -130,7 +130,7 @@ class QueryTests(BaseTestCase):
             if self.dataset == "bigdata":
                 return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
             if self.dataset == "array":
-                return self.generate_ops(num_items, start, json_generator.generate_docs_employee_array)
+                return self.generate_ops(num_items, start, json_generator.generate_all_type_documents_for_gsi)
         except Exception, ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
@@ -160,9 +160,9 @@ class QueryTests(BaseTestCase):
         return json_generator.generate_docs_bigdata(docs_per_day=docs_per_day,
             start=start, value_size=self.value_size)
 
-    def generate_docs_array(self, docs_per_day, start=0):
+    def generate_docs_array(self, num_items=10, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_array(docs_per_day=docs_per_day,
+        return json_generator.generate_all_type_documents_for_gsi(docs_per_day=num_items,
             start=start)
 
     def generate_ops(self, docs_per_day, start=0, method=None):

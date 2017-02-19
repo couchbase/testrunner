@@ -49,6 +49,7 @@ class QueryTests(BaseTestCase):
         self.named_prepare = self.input.param("named_prepare", None)
         self.skip_primary_index = self.input.param("skip_primary_index",False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
+        self.cbas_node = self.input.cbas
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
@@ -100,7 +101,7 @@ class QueryTests(BaseTestCase):
             f = open(filename,'w')
             f.write(data)
             f.close()
-            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+            url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
             os.system(cmd)
             os.remove(filename)
@@ -136,7 +137,7 @@ class QueryTests(BaseTestCase):
         f = open(filename,'w')
         f.write(data)
         f.close()
-        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
         os.system(cmd)
         os.remove(filename)

@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import copy
 import urllib
 import uuid
 import time
@@ -43,7 +44,8 @@ from testconstants import CB_REPO
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 
-from testconstants import LINUX_NONROOT_CB_BIN_PATH
+from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
+                          NR_INSTALL_LOCATION_FILE
 
 from membase.api.rest_client import RestConnection, RestHelper
 
@@ -141,6 +143,10 @@ class RemoteMachineShellConnection:
         self.username = username
         self.use_sudo = True
         self.nonroot = False
+        """ in nonroot, we could extract Couchbase Server at
+            any directory that non root user could create
+        """
+        self.nr_home_path = "/home/%s/" % self.username
         if self.username == 'root':
             self.use_sudo = False
         elif self.username != "Administrator":
@@ -168,9 +174,12 @@ class RemoteMachineShellConnection:
     def __init__(self, serverInfo):
         # let's create a connection
         self.username = serverInfo.ssh_username
+        self.password = serverInfo.ssh_password
+        self.ssh_key = serverInfo.ssh_key
         self.input = TestInput.TestInputParser.get_test_input(sys.argv)
         self.use_sudo = True
         self.nonroot = False
+        self.nr_home_path = "/home/%s/" % self.username
         if self.username == 'root':
             self.use_sudo = False
         elif self.username != "Administrator":
@@ -218,6 +227,43 @@ class RemoteMachineShellConnection:
                                                    {0}".format(e, self.ip))
                     exit(1)
         log.info("Connected to {0}".format(serverInfo.ip))
+
+    """
+        In case of non root user, we need to switch to root to
+        run command
+    """
+    def connect_with_user(self, user="root"):
+        if self.info.distribution_type.lower() == "mac":
+            log.info("This is Mac Server.  Skip re-connect to it as %s" % user)
+            return
+        max_attempts_connect = 2
+        attempt = 0
+        while True:
+            try:
+                log.info("Connect to node: %s as user: %s" % (self.ip, user))
+                if self.remote and self.ssh_key == '':
+                    self._ssh_client.connect(hostname=self.ip,
+                                             username=user,
+                                             password=self.password)
+                break
+            except paramiko.AuthenticationException:
+                log.error("Authentication for root failed")
+                exit(1)
+            except paramiko.BadHostKeyException:
+                log.error("Invalid Host key")
+                exit(1)
+            except Exception as e:
+                if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
+                        attempt != max_attempts_connect:
+                    log.error("Can't establish SSH session to node {1} as root:\
+                              {0}. Will try again in 1 sec".format(e, self.ip))
+                    attempt += 1
+                    time.sleep(1)
+                else:
+                    log.error("Can't establish SSH session to node {1} :\
+                                                   {0}".format(e, self.ip))
+                    exit(1)
+        log.info("Connected to {0} as {1}".format(self.ip, user))
 
     def sleep(self, timeout=1, message=""):
         log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
@@ -283,8 +329,8 @@ class RemoteMachineShellConnection:
             if self.is_couchbase_installed():
                 if self.nonroot:
                     log.info("Start Couchbase Server with non root method")
-                    o, r = self.execute_command('%scouchbase-server \-- -noinput -detached '\
-                                                              % (LINUX_NONROOT_CB_BIN_PATH))
+                    o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
+                                              % (self.nr_home_path, LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
@@ -314,7 +360,9 @@ class RemoteMachineShellConnection:
         elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
                 if self.nonroot:
-                    o, r = self.execute_command("%scouchbase-server -k" % LINUX_NONROOT_CB_BIN_PATH)
+                    o, r = self.execute_command("%s%scouchbase-server -k"
+                                                % (self.nr_home_path,
+                                                   LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
@@ -500,7 +548,13 @@ class RemoteMachineShellConnection:
                     return True
         elif self.info.type.lower() == "linux":
             if self.nonroot:
-                file_path = "/home/" + self.username + LINUX_CB_PATH
+                if self.file_exists("/home/%s/" % self.username, NR_INSTALL_LOCATION_FILE):
+                    output, error = self.execute_command("cat %s" % NR_INSTALL_LOCATION_FILE)
+                    if output and output[0]:
+                        log.info("Couchbase Server was installed in non default path %s"
+                                                                            % output[0])
+                        self.nr_home_path = output[0]
+                file_path = self.nr_home_path + LINUX_CB_PATH
                 if self.file_exists(file_path, VERSION_FILE):
                     log.info("non root couchbase installed at %s " % self.ip)
                     return True
@@ -556,7 +610,13 @@ class RemoteMachineShellConnection:
             log.info("This url {0} is live".format(url))
             live_url = True
         else:
-            log.error("This url {0} is failed to connect".format(url))
+            log.error("\n===============\n"
+                      "        This url {0} \n"
+                      "        is failed to connect.\n"
+                      "        Check version in params to make sure it correct pattern or build number.\n"
+                      "===============\n".format(url))
+            os.system("ps aux | grep python | grep %d " % os.getpid())
+            os.system('kill %d' % os.getpid())
         return live_url
 
     def download_build(self, build):
@@ -575,10 +635,17 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe out"')
             self.log_command_output(output, error)
         else:
-            output, error = self.execute_command('/sbin/iptables -F')
+            command_1 = "/sbin/iptables -F"
+            command_2 = "/sbin/iptables -t nat -F"
+            if self.nonroot:
+                self.connect_with_user()
+            output, error = self.execute_command(command_1)
             self.log_command_output(output, error)
-            output, error = self.execute_command('/sbin/iptables -t nat -F')
+            output, error = self.execute_command(command_2)
             self.log_command_output(output, error)
+            self.connect_with_user(user=self.username)
+            if self.nonroot:
+                self.connect_with_user(user=self.username)
 
     def download_binary(self, url, deliverable_type, filename, latest_url=None, skip_md5_check=True):
         self.extract_remote_info()
@@ -647,10 +714,34 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             if skip_md5_check:
                 if self.nonroot:
+                    output, error = self.execute_command("ls -lh ")
+                    self.log_command_output(output, error)
                     log.info("remove old couchbase server binary ")
-                    self.execute_command_raw('rm couchbase-server-*')
-                    output, error = self.execute_command_raw('pwd;' \
-                                    ' wget -q -O {0} {1};ls -lh'.format(filename, url))
+                    if self.file_exists("/home/%s/" % self.username, NR_INSTALL_LOCATION_FILE):
+                        output, error = self.execute_command("cat %s"
+                                             % NR_INSTALL_LOCATION_FILE)
+                        if output and output[0]:
+                            log.info("Couchbase Server was installed in non default path %s"
+                                                                            % output[0])
+                        self.nr_home_path = output[0]
+                    self.execute_command_raw('cd %s;rm couchbase-server-*'
+                                                      % self.nr_home_path)
+                    if "nr_install_dir" in self.input.test_params and \
+                                           self.input.test_params["nr_install_dir"]:
+                        self.nr_home_path = self.nr_home_path + self.input.test_params["nr_install_dir"]
+                        op, er = self.execute_command("echo %s > %s" % (self.nr_home_path,
+                                                              NR_INSTALL_LOCATION_FILE))
+                        self.log_command_output(op, er)
+                        op, er = self.execute_command("rm -rf %s" % self.nr_home_path)
+                        self.log_command_output(op, er)
+                        op, er = self.execute_command("mkdir %s" % self.nr_home_path)
+                        self.log_command_output(op, er)
+                    output, error = self.execute_command("ls -lh ")
+                    self.log_command_output(output, error)
+                    output, error = self.execute_command_raw('cd {2}; pwd;'
+                                                             ' wget -q -O {0} {1};ls -lh'
+                                                             .format(filename, url,
+                                                                     self.nr_home_path))
                     self.log_command_output(output, error)
                 else:
                     output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh'\
@@ -669,7 +760,7 @@ class RemoteMachineShellConnection:
             # check if the file exists there now ?
             if self.nonroot:
                 """ binary is saved at current user directory """
-                return self.file_exists('/home/%s' % self.username, filename)
+                return self.file_exists(self.nr_home_path, filename)
             else:
                 return self.file_exists('/tmp', filename)
             # for linux environment we can just
@@ -825,6 +916,8 @@ class RemoteMachineShellConnection:
                     sftp.close()
                     return True
                 elif name.filename == filename and int(name.st_size) == 0:
+                    if name.filename == NR_INSTALL_LOCATION_FILE:
+                        continue
                     log.info("File {0} will be deleted".format(filename))
                     sftp.remove(remotepath + filename)
             sftp.close()
@@ -1351,6 +1444,9 @@ class RemoteMachineShellConnection:
             could not reused to uninstall or install cb server """
         self.delete_file(WIN_TMP_PATH, version[:10] + ".exe")
 
+    """
+        This method install Couchbase Server
+    """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
                        fts_query_limit=None):
@@ -1421,27 +1517,26 @@ class RemoteMachineShellConnection:
 
             if self.info.deliverable_type == 'rpm':
                 if self.nonroot:
-                    log.info("couchbase build name: %s  " % build.name)
-                    op, er = self.execute_command('rpm2cpio %s ' \
+                    op, er = self.execute_command('cd %s; rpm2cpio %s ' \
                         '|  cpio --extract --make-directories --no-absolute-filenames ' \
-                             % build.name)
+                                                       % (self.nr_home_path, build.name))
                     self.log_command_output(op, er)
-                    output, error = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
-                                                         % LINUX_CB_PATH[1:])
+                    output, error = self.execute_command('cd %s%s; ./bin/install/reloc.sh `pwd` ' \
+                                                         % (self.nr_home_path, LINUX_CB_PATH))
                     self.log_command_output(output, error)
-                    op, er = self.execute_command('pwd')
+                    op, er = self.execute_command('cd %s;pwd' % self.nr_home_path)
                     self.log_command_output(op, er)
                     """ command to start Couchbase Server in non root
                         /home/nonroot_user/opt/couchbase/bin/couchbase-server \-- -noinput -detached
                     """
+                    output, error = self.execute_command("ls -lh ")
+                    self.log_command_output(output, error)
                     if start_server_after_install:
-                        output, error = self.execute_command('/home/%s%scouchbase-server '\
+                        output, error = self.execute_command('%s%scouchbase-server '\
                                                              '\-- -noinput -detached '\
-                                                              % (self.username,
+                                                              % (self.nr_home_path,
                                                                  LINUX_COUCHBASE_BIN_PATH))
                 else:
-                    self.check_openssl_version(self.info.deliverable_type, openssl,
-                                               build.product_version)
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if force:
                         output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
@@ -1451,11 +1546,12 @@ class RemoteMachineShellConnection:
                                                              .format(environment, build.name))
             elif self.info.deliverable_type == 'deb':
                 if self.nonroot:
-                    log.info("couchbase build name: %s  " % build.name)
-                    op, er = self.execute_command('dpkg-deb -x %s $HOME ' % build.name)
+                    op, er = self.execute_command('cd %s; dpkg-deb -x %s %s '
+                                                % (self.nr_home_path, build.name,
+                                                   self.nr_home_path))
                     self.log_command_output(op, er)
-                    output, error = self.execute_command('cd %s; ./bin/install/reloc.sh `pwd` ' \
-                                                          % LINUX_CB_PATH[1:])
+                    output, error = self.execute_command('cd %s%s; ./bin/install/reloc.sh `pwd`'\
+                                                               % (self.nr_home_path, LINUX_CB_PATH))
                     self.log_command_output(output, error)
                     op, er = self.execute_command('pwd')
                     self.log_command_output(op, er)
@@ -1463,13 +1559,11 @@ class RemoteMachineShellConnection:
                         as in centos above
                     """
                     if start_server_after_install:
-                        output, error = self.execute_command('/home/%s%scouchbase-server '\
+                        output, error = self.execute_command('%s%scouchbase-server '\
                                                              '\-- -noinput -detached '\
-                                                               % (self.username,
+                                                               % (self.nr_home_path,
                                                                   LINUX_COUCHBASE_BIN_PATH))
                 else:
-                    self.check_openssl_version(self.info.deliverable_type, openssl,
-                                               build.product_version)
                     self.install_missing_lib()
                     if force:
                         output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'\
@@ -2058,7 +2152,16 @@ class RemoteMachineShellConnection:
                           " Use root user to uninstall it at %s \n"\
                           " This python process id: %d will be killed to stop the installation"\
                          % (self.ip, os.getpid())
+                    self.sleep(5, "==== delay kill pid %d in 5 seconds to printout message ==="\
+                                                                                 % os.getpid())
                     os.system('kill %d' % os.getpid())
+                if self.file_exists(self.nr_home_path, NR_INSTALL_LOCATION_FILE):
+                    output, error = self.execute_command("cat %s"
+                                             % NR_INSTALL_LOCATION_FILE)
+                    if output and output[0]:
+                        log.info("Couchbase Server was installed in non default path %s"
+                                                                            % output[0])
+                        self.nr_home_path = output[0]
             # uninstallation command is different
             if type == "ubuntu":
                 if self.nonroot:
@@ -2071,14 +2174,6 @@ class RemoteMachineShellConnection:
                               % (LINUX_CB_PATH, self.ip)
                         sys.exit(1)
                     self.stop_server()
-                    log.info("Remove couchbase server directories opt etc and usr ")
-                    output, error = self.execute_command("rm -rf opt etc usr")
-                    self.log_command_output(output, error)
-                    output, error = self.execute_command("rm -rf opt etc usr")
-                    self.log_command_output(output, error)
-                    self.execute_command("rm -rf couchbase-server-*")
-                    output, error = self.execute_command("ls -lh")
-                    self.log_command_output(output, error)
                 else:
                     if sv in COUCHBASE_FROM_VERSION_4:
                         if self.is_enterprise(type):
@@ -2105,12 +2200,6 @@ class RemoteMachineShellConnection:
                                % (LINUX_CB_PATH, self.ip)
                         sys.exit(1)
                     self.stop_server()
-                    log.info("Remove couchbase server directories opt etc and usr ")
-                    output, error = self.execute_command("rm -rf opt etc usr")
-                    self.log_command_output(output, error)
-                    self.execute_command("rm -rf couchbase-server-*")
-                    output, error = self.execute_command("ls -lh")
-                    self.log_command_output(output, error)
                 else:
                     output, error = self.execute_command("killall -9 rpm")
                     self.log_command_output(output, error)
@@ -2141,6 +2230,29 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf /Applications/Couchbase\ Server.app")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -rf ~/Library/Application\ Support/Couchbase")
+            self.log_command_output(output, error)
+        if self.nonroot:
+            if self.nr_home_path != "/home/%s/" % self.username:
+                log.info("remove all non default install dir")
+                output, error = self.execute_command("rm -rf %s"
+                                                        % self.nr_home_path)
+                self.log_command_output(output, error)
+            else:
+                log.info("Remove only Couchbase Server directories opt etc and usr ")
+                output, error = self.execute_command("cd %s;rm -rf opt etc usr"
+                                                           % self.nr_home_path)
+                self.log_command_output(output, error)
+                self.execute_command("cd %s;rm -rf couchbase-server-*"
+                                                      % self.nr_home_path)
+                output, error = self.execute_command("cd %s;ls -lh"
+                                                      % self.nr_home_path)
+                self.log_command_output(output, error)
+            if "nr_install_dir" not in self.input.test_params:
+                self.nr_home_path = "/home/%s/" % self.username
+                output, error = self.execute_command(" :> %s"
+                                             % NR_INSTALL_LOCATION_FILE)
+                self.log_command_output(output, error)
+            output, error = self.execute_command("ls -lh")
             self.log_command_output(output, error)
 
     def couchbase_win_uninstall(self, product, version, os_name, query):
@@ -2862,7 +2974,6 @@ class RemoteMachineShellConnection:
         if o:
             return o
 
-        
     def get_memcache_pid(self):
          self.extract_remote_info()
          if self.info.type == 'Linux':
@@ -2898,8 +3009,9 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == "linux":
             if self.nonroot:
                 log.info("Stop Couchbase Server with non root method")
-                o, r = self.execute_command('%scouchbase-server -k '\
-                                         % (LINUX_NONROOT_CB_BIN_PATH))
+                o, r = self.execute_command('%s%scouchbase-server -k '\
+                                         % (self.nr_home_path,
+                                            LINUX_COUCHBASE_BIN_PATH))
                 self.log_command_output(o, r)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
@@ -2928,8 +3040,9 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == "linux":
             if self.nonroot:
                 log.info("Start Couchbase Server with non root method")
-                o, r = self.execute_command('%scouchbase-server \-- -noinput -detached '\
-                                                           % (LINUX_NONROOT_CB_BIN_PATH))
+                o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
+                                                           % (self.nr_home_path,
+                                                              LINUX_COUCHBASE_BIN_PATH))
                 self.log_command_output(o, r)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
@@ -3861,6 +3974,7 @@ class RemoteUtilHelper(object):
 
     @staticmethod
     def enable_firewall(server, bidirectional=False, xdcr=False):
+        """ Check if user is root or non root in unix """
         shell = RemoteMachineShellConnection(server)
         shell.info = shell.extract_remote_info()
         if shell.info.type.lower() == "windows":
@@ -3875,23 +3989,32 @@ class RemoteUtilHelper(object):
             else:
                 log.error("erlang process failed to suspend")
         else:
+            copy_server = copy.deepcopy(server)
+            command_1 = "/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT"
+            command_2 = "/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT"
+            command_3 = "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
+            if shell.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME \
+                             and server.ssh_username != "root":
+                copy_server.ssh_username = "root"
+                shell.disconnect()
+                log.info("=== connect to server with user %s " % copy_server.ssh_username)
+                shell = RemoteMachineShellConnection(copy_server)
+                o, r = shell.execute_command("whoami")
+                shell.log_command_output(o, r)
             # Reject incoming connections on port 1000->65535
-            o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT")
+            o, r = shell.execute_command(command_1)
             shell.log_command_output(o, r)
-
             # Reject outgoing connections on port 1000->65535
             if bidirectional:
-                o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT")
+                o, r = shell.execute_command(command_2)
                 shell.log_command_output(o, r)
-
             if xdcr:
-                o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+                o, r = shell.execute_command(command_3)
                 shell.log_command_output(o, r)
-
             log.info("enabled firewall on {0}".format(server))
             o, r = shell.execute_command("/sbin/iptables --list")
             shell.log_command_output(o, r)
-        shell.disconnect()
+            shell.disconnect()
 
     @staticmethod
     def common_basic_setup(servers):

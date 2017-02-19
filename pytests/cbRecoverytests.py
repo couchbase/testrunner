@@ -280,11 +280,15 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 if "create_bucket_when_recovery" in when_step:
                      name = 'standard_bucket'
                      try:
-                         self.cluster.create_standard_bucket(self.src_master, name, STANDARD_BUCKET_PORT + 10, 100, 1)
+                         standard_params=self._create_bucket_params(server=self.src_master, size=100, replicas=1)
+                         self._create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+10,
+                                                             bucket_params=standard_params)
                      except BucketCreationException, e:
                          self.log.info("bucket creation failed during cbrecovery as expected")
                      # but still able to create bucket on destination
-                     self.cluster.create_standard_bucket(self.dest_master, name, STANDARD_BUCKET_PORT + 10, 100, 1)
+                     standard_params = self._create_bucket_params(server=self.dest_master, size=100, replicas=1)
+                     self.cluster.create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + 10,
+                                                         bucket_params=standard_params)
                      # here we try to re-call cbrecovery(seems it's supported even it's still running)
                      # if recovery fast(=completed) we can get "No recovery needed"
                      self.cbr_routine(self.dest_master, self.src_master)
@@ -349,10 +353,14 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 if "create_bucket_when_recovery" in when_step:
                      name = 'standard_bucket'
                      try:
-                         self.cluster.create_standard_bucket(self.dest_master, name, STANDARD_BUCKET_PORT + 10, 100, 1)
+                         standard_params=self._create_bucket_params(server=self.dest_master, size=100, replicas=1)
+                         self.cluster.create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + 10,
+                                                             bucket_params=standard_params)
                      except BucketCreationException, e:
                          self.log.info("bucket creation failed during cbrecovery as expected")
-                     self.cluster.create_standard_bucket(self.src_master, name, STANDARD_BUCKET_PORT + 10, 100, 1)
+                     standard_params = self._create_bucket_params(server=self.src_master, size=100, replicas=1)
+                     self.cluster.create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + 10,
+                                                         bucket_params=standard_params)
                      self.cbr_routine(self.src_master, self.dest_master)
                 elif "recovery_when_rebalance" in when_step:
                     rest.remove_all_recoveries()

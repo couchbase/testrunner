@@ -44,7 +44,7 @@ class BucketTests(BaseUITestCase):
 
     def test_add_bucket(self):
         bucket = Bucket(parse_bucket=self.input)
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BucketHelper(self).create(bucket)
 
     def test_add_bucket_with_ops(self):
@@ -52,7 +52,7 @@ class BucketTests(BaseUITestCase):
         bucket_helper = BucketHelper(self)
         bucket = Bucket(parse_bucket=self.input)
         bucket.num_replica = '0'
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         try:
             BucketHelper(self).create(bucket)
         except Exception, ex:
@@ -68,7 +68,7 @@ class BucketTests(BaseUITestCase):
 
     def test_bucket_stats_mb_8538(self):
         self.bucket = Bucket()
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BucketHelper(self).create(self.bucket)
 
         NavigationHelper(self).navigate('Indexes')
@@ -76,7 +76,7 @@ class BucketTests(BaseUITestCase):
         view_name = 'test_view_ui'
         DdocViewHelper(self).create_view(view_name, view_name)
 
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BaseHelper(self).wait_ajax_loaded()
         BucketHelper(self).open_stats(self.bucket)
         total_views_st = BucketHelper(self).get_stat("views total disk size")
@@ -90,7 +90,7 @@ class BucketTests(BaseUITestCase):
 
     def test_bucket_stats_connections(self):
         self.bucket = Bucket()
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BucketHelper(self).create(self.bucket)
 
         BucketHelper(self).open_stats(self.bucket)
@@ -161,7 +161,7 @@ class DocumentsTest(BaseUITestCase):
         self.bucket = Bucket()
         RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                               proxyPort=STANDARD_BUCKET_PORT + 1)
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         time.sleep(3)
         BucketHelper(self).open_documents(self.bucket)
 
@@ -177,7 +177,7 @@ class DocumentsTest(BaseUITestCase):
         self.bucket = Bucket()
         RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                               proxyPort=STANDARD_BUCKET_PORT + 2)
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BucketHelper(self).open_documents(self.bucket)
         doc_name = self.input.param('doc_name', 'test')
         doc_content = self.input.param('content', None)
@@ -192,7 +192,7 @@ class DocumentsTest(BaseUITestCase):
         self.bucket = Bucket()
         RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                               proxyPort=STANDARD_BUCKET_PORT + 3)
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BucketHelper(self).open_documents(self.bucket)
         doc_name = self.input.param('doc_name', 'test')
         doc_content = self.input.param('content', '{"test" : "test"}')
@@ -219,7 +219,7 @@ class DocumentsTest(BaseUITestCase):
         self.bucket = Bucket()
         RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                               proxyPort=STANDARD_BUCKET_PORT + 4)
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BucketHelper(self).open_documents(self.bucket)
         doc_name = self.input.param('doc_name', 'test')
         doc_content = self.input.param('content', '{"test" : "test"}')
@@ -242,7 +242,7 @@ class DocumentsTest(BaseUITestCase):
         self.bucket = Bucket()
         RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                               proxyPort=STANDARD_BUCKET_PORT + 5)
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         BucketHelper(self).open_documents(self.bucket)
 
         items_per_page = self.input.param('items-per-page', 5)
@@ -305,7 +305,7 @@ class SettingsTests(BaseUITestCase):
         NavigationHelper(self).navigate('Settings')
         SettingsHelper(self).navigate('Sample Buckets')
         sample_bucket = SettingsHelper(self).select_sample_bucket(sample)
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         self.assertTrue(BucketHelper(self).is_bucket_present(sample_bucket),
                         "Bucket %s is not present" % sample_bucket)
         end_time = time.time() + 120
@@ -328,7 +328,7 @@ class ROuserTests(BaseUITestCase):
         if not self.input.param('skip_preparation', False):
             self.log.info("create bucket, view for check")
             self.bucket = Bucket()
-            NavigationHelper(self).navigate('Data Buckets')
+            NavigationHelper(self).navigate('Buckets')
             RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                            proxyPort=STANDARD_BUCKET_PORT + 6)
             NavigationHelper(self).navigate('Indexes')
@@ -391,7 +391,7 @@ class ROuserTests(BaseUITestCase):
         for btn in ServerHelper(self).controls.server_row_controls().remove_btns:
             self.assertFalse(btn.is_displayed(), "There is remove btn")
         self.log.info("Bucket check")
-        navigator.navigate('Data Buckets')
+        navigator.navigate('Buckets')
         BaseHelper(self).wait_ajax_loaded()
         BucketHelper(self).controls.bucket_info(bucket.name).arrow.click()
         self.assertFalse(BucketHelper(self).controls.edit_btn().is_displayed(),
@@ -413,7 +413,7 @@ class ExternalUserTests(BaseUITestCase):
         self.helper.login()
         self.log.info("create bucket")
         self.bucket = Bucket()
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                            proxyPort=STANDARD_BUCKET_PORT + 6)
 
@@ -451,7 +451,7 @@ class  RebalanceProgressTests(BaseUITestCase):
         self.baseHelper.login()
         num_buckets = self.input.param("num_buckets", 1)
         self.buckets = []
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         for i in xrange(num_buckets):
             bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
             RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
@@ -495,7 +495,7 @@ class GracefullFailoverTests(BaseUITestCase):
             num_buckets = self.input.param("num_buckets", 1)
             self.num_replica = self.input.param("replica", 1)
             self.buckets = []
-            NavigationHelper(self).navigate('Data Buckets')
+            NavigationHelper(self).navigate('Buckets')
             for i in xrange(num_buckets):
                 bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password',
                                 replica=self.num_replica)
@@ -591,7 +591,7 @@ class ViewsTests(BaseUITestCase):
         self.buckets = []
         helper = BaseHelper(self)
         helper.login()
-        NavigationHelper(self).navigate('Data Buckets')
+        NavigationHelper(self).navigate('Buckets')
         for i in xrange(num_buckets):
             bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
             RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
@@ -1238,7 +1238,6 @@ class NavigationHelper():
         self.controls._navigation_tab_link(tab).click()
         self.wait.until(lambda fn: self._is_tab_selected(tab),
                         "tab '%s' is not selected in %d sec" % (tab, self.wait._timeout))
-        BaseHelper(self.tc).wait_ajax_loaded()
         self.tc.log.info("tab '%s' is selected" % tab)
 
 class ServerHelper():
@@ -1376,7 +1375,6 @@ class ServerHelper():
     def get_server_rebalance_progress(self, server, direction):
         if not self.is_server_stats_opened(server):
             self.open_server_stats(server)
-        BaseHelper(self.tc).wait_ajax_loaded()
         src = self.controls.server_info_rebalance_progress(server.ip).get_text()
         src = src.split("Data being transferred %s" % direction)[1]
         src = src.split('\n')
@@ -1560,7 +1558,6 @@ class BucketHelper():
                             "Warning 'Cluster Memory Fully Allocated' appeared")
         self.fill_bucket_info(bucket)
         self.controls.bucket_pop_up().create_btn.click()
-        BaseHelper(self.tc).wait_ajax_loaded()
         self.tc.log.info("created bucket '%s'" % bucket.name)
         if self.controls.bucket_pop_up().create_bucket_pop_up.is_present():
              self.wait.until_not(lambda fn:
@@ -1643,7 +1640,6 @@ class BucketHelper():
     def is_bucket_present(self, bucket):
         try:
             bucket_present = self.controls.bucket_info(bucket.name).name.is_displayed()
-            bucket_present &= self.controls.bucket_info(bucket.name).arrow.is_displayed()
             bucket_present &= self.controls.bucket_info(bucket.name).nodes.is_displayed()
             bucket_present &= self.controls.bucket_info(bucket.name).items_count.is_displayed()
             bucket_present &= self.controls.bucket_info(bucket.name).documents.is_displayed()
@@ -1837,7 +1833,6 @@ class DdocViewHelper():
 
     def create_view(self, ddoc_name, view_name, dev_view=True):
         self.tc.log.info('trying create a view %s' % view_name)
-        BaseHelper(self.tc).wait_ajax_loaded()
         try:
             self.wait.until(lambda fn:
                             self.controls.view_btn().create_view_btn.is_displayed(),
@@ -1967,7 +1962,6 @@ class DdocViewHelper():
 
     def verify_view_results(self, view_set, reduce_fn, value=0):
         self.tc.log.info('Verify View Results')
-        BaseHelper(self.tc).wait_ajax_loaded()
         if view_set == 'dev':
             self.wait.until(lambda fn:
                             self.controls.view_results_container().dev_subset.is_displayed,
@@ -2294,7 +2288,6 @@ class SettingsHelper():
         self.controls.user_create_info().password.type(pwd, is_pwd=True)
         self.controls.user_create_info().verify_password.type(verify_pwd, is_pwd=True)
         self.controls.user_create_info().create_btn.click()
-        BaseHelper(self.tc).wait_ajax_loaded()
         self.wait.until(lambda fn: self.is_user_created() or self.is_error_present(),
                         "No reaction for create btn in %d sec" % (self.wait._timeout))
         if self.is_error_present():

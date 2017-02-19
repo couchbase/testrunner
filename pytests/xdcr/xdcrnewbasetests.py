@@ -21,7 +21,7 @@ from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 from tasks.future import TimeoutError
 
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 
@@ -1078,6 +1078,40 @@ class CouchbaseCluster:
                     self.__log.info("Enabling audit ...")
                     audit_obj.setAuditEnable('true')
 
+    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
+                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                             bucket_priority=None, flush_enabled=1, lww=False):
+        """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            bucket_name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            password - The password for this bucket. (String)
+            size - The size of the bucket to be created. (int)
+            enable_replica_index - can be 0 or 1, 1 enables indexing of replica bucket data (int)
+            replicas - The number of replicas for this bucket. (int)
+            eviction_policy - The eviction policy for the bucket, can be valueOnly or fullEviction. (String)
+            bucket_priority - The priority of the bucket:either none, low, or high. (String)
+            bucket_type - The type of bucket. (String)
+            flushEnabled - Enable or Disable the flush functionality of the bucket. (int)
+            lww = determine the conflict resolution type of the bucket. (Boolean)
+
+        Returns:
+            bucket_params - A dictionary containing the parameters needed to create a bucket."""
+
+        bucket_params = {}
+        bucket_params['server'] = server
+        bucket_params['replicas'] = replicas
+        bucket_params['size'] = size
+        bucket_params['port'] = port
+        bucket_params['password'] = password
+        bucket_params['bucket_type'] = bucket_type
+        bucket_params['enable_replica_index'] = enable_replica_index
+        bucket_params['eviction_policy'] = eviction_policy
+        bucket_params['bucket_priority'] = bucket_priority
+        bucket_params['flush_enabled'] = flush_enabled
+        bucket_params['lww'] = lww
+        return bucket_params
 
     def set_global_checkpt_interval(self, value):
         self.set_xdcr_param("checkpointInterval",value)
@@ -1159,14 +1193,13 @@ class CouchbaseCluster:
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
-            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(
-                self.__master_node,
-                name,
-                'password',
-                bucket_size,
-                num_replicas,
-                eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+            sasl_params = self._create_bucket_params(server=self.__master_node, password='password',
+                                                                size=bucket_size, replicas=num_replicas,
+                                                                eviction_policy=eviction_policy,
+                                                                bucket_priority=bucket_priority)
+            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name,password='password',
+                                                                          bucket_params=sasl_params))
+
             self.__buckets.append(
                 Bucket(
                     name=name, authType="sasl", saslPassword="password",
@@ -1192,14 +1225,17 @@ class CouchbaseCluster:
         bucket_tasks = []
         for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
-            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(
-                self.__master_node,
-                name,
-                STANDARD_BUCKET_PORT + i,
-                bucket_size,
-                num_replicas,
+            standard_params = self._create_bucket_params(
+                server=self.__master_node,
+                size=bucket_size,
+                replicas=num_replicas,
                 eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority))
+                bucket_priority=bucket_priority)
+
+            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
+                                                                              bucket_params=standard_params))
+
+
             self.__buckets.append(
                 Bucket(
                     name=name,
@@ -1226,13 +1262,14 @@ class CouchbaseCluster:
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
         """
-        self.__clusterop.create_default_bucket(
-            self.__master_node,
-            bucket_size,
-            num_replicas,
+        bucket_params=self._create_bucket_params(
+            server=self.__master_node,
+            size=bucket_size,
+            replicas=num_replicas,
             eviction_policy=eviction_policy,
             bucket_priority=bucket_priority
         )
+        self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
             Bucket(
                 name=BUCKET_NAME.DEFAULT,
@@ -1556,21 +1593,37 @@ class CouchbaseCluster:
         tasks = []
         for bucket in self.__buckets:
             if op_type == OPS.UPDATE:
-                self.__kv_gen[OPS.UPDATE] = BlobGenerator(
-                    self.__kv_gen[OPS.CREATE].name,
-                    self.__kv_gen[OPS.CREATE].seed,
-                    self.__kv_gen[OPS.CREATE].value_size,
-                    start=0,
-                    end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                    self.__kv_gen[OPS.UPDATE] = BlobGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].seed,
+                        self.__kv_gen[OPS.CREATE].value_size,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                    self.__kv_gen[OPS.UPDATE] = DocumentGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].template,
+                        self.__kv_gen[OPS.CREATE].args,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
                 gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
             elif op_type == OPS.DELETE:
-                self.__kv_gen[OPS.DELETE] = BlobGenerator(
-                    self.__kv_gen[OPS.CREATE].name,
-                    self.__kv_gen[OPS.CREATE].seed,
-                    self.__kv_gen[OPS.CREATE].value_size,
-                    start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
-                        100 - perc) / 100),
-                    end=self.__kv_gen[OPS.CREATE].end)
+                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                    self.__kv_gen[OPS.DELETE] = BlobGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].seed,
+                        self.__kv_gen[OPS.CREATE].value_size,
+                        start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
+                            100 - perc) / 100),
+                        end=self.__kv_gen[OPS.CREATE].end)
+                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                    self.__kv_gen[OPS.DELETE] = DocumentGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].template,
+                        self.__kv_gen[OPS.CREATE].args,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
                 gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
             else:
                 raise XDCRException("Unknown op_type passed: %s" % op_type)
@@ -2466,7 +2519,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cleanup_previous()
         self.__init_clusters()
         self.__set_free_servers()
-        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
+        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
+                and str(self.__class__).find('capiXDCR') == -1:
             self.__create_buckets()
 
     def __init_parameters(self):
@@ -2637,12 +2691,13 @@ class XDCRNewBaseTest(unittest.TestCase):
             quota_percent = None
 
         dgm_run = self._input.param("dgm_run", 0)
+        bucket_size = 0
         if dgm_run:
             # buckets cannot be created if size<100MB
             bucket_size = 256
-        elif quota_percent is not None:
-             bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
-        else:
+        elif quota_percent is not None and num_buckets > 0:
+            bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
+        elif num_buckets > 0:
             bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
         return bucket_size
 
@@ -3239,6 +3294,34 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
 
+    def _wait_for_es_replication_to_catchup(self, timeout=300):
+        from membase.api.esrest_client import EsRestConnection
+
+        _count1 = _count2 = 0
+        for cb_cluster in self.__cb_clusters:
+            cb_cluster.run_expiry_pager()
+
+        # 5 minutes by default
+        end_time = time.time() + timeout
+
+        for cb_cluster in self.__cb_clusters:
+            rest1 = RestConnection(cb_cluster.get_master_node())
+            for remote_cluster in cb_cluster.get_remote_clusters():
+                rest2 = EsRestConnection(remote_cluster.get_dest_cluster().get_master_node())
+                for bucket in cb_cluster.get_buckets():
+                    while time.time() < end_time :
+                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                        _count2 = rest2.fetch_bucket_stats(bucket_name=bucket.name).itemCount
+                        if _count1 == _count2:
+                            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
+                            break
+                        self.sleep(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
+                                       "Waiting for replication to catch up ..".
+                                   format(bucket.name, _count1, _count2))
+                    else:
+                        self.fail("Not all items replicated in {0} sec for {1} "
+                                "bucket. on source cluster:{2}, on dest:{3}".\
+                            format(timeout, bucket.name, _count1, _count2))
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))

@@ -32,6 +32,12 @@ class CWCBaseTest(BaseTestCase):
         self.cli_cancel_collect = self.input.param("cli_cancel_collect", False)
         self.cli_upload = self.input.param("cli_upload", False)
         self.shutdown_nodes = self.input.param("shutdown_nodes", None)
+        self.add_services = self.input.param("add_services", None)
+        if self.add_services is not None:
+            if "-" in self.add_services:
+                self.add_services = self.add_services.split("-")
+            else:
+                self.add_services = [self.add_services]
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"

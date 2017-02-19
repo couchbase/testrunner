@@ -38,7 +38,6 @@ query_definition1 = QueryDefinition(
                                               "< 50 ORDER BY _id"),
     groups=["two_field_index1"],
     index_where_clause=" name IS NOT NULL ")
-projection = {"EntryKeys": [1], "PrimaryKey": False}
 
 query_definition2 = QueryDefinition(
     index_name="single_field_index",
@@ -50,7 +49,7 @@ query_definition2 = QueryDefinition(
     groups=["single_field_index"],
     index_where_clause=" name IS NOT NULL ")
 
-projection = {"EntryKeys": [1], "PrimaryKey": False}
+global_projection_value = {"PrimaryKey": True}
 
 
 class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
@@ -76,7 +75,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             for bucket in self.buckets:
                 if not id_map:
                     id_map = self.create_index_using_rest(bucket, query_definition)
-                self._multiscan_api_helper(scan_contents,bucket,offset=0,limit=limit,id_map=id_map)
+                self._multiscan_api_helper(scan_contents, bucket, offset=0, limit=limit, id_map=id_map)
 
     def test_without_offset_and_with_limit(self):
         """
@@ -124,7 +123,8 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             for bucket in self.buckets:
                 if not id_map:
                     id_map = self.create_index_using_rest(bucket, query_definition)
-                multiscan_result=self._multiscan_api_helper(scan_contents, bucket, offset=offset, limit=None, id_map=id_map)
+                multiscan_result = self._multiscan_api_helper(scan_contents, bucket, offset=offset, limit=None,
+                                                              id_map=id_map)
                 minimum = min(100, self.docs_per_day - offset)
                 if minimum < 0:
                     minimum = 0
@@ -246,7 +246,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                 name_inclusion
                             scan_content[0]["Filter"][1]["Inclusion"] = \
                                 age_inclusion
-                            multiscan_content = self._build_multiscan_body(scan_content, projection,
+                            multiscan_content = self._build_multiscan_body(scan_content, global_projection_value,
                                                                            offset=boundary_value,
                                                                            limit=10)
                             multiscan_result = \
@@ -278,7 +278,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             if not id_map:
                 id_map = self.create_index_using_rest(bucket, query_definition1)
                 for scan_content in scan_contents:
-                    multiscan_content = self._build_multiscan_body(scan_content, projection, offset=10,
+                    multiscan_content = self._build_multiscan_body(scan_content, global_projection_value, offset=10,
                                                                    limit=10)
                     multiscan_result = \
                         self.rest.multiscan_for_gsi_index_with_rest(
@@ -291,7 +291,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             Test multiscan where both offset and limit are negative values
         """
         id_map = 0
-        offset_limit_values = [0,-0, -10, -1000, -100000]
+        offset_limit_values = [0, -0, -10, -1000, -100000]
 
         scan_contents = []
         scan_contents.append([{"Seek": None,
@@ -308,7 +308,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                 name_inclusion
                             scan_content[0]["Filter"][1]["Inclusion"] = \
                                 age_inclusion
-                            multiscan_content = self._build_multiscan_body(scan_content, projection,
+                            multiscan_content = self._build_multiscan_body(scan_content, global_projection_value,
                                                                            offset=offset_limit_value,
                                                                            limit=offset_limit_value)
                             multiscan_result = \
@@ -341,7 +341,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                     scan_content[0]["Filter"][1]["Inclusion"] = \
                         0
                     offset = i * 10
-                    multiscan_content = self._build_multiscan_body(scan_content, projection, offset=offset,
+                    multiscan_content = self._build_multiscan_body(scan_content, global_projection_value, offset=offset,
                                                                    limit=10)
                     multiscan_result = \
                         self.rest.multiscan_for_gsi_index_with_rest(
@@ -374,7 +374,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                 name_inclusion
                             scan_content[0]["Filter"][1]["Inclusion"] = \
                                 age_inclusion
-                            multiscan_content = self._build_multiscan_body(scan_content, projection,
+                            multiscan_content = self._build_multiscan_body(scan_content, global_projection_value,
                                                                            offset=random.randint(0, self.docs_per_day),
                                                                            limit=random.randint(0, self.docs_per_day))
                             thread = Thread(target=self.rest.multiscan_for_gsi_index_with_rest,
@@ -410,7 +410,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                 name_inclusion
                             scan_content[0]["Filter"][1]["Inclusion"] = \
                                 age_inclusion
-                            multiscan_content = self._build_multiscan_body(scan_content, projection,
+                            multiscan_content = self._build_multiscan_body(scan_content, global_projection_value,
                                                                            offset=random.randint(0, self.docs_per_day),
                                                                            limit=random.randint(0, self.docs_per_day))
                             if i % 2 == 0:
@@ -585,7 +585,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                 name_inclusion
                             scan_content[0]["Filter"][1]["Inclusion"] = \
                                 age_inclusion
-                            multiscan_content = self._build_multiscan_body(scan_content, projection,
+                            multiscan_content = self._build_multiscan_body(scan_content, global_projection_value,
                                                                            offset=random.randint(0, self.docs_per_day),
                                                                            limit=random.randint(0, self.docs_per_day),
                                                                            distinct=True)
@@ -622,7 +622,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                 name_inclusion
                             scan_content[0]["Filter"][1]["Inclusion"] = \
                                 age_inclusion
-                            multiscan_content = self._build_multiscan_body(scan_content, projection,
+                            multiscan_content = self._build_multiscan_body(scan_content, global_projection_value,
                                                                            offset=random.randint(0, self.docs_per_day),
                                                                            limit=random.randint(0, self.docs_per_day),
                                                                            distinct=True)
@@ -644,7 +644,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
         query_definition2 = QueryDefinition(
             index_name="multiple_field_index",
-            index_fields=["name", "age","email","premium_customer"],
+            index_fields=["name", "age", "email", "premium_customer"],
             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                       "name > \"Adara\" AND "
                                                       "name < \"Winta\" "
@@ -661,7 +661,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             if not id_map:
                 id_map = self.create_index_using_rest(bucket, query_definition2)
             for scan_content in scan_contents:
-                self._multiscan_distinct_api_helper(scan_content,offset=0,limit=100,id_map=id_map)
+                self._multiscan_distinct_api_helper(scan_content, offset=0, limit=100, id_map=id_map)
 
     def test_with_offset_limit_and_with_composite_index_on_large_dataset(self):
         """
@@ -671,7 +671,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             log.error("Atleast 1M docs is required for this test to make sense!!")
         query_definition2 = QueryDefinition(
             index_name="multiple_field_index",
-            index_fields=["name", "age","email","premium_customer"],
+            index_fields=["name", "age", "email", "premium_customer"],
             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                       "name > \"Adara\" AND "
                                                       "name < \"Winta\" "
@@ -688,7 +688,8 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             if not id_map:
                 id_map = self.create_index_using_rest(bucket, query_definition2)
             for scan_content in scan_contents:
-                self._multiscan_distinct_api_helper(scan_content,offset=self.docs_per_day-1000, limit=1000, id_map=id_map,distinct=False)
+                self._multiscan_distinct_api_helper(scan_content, offset=self.docs_per_day - 1000, limit=1000,
+                                                    id_map=id_map, distinct=False)
 
     def test_with_distinct_true_with_multiple_filters_with_non_overlapping_data(self):
         """
@@ -696,7 +697,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
         query_definition2 = QueryDefinition(
             index_name="multiple_field_index",
-            index_fields=["name", "age","email","premium_customer"],
+            index_fields=["name", "age", "email", "premium_customer"],
             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                       "name > \"Adara\" AND "
                                                       "name < \"Winta\" "
@@ -708,15 +709,15 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         id_map = 0
         scan_contents = []
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "A", "High": "C"}]})
+                              "Filter": [{"Low": "A", "High": "C"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "D", "High": "F"}]})
+                              "Filter": [{"Low": "D", "High": "F"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "M", "High": "Q"}]})
+                              "Filter": [{"Low": "M", "High": "Q"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "S", "High": "V"}]})
+                              "Filter": [{"Low": "S", "High": "V"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "X", "High": "Z"}]})
+                              "Filter": [{"Low": "X", "High": "Z"}]})
 
         for bucket in self.buckets:
             if not id_map:
@@ -729,7 +730,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
         query_definition2 = QueryDefinition(
             index_name="multiple_field_index",
-            index_fields=["name", "age","email","premium_customer"],
+            index_fields=["name", "age", "email", "premium_customer"],
             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
                                                       "name > \"Adara\" AND "
                                                       "name < \"Winta\" "
@@ -741,15 +742,15 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         id_map = 0
         scan_contents = []
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "A", "High": "C"}]})
+                              "Filter": [{"Low": "A", "High": "C"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "B", "High": "F"}]})
+                              "Filter": [{"Low": "B", "High": "F"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "C", "High": "Q"}]})
+                              "Filter": [{"Low": "C", "High": "Q"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "D", "High": "V"}]})
+                              "Filter": [{"Low": "D", "High": "V"}]})
         scan_contents.append({"Seek": None,
-                               "Filter": [{"Low": "E", "High": "Z"}]})
+                              "Filter": [{"Low": "E", "High": "Z"}]})
 
         for bucket in self.buckets:
             if not id_map:
@@ -793,11 +794,320 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             if not id_map:
                 id_map = self.create_index_using_rest(bucket, query_definition2)
                 # multiscan_content = {"equal": "[\"Ebony\"]", "distinct":True, "limit": 100, "stale": False }
-            multiscan_content = {"equal":"[\'Netherlands\']"}
+            multiscan_content = {"equal": "[\'Netherlands\']"}
             multiscan_result = \
                 self.rest.lookup_gsi_index_with_rest(
                     id_map["id"], multiscan_content)
             log.info(multiscan_result)
+
+    def test_offset_limit_and_distinct_with_projection_with_primarykey(self):
+        """
+            Test offset,limit , distinct and primary key with different values
+        """
+        query_definition2 = QueryDefinition(
+            index_name="multiple_field_index",
+            index_fields=["name", "age", "email", "premium_customer"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" "
+                                                      "AND age > 0 AND age "
+                                                      "< 100 ORDER BY _id"),
+            groups=["multiple_field_index"],
+            index_where_clause=" name IS NOT NULL ")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "A", "High": "M"}]})
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "N", "High": "Z"}]})
+
+        projections = [{"EntryKeys": [0], "PrimaryKey": True},{"EntryKeys": [0, 1], "PrimaryKey": True},
+                       {"EntryKeys": [0, 1, 2], "PrimaryKey": True},{"EntryKeys": [0, 1, 2, 3], "PrimaryKey": True},
+                       {"EntryKeys": [0], "PrimaryKey": False}, {"EntryKeys": [0, 1], "PrimaryKey": False},
+                       {"EntryKeys": [0, 1, 2], "PrimaryKey": False}, {"EntryKeys": [0, 1, 2, 3], "PrimaryKey": False}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                self._multiscan_distinct_api_helper(scan_contents, offset=0, limit=100, id_map=id_map, projection=pr,
+                                                    distinct=False, verify=True)
+
+    def test_offset_limit_and_distinct_with_projection_of_all_values(self):
+        """
+            Test offset,limit and distinct with binary data
+        """
+        query_definition2 = QueryDefinition(
+            index_name="multiple_field_index",
+            index_fields=["name", "age", "email", "premium_customer"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" "
+                                                      "AND age > 0 AND age "
+                                                      "< 100 ORDER BY _id"),
+            groups=["multiple_field_index"],
+            index_where_clause=" name IS NOT NULL ")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "A", "High": "M"}]})
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "N", "High": "Z"}]})
+
+        projection = {"EntryKeys": [0, 1, 2, 3], "PrimaryKey": True}
+
+        for bucket in self.buckets:
+            if not id_map:
+                id_map = self.create_index_using_rest(bucket, query_definition2)
+            self._multiscan_distinct_api_helper(scan_contents, offset=0, limit=100, id_map=id_map,
+                                                projection=projection)
+
+    def test_offset_limit_and_projection_with_number_entry_keys_more_than_indexed_fields(self):
+        """
+            Test offset,limit and distinct with negative scenarios
+        """
+        query_definition2 = QueryDefinition(
+            index_name="multiple_field_index",
+            index_fields=["name", "age", "email", "premium_customer"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" "
+                                                      "AND age > 0 AND age "
+                                                      "< 100 ORDER BY _id"),
+            groups=["multiple_field_index"],
+            index_where_clause=" name IS NOT NULL ")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "A", "High": "M"}]})
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "N", "High": "Z"}]})
+
+        projections = [{"EntryKeys": [0, 1, 2, 3, 4], "PrimaryKey": True},
+                       {"EntryKeys": [0, 1, 2, 3, 4, 5, 6], "PrimaryKey": False}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                result = self._multiscan_distinct_api_helper(scan_contents, offset=0, limit=100, id_map=id_map,
+                                                             projection=pr, verify=False)
+                self.assertTrue("Invalid number of Entry Keys" in json.dumps(result))
+
+    def test_offset_limit_and_projection_with_entry_indices_more_than_indexed_fields(self):
+        """
+            Test offset,limit and distinct with negative scenarios
+        """
+        query_definition2 = QueryDefinition(
+            index_name="multiple_field_index",
+            index_fields=["name", "age", "email", "premium_customer"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" "
+                                                      "AND age > 0 AND age "
+                                                      "< 100 ORDER BY _id"),
+            groups=["multiple_field_index"],
+            index_where_clause=" name IS NOT NULL ")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "A", "High": "M"}]})
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "N", "High": "Z"}]})
+
+        projections = [{"EntryKeys": [7, 8, 9], "PrimaryKey": True},
+                       {"EntryKeys": [1000, 20000, 30000000], "PrimaryKey": False},
+                       {"EntryKeys": [140000], "PrimaryKey": True},
+                       {"EntryKeys": [-1], "PrimaryKey": True},
+                       {"EntryKeys": [-10, -20], "PrimaryKey": True}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                result = self._multiscan_distinct_api_helper(scan_contents, offset=0, limit=100, id_map=id_map,
+                                                             projection=pr, verify=False)
+                self.assertTrue("Invalid Entry Key" in json.dumps(result))
+
+    def test_offset_limit_and_projection_with_duplicate_entry_keys(self):
+        """
+            Test offset,limit and distinct with duplicate entry keys
+        """
+        query_definition2 = QueryDefinition(
+            index_name="multiple_field_index",
+            index_fields=["name", "age", "email", "premium_customer"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" "
+                                                      "AND age > 0 AND age "
+                                                      "< 100 ORDER BY _id"),
+            groups=["multiple_field_index"],
+            index_where_clause=" name IS NOT NULL ")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "A", "High": "M"}]})
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "N", "High": "Z"}]})
+
+        projections = [{"EntryKeys": [0, 1, 0], "PrimaryKey": True},
+                       {"EntryKeys": [1, 1, 2], "PrimaryKey": True},
+                       {"EntryKeys": [1, 2, 3, 3], "PrimaryKey": False},
+                       {"EntryKeys": [1, 1, 1, 1], "PrimaryKey": False}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                # Validations could fail
+                # See MB-22724 for more details
+                self._multiscan_distinct_api_helper(scan_contents, offset=0, limit=100, id_map=id_map,
+                                                    projection=pr)
+
+    def test_offset_limit_and_projection_with_indexed_values_of_large_size(self):
+        """
+            Test offset,limit and distinct with large indexed values
+        """
+        query_definition2 = QueryDefinition(
+            index_name="multiple_field_index",
+            index_fields=["name", "age", "email", "premium_customer", "travel_history_code", "countries_visited",
+                          "mutated", "credit_cards", "secret_combination", "address", "question_values",
+                          "travel_details", "booking", "travel_history"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" "
+                                                      "AND age > 0 AND age "
+                                                      "< 100 ORDER BY _id"),
+            groups=["multiple_field_index"],
+            index_where_clause=" name IS NOT NULL ")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "A", "High": "M"}]})
+        scan_contents.append({"Seek": None,
+                              "Filter": [{"Low": "N", "High": "Z"}]})
+
+        projections = [{"EntryKeys": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], "PrimaryKey": True},
+                       # See MB-22724 for more details
+                       # {"EntryKeys": [1, 2, 0, 4, 5, 3, 13, 11, 12, 9, 7, 8, 6, 10], "PrimaryKey": False}
+                      ]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                self._multiscan_distinct_api_helper(scan_contents, offset=0, distinct=False, limit=100, id_map=id_map,
+                                                    projection=pr)
+
+    def test_with_offset_limit_projection_and_with_distinct_array_indexes(self):
+        """
+            Test multiscan with offset and limit with distinct array indexes
+        """
+        query_definition2 = QueryDefinition(index_name="array_index_travel_details",
+                                            index_fields=["DISTINCT ARRAY t FOR t in TO_ARRAY(`travel_details`) END"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "ANY t IN TO_ARRAY(`travel_details`) SATISFIES t.country = \"India\" END ORDER BY _id"),
+                                            groups=["all", "array", "duplicate_array", "range",
+                                                    "orderby", "equals"],
+                                            index_where_clause=" travel_details IS NOT NULL ")
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                               "Filter": None})
+        projections = [{"EntryKeys": [], "PrimaryKey": True}, {"EntryKeys": [0], "PrimaryKey": True},
+                       {"EntryKeys": [0], "PrimaryKey": False}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                self._multiscan_distinct_api_helper(scan_contents, offset=0, distinct=False, limit=100, id_map=id_map,
+                                                    projection=pr)
+
+    def test_with_offset_limit_projection_and_with_duplicate_array_indexes(self):
+        """
+            Test multiscan with offset and limit with duplicate array indexes
+        """
+        query_definition2 = QueryDefinition(index_name="array_index_travel_details",
+                                            index_fields=["ALL ARRAY t FOR t in TO_ARRAY(`travel_details`) END"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "ANY t IN TO_ARRAY(`travel_details`) SATISFIES t.country = \"India\" END ORDER BY _id"),
+                                            groups=["all", "array", "duplicate_array", "range",
+                                                    "orderby", "equals"],
+                                            index_where_clause=" travel_details IS NOT NULL ")
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                               "Filter": None})
+        projections = [{"EntryKeys": [], "PrimaryKey": True}, {"EntryKeys": [0], "PrimaryKey": True},
+                       {"EntryKeys": [0], "PrimaryKey": False}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                self._multiscan_distinct_api_helper(scan_contents, offset=0, distinct=False, limit=100, id_map=id_map,
+                                                    projection=pr)
+
+    def test_with_offset_limit_projection_and_with_primary_index(self):
+        """
+            Test multiscan with offset and limit with primary index
+        """
+        query_definition2 = QueryDefinition(
+            index_name="primary_index",
+            index_fields=["name"],
+            query_template="SELECT * FROM %s",
+            groups=["full_data_set", "primary"], index_where_clause="")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                               "Filter": [{"Low": "A", "High": "Z"}]})
+        projections = [{"EntryKeys": [], "PrimaryKey": True},
+                       {"EntryKeys": [], "PrimaryKey": False},
+                       {"EntryKeys": [0], "PrimaryKey": True},
+                       {"EntryKeys": [0], "PrimaryKey": False},
+                       {"PrimaryKey": True},
+                       {"PrimaryKey": False}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                self._multiscan_distinct_api_helper(scan_contents, offset=0, distinct=False, limit=100,
+                                                    id_map=id_map, projection=pr)
+
+    def test_with_offset_limit_projection_and_with_primary_index_with_distinct_true(self):
+        """
+            Test multiscan with offset and limit with primary index and distinct=True
+        """
+        query_definition2 = QueryDefinition(
+            index_name="primary_index",
+            index_fields=["name"],
+            query_template="SELECT * FROM %s",
+            groups=["full_data_set", "primary"], index_where_clause="")
+
+        id_map = 0
+        scan_contents = []
+        scan_contents.append({"Seek": None,
+                               "Filter": [{"Low": "A", "High": "Z"}]})
+        projections = [{"EntryKeys": [], "PrimaryKey": True},
+                       {"EntryKeys": [], "PrimaryKey": False},
+                       {"PrimaryKey": True},
+                       {"PrimaryKey": False}]
+
+        for pr in projections:
+            for bucket in self.buckets:
+                if not id_map:
+                    id_map = self.create_index_using_rest(bucket, query_definition2)
+                self._multiscan_distinct_api_helper(scan_contents, offset=0, distinct=True, limit=100,
+                                                    id_map=id_map, projection=pr)
 
     def _create_composite_index_query_definitions(self):
         definitions_list = []
@@ -895,15 +1205,24 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         if sort != multiscan_doc_list:
             raise Exception(msg)
 
-    def _verify_distinct_items(self, total_result, multiscan_result, offset=0, limit=100, distinct=False):
+    def _verify_distinct_items(self, total_result, multiscan_result, offset=0, limit=100, distinct=False,
+                               projection=global_projection_value):
         temp_doc_list = []
         ms_doc_list = []
         for tr in total_result:
+            if projection["PrimaryKey"] is False and tr["docid"] != "":
+                assert False
+            if projection["PrimaryKey"] is True and tr["docid"] == "":
+                assert False
             temp_doc_val = str(tr["key"])
             " ".join(temp_doc_val)
             temp_doc_list.append(temp_doc_val)
 
         for ms in multiscan_result:
+            if projection["PrimaryKey"] is False and ms["docid"] != "":
+                assert False
+            if projection["PrimaryKey"] is True and ms["docid"] == "":
+                assert False
             ms_doc_val = str(ms["key"])
             " ".join(ms_doc_val)
             ms_doc_list.append(ms_doc_val)
@@ -918,10 +1237,10 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
             final_index = None
         array_limit_offset = temp_doc_list_distinct[offset:final_index]
         log.info(array_limit_offset)
-        log.info(ms_doc_list)
+        log.info(sorted(ms_doc_list))
         self.assertEqual(len(array_limit_offset), len(ms_doc_list), "No. of items mismatch")
         msg = "The number of rows match but the results mismatch, please check"
-        if sorted(array_limit_offset) != ms_doc_list:
+        if sorted(array_limit_offset) != sorted(ms_doc_list):
             raise Exception(msg)
 
     def _multiscan_api_helper(self, scan_contents, bucket, offset, limit, id_map):
@@ -932,7 +1251,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                         name_inclusion
                     scan_content[0]["Filter"][1]["Inclusion"] = \
                         age_inclusion
-                    multiscan_content = self._build_multiscan_body(scan_content, projection, offset=offset,
+                    multiscan_content = self._build_multiscan_body(scan_content, global_projection_value, offset=offset,
                                                                    limit=limit)
                     multiscan_result = \
                         self.rest.multiscan_for_gsi_index_with_rest(
@@ -942,16 +1261,23 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                                limit=limit)
                     return multiscan_result
 
-    def _multiscan_distinct_api_helper(self, scan_contents, offset, limit, id_map,distinct=True):
+    def _multiscan_distinct_api_helper(self, scan_contents, offset=0, limit=100, id_map=0, distinct=True,
+                                       projection=global_projection_value, verify=True):
         multiscan_content = self._build_multiscan_body(scan_contents, projection, offset=0, limit=0,
                                                        distinct=False)
         multiscan_result = \
             self.rest.multiscan_for_gsi_index_with_rest(
                 id_map["id"], json.dumps(multiscan_content))
-        multiscan_content = self._build_multiscan_body(scan_contents, projection, offset=offset,
-                                                       limit=limit, distinct=distinct)
+
+        multiscan_content1 = self._build_multiscan_body(scan_contents, projection, offset=offset,
+                                                        limit=limit, distinct=distinct)
         multiscan_result1 = \
             self.rest.multiscan_for_gsi_index_with_rest(
-                id_map["id"], json.dumps(multiscan_content))
+                id_map["id"], json.dumps(multiscan_content1))
         log.info(multiscan_result1)
-        self._verify_distinct_items(multiscan_result, multiscan_result1, offset=offset, limit=limit, distinct=distinct)
+
+        if verify:
+            self._verify_distinct_items(multiscan_result, multiscan_result1, offset=offset, limit=limit,
+                                        distinct=distinct, projection=projection)
+        else:
+            return multiscan_result1

@@ -316,7 +316,7 @@ class Control():
 class ControlsHelper():
     def __init__(self, driver):
         self.driver = driver
-        file = "pytests/ui/uilocators-watson.conf"
+        file = "pytests/ui/uilocators-spock.conf"
         config = ConfigParser.ConfigParser()
         config.read(file)
         self.locators = config
@@ -364,21 +364,12 @@ class BaseHelperControls():
         self._login_btn = helper.find_control('login', 'login_btn')
         self._logout_btn = helper.find_control('login', 'logout_btn')
         self.error = helper.find_control('login', 'error')
-        self.ajax_spinner = helper.find_control('login', 'ajax_spinner')
-
 
 class BaseHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = BaseHelperControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=100)
-
-    def wait_ajax_loaded(self):
-        try:
-            self.wait.until_not(lambda fn:  self.controls.ajax_spinner.is_displayed(),
-                                "Page is still loaded")
-        except StaleElementReferenceException:
-            pass
 
     def create_screenshot(self):
         path_screen = self.tc.input.ui_conf['screenshots'] or 'logs/screens'
@@ -403,7 +394,6 @@ class BaseHelper():
         self.wait.until(lambda fn: self.controls._login_btn.is_displayed(),
                         "Login Button is not displayed in %d sec" % (self.wait._timeout))
         self.controls._login_btn.click()
-        BaseHelper(self.tc).wait_ajax_loaded()
         self.tc.log.info("user %s is logged in" % user)
 
     def logout(self):
