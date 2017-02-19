@@ -20,7 +20,6 @@ from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 from tasks.future import TimeoutError
-from memcached.helper.kvstore import Synchronized
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.exception import XDCRException
@@ -2144,7 +2143,7 @@ class CouchbaseCluster:
         buckets = copy.copy(self.get_buckets())
 
         for bucket in buckets:
-            items = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             while True:
                 try:
                     active_keys = int(rest.get_active_key_count(bucket.name))
@@ -2174,7 +2173,7 @@ class CouchbaseCluster:
 
         for bucket in buckets:
             if len(self.__nodes) > 1:
-                items = sum([len(kv_store) for kv_store in bucket.kvs.values() if kv_store is not None])
+                items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 items = items * bucket.numReplicas
             else:
                 items = 0
@@ -3084,32 +3083,34 @@ class XDCRNewBaseTest(unittest.TestCase):
         for key in valid_keys_src:
             # replace/add the values for each key in src kvs
             if key not in deleted_keys_dest:
-                part1 = kv_src_bucket[kvs_num].acquire_partition(key)
-                part2 = kv_dest_bucket[kvs_num].acquire_partition(key)
+                partition1 = kv_src_bucket[kvs_num].acquire_partition(key)
+                partition2 = kv_dest_bucket[kvs_num].acquire_partition(key)
                 # In case of lww, if source's key timestamp is lower than
                 # destination than no need to set.
-                with Synchronized(dict(part1)) as partition1, Synchronized(dict(part2)) as partition2:
-                    if self.__lww and partition1.get_timestamp(
-                            key) < partition2.get_timestamp(key):
-                        continue
-                    key_add = partition1.get_key(key)
-                    partition2.set(
-                        key,
-                        key_add["value"],
-                        key_add["expires"],
-                        key_add["flag"])
+                if self.__lww and partition1.get_timestamp(
+                        key) < partition2.get_timestamp(key):
+                    continue
+                key_add = partition1.get_key(key)
+                partition2.set(
+                    key,
+                    key_add["value"],
+                    key_add["expires"],
+                    key_add["flag"])
+                kv_src_bucket[kvs_num].release_partition(key)
+                kv_dest_bucket[kvs_num].release_partition(key)
 
         for key in deleted_keys_src:
             if key not in deleted_keys_dest:
-                part1 = kv_src_bucket[kvs_num].acquire_partition(key)
-                part2 = kv_dest_bucket[kvs_num].acquire_partition(key)
+                partition1 = kv_src_bucket[kvs_num].acquire_partition(key)
+                partition2 = kv_dest_bucket[kvs_num].acquire_partition(key)
                 # In case of lww, if source's key timestamp is lower than
                 # destination than no need to delete.
-                with Synchronized(dict(part1)) as partition1, Synchronized(dict(part2)) as partition2:
-                    if self.__lww and partition1.get_timestamp(
-                            key) < partition2.get_timestamp(key):
-                        continue
-                    partition2.delete(key)
+                if self.__lww and partition1.get_timestamp(
+                        key) < partition2.get_timestamp(key):
+                    continue
+                partition2.delete(key)
+                kv_src_bucket[kvs_num].release_partition(key)
+                kv_dest_bucket[kvs_num].release_partition(key)
 
         valid_keys_dest, deleted_keys_dest = kv_dest_bucket[
             kvs_num].key_set()
