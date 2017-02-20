@@ -933,6 +933,24 @@ class RestConnection(object):
             log.info(content)
         return status
 
+    #temporary method to change storage mode to plasma
+    def set_indexer_storage_mode_to_plasma(self, username='Administrator',
+                                 password='password'):
+        api = self.index_baseUrl + 'settings/'
+        authorization = base64.encodestring('%s:%s' % (username, password))
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        params = urllib.urlencode({'indexer.settings.storage_mode': 'plasma'})
+        error_message = "storage mode cannot be set to Plasma"
+        log.info('indexer.settings.storage_mode : plasma')
+        status, content, header = self._http_request(api, 'POST',
+                                                     headers=headers,
+                                                     params=params)
+        if not status and error_message in content:
+            #TODO: Currently it just acknowledges if there is an error.
+            #And proceeds with further initialization.
+            log.info(content)
+        return status
+
     def get_cluster_ceritificate(self):
         api = self.baseUrl + 'pools/default/certificate'
         status, content, _ = self._http_request(api, 'GET')
