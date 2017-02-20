@@ -152,17 +152,17 @@ class CBASDemoQueries(CBASBaseTest):
         self.sleep(5)
 
         # Execute Query
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             query_record['query'], self.master)
         self.log.info('Actual Status : ' + status)
         self.log.info('Expected Status : ' + query_record['expected_status'])
-        self.log.info('Actual # Hits : ' + metrics['resultCount'])
+        self.log.info('Actual # Hits : ' + str(metrics['resultCount']))
         self.log.info('Expected # Hits : ' + query_record['expected_hits'])
 
         # Validate Query output
         result = False
         if (status == query_record['expected_status']) and (
-            metrics['resultCount'] == query_record['expected_hits']):
+            int(metrics['resultCount']) == int(query_record['expected_hits'])):
             result = True
 
         if not result:
