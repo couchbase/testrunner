@@ -663,7 +663,8 @@ class N1QLHelper():
         self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
 
-    def verify_indexes_redistributed(self, map_before_rebalance, map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False):
+    def verify_indexes_redistributed(self, map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
+                                     stats_map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False):
         # verify that number of indexes before and after rebalance are same
         no_of_indexes_before_rebalance = 0
         no_of_indexes_after_rebalance = 0
@@ -717,11 +718,41 @@ class N1QLHelper():
         if swap_rebalance:
             for node_in in nodes_in:
                 # strip of unnecessary data for comparison
-                ip_address = str(node_in).replace("ip:", "").replace(" port", "").replace(" port:8091", "").replace(
-                    " ssh_username:root", "")
+                ip_address = str(node_in).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "")
                 if ip_address not in indexer_nodes_after_rebalance:
                     self.log.info("swap rebalanced in node is not distributed any indexes")
                     raise Exception("swap rebalanced in node is not distributed any indexes")
+
+        # verify that items_count before and after rebalance are same
+        items_count_before_rebalance = {}
+        items_count_after_rebalance = {}
+        for bucket in stats_map_before_rebalance:
+            for index in stats_map_before_rebalance[bucket]:
+                items_count_before_rebalance[index] = stats_map_before_rebalance[bucket][index][
+                    "items_count"]
+        for bucket in stats_map_after_rebalance:
+            for index in stats_map_after_rebalance[bucket]:
+                items_count_after_rebalance[index] = stats_map_after_rebalance[bucket][index]["items_count"]
+        self.log.info("item_count of indexes before rebalance {0}".format(items_count_before_rebalance))
+        self.log.info("item_count of indexes after rebalance {0}".format(items_count_after_rebalance))
+        if cmp(items_count_before_rebalance, items_count_after_rebalance) != 0:
+            self.log.info("items_count mismatch")
+            raise Exception("items_count mismatch")
+
+        # verify that index status before and after rebalance are same
+        index_state_before_rebalance = {}
+        index_state_after_rebalance = {}
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                index_state_before_rebalance[index] = map_before_rebalance[bucket][index]["status"]
+        for bucket in map_after_rebalance:
+            for index in map_after_rebalance[bucket]:
+                index_state_after_rebalance[index] = map_after_rebalance[bucket][index]["status"]
+        self.log.info("index status of indexes rebalance {0}".format(index_state_before_rebalance))
+        self.log.info("index status of indexes rebalance {0}".format(index_state_after_rebalance))
+        if cmp(index_state_before_rebalance, index_state_after_rebalance) != 0:
+            self.log.info("index status mismatch")
+            raise Exception("index status mismatch")
 
         # Rebalance is not guaranteed to achieve a balanced cluster.
         # The indexes will be distributed in a manner to satisfy the resource requirements of each index.
