@@ -476,20 +476,26 @@ class QueriesIndexTests(QueryTests):
                 plan3 = ExplainPlanHelper(actual_result)
                 self.assertTrue(len(plan3['~children'][0]['spans'])==1)
                 # There is different expected behavior in 4.7 vs earlier versions
-                if float(version[:3]) >= 4.7:
-                    self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0] == 'array_min($1)')
+                if self.index_type.lower() == 'gsi':
+                    self.assertTrue(plan3['~children'][0]['spans'][0]['range'][0]['low'] == 'array_min($1)')
                 else:
-                    self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0] == 'null')
+                    self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0] == 'array_min($1)')
 
                 self.query = 'explain select join_day from %s where join_day in  [] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan4 = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0]=="null")
+                if self.index_type.lower() == 'gsi':
+                    self.assertTrue(plan4['~children'][0]['spans'][0]['range'][0]['high']=="null")
+                else:
+                    self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0] == "null")
 
                 self.query = 'explain select join_day from %s where join_day in  [] and join_day is not null '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan7 = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan7['~children'][0]['spans'][0]['Range']['High'][0]=="null")
+                if self.index_type.lower() == 'gsi':
+                    self.assertTrue(plan4['~children'][0]['spans'][0]['range'][0]['high']=="null")
+                else:
+                    self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0] == "null")
                 
                 self.query = 'explain select join_day from %s where join_day in  [$1,$2,$3] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
@@ -1189,7 +1195,7 @@ class QueriesIndexTests(QueryTests):
 
                 self.query = "EXPLAIN select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
                 bucket.name,bucket.name) + \
-                             "ND  NOT (department = 'Manager') order BY name limit 10"
+                             "AND  NOT (department = 'Manager') order BY name limit 10"
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
@@ -3523,7 +3529,10 @@ class QueriesIndexTests(QueryTests):
                     self.query = "explain select  name,skills[0] as skills  from %s where skills[0]='skill2010' and join_yr=2010 and ( VMs[0].os IN ['ubuntu','windows','linux'] OR VMs[0].os IN ['ubuntu','windows','linux'] ) order by _id asc LIMIT 10 OFFSET 0;" % (bucket.name)
                     actual_result=self.run_cbq_query()
                     plan = ExplainPlanHelper(actual_result)
-                    self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan2")
+                    if self.index_type.lower() == 'gsi':
+                        self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan2")
+                    else:
+                        self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan")
                     self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["index"] == index_name)
                     #self.test_explain_union(index_name)
                     self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux','linux'] order by name LIMIT 15 OFFSET 0;" % (bucket.name)
