@@ -2224,7 +2224,7 @@ class BaseTestCase(unittest.TestCase):
                                            delete_per=0, expiry_per=0, start=0, end=0):
         count = end - start
         change_dist_map = {}
-        create_count = count * create_per
+        create_count = int(count * create_per)
         start_pointer = start
         end_pointer = start
         if update_per != 0:
