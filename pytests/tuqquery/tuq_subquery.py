@@ -164,7 +164,7 @@ class QuerySubqueryTests(QueryTests):
                      ' order by meta().id limit 2'
         actual_result = self.run_cbq_query()
         print actual_result['results']
-        self.assertTrue(actual_result['results']==[{u'id': u'cb8ad18a-242a-4174-aea6-18a8522637b9', u'name': [{u'FirstName': u'employeefirstname-4'}, {u'MiddleName': u'employeemiddlename-4'}, {u'LastName': u'employeelastname-4'}]}, {u'id': u'f89a8909-ea23-4051-8021-161d0d06ae20', u'name': [{u'FirstName': u'employeefirstname-4'}, {u'MiddleName': u'employeemiddlename-4'}, {u'LastName': u'employeelastname-4'}]}])
+        self.assertTrue(actual_result['results']==[{ u'name': [{u'FirstName': u'employeefirstname-4'}, {u'MiddleName': u'employeemiddlename-4'}, {u'LastName': u'employeelastname-4'}]}, { u'name': [{u'FirstName': u'employeefirstname-4'}, {u'MiddleName': u'employeemiddlename-4'}, {u'LastName': u'employeelastname-4'}]}])
 
 
     def test_correlated_queries_predicate_not_exists(self):
