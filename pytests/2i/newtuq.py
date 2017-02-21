@@ -25,9 +25,10 @@ class QueryTests(BaseTestCase):
             self.log.info ("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
 
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        if self.gsi_type == "plasma":
-            indexer_rest = RestConnection(indexer_node[0])
-            indexer_rest.set_indexer_storage_mode_to_plasma()
+        # Set indexer storage mode
+        indexer_rest = RestConnection(indexer_node[0])
+        doc = {"indexer.settings.storage_mode": self.gsi_type}
+        indexer_rest.set_index_settings(doc)
         self.indexer_scanTimeout = self.input.param("indexer_scanTimeout", None)
         if self.indexer_scanTimeout is not None:
             for server in indexer_node:
