@@ -486,6 +486,78 @@ class StableTopFTS(FTSBaseTest):
         self.generate_random_queries(index, self.num_queries, self.query_types)
         self.run_query_and_compare(index)
 
+    def test_query_string_combinations(self):
+        """
+        uses RQG framework minus randomness for testing query-string combinations of '', '+', '-'
+        {
+
+            mterms := [
+                [],                         // none
+                ["+Wikipedia"],             // one term
+                ["+Wikipedia", "+English"], // two terms
+                ["+the"],                   // one term (stop word)
+                ["+the", "+English"],       // two terms (one stop)
+                ["+the", "+and"],           // two terms (both stop)
+            ]
+
+            sterms = [
+                [],                         // none
+                ["Category"],               // one term
+                ["Category", "United"],     // two terms
+                ["of"],                     // one term (stop word)
+                ["of", "United"],           // two terms (one stop)
+                ["of", "at"],               // two terms (both stop)
+            ]
+
+            nterms = [
+                [],                         // none
+                ["-language"],              // one term
+                ["-language", "-States"],   // two terms
+                ["-for"],                   // one term (stop word)
+                ["-for", "-States"],        // two terms (one stop)
+                ["-for", "-with"],          // two terms (both stop)
+            ]
+        }
+
+        """
+        self.load_data()
+
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        index.fts_queries = []
+        mterms = [[],
+                  ["+revision.text.#text:\"Wikipedia\""],
+                  ["+revision.text.#text:\"Wikipedia\"", "+revision.text.#text:\"English\""],
+                  ["+revision.text.#text:\"the\""],
+                  ["+revision.text.#text:\"the\"", "+revision.text.#text:\"English\""],
+                  ["+revision.text.#text:\"the\"", "+revision.text.#text:\"and\""]]
+        sterms = [[],
+                  ["revision.text.#text:\"Category\""],
+                  ["revision.text.#text:\"Category\"", "revision.text.#text:\"United\""],
+                  ["revision.text.#text:\"of\""],
+                  ["revision.text.#text:\"of\"", "revision.text.#text:\"United\""],
+                  ["revision.text.#text:\"of\"", "revision.text.#text:\"at\""]]
+        nterms = [[],
+                  ["-revision.text.#text:\"language\""],
+                  ["-revision.text.#text:\"language\"", "-revision.text.#text:\"States\""],
+                  ["-revision.text.#text:\"for\""],
+                  ["-revision.text.#text:\"for\"", "-revision.text.#text:\"States\""],
+                  ["-revision.text.#text:\"for\"", "-revision.text.#text:\"with\""]]
+        for mterm in mterms:
+            for sterm in sterms:
+                for nterm in nterms:
+                    clause  = (' '.join(mterm) + ' ' + ' '.join(sterm) + ' ' + ' '.join(nterm)).strip()
+                    query = {"query": clause}
+                    index.fts_queries.append(json.loads(json.dumps(query,ensure_ascii=False)))
+                    if self.compare_es:
+                        self.es.es_queries.append(json.loads(json.dumps({"query": {"query_string": query}},
+                                                                     ensure_ascii=False)))
+        self.run_query_and_compare(index)
+
+
     def index_edit_and_query_custom_mapping(self):
         """
         Index and query index, update map, query again, uses RQG
