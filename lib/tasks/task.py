@@ -833,21 +833,23 @@ class GenericLoadingTask(Thread, Task):
             self.set_exception(error)
 
 
-    def _update_batch(self, partition_keys_dic, key_val):
+    def _update_batch(self, partition_keys_dic, key_val, shared_client = None):
         try:
             self._process_values_for_update(partition_keys_dic, key_val)
-            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            client = shared_client or self.client
+            client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
             self._populate_kvstore(partition_keys_dic, key_val)
         except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
             self.state = FINISHED
             self.set_exception(error)
 
 
-    def _delete_batch(self, partition_keys_dic, key_val):
+    def _delete_batch(self, partition_keys_dic, key_val, shared_client = None):
         for partition, keys in partition_keys_dic.items():
             for key in keys:
                 try:
-                    self.client.delete(key)
+                    client = shared_client or self.client
+                    client.delete(key)
                     partition.delete(key)
                 except MemcachedError as error:
                     if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
@@ -861,9 +863,10 @@ class GenericLoadingTask(Thread, Task):
                     self.set_exception(error)
 
 
-    def _read_batch(self, partition_keys_dic, key_val):
+    def _read_batch(self, partition_keys_dic, key_val, shared_client = None):
         try:
-            o, c, d = self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+            client = shared_client or self.client
+            o, c, d = client.getMulti(key_val.keys(), self.pause, self.timeout)
         except MemcachedError as error:
                 self.state = FINISHED
                 self.set_exception(error)
@@ -964,11 +967,11 @@ class LoadDocumentsTask(GenericLoadingTask):
             if self.op_type == 'create':
                 self._create_batch(partition_keys_dic, key_value, shared_client)
             elif self.op_type == 'update':
-                self._update_batch(partition_keys_dic, key_value)
+                self._update_batch(partition_keys_dic, key_value, shared_client)
             elif self.op_type == 'delete':
-                self._delete_batch(partition_keys_dic, key_value)
+                self._delete_batch(partition_keys_dic, key_value, shared_client)
             elif self.op_type == 'read':
-                self._read_batch(partition_keys_dic, key_value)
+                self._read_batch(partition_keys_dic, key_value, shared_client)
             else:
                 self.state = FINISHED
                 self.set_exception(Exception("Bad operation type: %s" % self.op_type))
@@ -992,8 +995,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         # only run high throughput for batch-create workloads
         # also check number of input generators isn't greater than
         # process_concurrency as too many generators become inefficient
-        self.is_high_throughput_mode = self.op_type == "create" and \
-            self.batch_size > 1 and \
+        self.is_high_throughput_mode = self.op_type != "delete" and \
             len(self.generators) < self.process_concurrency
         self.input_generators = generators
 
@@ -1039,6 +1041,8 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
         # high throughput mode requires partitioning the doc generators
         self.generators = []
+        if self.batch_size == 1:
+            self.batch_size = 1000
         for gen in self.input_generators:
             gen_range = int(gen.end/self.process_concurrency)
             for pos in range(gen.start, gen.end, gen_range):
@@ -1053,7 +1057,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                         self.batch_size)
                 self.generators.append(batch_gen)
 
-     
+
         # run generator processes
         iterator = 0
         all_processes = []
