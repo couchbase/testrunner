@@ -133,6 +133,17 @@ class QueryCurlTests(QueryTests):
         expected_result = self.run_cbq_query("select * from default d where d.name == 'employee-9'")
         self.assertTrue(json_curl['results'] == expected_result['results'])
 
+    '''Test if you can access a protected bucket with curl and authorization'''
+    def test_protected_bucket(self):
+        # The query that curl will send to couchbase
+        n1ql_query = 'select * from bucket0 limit 5'
+        # This is the query that the cbq-engine will execute
+        query = "select curl('POST', "+ self.query_service_url +", "
+        options = "{'data' : 'statement=%s', 'user': 'Administrator:password'})" % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath,query+options,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['metrics']['resultCount'] == 5)
+
 ##############################################################################################
 #
 #   External endpoint Tests
@@ -202,7 +213,7 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(json_curl['metrics']['resultCount'] == 1 and
                         json_curl['results'][0]['result']['username'] == 'Bret')
 
-    '''Test requests to the google maps api with an api key'''
+    '''Test request to the google maps api with an api key'''
     def test_external_json_google_api_key(self):
         # Test the google maps json endpoint with a valid api key and make sure it works
         curl_output = self.shell.execute_command("curl --get https://maps.googleapis.com/maps/api/geocode/json -d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'")
@@ -261,25 +272,38 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(actual_curl['errors'][0]['msg'] ==
                         "Errorevaluatingprojection.-cause:InvalidJSONendpointgoogle.com")
 
-    '''WIP'''
+    '''Test if a protected bucket can be accessed without giving its password'''
+    def test_protected_bucket_noauth(self):
+        # The query that curl will send to couchbase
+        n1ql_query = 'select * from bucket0 limit 5'
+        # This is the query that the cbq-engine will execute
+        query = "select curl('POST', "+ self.query_service_url +", {'data' : 'statement=%s'})" % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == "AuthorizationFailedKeyspacebucket0")
+
+    '''Test an unsupported method in n1ql curl
+        -DELETE.'''
     def test_unsupported_method(self):
         url = "'http://google.com/'"
         query="select curl('DELETE', "+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        import pdb; pdb.set_trace()
+        self.assertTrue(actual_curl['errors'][0]['msg'] ==
+                        "Errorevaluatingprojection.-cause:Methodnotsupported")
 
     '''Tests what happens when you don't give an api key to a url that requires an api key
         - do not provide an api key
         - provide an incorrect api key'''
     def test_external_json_invalid_api_key(self):
+        # Don't provide an apikey to a url that requires one
         url = "'https://api.themoviedb.org/3/movie/550'"
         query="select curl('GET', "+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['results'][0]['$1']['status_message'] == "InvalidAPIkey:Youmustbegrantedavalidkey.")
 
-        # Test the google maps json enpoint with an invalid api key and make sure it errors
+        # Test the google maps json endpoint with an invalid api key and make sure it errors
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_'}"
         query="select curl('GET', "+ url +", %s" % options + ")"
