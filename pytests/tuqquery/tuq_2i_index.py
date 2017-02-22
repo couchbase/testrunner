@@ -32,6 +32,7 @@ class QueriesIndexTests(QueryTests):
     def suite_tearDown(self):
         super(QueriesIndexTests, self).suite_tearDown()
 
+
     def test_meta_indexcountscan(self):
         for bucket in self.buckets:
             created_indexes = []
@@ -88,8 +89,7 @@ class QueriesIndexTests(QueryTests):
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}]'
 
                actual_result = self.run_cbq_query()
-               print "count is {0}".format(actual_result['results'])
-               #self.assertTrue(actual_result['results']==[{u'$1': 60}])
+               self.assertTrue(actual_result['results']==[{u'$1': 360}])
 
                self.query = 'explain select count(1) from {0} where name = ['.format(bucket.name)+\
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}] and join_yr=2010'
@@ -100,8 +100,7 @@ class QueriesIndexTests(QueryTests):
                self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}] and department="Support"'
                actual_result = self.run_cbq_query()
-               print "coun1 is {0}".format(actual_result['results'])
-               self.assertTrue(actual_result['results'] == [{ "$1": 12}])
+               self.assertTrue(actual_result['results'] == [{u'$1': 36}])
 
                self.query = 'drop index {0}.idx'.format(bucket.name)
                self.run_cbq_query()
@@ -118,6 +117,7 @@ class QueriesIndexTests(QueryTests):
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
                '] and meta().id = "query-testemployee10317.9004497-0"'
                actual_result = self.run_cbq_query()
+               print "count is {0}".format(actual_result['results'])
                self.assertTrue(actual_result['results'] == ([{u'$1': 1}]))
 
 
@@ -131,6 +131,7 @@ class QueriesIndexTests(QueryTests):
                self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
                self.query = 'select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
+               print "count is {0}".format(actual_result['results'])
                self.assertTrue(actual_result['results']==[{u'$1': 1}])
 
                self.query = 'drop index {0}.idx'.format(bucket.name)
@@ -142,6 +143,7 @@ class QueriesIndexTests(QueryTests):
                self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan")
                self.query = 'select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
+               print "count is {0}".format(actual_result['results'])
                self.assertTrue(actual_result['results']==[{u'$1': 1}])
 
                self.query = 'CREATE INDEX idx ON {0}( join_yr[0] ) WHERE department = "Support"'.format(bucket.name)
@@ -153,6 +155,7 @@ class QueriesIndexTests(QueryTests):
 
                self.query = 'select count(*) from {0} where join_yr[0]>2012 and department = "Support"'.format(bucket.name)
                actual_result = self.run_cbq_query()
+               print "count is {0}".format(actual_result['results'])
                self.assertTrue(actual_result['results']==[{u'$1': 181}])
 
 
@@ -166,7 +169,7 @@ class QueriesIndexTests(QueryTests):
                self.assertTrue(plan['~children'][0]['#operator']!="IndexCountScan")
                self.query = 'select count(*) from {0} where department = "Support" and join_yr[0]<2011'.format(bucket.name)
                actual_result = self.run_cbq_query()
-
+               print "count is {0}".format(actual_result['results'])
                self.assertTrue(actual_result['results']==[{u'$1': 53}])
 
 
@@ -452,7 +455,6 @@ class QueriesIndexTests(QueryTests):
     def test_in_spans(self):
          for bucket in self.buckets:
             created_indexes = []
-            version = self.rest.get_nodes_self().version
             try:
                 idx = "idx"
                 self.query = "CREATE INDEX %s ON %s ( join_day )" %(idx,bucket.name)+\
@@ -509,6 +511,67 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(len(plan6['~children'][0]['~children'][0]['scan']['spans'])==3)
                 self.assertTrue(plan6["~children"][0]["~children"][0]['scan']['limit'] == "5")
 
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_stable_scan(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s ( join_day )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                idx = "idx2"
+                self.query = "CREATE INDEX %s ON %s ( meta().id )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.query = 'select join_day from %s where join_day in [4,7,5,10] order by meta().id' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where join_day in [4,7,5,10] order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'select join_day from %s where join_day = 4 OR join_day > 5 OR join_day < 10 order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where join_day = 4 OR join_day > 5 OR join_day < 10 order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query ='select join_day from %s where join_day != 10 order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query ='select join_day from %s use index(`#primary`) where join_day != 10 order by meta().id'%(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'select join_day from %s where meta().id in ["query-testemployee10153.1877827-0","","query-testemployee10194.855617-0"] order by meta().id' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where meta().id in ["query-testemployee10153.1877827-0","","query-testemployee10194.855617-0"] order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.assertTrue(actual_result['results']==[{u'join_day': 9}, {u'join_day': 4}])
+                self.query = 'select join_day from %s where meta().id = "query-testemployee10231.2819054-0" OR meta().id > "" OR meta().id < "query-testemployee10317.9004497-0" order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where meta().id = "query-testemployee10231.2819054-0" OR meta().id > "" OR meta().id < "query-testemployee10317.9004497-0" order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'select join_day from %s where meta().id = "query-testemployee10231.2819054-0" OR meta().id > "" OR meta().id < "query-testemployee10317.9004497-0" order by meta().id limit 10'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==[{u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}])
+                self.query ='select join_day from %s where meta().id != "query-testemployee10231.2819054-0" order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query ='select join_day from %s use index(`#primary`) where meta().id != "query-testemployee10231.2819054-0" order by meta().id'%(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query ='select join_day from %s where meta().id != "query-testemployee10231.2819054-0" order by meta().id limit 10'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==[{u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}])
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -861,6 +924,19 @@ class QueriesIndexTests(QueryTests):
             self.assertTrue(actual_result['results'][0]['transDate']=='2016-07-02')
         finally:
             for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_pushdown_complex_filter(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idxjoin_yr"
+
+            finally:
+                for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
