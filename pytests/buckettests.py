@@ -340,6 +340,25 @@ class CreateBucketTests(BaseTestCase):
         else:
             self.log.info("There is extra index %s" % index_name)
 
+    # Start of tests for ephemeral buckets
+    #
+    def test_ephemeral_buckets(self):
+        shared_params = self._create_bucket_params(server=self.server, size=100,
+                                                              replicas=self.num_replicas, bucket_type='ephemeral')
+        # just do sasl for now, pending decision on support of non-sasl buckets in 5.0
+        self.cluster.create_sasl_bucket(name=self.bucket_name, password=self.sasl_password,bucket_params=shared_params)
+        self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=self.sasl_password,
+                                           num_replicas=self.num_replicas,
+                                           bucket_size=self.bucket_size, master_id=self.server))
+
+        self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self.bucket_name, self.rest),
+                            msg='failed to start up bucket with name "{0}'.format(self.bucket_name))
+        gen_load = BlobGenerator('buckettest', 'buckettest-', self.value_size, start=0, end=self.num_items)
+        self._load_all_buckets(self.server, gen_load, "create", 0)
+        self.cluster.bucket_delete(self.server, self.bucket_name)
+        self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(self.bucket_name, self.rest, timeout_in_seconds=60),
+                            msg='bucket "{0}" was not deleted even after waiting for 30 seconds'.format(self.bucket_name))
+
     def _get_cb_version(self):
         rest = RestConnection(self.master)
         version = rest.get_nodes_self().version
