@@ -3338,6 +3338,12 @@ class XDCRNewBaseTest(unittest.TestCase):
             6. Verify Revision id of each item.
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
+        src_dcp_queue_drained = False
+        dest_dcp_queue_drained = False
+        src_active_passed = False
+        src_replica_passed = False
+        dest_active_passed = False
+        dest_replica_passed = False
         self.__merge_all_buckets()
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
