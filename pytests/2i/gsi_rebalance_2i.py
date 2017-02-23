@@ -3,8 +3,6 @@ from membase.api.rest_client import RestConnection, RestHelper
 import random
 import threading
 from lib import testconstants
-from lib.couchbase_helper.query_definitions import SQLDefinitionGenerator, RANGE_SCAN_TEMPLATE, QueryDefinition
-from lib.membase.api.exception import CBQError, BucketFlushFailed
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.query_tests_helper import QueryHelperTests
 
@@ -15,8 +13,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.rest = RestConnection(self.servers[0])
         self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         self.create_primary_index = False
-        self.restServer = self.get_nodes_from_services_map(service_type="index")
-        self.rest = RestConnection(self.restServer)
+        # self.restServer = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        # self.rest = RestConnection(self.restServer)
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
@@ -292,6 +290,182 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                                       swap_rebalance=True)
         self.run_operation(phase="after")
 
+    def test_build_index_when_gsi_rebalance_in_progress(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self._create_index_with_defer_build_true()
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+        # rebalance out a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+        self.sleep(2)
+        exceptions = self._build_index()
+        if not filter(lambda x: 'Indexer Cannot Process Build Index - Rebalance In Progress' in x, exceptions):
+            self.fail("build index did not fail during gsi rebalance with expected error message")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.run_operation(phase="after")
+
+    def test_hard_failover_and_full_recovery_and_gsi_rebalance(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        # failover the indexer node
+        failover_task = self.cluster.async_failover([self.master],failover_nodes=[index_server], graceful=False)
+        failover_task.result()
+        self.sleep(30)
+        # do a full recovery and rebalance
+        self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
+        self.rest.add_back_node('ns_1@' + index_server.ip)
+        reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        self.run_operation(phase="during")
+        if reb1:
+            result = self.rest.monitorRebalance()
+            msg = "successfully rebalanced cluster {0}"
+            self.log.info(msg.format(result))
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [],)
+        self.run_operation(phase="after")
+
+    def test_hard_failover_and_delta_recovery_and_gsi_rebalance(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        # failover the indexer node
+        failover_task = self.cluster.async_failover([self.master],failover_nodes=[index_server], graceful=False)
+        failover_task.result()
+        self.sleep(30)
+        # do a delta recovery and rebalance
+        self.rest.set_recovery_type('ns_1@' + index_server.ip, "delta")
+        self.rest.add_back_node('ns_1@' + index_server.ip)
+        reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        self.run_operation(phase="during")
+        if reb1:
+            result = self.rest.monitorRebalance()
+            msg = "successfully rebalanced cluster {0}"
+            self.log.info(msg.format(result))
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [],)
+        self.run_operation(phase="after")
+
+    def test_hard_failover_and_gsi_rebalance(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+        # failover the indexer node which had all the indexes
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=False)
+        failover_task.result()
+        self.sleep(30)
+        # rebalance out the indexer node
+        reb1 = self.cluster.rebalance(self.servers[:self.nodes_init+1], [], [index_server])
+        if reb1:
+            result = self.rest.monitorRebalance()
+            msg = "successfully rebalanced cluster {0}"
+            self.log.info(msg.format(result))
+        self.sleep(30)
+        map_after_rebalance, _ = self._return_maps()
+        self.assertEqual(len(map_after_rebalance.keys()), 0)
+
+    def test_graceful_failover_and_full_recovery_and_gsi_rebalance(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        # failover the indexer node
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
+        failover_task.result()
+        self.sleep(120)
+        # do a full recovery and rebalance
+        self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
+        self.rest.add_back_node('ns_1@' + index_server.ip)
+        reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        self.run_operation(phase="during")
+        if reb1:
+            result = self.rest.monitorRebalance()
+            msg = "successfully rebalanced cluster {0}"
+            self.log.info(msg.format(result))
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [],)
+        self.run_operation(phase="after")
+
+    def test_graceful_failover_and_delta_recovery_and_gsi_rebalance(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        # failover the indexer node
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
+        failover_task.result()
+        self.sleep(120)
+        # do a delta recovery and rebalance
+        self.rest.set_recovery_type('ns_1@' + index_server.ip, "delta")
+        self.rest.add_back_node('ns_1@' + index_server.ip)
+        reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        self.run_operation(phase="during")
+        if reb1:
+            result = self.rest.monitorRebalance()
+            msg = "successfully rebalanced cluster {0}"
+            self.log.info(msg.format(result))
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [],)
+        self.run_operation(phase="after")
+
+    def test_gsi_rebalance_works_with_mutations_query_in_progress(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+        # rebalance out a indexer node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+        # start kv mutations and query in parallel
+        results = []
+        tasks = self.async_run_doc_ops()
+        for task in tasks:
+            results.append(threading.Thread(target=task.result()))
+        for result in results:
+            result.start()
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        for result in results:
+            result.join()
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [self.servers[self.nodes_init]], [index_server],
+                                                      swap_rebalance=True)
+        self.run_operation(phase="after")
+
     def _return_maps(self):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
@@ -380,3 +554,34 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             log.info(actual_result)
         finally:
             return actual_result
+
+    def _create_index_with_defer_build_true(self):
+        for bucket in self.buckets:
+            for query_definition in self.query_definitions:
+                defer_build = True
+                query = query_definition.generate_index_create_query(
+                    bucket=bucket, use_gsi_for_secondary=self.use_gsi_for_secondary,
+                    deploy_node_info=None, defer_build=defer_build)
+                log.info(query)
+                create_index_task = self.cluster.async_create_index(
+                    server=self.n1ql_server, bucket=bucket, query=query,
+                    n1ql_helper=self.n1ql_helper,
+                    index_name=query_definition.index_name,
+                    defer_build=defer_build)
+                create_index_task.result()
+
+    def _build_index(self):
+        exceptions = []
+        try:
+            for bucket in self.buckets:
+                for query_definition in self.query_definitions:
+                        query = self.n1ql_helper.gen_build_index_query(
+                            bucket=bucket, index_list=[query_definition.index_name])
+                        build_index_task = self.cluster.async_build_index(
+                            server=self.n1ql_server, bucket=bucket, query=query,
+                            n1ql_helper=self.n1ql_helper)
+                        build_index_task.result()
+        except Exception, ex:
+            exceptions.append(str(ex))
+        finally:
+            return exceptions
