@@ -610,13 +610,12 @@ class RemoteMachineShellConnection:
             log.info("This url {0} is live".format(url))
             live_url = True
         else:
-            log.error("\n===============\n"
-                      "        This url {0} \n"
-                      "        is failed to connect.\n"
-                      "        Check version in params to make sure it correct pattern or build number.\n"
-                      "===============\n".format(url))
-            os.system("ps aux | grep python | grep %d " % os.getpid())
-            os.system('kill %d' % os.getpid())
+            mesg = "\n===============\n"\
+                   "        This url {0} \n"\
+                   "        is failed to connect.\n"\
+                   "        Check version in params to make sure it correct pattern or build number.\n"\
+                   "===============\n".format(url)
+            self.stop_current_python_running(mesg)
         return live_url
 
     def download_build(self, build):
@@ -949,27 +948,26 @@ class RemoteMachineShellConnection:
         except IOError:
             return False
 
-    def download_binary_in_win(self, url, version, nsis_install=False):
+    def download_binary_in_win(self, url, version, msi_install=False):
         self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
         self.terminate_processes(self.info, \
                                  [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
         self.disable_firewall()
         version = version.replace("-rel", "")
-        exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
+        deliverable_type = "exe"
+        if url and url.split(".")[-1] == "msi":
+            deliverable_type = "msi"
+        exist = self.file_exists('/cygdrive/c/tmp/', '{0}.{1}'.format(version, deliverable_type))
         log.info('**** about to do the wget ****')
-        if nsis_install:
+        if not exist:
             output, error = self.execute_command(
                  "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
-                                            " {0} -O {1}';ls -lh;".format(url, url.split('/')[-1]))
-            self.log_command_output(output, error)
-        elif not exist:
-            output, error = self.execute_command(
-                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
-                                            " {0} -O {1}.exe';ls -lh;".format(url, version))
+                                            " {0} -O {1}.{2}';ls -lh;".format(url, version,
+                                                                              deliverable_type))
             self.log_command_output(output, error)
         else:
-            log.info('File {0}.exe exist in tmp directory'.format(version))
-        return self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
+            log.info('File {0}.{1} exist in tmp directory'.format(version, deliverable_type))
+        return self.file_exists('/cygdrive/c/tmp/', '{0}.{1}'.format(version, deliverable_type))
 
     def copy_file_local_to_remote(self, src_path, des_path):
         sftp = self._ssh_client.open_sftp()
@@ -1660,13 +1658,16 @@ class RemoteMachineShellConnection:
         return success
 
     def install_server_win(self, build, version, startserver=True,
-                           vbuckets=None, fts_query_limit=None,windows_nsis=False):
+                           vbuckets=None, fts_query_limit=None,windows_msi=False):
 
 
-        log.info('******start install_server_win')
-
-        if windows_nsis:
-            output, error = self.execute_command("cmd /c 'c:\\tmp\\{0}' /S".format( build.url.split('/')[-1]))
+        log.info('******start install_server_win ********')
+        if windows_msi:
+            log.info("***** msi method ******")
+            msg = "There is a bug MB-22956 that blocks this installation method"
+            self.stop_current_python_running(msg)
+            output, error = self.execute_command("cd /cygdrive/c/tmp; msiexec /i {0}.msi /qn "\
+                                                .format(version))
             self.log_command_output(output, error)
             return len(error) == 0
         remote_path = None
@@ -1964,7 +1965,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
 
-    def couchbase_uninstall(self,windows_nsis=False):
+    def couchbase_uninstall(self, windows_msi=False):
         log.info('{0} *****In couchbase uninstall****'.format( self.ip))
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
@@ -1975,8 +1976,8 @@ class RemoteMachineShellConnection:
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         fv, sv, bn = self.get_cbversion(type)
-        if windows_nsis:
-            log.info('{0} ***** NSIS Uninstall'.format( self.ip))
+        if windows_msi and False:
+            log.info('{0} ***** MSI Uninstall'.format( self.ip))
 
             # only one command?
             #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
@@ -1992,11 +1993,14 @@ class RemoteMachineShellConnection:
             self.sleep(30, 'waiting 30 seconds to complete the uninstallation')
 
             self.log_command_output(output, error)
-            log.info('{0} ***** NSIS Uninstall - complete'.format(self.ip))
+            log.info('{0} ***** MSI Uninstall - complete'.format(self.ip))
         elif type == 'windows':
             product = "cb"
             query = BuildQuery()
             os_type = "exe"
+            if windows_msi:
+                os_type = "msi"
+                self.info.deliverable_type = "msi"
             task = "uninstall"
             bat_file = "uninstall.bat"
             product_name = "couchbase-server-enterprise"
@@ -2031,7 +2035,7 @@ class RemoteMachineShellConnection:
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
-                build_name = build_name.rstrip() + ".exe"
+                build_name = build_name.rstrip() + ".%s" % os_type
                 log.info('Check if {0} is in tmp directory on {1} server'\
                                                        .format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
@@ -2074,9 +2078,10 @@ class RemoteMachineShellConnection:
                 self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
                 #self.create_windows_capture_file(task, product, full_version)
-                capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
+                if not windows_msi:
+                    capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
                                         bat_file, product, short_version, task)
-                self.stop_schedule_tasks()
+                    self.stop_schedule_tasks()
 
                 """ Remove this workaround when bug MB-14504 is fixed """
                 log.info("Kill any un/install process leftover in sherlock")
@@ -2094,16 +2099,28 @@ class RemoteMachineShellConnection:
 
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
-                output, error = \
+                if windows_msi:
+                    log.info("******** uninstall via msi method ***********")
+                    msg = "\nThere is a bug MB-22956 \nthat blocks this uninstallation method\n"
+                    self.stop_current_python_running(msg)
+                    output, error = \
+                        self.execute_command("cd /cygdrive/c/tmp; msiexec /x %s /qn"\
+                                             % build_name)
+                    self.log_command_output(output, error)
+                else:
+                    output, error = \
                         self.execute_command("cmd /c schtasks /run /tn removeme")
-                self.log_command_output(output, error)
+                    self.log_command_output(output, error)
                 deleted = self.wait_till_file_deleted(version_path, \
                                             VERSION_FILE, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
                 if full_version[:3] != "2.5":
-                    ended = self.wait_till_process_ended(full_version[:10])
+                    uninstall_process = full_version[:10]
+                    if windows_msi:
+                        uninstall_process = "msiexec"
+                    ended = self.wait_till_process_ended(uninstall_process)
                     if not ended:
                         sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
                 if full_version[:3] == "2.5":
@@ -2128,7 +2145,7 @@ class RemoteMachineShellConnection:
                             'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
                     self.log_command_output(output, error)
                 """ end remove code """
-                if capture_iss_file:
+                if capture_iss_file and not windows_msi:
                     log.info("Delete {0} in windows automation directory" \
                                                           .format(capture_iss_file))
                     output, error = self.execute_command("rm -f \
@@ -2146,15 +2163,12 @@ class RemoteMachineShellConnection:
             if self.nonroot:
                 test = self.file_exists(LINUX_CB_PATH, VERSION_FILE)
                 if self.file_exists(LINUX_CB_PATH, VERSION_FILE):
-                    os.system("ps aux | grep python | grep %d " % os.getpid())
-                    print " ***** ERROR: ***** \n"\
-                          " Couchbase Server was installed by root user. \n"\
-                          " Use root user to uninstall it at %s \n"\
-                          " This python process id: %d will be killed to stop the installation"\
-                         % (self.ip, os.getpid())
-                    self.sleep(5, "==== delay kill pid %d in 5 seconds to printout message ==="\
-                                                                                 % os.getpid())
-                    os.system('kill %d' % os.getpid())
+                    mesg = " ***** ERROR: ***** \n"\
+                           " Couchbase Server was installed by root user. \n"\
+                           " Use root user to uninstall it at %s \n"\
+                           " This python process id: %d will be killed to stop the installation"\
+                           % (self.ip, os.getpid())
+                    self.stop_current_python_running(mesg)
                 if self.file_exists(self.nr_home_path, NR_INSTALL_LOCATION_FILE):
                     output, error = self.execute_command("cat %s"
                                              % NR_INSTALL_LOCATION_FILE)
@@ -3969,6 +3983,12 @@ class RemoteMachineShellConnection:
         else:
             return True
 
+    def stop_current_python_running(self, mesg):
+        os.system("ps aux | grep python | grep %d " % os.getpid())
+        print mesg
+        self.sleep(5, "==== delay kill pid %d in 5 seconds to printout message ==="\
+                                                                      % os.getpid())
+        os.system('kill %d' % os.getpid())
 
 class RemoteUtilHelper(object):
 

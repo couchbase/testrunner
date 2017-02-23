@@ -700,7 +700,7 @@ class BuildQuery(object):
                     build.product_version = version + "-rel"
                 else:
                     build.product_version = version
-        if "exe" in deliverable_type:
+        if deliverable_type in ["exe", "msi"]:
             if version[:5] in COUCHBASE_VERSION_2:
                 setup = "setup."
             else:
@@ -772,6 +772,9 @@ class BuildQuery(object):
                    "." + build.deliverable_type
             else:
                 os_name = ""
+                joint_char = "-"
+                if build.deliverable_type == "msi":
+                    joint_char = "_"
                 """ sherlock build in unix only support 64-bit """
                 build.architecture_type = "amd64"
                 if  "ubuntu 12.04" in distribution_version:
@@ -792,7 +795,7 @@ class BuildQuery(object):
                     os_name = "macos"
                     build.architecture_type = "x86_64"
                 build.name = edition_type + "_" + build.product_version + \
-                   "-" + os_name + "_" +  build.architecture_type + \
+                   joint_char + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type
             build.url = repo + build_number + "/" + build.name
         elif toy is not "":

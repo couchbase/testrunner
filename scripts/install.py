@@ -130,8 +130,8 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(params["server"])
         #remote_client.membase_uninstall()
 
-        self.nsis = 'nsis' in params and params['nsis'].lower() == 'true'
-        remote_client.couchbase_uninstall(windows_nsis=self.nsis)
+        self.msi = 'msi' in params and params['msi'].lower() == 'true'
+        remote_client.couchbase_uninstall(windows_msi=self.msi)
         remote_client.disconnect()
 
 
@@ -194,6 +194,11 @@ class Installer(object):
             else:
                 linux_repo = False
         if ok:
+            if "msi" in params and params["msi"].lower() == "true":
+                msi = True
+            else:
+                msi = False
+        if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
@@ -223,6 +228,8 @@ class Installer(object):
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
+        if msi:
+            info.deliverable_type = "msi"
         remote_client.disconnect()
         if ok and not linux_repo:
             timeout = 300
@@ -567,7 +574,7 @@ class CouchbaseServerInstaller(Installer):
 
         log.info('********CouchbaseServerInstaller:install')
 
-        self.nsis = 'nsis' in params and params['nsis'].lower() == 'true'
+        self.msi = 'msi' in params and params['msi'].lower() == 'true'
         start_server = True
         try:
             if "linux_repo" not in params:
@@ -622,10 +629,10 @@ class CouchbaseServerInstaller(Installer):
         if not linux_repo:
             if type == "windows":
                 log.info('***** Download Windows binary*****')
-                remote_client.download_binary_in_win(build.url, params["version"],nsis_install=self.nsis)
+                remote_client.download_binary_in_win(build.url, params["version"],msi_install=self.msi)
                 success = remote_client.install_server_win(build, \
                         params["version"].replace("-rel", ""), vbuckets=vbuckets,
-                        fts_query_limit=fts_query_limit,windows_nsis=self.nsis )
+                        fts_query_limit=fts_query_limit,windows_msi=self.msi )
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:
