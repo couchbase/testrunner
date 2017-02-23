@@ -82,7 +82,6 @@ class DocumentGenerator(KVGenerator):
         doc = self.template.format(*doc_args).replace('\'', '"').replace('True', 'true').replace('False', 'false').replace('\\', '\\\\')
         json_doc = json.loads(doc)
         json_doc['_id'] = self.name + '-' + str(self.itr)
-        json_doc['mutated'] = 0
         self.itr += 1
         return json_doc['_id'], json.dumps(json_doc).encode("ascii", "ignore")
 
