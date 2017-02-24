@@ -504,7 +504,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan6 = ExplainPlanHelper(actual_result)
                 self.assertTrue(len(plan6['~children'][0]['~children'][0]['scan']['spans'])==3)
-                self.assertTrue(plan6["~children"][0]["~children"][0]['scan']['limit'] == "5")
+                self.assertTrue( plan6["~children"][1]['expr'] == "5" and plan6["~children"][1]['#operator'] == 'Limit')
 
             finally:
                 for idx in created_indexes:
@@ -3634,9 +3634,6 @@ class QueriesIndexTests(QueryTests):
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
-
-
-
 
     def test_covering_partial_index(self):
         for bucket in self.buckets:
