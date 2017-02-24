@@ -298,12 +298,12 @@ def main():
 
     BEFORE_SUITE = "suite_setUp"
     AFTER_SUITE = "suite_tearDown"
-    names, test_params, arg_i, arg_p, options = parse_args(sys.argv)
+    names, runtime_test_params, arg_i, arg_p, options = parse_args(sys.argv)
     # get params from command line
     TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
     # ensure command line params get higher priority
-    test_params.update(TestInputSingleton.input.test_params)
-    TestInputSingleton.input.test_params = test_params
+    runtime_test_params.update(TestInputSingleton.input.test_params)
+    TestInputSingleton.input.test_params = runtime_test_params
     print "Global Test input params:"
     pprint(TestInputSingleton.input.test_params)
 
@@ -318,10 +318,10 @@ def main():
 
     results = []
     case_number = 1
-    if "GROUP" in test_params:
-        print "Only cases in GROUPs '{0}' will be executed".format(test_params["GROUP"])
-    if "EXCLUDE_GROUP" in test_params:
-        print "Cases from GROUPs '{0}' will be excluded".format(test_params["EXCLUDE_GROUP"])
+    if "GROUP" in runtime_test_params:
+        print "Only cases in GROUPs '{0}' will be executed".format(runtime_test_params["GROUP"])
+    if "EXCLUDE_GROUP" in runtime_test_params:
+        print "Cases from GROUPs '{0}' will be excluded".format(runtime_test_params["EXCLUDE_GROUP"])
 
     if TestInputSingleton.input.param("get-delays", False):
         # start measure_sched_delays on all servers
@@ -333,12 +333,31 @@ def main():
         argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
         params = dict(zip(argument_split[::2], argument_split[1::2]))
 
-        if ("GROUP" or "EXCLUDE_GROUP") in test_params:
-            # determine if the test relates to the specified group(can be separated by ';')
-            if not ("GROUP" in params and len(set(test_params["GROUP"].split(";")) & set(params["GROUP"].split(";"))) or "ALL" in test_params["GROUP"].split(";")) or\
-                    "EXCLUDE_GROUP" in test_params and len(set(test_params["EXCLUDE_GROUP"].split(";")) & set(params["GROUP"].split(";"))):
-                print "test '{0}' was skipped".format(name)
+
+
+        # Note that if ALL is specified at runtime then tests which have no groups are still run - just being
+        # explicit on this
+
+        if "GROUP" in runtime_test_params and "ALL" not in runtime_test_params["GROUP"].split(";"):
+            if 'GROUP' not in params:         # params is the .conf file parameters.
+                # this test is not in any groups so we do not run it
+                print "test '{0}' skipped, a group was requested and this is not any groups".format(name)
                 continue
+
+            # there is a group for this test case, if that group is not specified at run time then do not run it
+            elif len( set(runtime_test_params["GROUP"].split(";")) & set(params["GROUP"].split(";")) ) == 0:
+                print "test '{0}' skipped, is not in the requested group".format(name)
+                continue
+            else:
+                pass # the test was in requested group, will run it
+
+        elif "EXCLUDE_GROUP" in runtime_test_params:
+            if 'GROUP' in params and \
+                len(set(runtime_test_params["EXCLUDE_GROUP"].split(";")) & set(params["GROUP"].split(";"))) > 0:
+                    print "test '{0}' skipped, is in an excluded group".format(name)
+                    continue
+
+
 
         # Create Log Directory
         logs_folder = os.path.join(root_log_dir, "test_%s" % case_number)
@@ -354,7 +373,7 @@ def main():
 
         # Update the test params for each test
         TestInputSingleton.input.test_params = params
-        TestInputSingleton.input.test_params.update(test_params)
+        TestInputSingleton.input.test_params.update(runtime_test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
         TestInputSingleton.input.test_params["logs_folder"] = logs_folder
         print "Test Input params:"
