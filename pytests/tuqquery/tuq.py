@@ -3339,7 +3339,7 @@ class QueryTests(BaseTestCase):
                     #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
                     queries_errors = {'CREATE INDEX ONE ON default(meta().cas) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().flags) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta().expiry) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta().expiration) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().cas) using VIEW' : ('syntax error', 3000)}
                     # if self.gsi_type:
                     #     for query in queries_errors.iterkeys():
