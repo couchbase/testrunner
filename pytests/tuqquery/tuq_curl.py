@@ -9,7 +9,31 @@ from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
 
-
+SOURCE_CB_PARAMS = {
+                      "authUser": "default",
+                      "authPassword": "",
+                      "authSaslUser": "",
+                      "authSaslPassword": "",
+                      "clusterManagerBackoffFactor": 0,
+                      "clusterManagerSleepInitMS": 0,
+                      "clusterManagerSleepMaxMS": 20000,
+                      "dataManagerBackoffFactor": 0,
+                      "dataManagerSleepInitMS": 0,
+                      "dataManagerSleepMaxMS": 20000,
+                      "feedBufferSizeBytes": 0,
+                      "feedBufferAckThreshold": 0
+                    }
+INDEX_DEFINITION = {
+                          "type": "fulltext-index",
+                          "name": "",
+                          "uuid": "",
+                          "params": {},
+                          "sourceType": "couchbase",
+                          "sourceName": "default",
+                          "sourceUUID": "",
+                          "sourceParams": SOURCE_CB_PARAMS,
+                          "planParams": {}
+                        }
 
 class QueryCurlTests(QueryTests):
     def setUp(self):
@@ -17,6 +41,26 @@ class QueryCurlTests(QueryTests):
         self.shell = RemoteMachineShellConnection(self.master)
         self.cbqpath = '%scbq' % self.path
         self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip,self.n1ql_port)
+        self.api_port = self.input.param("api_port", 8094)
+        self.load_sample = self.input.param("load_sample", False)
+        print self.load_sample
+        if self.load_sample:
+            self.shell.execute_command("""curl -v -u Administrator:password \
+                         -X POST http://{0}:{1}/sampleBuckets/install \
+                      -d  '["beer-sample"]'""".format(self.master.ip, self.master.port))
+            time.sleep(1)
+            index_definition = INDEX_DEFINITION
+            index_name = index_definition['name'] = "beers"
+            index_definition['sourceName'] = "beer-sample"
+            index_definition['sourceParams']['authUser'] = "beer-sample"
+            rest_src_fts = RestConnection(self.servers[0])
+            try:
+                status, _ = rest_src_fts.get_fts_index_definition(index_name)
+                if status != 400:
+                    rest_src_fts.delete_fts_index(index_name)
+                rest_src_fts.create_fts_index(index_name, index_definition)
+            except Exception, ex:
+                self.fail(ex)
 
     def suite_setUp(self):
         super(QueryCurlTests, self).suite_setUp()
@@ -133,16 +177,38 @@ class QueryCurlTests(QueryTests):
         expected_result = self.run_cbq_query("select * from default d where d.name == 'employee-9'")
         self.assertTrue(json_curl['results'] == expected_result['results'])
 
+    '''WIP'''
+    def test_curl_join(self):
+        url = "'http://%s:%s/api/index/beers/query'" % (self.master.ip,self.api_port)
+        select_query = "select ARRAY x.id for x in b1.result.hits end as hits, b1.result.total_hits as total," \
+                       "array_length(b1.result.hits), b "
+        from_query = "from (select curl('POST', "+ url +", "
+        options = "{'header':'Content-Type: application/json', " \
+                  "'data':{'explain':false,'fields': ['*'],'highlight': {},'query': {'query': 'beer'}}}) result) b1 "
+        join = "INNER JOIN `beer-sample` b ON KEYS b1.result.hits[*].id"
+        curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+options+join,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        import pdb;pdb.set_trace()
+
     '''Test if you can access a protected bucket with curl and authorization'''
     def test_protected_bucket(self):
-        # The query that curl will send to couchbase
         n1ql_query = 'select * from bucket0 limit 5'
-        # This is the query that the cbq-engine will execute
         query = "select curl('POST', "+ self.query_service_url +", "
-        options = "{'data' : 'statement=%s', 'user': 'Administrator:password'})" % n1ql_query
+        options = "{'data' : 'statement=%s', 'user': 'bucket0:password'})" % n1ql_query
         curl = self.shell.execute_commands_inside(self.cbqpath,query+options,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['results'][0]['$1']['metrics']['resultCount'] == 5)
+
+    '''Test a n1ql curl query containing the use of FTS'''
+    def test_basic_fts_curl(self):
+        url = "'http://%s:%s/api/index/beers/query'" % (self.master.ip,self.api_port)
+        select_query = "select result.total_hits, array_length(result.hits) "
+        from_query = "from curl('POST', "+ url +", "
+        options = "{'header':'Content-Type: application/json', " \
+                  "'data':{'explain':true,'fields': ['*'],'highlight': {},'query': {'query': 'garden'}}}) result"
+        curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+options,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['total_hits'] == 12 and json_curl['results'][0]['$1'] == 10)
 
 ##############################################################################################
 #
@@ -280,7 +346,8 @@ class QueryCurlTests(QueryTests):
         query = "select curl('POST', "+ self.query_service_url +", {'data' : 'statement=%s'})" % n1ql_query
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == "AuthorizationFailedKeyspacebucket0")
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] ==
+                        "Userdoesnotbelongtoaspecifiedrole.Keyspacebucket0")
 
     '''Test an unsupported method in n1ql curl
         -DELETE.'''
