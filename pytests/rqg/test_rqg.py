@@ -63,6 +63,7 @@ class RQGTests(BaseTestCase):
         self.total_queries= self.input.param("total_queries",None)
         self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
         self.run_query_with_primary= self.input.param("run_query_with_primary",False)
+        self.create_primary_index=self.input.param("create_primary_index",True)
         self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
         self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
         self.test_file_path= self.input.param("test_file_path",None)
@@ -638,7 +639,7 @@ class RQGTests(BaseTestCase):
         aggregate = False
         subquery=self.subquery
 
-
+        #import pdb;pdb.set_trace()
         if (n1ql_query.find("simple_table")>0) and ((self.database+"_"+"simple_table") not in n1ql_query):
             n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
         if (subquery == True):
@@ -943,7 +944,7 @@ class RQGTests(BaseTestCase):
         result_run = {}
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
-
+        #import pdb;pdb.set_trace()
         for i,item in enumerate(hints):
             if "simple_table" in item:
                 hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
@@ -1166,7 +1167,8 @@ class RQGTests(BaseTestCase):
                         t.join()
 
     def _build_primary_indexes(self, using_gsi= True):
-        self.n1ql_helper.create_primary_index(using_gsi = using_gsi, server = self.n1ql_server)
+        if (self.create_primary_index==True):
+            self.n1ql_helper.create_primary_index(using_gsi = using_gsi, server = self.n1ql_server)
 
     def _load_data_in_buckets_using_mc_bin_client(self, bucket, data_set):
         client = VBucketAwareMemcached(RestConnection(self.master), bucket)
