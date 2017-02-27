@@ -1220,3 +1220,17 @@ class Cluster(object):
                                     cli_command_location)
         self.task_manager.schedule(_task)
         return _task
+
+    def async_cbas_query_execute(self, server, cbas_endpoint, statement, mode=None, pretty=True):
+        """
+        Asynchronously execute a CBAS query
+        :param server: CB server
+        :param cbas_endpoint: CBAS Endpoint URL (/analytics/service)
+        :param statement: Query to be executed
+        :param mode: Query Execution mode
+        :param pretty: Pretty formatting
+        :return: task with the output or error message
+        """
+        _task = CBASQueryExecuteTask(server, cbas_endpoint, statement, mode, pretty)
+        self.task_manager.schedule(_task)
+        return _task
