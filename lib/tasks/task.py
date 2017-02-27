@@ -4457,3 +4457,75 @@ class EnterpriseCompactTask(Task):
             self.remote_client.log_command_output(self.output, self.error)
         else:
             task_manager.schedule(self, 10)
+
+class CBASQueryExecuteTask(Task):
+    def __init__(self, server, cbas_endpoint, statement, mode=None, pretty=True):
+        Task.__init__(self, "cbas_query_execute_task")
+        self.server = server
+        self.cbas_endpoint = cbas_endpoint
+        self.statement = statement
+        self.mode = mode
+        self.pretty = pretty
+        self.response = {}
+        self.passed = True
+
+    def execute(self, task_manager):
+        try:
+            rest = RestConnection(self.server)
+            self.response = json.loads(rest.execute_statement_on_cbas(self.cbas_endpoint, self.statement,
+                                           self.mode, self.pretty))
+            if self.response:
+                self.state = CHECKING
+                task_manager.schedule(self)
+            else:
+                self.log.info("Some error")
+                self.state = FINISHED
+                self.passed = False
+                self.set_result(False)
+        # catch and set all unexpected exceptions
+
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.passed = False
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+            if "errors" in self.response:
+                errors = self.response["errors"]
+            else:
+                errors = None
+
+            if "results" in self.response:
+                results = self.response["results"]
+            else:
+                results = None
+
+            if "handle" in self.response:
+                handle = self.response["handle"]
+            else:
+                handle = None
+
+            if self.mode != "async":
+                if self.response["status"] == "success":
+                    self.set_result(True)
+                    self.passed = True
+                else:
+                    self.log.info(errors)
+                    self.passed = False
+                    self.set_result(False)
+            else:
+                if self.response["status"] == "started":
+                    self.set_result(True)
+                    self.passed = True
+                else:
+                    self.log.info(errors)
+                    self.passed = False
+                    self.set_result(False)
+            self.state = FINISHED
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)

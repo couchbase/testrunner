@@ -303,6 +303,17 @@ class RestConnection(object):
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
             self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8093)
+
+        # Initialization of CBAS related params
+        self.cbas_base_url = ""
+        if self.input.cbas:
+            self.cbas_node = self.input.cbas
+            self.cbas_port = 8095
+            if hasattr(self.cbas_node, 'port'):
+                self.cbas_port = self.cbas_node.port
+            self.cbas_base_url = "http://{0}:{1}".format(self.cbas_node.ip,
+                                                         self.cbas_port)
+
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
@@ -932,6 +943,22 @@ class RestConnection(object):
             #And proceeds with further initialization.
             log.info(content)
         return status
+
+    def execute_statement_on_cbas(self, statement, mode, pretty=True):
+        api = self.cbas_base_url + "/analytics/service"
+        headers = {'Content-type': 'application/json'}
+        params = {'statement': statement, 'mode': mode, 'pretty': pretty}
+        params = json.dumps(params)
+        status, content, header = self._http_request(api, 'POST',
+                                                     headers=headers,
+                                                     params=params,
+                                                     timeout=3600)
+        if status:
+            return content
+        else:
+            log.error("/analytics/service status:{0},content:{1}".format(
+                status, content))
+            raise Exception("Analytics Service API failed")
 
     def get_cluster_ceritificate(self):
         api = self.baseUrl + 'pools/default/certificate'

@@ -1269,3 +1269,4 @@ class Cluster(object):
         _task = CBASQueryExecuteTask(server, cbas_endpoint, statement, mode, pretty)
         self.task_manager.schedule(_task)
         return _task
+
