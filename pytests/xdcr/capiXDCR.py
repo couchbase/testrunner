@@ -106,7 +106,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -123,7 +123,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.async_perform_update_delete()
@@ -139,7 +139,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         rest_conn = RestConnection(self.src_master)
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.async_load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
@@ -158,7 +158,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -194,7 +194,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -212,7 +212,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -245,7 +245,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -265,7 +265,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -282,7 +282,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -299,7 +299,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -316,7 +316,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -350,7 +350,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
@@ -379,7 +379,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -421,7 +421,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()

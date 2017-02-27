@@ -303,6 +303,19 @@ class RestConnection(object):
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
             self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8093)
+
+        # Initialization of CBAS related params
+        self.cbas_base_url = ""
+        if hasattr(self.input, 'cbas'):
+            if self.input.cbas:
+                self.cbas_node = self.input.cbas
+                self.cbas_port = 8095
+                if hasattr(self.cbas_node, 'port'):
+                    self.cbas_port = self.cbas_node.port
+                self.cbas_base_url = "http://{0}:{1}".format(
+                    self.cbas_node.ip,
+                    self.cbas_port)
+
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
@@ -933,6 +946,22 @@ class RestConnection(object):
             log.info(content)
         return status
 
+    def execute_statement_on_cbas(self, statement, mode, pretty=True):
+        api = self.cbas_base_url + "/analytics/service"
+        headers = {'Content-type': 'application/json'}
+        params = {'statement': statement, 'mode': mode, 'pretty': pretty}
+        params = json.dumps(params)
+        status, content, header = self._http_request(api, 'POST',
+                                                     headers=headers,
+                                                     params=params,
+                                                     timeout=3600)
+        if status:
+            return content
+        else:
+            log.error("/analytics/service status:{0},content:{1}".format(
+                status, content))
+            raise Exception("Analytics Service API failed")
+
     def get_cluster_ceritificate(self):
         api = self.baseUrl + 'pools/default/certificate'
         status, content, _ = self._http_request(api, 'GET')
@@ -1406,23 +1435,39 @@ class RestConnection(object):
         else:
             return None
 
-    def _rebalance_progress(self):
+    def _rebalance_status_and_progress(self):
+        """
+        Returns a 2-tuple capturing the rebalance status and progress, as follows:
+            ('running', progress) - if rebalance is running
+            ('none', 100)         - if rebalance is not running (i.e. assumed done)
+            (None, -100)          - if there's an error getting the rebalance progress
+                                    from the server
+            (None, -1)            - if the server responds but there's no information on
+                                    what the status of rebalance is
+
+        The progress is computed as a average of the progress of each node
+        rounded to 2 decimal places.
+
+        Throws RebalanceFailedException if rebalance progress returns an error message
+        """
         avg_percentage = -1
+        rebalance_status = None
         api = self.baseUrl + "pools/default/rebalanceProgress"
         try:
             status, content, header = self._http_request(api)
         except ServerUnavailableException as e:
             log.error(e)
-            return -100
+            return None, -100
         json_parsed = json.loads(content)
         if status:
             if "status" in json_parsed:
+                rebalance_status = json_parsed["status"]
                 if "errorMessage" in json_parsed:
                     msg = '{0} - rebalance failed'.format(json_parsed)
                     log.error(msg)
                     self.print_UI_logs()
                     raise RebalanceFailedException(msg)
-                elif json_parsed["status"] == "running":
+                elif rebalance_status == "running":
                     total_percentage = 0
                     count = 0
                     for key in json_parsed:
@@ -1441,8 +1486,10 @@ class RestConnection(object):
                     avg_percentage = 100
         else:
             avg_percentage = -100
-        return avg_percentage
+        return rebalance_status, avg_percentage
 
+    def _rebalance_progress(self):
+        return self._rebalance_status_and_progress()[1]
 
     def log_client_error(self, post):
         api = self.baseUrl + 'logClientError'

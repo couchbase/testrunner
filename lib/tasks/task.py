@@ -460,6 +460,7 @@ class RebalanceTask(Task):
         self.start_time = time.time()
 
     def check(self, task_manager):
+        status = None
         progress = -100
         try:
             if self.monitor_vbuckets_shuffling:
@@ -477,7 +478,8 @@ class RebalanceTask(Task):
                             self.log.error(msg)
                             self.log.error("Old vbuckets: %s, new vbuckets %s" % (self.old_vbuckets, new_vbuckets))
                             raise Exception(msg)
-            progress = self.rest._rebalance_progress()
+            (status, progress) = self.rest._rebalance_status_and_progress()
+            self.log.info("Rebalance - status: %s, progress: %s", status, progress)
             # if ServerUnavailableException
             if progress == -100:
                 self.retry_get_progress += 1
@@ -501,7 +503,9 @@ class RebalanceTask(Task):
             """ for mix cluster, rebalance takes longer """
             self.log.info("rebalance in mix cluster")
             retry_get_process_num = 40
-        if progress != -1 and progress != 100:
+        # we need to wait for status to be 'none' (i.e. rebalance actually finished and
+        # not just 'running' and at 100%) before we declare ourselves done
+        if progress != -1 and status != 'none':
             if self.retry_get_progress < retry_get_process_num:
                 task_manager.schedule(self, 10)
             else:
@@ -4567,3 +4571,75 @@ class EnterpriseCompactTask(Task):
             self.remote_client.log_command_output(self.output, self.error)
         else:
             task_manager.schedule(self, 10)
+
+class CBASQueryExecuteTask(Task):
+    def __init__(self, server, cbas_endpoint, statement, mode=None, pretty=True):
+        Task.__init__(self, "cbas_query_execute_task")
+        self.server = server
+        self.cbas_endpoint = cbas_endpoint
+        self.statement = statement
+        self.mode = mode
+        self.pretty = pretty
+        self.response = {}
+        self.passed = True
+
+    def execute(self, task_manager):
+        try:
+            rest = RestConnection(self.server)
+            self.response = json.loads(rest.execute_statement_on_cbas(self.cbas_endpoint, self.statement,
+                                           self.mode, self.pretty))
+            if self.response:
+                self.state = CHECKING
+                task_manager.schedule(self)
+            else:
+                self.log.info("Some error")
+                self.state = FINISHED
+                self.passed = False
+                self.set_result(False)
+        # catch and set all unexpected exceptions
+
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.passed = False
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+            if "errors" in self.response:
+                errors = self.response["errors"]
+            else:
+                errors = None
+
+            if "results" in self.response:
+                results = self.response["results"]
+            else:
+                results = None
+
+            if "handle" in self.response:
+                handle = self.response["handle"]
+            else:
+                handle = None
+
+            if self.mode != "async":
+                if self.response["status"] == "success":
+                    self.set_result(True)
+                    self.passed = True
+                else:
+                    self.log.info(errors)
+                    self.passed = False
+                    self.set_result(False)
+            else:
+                if self.response["status"] == "started":
+                    self.set_result(True)
+                    self.passed = True
+                else:
+                    self.log.info(errors)
+                    self.passed = False
+                    self.set_result(False)
+            self.state = FINISHED
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)

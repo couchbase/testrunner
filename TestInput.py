@@ -351,6 +351,12 @@ class TestInputParser():
         for option in options:
             if option == 'ip':
                 server.ip = config.get(section, option)
+            if option == 'port':
+                server.port = config.get(section, option)
+            if option == 'username':
+                server.username = config.get(section, option)
+            if option == 'password':
+                server.password = config.get(section, option)
         return server
 
     @staticmethod

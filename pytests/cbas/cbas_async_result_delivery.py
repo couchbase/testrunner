@@ -31,13 +31,16 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
                                cb_bucket_password=self.cb_bucket_password)
 
+        # Allow ingestion to complete
+        self.sleep(60)
+
     def test_mode(self):
         self.setupForTest()
 
         statement = "select * from {0} where city=\"Chicago\";".format(
             self.cbas_dataset_name)
-        status, metrics, errors, results, handle = self.execute_statement_on_cbas(
-            statement, self.master, mode=self.mode)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode=self.mode)
 
         if self.mode == 'async' or self.mode == 'deferred':
             if results:
@@ -62,8 +65,8 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
             results = self.retrieve_result_using_handle(self.master, handle)
 
             # Execute the same query without passing the mode param (legacy mode)
-            _, _, _, immediate_results, _ = self.execute_statement_on_cbas(
-                statement, self.master)
+            _, _, _, immediate_results, _ = self.execute_statement_on_cbas_via_rest(
+                statement, self.mode)
 
             # Validate if the results with mode and without mode are the same
             if not (results == immediate_results):
@@ -78,8 +81,8 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         # Execute statement and get a handle
         statement = "select * from {0} where city=\"Chicago\";".format(
             self.cbas_dataset_name)
-        status, metrics, errors, results, handle = self.execute_statement_on_cbas(
-            statement, self.master, mode=self.mode)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode=self.mode)
 
         # Fetch result using the same handle twice
         if handle:
@@ -136,8 +139,8 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         statement = "select sleep(count(*),{0}) from {1} where mutated=0;".format(
             delay, self.cbas_dataset_name)
 
-        status, metrics, errors, results, handle = self.execute_statement_on_cbas(
-            statement, self.master, mode=self.mode)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode=self.mode)
         async_mode_execution_time = self.convert_execution_time_into_ms(
             metrics["executionTime"])
         self.log.info("Execution time in async mode = %s",
@@ -201,16 +204,16 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
             self.cbas_dataset_name)
 
         # Execute query (with sleep induced) in async mode and see the execution time
-        _, async_metrics, _, _, async_handle = self.execute_statement_on_cbas(
-            statement, self.master, mode="async")
+        _, async_metrics, _, _, async_handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="async")
         async_mode_execution_time = self.convert_execution_time_into_ms(
             async_metrics["executionTime"])
         self.log.info("Execution time in async mode = %s ms",
                       async_mode_execution_time)
 
         # Execute query (with sleep induced) in deferred mode and see the execution time
-        status, deferred_metrics, _, results, deferred_handle = self.execute_statement_on_cbas(
-            statement, self.master, mode=self.mode)
+        status, deferred_metrics, _, results, deferred_handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode=self.mode)
         deferred_mode_execution_time = self.convert_execution_time_into_ms(
             deferred_metrics["executionTime"])
         self.log.info("Execution time in deferred mode = %s ms",
@@ -267,8 +270,8 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
             self.cbas_dataset_name)
 
         # Execute query (with sleep induced) in immediate mode
-        status, metrics, _, results, handle = self.execute_statement_on_cbas(
-            statement, self.master, mode=self.mode)
+        status, metrics, _, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode=self.mode)
 
         # Validate status is 'success'
         self.log.info("Status = %s", status)
@@ -315,8 +318,8 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         statement = "select sleep(count(*),{0}) from {1} where mutated=0;".format(
             delay, self.cbas_dataset_name)
 
-        status, metrics, errors, results, handle = self.execute_statement_on_cbas(
-            statement, self.master, mode=self.mode)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode=self.mode)
 
         if handle:
             if self.mode == "async":

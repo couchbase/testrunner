@@ -943,21 +943,26 @@ class QueryTests(BaseTestCase):
             if self.master.ip == "127.0.0.1":
                 scheme = "http"
                 host="{0}:{1}".format(self.master.ip,self.master.port)
-            # self.query = 'select * from default where meta().id = "{0}"'.format("k051")
-            # actual_result = self.run_cbq_query()
-            # self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854776000L})
-            # self.query = 'select * from default where meta().id = "{0}"'.format("k031")
-            # actual_result = self.run_cbq_query()
-            # self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775807})
-            # self.query = 'select * from default where meta().id = "{0}"'.format("k021")
-            # actual_result = self.run_cbq_query()
-            # self.assertEquals(actual_result['results'][0]["default"],{'id': 1470691191458562048})
-            # self.query = 'select * from default where meta().id = "{0}"'.format("k011")
-            # actual_result = self.run_cbq_query()
-            # self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854775807})
-            # self.query = 'select * from default where meta().id = "{0}"'.format("k041")
-            # actual_result = self.run_cbq_query()
-            # self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854776000L})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k051")
+            actual_result = self.run_cbq_query()
+            print "k051 results is {0}".format(actual_result['results'][0]["default"])
+            #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775808})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k031")
+            actual_result = self.run_cbq_query()
+            print "k031 results is {0}".format(actual_result['results'][0]["default"])
+            #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775807})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k021")
+            actual_result = self.run_cbq_query()
+            print "k021 results is {0}".format(actual_result['results'][0]["default"])
+            #self.assertEquals(actual_result['results'][0]["default"],{'id': 1470691191458562048})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k011")
+            actual_result = self.run_cbq_query()
+            print "k011 results is {0}".format(actual_result['results'][0]["default"])
+            #self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854775807})
+            self.query = 'select * from default where meta().id = "{0}"'.format("k041")
+            actual_result = self.run_cbq_query()
+            print "k041 results is {0}".format(actual_result['results'][0]["default"])
+            #self.assertEquals(actual_result['results'][0]["default"],{'id':  9223372036854776000L})
             self.query = 'delete from default where meta().id in ["k051","k021","k011","k041","k031"]'
             self.run_cbq_query()
 
@@ -3334,7 +3339,7 @@ class QueryTests(BaseTestCase):
                     #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
                     queries_errors = {'CREATE INDEX ONE ON default(meta().cas) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().flags) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta().expiry) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta().expiration) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().cas) using VIEW' : ('syntax error', 3000)}
                     # if self.gsi_type:
                     #     for query in queries_errors.iterkeys():

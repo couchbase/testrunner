@@ -54,6 +54,7 @@ class auditcli(BaseTestCase):
             raise Exception(" Ldap Tests cannot run on windows");
         else:
             if self.source == 'saslauthd':
+                self.auth_type = 'sasl'
                 rest = RestConnection(self.master)
                 self.setupLDAPSettings(rest)
                 #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
@@ -85,7 +86,7 @@ class auditcli(BaseTestCase):
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+        content =  rest.set_user_roles(user_id=username,payload=payload)
 
 
     #Wrapper around auditmain
@@ -96,10 +97,10 @@ class auditcli(BaseTestCase):
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
 
-    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211, bucket_password=None, \
+    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_password=None, \
                         bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
-        options = "--bucket={0} --bucket-type={1} --bucket-port={2} --bucket-ramsize={3} --bucket-replica={4}".\
-            format(bucket, bucket_type, bucket_port, bucket_ramsize, bucket_replica)
+        options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}".\
+            format(bucket, bucket_type, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica), "")[enable_index_replica is None]
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
@@ -132,7 +133,7 @@ class auditcli(BaseTestCase):
                                    'groupUUID':"0", 'node':'ns_1@' + self.servers[num + 1].ip, 'source':source,
                                    'user':self.master.rest_username, "real_userid:user":self.ldapUser, "ip":'127.0.0.1', "remote:port":57457}
             self.checkConfig(self.eventID, self.master, expectedResults)
-            expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
+            expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.servers[num + 1].ip, "ns_1@" + self.master.ip],
                                     'ejected_nodes':[], 'source':'ns_server', 'source':source, 'user':self.master.rest_username,
                                     "ip":'127.0.0.1', "port":57457, "real_userid:user":self.ldapUser}
             self.checkConfig(8200, self.master, expectedResults)
@@ -144,7 +145,7 @@ class auditcli(BaseTestCase):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
                 #expectedResults = {'node':'ns_1@' + self.servers[num + 1].ip, 'source':source, 'user':self.master.rest_username, "ip":'127.0.0.1', "port":57457}
                 #self.checkConfig(self.eventID, self.master, expectedResults)
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.servers[num + 1].ip, "ns_1@" + self.master.ip],
                                     'ejected_nodes':["ns_1@" + self.servers[num + 1].ip], 'source':source, 'user':self.master.rest_username,
                                     "ip":'127.0.0.1', "port":57457, "real_userid:user":self.ldapUser}
                 self.checkConfig(8200, self.master, expectedResults)
@@ -169,7 +170,7 @@ class auditcli(BaseTestCase):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
                 self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
                 cli_command = "server-readd"
-                options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num ].ip)
+                options = "--server-add={0}:8091 ".format(self.servers[nodes_add - nodes_rem - num ].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
                 expectedResults = {'node':'ns_1@' + self.servers[nodes_add - nodes_rem - num ].ip, 'type':'full', "real_userid:user":self.ldapUser, 'source':source, 'user':self.master.rest_username, "ip":'127.0.0.1', "port":57457}
                 self.checkConfig(self.eventID, self.master, expectedResults)
@@ -189,7 +190,7 @@ class auditcli(BaseTestCase):
         enable_index_replica = self.input.param("enable_index_replica", None)
 
         remote_client = RemoteMachineShellConnection(self.master)
-        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
+        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_password=bucket_password, \
                         bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
         expectedResults = {'bucket_name':'default', 'ram_quota':209715200, 'num_replicas':1,
                                'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
@@ -221,14 +222,13 @@ class auditcli(BaseTestCase):
 
         remote_client = RemoteMachineShellConnection(self.master)
 
-        self._create_bucket(remote_client, bucket, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
+        self._create_bucket(remote_client, bucket, bucket_type=bucket_type, bucket_password=bucket_password, \
                         bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
 
         cli_command = "bucket-edit"
         options = "--bucket={0}".format(bucket)
         options += (" --enable-flush={0}".format(enable_flush_new), "")[enable_flush_new is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica_new), "")[enable_index_replica_new is None]
-        options += (" --bucket-port={0}".format(bucket_port_new), "")[bucket_port_new is None]
         options += (" --bucket-password={0}".format(bucket_password_new), "")[bucket_password_new is None]
         options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), "")[bucket_ramsize_new is None]
 
@@ -238,7 +238,7 @@ class auditcli(BaseTestCase):
                             'auth_type':'none', "autocompaction":'false', "purge_interval":"undefined", \
                             "flush_enabled":True, "num_threads":3, "source":self.source, \
                             "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'',
-                            "moxi_port":1224 }
+                            'auth_type':self.auth_type}
         self.checkConfig(8202, self.master, expectedResults)
 
         cli_command = "bucket-flush --force"
