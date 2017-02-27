@@ -306,13 +306,15 @@ class RestConnection(object):
 
         # Initialization of CBAS related params
         self.cbas_base_url = ""
-        if self.input.cbas:
-            self.cbas_node = self.input.cbas
-            self.cbas_port = 8095
-            if hasattr(self.cbas_node, 'port'):
-                self.cbas_port = self.cbas_node.port
-            self.cbas_base_url = "http://{0}:{1}".format(self.cbas_node.ip,
-                                                         self.cbas_port)
+        if hasattr(self.input, 'cbas'):
+            if self.input.cbas:
+                self.cbas_node = self.input.cbas
+                self.cbas_port = 8095
+                if hasattr(self.cbas_node, 'port'):
+                    self.cbas_port = self.cbas_node.port
+                self.cbas_base_url = "http://{0}:{1}".format(
+                    self.cbas_node.ip,
+                    self.cbas_port)
 
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
