@@ -866,9 +866,10 @@ class FTSIndex:
             self.__log.info("Doc ID %s not found in search results." % doc_id)
             return -1
 
-    def create(self):
+    def create(self, rest=None):
         self.__log.info("Checking if index already exists ...")
-        rest = RestConnection(self.__cluster.get_random_fts_node())
+        if not rest:
+            rest = RestConnection(self.__cluster.get_random_fts_node())
         status, _ = rest.get_fts_index_definition(self.name)
         if status != 400:
             rest.delete_fts_index(self.name)
@@ -878,30 +879,36 @@ class FTSIndex:
             rest.ip))
         rest.create_fts_index(self.name, self.index_definition)
 
-    def update(self):
-        rest = RestConnection(self.__cluster.get_random_fts_node())
+    def update(self, rest=None):
+        if not rest:
+            rest = RestConnection(self.__cluster.get_random_fts_node())
         self.__log.info("Updating {0} {1} on {2}".format(
             self.index_type,
             self.name,
             rest.ip))
         rest.update_fts_index(self.name, self.index_definition)
 
-    def delete(self):
-        rest = RestConnection(self.__cluster.get_random_fts_node())
+    def delete(self, rest=None):
+        if not rest:
+            rest = RestConnection(self.__cluster.get_random_fts_node())
         self.__log.info("Deleting {0} {1} on {2}".format(
             self.index_type,
             self.name,
             rest.ip))
         status = rest.delete_fts_index(self.name)
-        if not self.__cluster.are_index_files_deleted_from_disk(self.name):
-            self.__log.error("Status: {0} but index file for {1} not yet "
-                             "deleted!".format(status, self.name))
+        if status:
+            if not self.__cluster.are_index_files_deleted_from_disk(self.name):
+                self.__log.error("Status: {0} but index file for {1} not yet "
+                                 "deleted!".format(status, self.name))
+            else:
+                self.__log.info("Validated: all index files for {0} deleted from "
+                                "disk".format(self.name))
         else:
-            self.__log.info("Validated: all index files for {0} deleted from "
-                            "disk".format(self.name))
+            raise FTSException("Index/alias {0} not deleted".format(self.name))
 
-    def get_index_defn(self):
-        rest = RestConnection(self.__cluster.get_random_fts_node())
+    def get_index_defn(self, rest=None):
+        if not rest:
+            rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_definition(self.name)
 
     def get_max_partitions_pindex(self):
@@ -911,8 +918,9 @@ class FTSIndex:
     def clone(self, clone_name):
         pass
 
-    def get_indexed_doc_count(self):
-        rest = RestConnection(self.__cluster.get_random_fts_node())
+    def get_indexed_doc_count(self, rest=None):
+        if not rest:
+            rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_doc_count(self.name)
 
     def get_src_bucket_doc_count(self):
@@ -1027,7 +1035,7 @@ class FTSIndex:
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000):
+                      consistency_vectors={}, timeout=60000, rest=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -2933,7 +2941,7 @@ class FTSBaseTest(unittest.TestCase):
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
         if self.__fail_on_errors:
-            self.__report_error_list = ["panic:", "crash in forestdb"]
+            self.__report_error_list = []
 
         # for format {ip1: {"panic": 2}}
         self.__error_count_dict = {}
