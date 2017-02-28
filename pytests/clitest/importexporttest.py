@@ -10,6 +10,7 @@ from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_cli import CouchbaseCLI
 from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
@@ -77,8 +78,30 @@ class ImportExportTests(CliBaseTest):
         return self._common_imex_test("export", options)
 
     def test_export_and_import_back(self):
-        options = {"load_doc": True, "docs":"10"}
+        options = {"load_doc": True, "docs":"1000"}
         return self._common_imex_test("export", options)
+
+    def test_export_from_dgm_bucket(self):
+        """
+           Need to add params below to test:
+            format_type=list (or lines)
+            dgm_run=True
+            active_resident_threshold=xx
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        return self._common_imex_test("export", options)
+
+    def test_import_to_dgm_bucket(self):
+        """
+           Need to add params below to test:
+            format_type=list (or lines)
+            imex_type=json (tab or csv)
+            import_file=json_list_1000_lines (depend on above formats)
+            dgm_run=True
+            active_resident_threshold=xx
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        return self._common_imex_test("import", options)
 
     def test_imex_during_rebalance(self):
         """ During rebalance, the test will execute the import/export command.
@@ -526,6 +549,11 @@ class ImportExportTests(CliBaseTest):
             self.log.info("test with local bin path ")
             self.cli_command_path = "cd %s; ./" % self.cli_command_path
         self.buckets = RestConnection(server).get_buckets()
+        random_key = self.key_generator()
+        kv_gen = BlobGenerator(random_key, "%s-" % random_key,
+                                                   self.value_size,
+                                                   start=0,
+                                                   end=50000)
         if "export" in cmd:
             cmd = "cbexport"
             if options["load_doc"]:
@@ -536,11 +564,22 @@ class ImportExportTests(CliBaseTest):
                             % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
                                server.ip, username, password, options["docs"],
                                bucket.name)
+                        if self.dgm_run and self.active_resident_threshold:
+                            """ disable auto compaction so that bucket could
+                                go into dgm faster.
+                            """
+                            self.rest.disable_auto_compaction()
+                            self.log.info("**** Load bucket to %s of active resident"\
+                                          % self.active_resident_threshold)
+                            self._load_all_buckets(self.master, kv_gen, "create", 0)
+                        self.log.info("load sample data to bucket")
                         self.shell.execute_command(load_cmd)
             """ remove previous export directory at tmp dir and re-create it
                 in linux:   /tmp/export
                 in windows: /cygdrive/c/tmp/export """
+            self.log.info("remove old export dir in %s" % self.tmp_path)
             self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
+            self.log.info("create export dir in %s" % self.tmp_path)
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
             """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
@@ -627,6 +666,15 @@ class ImportExportTests(CliBaseTest):
                                                              import_method, des_file,
                                               format_flag, self.format_type, key_gen,
                                                                 field_separator_flag)
+                    if self.dgm_run and self.active_resident_threshold:
+                        """ disable auto compaction so that bucket could
+                            go into dgm faster.
+                        """
+                        self.rest.disable_auto_compaction()
+                        self.log.info("**** Load bucket to %s of active resident"\
+                                          % self.active_resident_threshold)
+                        self._load_all_buckets(self.master, kv_gen, "create", 0)
+                    self.log.info("Import data to bucket")
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
                     """ Json `file:///root/json_list` imported to `http://host:8091` successfully """

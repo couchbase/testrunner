@@ -783,18 +783,23 @@ class BaseTestCase(unittest.TestCase):
     """
 
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
-                          only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
-                          proxy_client=None):
+                          only_store_hash=True, batch_size=1000, pause_secs=1,
+                          timeout_secs=30, proxy_client=None):
 
         if self.enable_bloom_filter:
             for bucket in self.buckets:
-                ClusterOperationHelper.flushctl_set(self.master, "bfilter_enabled", 'true', bucket)
+                ClusterOperationHelper.flushctl_set(self.master,
+                                                    "bfilter_enabled", 'true', bucket)
 
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
-                                             only_store_hash, batch_size, pause_secs, timeout_secs,
-                                             proxy_client)
+                                             only_store_hash, batch_size, pause_secs,
+                                             timeout_secs, proxy_client)
         for task in tasks:
             task.result()
+
+        """
+           Load bucket to DGM if params active_resident_threshold is passed
+        """
         if self.active_resident_threshold:
             stats_all_buckets = {}
             for bucket in self.buckets:
@@ -805,20 +810,31 @@ class BaseTestCase(unittest.TestCase):
                 while not threshold_reached:
                     active_resident = \
                         stats_all_buckets[bucket.name].get_stats([self.master], bucket, '',
-                                                                 'vb_active_perc_mem_resident')[
-                            server]
+                                                     'vb_active_perc_mem_resident')[server]
                     if int(active_resident) > self.active_resident_threshold:
                         self.log.info(
-                            "resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
-                            (active_resident, self.active_resident_threshold, self.master.ip, bucket.name))
+                            "resident ratio is %s greater than %s for %s in bucket %s.\n"\
+                            " Continue loading to the cluster" %
+                                               (active_resident,
+                                                self.active_resident_threshold,
+                                                self.master.ip,
+                                                bucket.name))
                         random_key = self.key_generator()
-                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size,
+                        generate_load = BlobGenerator(random_key,
+                                                      '%s-' % random_key,
+                                                      self.value_size,
                                                       end=batch_size * 50)
-                        self._load_bucket(bucket, self.master, generate_load, "create", exp=0, kv_store=1, flag=0,
-                                          only_store_hash=True, batch_size=batch_size, pause_secs=5, timeout_secs=60)
+                        self._load_bucket(bucket, self.master, generate_load,
+                                          "create", exp=0, kv_store=1, flag=0,
+                                          only_store_hash=True,
+                                          batch_size=batch_size,
+                                          pause_secs=5, timeout_secs=60)
                     else:
                         threshold_reached = True
-                        self.log.info("DGM state achieved for %s in bucket %s!" % (self.master.ip, bucket.name))
+                        self.log.info("\n DGM state achieved at %s %% for %s in bucket %s!"\
+                                                                     % (active_resident,
+                                                                        self.master.ip,
+                                                                        bucket.name))
                         break
 
     def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True,
