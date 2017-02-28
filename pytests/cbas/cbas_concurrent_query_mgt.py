@@ -13,6 +13,7 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
         self.rest = RestConnection(self.master)
         self.failed_count = 0
         self.success_count = 0
+        self.rejected_count = 0
         self.statement = "select sleep(count(*),500) from {0} where mutated=0;".format(
             self.cbas_dataset_name)
 
@@ -80,8 +81,12 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
         for thread in threads:
             thread.join()
 
-        self.log.info("%s queries submitted, %s failed, %s passed" % (
-        self.num_concurrent_queries, self.failed_count, self.success_count))
+        self.log.info("%s queries submitted, %s failed, %s passed, %s rejected" % (
+        self.num_concurrent_queries, self.failed_count, self.success_count, self.rejected_count))
+
+        if self.failed_count + self.success_count + self.rejected_count != self.num_concurrent_queries:
+            self.fail("Some queries errored out. Check logs.")
+
         if self.failed_count > 0:
             self.fail("Some queries failed.")
 
@@ -89,19 +94,47 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
         # Execute query (with sleep induced)
         name = threading.currentThread().getName();
 
-        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
-            self.statement, mode=self.mode, rest=self.rest)
-
-        # Validate if the status of the request is success, and if the count matches num_items
-        if status == "success":
-            if results[0]['$1'] != self.num_items:
-                self.log.info("Query result : %s", results[0]['$1'])
-                self.log.info("********Thread %s : failure**********", name)
-                self.failed_count += 1
+        try:
+            status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+                self.statement, mode=self.mode, rest=self.rest, timeout=3600)
+            # Validate if the status of the request is success, and if the count matches num_items
+            if self.mode == "immediate":
+                if status == "success":
+                    if results[0]['$1'] != self.num_items:
+                        self.log.info("Query result : %s", results[0]['$1'])
+                        self.log.info("********Thread %s : failure**********",
+                                      name)
+                        self.failed_count += 1
+                    else:
+                        self.log.info("--------Thread %s : success----------",
+                                      name)
+                        self.success_count += 1
+                else:
+                    self.log.info("Status = %s", status)
+                    self.log.info("********Thread %s : failure**********", name)
+                    self.failed_count += 1
+            elif self.mode == "async":
+                if status == "started" and handle:
+                    self.log.info("--------Thread %s : success----------", name)
+                    self.success_count += 1
+                else:
+                    self.log.info("Status = %s", status)
+                    self.log.info("********Thread %s : failure**********", name)
+                    self.failed_count += 1
+            elif self.mode == "deferred":
+                if status == "success" and handle:
+                    self.log.info("--------Thread %s : success----------", name)
+                    self.success_count += 1
+                else:
+                    self.log.info("Status = %s", status)
+                    self.log.info("********Thread %s : failure**********", name)
+                    self.failed_count += 1
+        except Exception, e:
+            if str(e)=="Request Rejected":
+                self.log.info("Error 503 : Request Rejected")
+                self.rejected_count += 1
             else:
-                self.log.info("--------Thread %s : success----------", name)
-                self.success_count += 1
-        else:
-            self.log.info("Status = %s", status)
-            self.log.info("********Thread %s : failure**********", name)
-            self.failed_count += 1
+                self.log.error(str(e))
+
+
+

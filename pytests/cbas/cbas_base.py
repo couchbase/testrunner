@@ -72,7 +72,7 @@ class CBASBaseTest(BaseTestCase):
         """
         cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"name\":\"" + cb_bucket_name + "\",\"nodes\":\"" + cb_server_ip + "\"};"
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_create_bucket, self.mode)
+            cmd_create_bucket)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -93,7 +93,7 @@ class CBASBaseTest(BaseTestCase):
             cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";".format(
                 cbas_dataset_name, cbas_bucket_name, where_field, where_value)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_create_dataset, self.mode)
+            cmd_create_dataset)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -109,7 +109,7 @@ class CBASBaseTest(BaseTestCase):
         """
         cmd_connect_bucket = "connect bucket " + cbas_bucket_name + " with {\"password\":\"" + cb_bucket_password + "\"};"
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_connect_bucket, self.mode)
+            cmd_connect_bucket)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -132,7 +132,7 @@ class CBASBaseTest(BaseTestCase):
                 cbas_bucket_name)
 
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_disconnect_bucket, self.mode)
+            cmd_disconnect_bucket)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -147,7 +147,7 @@ class CBASBaseTest(BaseTestCase):
         """
         cmd_drop_dataset = "drop dataset {0};".format(cbas_dataset_name)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_drop_dataset, self.mode)
+            cmd_drop_dataset)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -162,7 +162,7 @@ class CBASBaseTest(BaseTestCase):
         """
         cmd_drop_bucket = "drop bucket {0};".format(cbas_bucket_name)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_drop_bucket, self.mode)
+            cmd_drop_bucket)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -271,7 +271,7 @@ class CBASBaseTest(BaseTestCase):
             #cmd_get_buckets = "select BucketName from Metadata.`Bucket`;"
             cmd_get_buckets = "select Name from Metadata.`Bucket`;"
             status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-                cmd_get_buckets, self.mode)
+                cmd_get_buckets)
             if (results != None) & (len(results) > 0):
                 for row in results:
                     self.disconnect_from_bucket(row['Name'],
@@ -284,7 +284,7 @@ class CBASBaseTest(BaseTestCase):
             # Drop all datasets
             cmd_get_datasets = "select DatasetName from Metadata.`Dataset` where DataverseName != \"Metadata\";"
             status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-                cmd_get_datasets, self.mode)
+                cmd_get_datasets)
             if (results != None) & (len(results) > 0):
                 for row in results:
                     self.drop_dataset(row['DatasetName'])
@@ -294,7 +294,7 @@ class CBASBaseTest(BaseTestCase):
 
             # Drop all buckets
             status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-                cmd_get_buckets, self.mode)
+                cmd_get_buckets)
             if (results != None) & (len(results) > 0):
                 for row in results:
                     self.drop_cbas_bucket(row['Name'])
@@ -335,7 +335,7 @@ class CBASBaseTest(BaseTestCase):
         cmd_get_num_mutated_items = "select count(*) from %s where mutated>0;" % dataset_name
 
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_get_num_items, self.mode)
+            cmd_get_num_items)
         if status != "success":
             self.log.error("Query failed")
         else:
@@ -343,7 +343,7 @@ class CBASBaseTest(BaseTestCase):
             total_items = results[0]['$1']
 
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_get_num_mutated_items, self.mode)
+            cmd_get_num_mutated_items)
         if status != "success":
             self.log.error("Query failed")
         else:
@@ -399,32 +399,37 @@ class CBASBaseTest(BaseTestCase):
         else:
             return None
 
-    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None):
+    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None, timeout=70):
         """
         Executes a statement on CBAS using the REST API using REST Client
         """
         pretty = "true"
         if not rest:
             rest = RestConnection(self.master)
-        response = rest.execute_statement_on_cbas(statement,
-                                                  mode, pretty)
-        response = json.loads(response)
-        if "errors" in response:
-            errors = response["errors"]
-        else:
-            errors = None
+        try:
+            response = rest.execute_statement_on_cbas(statement, mode, pretty,
+                                                      timeout)
+            response = json.loads(response)
+            if "errors" in response:
+                errors = response["errors"]
+            else:
+                errors = None
 
-        if "results" in response:
-            results = response["results"]
-        else:
-            results = None
+            if "results" in response:
+                results = response["results"]
+            else:
+                results = None
 
-        if "handle" in response:
-            handle = response["handle"]
-        else:
-            handle = None
+            if "handle" in response:
+                handle = response["handle"]
+            else:
+                handle = None
 
-        return response["status"], response["metrics"], errors, results, handle
+            return response["status"], response[
+                "metrics"], errors, results, handle
+
+        except Exception,e:
+            raise Exception(str(e))
 
     def async_query_execute(self, statement, mode, num_queries):
         """

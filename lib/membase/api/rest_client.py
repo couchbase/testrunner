@@ -946,7 +946,7 @@ class RestConnection(object):
             log.info(content)
         return status
 
-    def execute_statement_on_cbas(self, statement, mode, pretty=True):
+    def execute_statement_on_cbas(self, statement, mode, pretty=True, timeout=70):
         api = self.cbas_base_url + "/analytics/service"
         headers = {'Content-type': 'application/json'}
         params = {'statement': statement, 'mode': mode, 'pretty': pretty}
@@ -954,9 +954,12 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST',
                                                      headers=headers,
                                                      params=params,
-                                                     timeout=3600)
+                                                     timeout=timeout)
         if status:
             return content
+        elif str(header['status']) == '503':
+            log.info("Request Rejected")
+            raise Exception("Request Rejected")
         else:
             log.error("/analytics/service status:{0},content:{1}".format(
                 status, content))
