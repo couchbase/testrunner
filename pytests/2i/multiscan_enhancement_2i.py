@@ -154,12 +154,58 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
         msg = "Failed Scans: {0}".format(failed_scans)
         self.assertEqual(len(failed_scans), 0, msg)
 
+    def test_simple_index_multiple_filter_spans(self):
+        failed_scans = []
+        query_definition = QueryDefinition(
+            index_name="name_index", index_fields=["name"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" ORDER BY _id"),
+            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        scan_contents = []
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Callia"}]},
+                              {"Filter":[{"Low": "Kala", "High": "Winta"}]}])
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Callia"}]},
+                              {"Filter":[{"Low": "Callia", "High": "Winta"}]}])
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Callia"}]},
+                              {"Filter":[{"Low": "Callia", "High": "Callia"}]}])
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Kala"}]},
+                              {"Filter":[{"Low": "Callia", "High": "Winta"}]}])
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Winta"}]},
+                              {"Filter":[{"Low": "Callia", "High": "Kala"}]}])
+        scan_contents.append([{"Filter":[{"Low": NULL_STRING, "High":"Callia"}]},
+                              {"Filter":[{"Low": "Kala", "High": "Winta"}]}])
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High": NULL_STRING}]},
+                              {"Filter":[{"Low": "Callia", "High": "Winta"}]}])
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Callia"}]},
+                              {"Filter":[{"Low": NULL_STRING, "High": "Winta"}]}])
+        scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Callia"}]},
+                              {"Filter":[{"Low": "Callia", "High": NULL_STRING}]}])
+        multiscan_content = self._update_multiscan_content(1)
+        for bucket in self.buckets:
+            id_map = self.create_index_using_rest(bucket, query_definition)
+            for scan_content in scan_contents:
+                for name_inclusion_first in range(4):
+                    for name_inclusion_second in range(4):
+                        scan_content[0]["Filter"][0]["Inclusion"] = name_inclusion_first
+                        scan_content[1]["Filter"][0]["Inclusion"] = name_inclusion_second
+                        multiscan_content["scans"] = json.dumps(scan_content)
+                        multiscan_result = \
+                            self.rest.multiscan_for_gsi_index_with_rest(
+                                id_map["id"], json.dumps(multiscan_content))
+                        check = self._verify_items_indexed_for_two_field_index(
+                            bucket, id_map["id"],
+                            ["name"], scan_content, multiscan_result)
+                        if not check:
+                            failed_scans.append(copy.deepcopy(scan_content))
+        msg = "Failed Scans: {0}".format(failed_scans)
+        self.assertEqual(len(failed_scans), 0, msg)
+
     def test_two_field_composite_index_seek(self):
         failed_scans = []
         query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age", index_fields=["name", "age"],
+            index_name="name_index", index_fields=["name", "age"],
             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
                                                       "name < \"Winta\""
                                                       "AND age > 0 AND age "
                                                       "< 100 ORDER BY _id"),
@@ -383,21 +429,32 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
         query_definition = QueryDefinition(
             index_name="two_field_composite_name_age", index_fields=["name", "age"],
             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
+                                                      "name > \"Callia\" AND "
+                                                      "name < \"Kala\""
                                                       "AND age > 0 AND age "
                                                       "< 100 ORDER BY _id"),
             groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
-        scan_contents.append([{"Filter":[{"Low":"Winta", "High":"Zack"},
-                                        {"Low":30, "High":50}]}])
-        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Winta"},
-                                        {"Low":130, "High":150}]}])
-        """
-        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Winta"},
-                                        {"Low":30, "High":50},
-                                         {"Low": "India", "High": "US"}]}])
-        """
+        scan_contents.append([{"Seek": None, "Filter":[{"Low":"Callia", "High":"Kala"},
+                                                 {"Low":40, "High":70}]}])
+        scan_contents.append([{"Filter":[{"Low":"Callia", "High":"Kala"},
+                                         {"Low":40, "High":70}]}])
+        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Kala"},
+                                         {"Low":40, "High":70}]}])
+        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Callia"},
+                                         {"Low":40, "High":70}]}])
+        scan_contents.append([{"Filter":[{"Low":"Callia", "High":"Kala"},
+                                         {"Low":40, "High":40}]}])
+        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Kala"},
+                                         {"Low":40, "High":40}]}])
+        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Callia"},
+                                         {"Low":40, "High":40}]}])
+        scan_contents.append([{"Filter":[{"Low":"Callia", "High":"Kala"},
+                                         {"Low":70, "High":40}]}])
+        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Kala"},
+                                         {"Low":70, "High":40}]}])
+        scan_contents.append([{"Filter":[{"Low":"Kala", "High":"Callia"},
+                                         {"Low":70, "High":40}]}])
         multiscan_content = self._update_multiscan_content()
         for bucket in self.buckets:
             id_map = self.create_index_using_rest(bucket, query_definition)
@@ -471,6 +528,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                                                       "name < \"Winta\""
                                                       "AND age > 0 AND age "
                                                       "< 100 ORDER BY _id"),
+
              groups=["two_field_index"],
              index_where_clause=" name IS NOT NULL ")
         scan_content = [{"Filter":[{"Low": "M", "High": "Z"}, {}]}]
@@ -559,7 +617,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
     def test_name_age_premium_customer_composite_index(self):
         failed_scans = []
         query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age",
+            index_name="three_field_composite_name_age",
             index_fields=["name", "age", "premium_customer"],
             groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         #Basic Scan
@@ -569,7 +627,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                                        {"Low": False, "High": True}]}]
         for bucket in self.buckets:
             id_map = self.create_index_using_rest(bucket, query_definition)
-            multiscan_content = self._update_multiscan_content()
+            multiscan_content = self._update_multiscan_content(index_fields=3)
             for name_inclusion in range(4):
                 for age_inclusion in range(4):
                     for cust_inclustion in range(4):
@@ -577,7 +635,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                             name_inclusion
                         scan_content[0]["Filter"][1]["Inclusion"] = \
                             age_inclusion
-                        scan_content[0]["Filter"][1]["Inclusion"] = \
+                        scan_content[0]["Filter"][2]["Inclusion"] = \
                             cust_inclustion
                         multiscan_content["scans"] = json.dumps(scan_content)
                         multiscan_result = \
@@ -872,6 +930,10 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def _verify_items_indexed_for_two_field_index(self, bucket, index_id, index_fields,
                                                   scan_content, multiscan_result):
+        err_message = "There are more ranges than number"
+        if isinstance(multiscan_result, dict):
+            if err_message in multiscan_result.values():
+                multiscan_result = ''
         expected_results = []
         body = {"stale": "False"}
         for content in scan_content:
