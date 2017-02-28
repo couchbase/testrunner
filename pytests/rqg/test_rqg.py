@@ -63,7 +63,7 @@ class RQGTests(BaseTestCase):
         self.total_queries= self.input.param("total_queries",None)
         self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
         self.run_query_with_primary= self.input.param("run_query_with_primary",False)
-        self.create_primary_index=self.input.param("create_primary_index",True)
+        self.create_primary_index=self.input.param("create_primary_index", True)
         self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
         self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
         self.test_file_path= self.input.param("test_file_path",None)
@@ -77,7 +77,7 @@ class RQGTests(BaseTestCase):
         self.ram_quota = self.input.param("ram_quota",512)
         self.drop_index = self.input.param("drop_index",False)
         self.drop_bucket = self.input.param("drop_bucket",False)
-        self.subquery = self.input.param("subquery",False)
+        self.dynamic_indexing = self.input.param("dynamic_indexing", False)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -877,7 +877,9 @@ class RQGTests(BaseTestCase):
                 queries = 0
                 file_number = 1
                 f.close()
-                f = open(self.data_dump_path+"/"+self.file_prefix+"_"+file_number+".txt","w")
+                filename = self.data_dump_path + "/" \
+                           + self.file_prefix + "_" + str(file_number) + ".txt"
+                f = open(filename,"w")
         f.close()
 
     def test_take_snapshot_of_database(self):
@@ -1151,7 +1153,8 @@ class RQGTests(BaseTestCase):
             else:
                 self.sec_index_map  = self._extract_secondary_index_map_from_file(self.secondary_index_info_path)
         if not self.generate_input_only:
-            self._build_primary_indexes(self.using_gsi)
+            if self.create_primary_index:
+                self._build_primary_indexes(self.using_gsi)
             if self.create_secondary_indexes:
                 thread_list = []
                 if self.build_secondary_index_in_seq:
@@ -1167,8 +1170,7 @@ class RQGTests(BaseTestCase):
                         t.join()
 
     def _build_primary_indexes(self, using_gsi= True):
-        if (self.create_primary_index==True):
-            self.n1ql_helper.create_primary_index(using_gsi = using_gsi, server = self.n1ql_server)
+        self.n1ql_helper.create_primary_index(using_gsi = using_gsi, server = self.n1ql_server)
 
     def _load_data_in_buckets_using_mc_bin_client(self, bucket, data_set):
         client = VBucketAwareMemcached(RestConnection(self.master), bucket)
@@ -1327,23 +1329,41 @@ class RQGTests(BaseTestCase):
         if not self.gen_secondary_indexes:
             return
         secondary_index_table_map = self._calculate_secondary_indexing_information(query_list)
-        for table_name in secondary_index_table_map.keys():
-            #table_name = self.database+"_" + table_name
-            self.log.info(" Building Secondary Indexes for Bucket {0}".format(self.database+"_" + table_name))
-            for index_name in secondary_index_table_map[table_name].keys():
-                query = "Create Index {0} on {1}({2}) ".format(index_name, self.database+"_" + table_name,
-                    ",".join(secondary_index_table_map[table_name][index_name]))
+        if self.dynamic_indexing:
+            for table_name in secondary_index_table_map.keys():
+                index_name = "idx_" + str(table_name)
+                bucket_name = self.database+ "_" + table_name
+                query = "Create Index {0} on {1}(DISTINCT ARRAY v FOR v IN PAIRS(SELF) END)".format(
+                    index_name, bucket_name)
                 if self.gen_gsi_indexes:
                     query += " using gsi"
                 self.log.info(" Running Query {0} ".format(query))
                 try:
-                    actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
-                    table_name = self.database+"_" + table_name
-                    check = self.n1ql_helper.is_index_online_and_in_list(table_name, index_name,
-                        server = self.n1ql_server, timeout = 240)
+                    actual_result = self.n1ql_helper.run_cbq_query(
+                        query=query, server=self.n1ql_server)
+                    check = self.n1ql_helper.is_index_online_and_in_list(
+                        bucket_name, index_name, server=self.n1ql_server, timeout=240)
                 except Exception, ex:
                     self.log.info(ex)
                     raise
+        else:
+            for table_name in secondary_index_table_map.keys():
+                #table_name = self.database+"_" + table_name
+                self.log.info(" Building Secondary Indexes for Bucket {0}".format(self.database+"_" + table_name))
+                for index_name in secondary_index_table_map[table_name].keys():
+                    query = "Create Index {0} on {1}({2}) ".format(index_name, self.database+"_" + table_name,
+                        ",".join(secondary_index_table_map[table_name][index_name]))
+                    if self.gen_gsi_indexes:
+                        query += " using gsi"
+                    self.log.info(" Running Query {0} ".format(query))
+                    try:
+                        actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                        table_name = self.database+"_" + table_name
+                        check = self.n1ql_helper.is_index_online_and_in_list(table_name, index_name,
+                            server = self.n1ql_server, timeout = 240)
+                    except Exception, ex:
+                        self.log.info(ex)
+                        raise
 
     def _generate_secondary_indexes_during_initialize(self, index_map = {}):
         if self.generate_input_only:
@@ -1363,17 +1383,31 @@ class RQGTests(BaseTestCase):
         build_index_list = []
         batch_index_definitions = {}
         batch_index_definitions = index_map
-        for index_name in batch_index_definitions.keys():
-            query = "{0} WITH {1}".format(
-                batch_index_definitions[index_name]["definition"], defer_mode)
+        if self.dynamic_indexing:
+            index_name = "idx_" + table_name
+            query = "CREATE INDEX {0} ON {1}(DISTINCT ARRAY v FOR v IN PAIRS(SELF) END) WITH {2}".format(
+                    index_name, table_name, defer_mode)
             build_index_list.append(index_name)
             self.log.info(" Running Query {0} ".format(query))
             try:
-                actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose = False)
+                actual_result = self.n1ql_helper.run_cbq_query(
+                    query=query, server=self.n1ql_server, verbose=False)
                 build_index_list.append(index_name)
             except Exception, ex:
                 self.log.info(ex)
                 raise
+        else:
+            for index_name in batch_index_definitions.keys():
+                query = "{0} WITH {1}".format(
+                    batch_index_definitions[index_name]["definition"], defer_mode)
+                build_index_list.append(index_name)
+                self.log.info(" Running Query {0} ".format(query))
+                try:
+                    actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose = False)
+                    build_index_list.append(index_name)
+                except Exception, ex:
+                    self.log.info(ex)
+                    raise
         # Run Build Query
         if build_index_list != None and len(build_index_list) > 0:
             batch_size = 0
@@ -1783,5 +1817,3 @@ class RQGTests(BaseTestCase):
                                     datetime_field_value,bool_field_value,varchar_value,char_value,orderid1,qty1,price1,primary_key_value,
                                     orderid2,qty2,price2,primary_key_value)
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_insert_template, server = self.n1ql_server)
-
-
