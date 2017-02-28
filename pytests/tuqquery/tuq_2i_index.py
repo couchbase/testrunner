@@ -2667,7 +2667,7 @@ class QueriesIndexTests(QueryTests):
                     plan['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
                 result1 = plan['~children'][0]['scan']['index']
-                self.assertTrue(result1 == idx)
+                self.assertTrue(result1 == idx or result1 == idx2)
                 self.query = "EXPLAIN SELECT new_project_full.department new_project " +\
                 "FROM %s as employee use index (%s) left JOIN default as new_project_full " % (bucket.name,idx2) +\
                 "ON KEYS meta(`employee`).id WHERE ANY i IN employee.address SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
@@ -2677,7 +2677,7 @@ class QueriesIndexTests(QueryTests):
                     plan['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
                 result1 = plan['~children'][0]['scan']['index']
-                self.assertTrue(result1 == idx2)
+                self.assertTrue(result1 == idx2 or result1 == idx)
                 self.query = "SELECT new_project_full.department new_project " +\
                 "FROM %s as employee left JOIN default as new_project_full " % (bucket.name) +\
                 "ON KEYS meta(`employee`).id WHERE ANY i IN employee.address SATISFIES  (ANY j IN i SATISFIES j.city='Delhi' end) END "
