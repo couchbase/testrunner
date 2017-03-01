@@ -258,7 +258,8 @@ class BuildQuery(object):
         return build
 
     def find_couchbase_release_build(self, product, deliverable_type, os_architecture,
-                                    build_version, is_amazon=False, os_version=""):
+                                    build_version, is_amazon=False, os_version="",
+                                    direct_build_url=None):
         build_details = build_version
         if build_version[:5] in COUCHBASE_VERSION_2_WITH_REL:
             if build_version[-4:] != "-rel":
@@ -423,6 +424,8 @@ class BuildQuery(object):
                                                        deliverable_type)
             build.url = build.url.replace("enterprise", "community")
             build.name = build.name.replace("enterprise", "community")
+        if direct_build_url is not None and deliverable_type != "exe":
+            build.url = direct_build_url
         return build
 
     def sort_builds_by_version(self, builds):

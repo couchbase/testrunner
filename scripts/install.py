@@ -270,7 +270,8 @@ class Installer(object):
                                             os_architecture=info.architecture_type,
                                             build_version=version,
                                             product=name,
-                                            os_version = info.distribution_version)
+                                            os_version = info.distribution_version,
+                                            direct_build_url=direct_build_url)
                 else:
                     builds, changes = BuildQuery().get_all_builds(version=version,
                                       timeout=timeout,
