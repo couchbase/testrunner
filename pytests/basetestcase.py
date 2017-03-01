@@ -135,6 +135,9 @@ class BaseTestCase(unittest.TestCase):
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
+            self.is_container = self.input.param("is_container", False)
+
+            # bucket parameters go here,
             self.bucket_size = self.input.param("bucket_size", None)
             self.lww = self.input.param("lww", False) # only applies to LWW but is here because the bucket is created here
             if self.skip_setup_cleanup:
@@ -410,7 +413,7 @@ class BaseTestCase(unittest.TestCase):
                                                       maxParallelReplicaIndexers, init_port,
                                                       quota_percent, services=assigned_services,
                                                       index_quota_percent=self.index_quota_percent,
-                                                      gsi_type=self.gsi_type))
+                                                      gsi_type=self.gsi_type, is_container=self.is_container))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:

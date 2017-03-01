@@ -3512,6 +3512,7 @@ class Node(object):
         self.rest_password = ""
         self.port = 8091
         self.services = []
+        self.storageTotalRam = 0
 
 
 class AutoFailoverSettings(object):
@@ -3639,6 +3640,14 @@ class RestParser(object):
                 node.moxi = ports["proxy"]
             if "direct" in ports:
                 node.memcached = ports["direct"]
+
+        if "storageTotals" in parsed:
+            storageTotals = parsed["storageTotals"]
+            if storageTotals.get("ram"):
+                if storageTotals["ram"].get("total"):
+                    ramKB = storageTotals["ram"]["total"]
+                    node.storageTotalRam = ramKB/(1024*1024)
+
         return node
 
     def parse_get_bucket_response(self, response):

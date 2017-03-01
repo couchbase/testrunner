@@ -119,7 +119,8 @@ class Cluster(object):
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
                         maxParallelIndexers=None, maxParallelReplicaIndexers=None, port=None,
-                        quota_percent=None, services = None, index_quota_percent = None, gsi_type='forestdb'):
+                        quota_percent=None, services = None, index_quota_percent = None, gsi_type='forestdb',
+                        is_container=False):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -137,13 +138,14 @@ class Cluster(object):
             quota_percent - percent of memory to initialize
             services - can be kv, n1ql, index
             gsi_type - Indexer Storage Mode
+            is_container - Boolean indicating wether init target is a container
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
 
         _task = NodeInitializeTask(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                           rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers,
                           port, quota_percent, services = services, index_quota_percent = index_quota_percent,
-                          gsi_type=gsi_type)
+                          gsi_type=gsi_type, is_container=is_container)
         self.task_manager.schedule(_task)
         return _task
 
@@ -1253,3 +1255,18 @@ class Cluster(object):
                                     cli_command_location)
         self.task_manager.schedule(_task)
         return _task
+
+    def async_cbas_query_execute(self, server, cbas_endpoint, statement, mode=None, pretty=True):
+        """
+        Asynchronously execute a CBAS query
+        :param server: CB server
+        :param cbas_endpoint: CBAS Endpoint URL (/analytics/service)
+        :param statement: Query to be executed
+        :param mode: Query Execution mode
+        :param pretty: Pretty formatting
+        :return: task with the output or error message
+        """
+        _task = CBASQueryExecuteTask(server, cbas_endpoint, statement, mode, pretty)
+        self.task_manager.schedule(_task)
+        return _task
+>>>>>>> c073b21... CBQE-3879: use storageTotal Ram for containers
