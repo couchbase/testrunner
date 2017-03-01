@@ -1990,6 +1990,11 @@ class RestConnection(object):
                            'evictionPolicy': evictionPolicy}
         if lww:
             init_params['conflictResolutionType'] = 'lww'
+
+
+        if bucketType == 'ephemeral':
+            del init_params['replicaIndex']     # does not apply to ephemeral buckets, and is even rejected
+
         params = urllib.urlencode(init_params)
 
         log.info("{0} with param: {1}".format(api, params))
