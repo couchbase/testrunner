@@ -178,11 +178,11 @@ class QuerySubqueryTests(QueryTests):
         self.query = 'SELECT name, id FROM default WHERE "windows" IN (SELECT RAW VMs.os FROM default.VMs) order by meta().id limit 2'
         actual_result = self.run_cbq_query()
         print actual_result['results']
-        #self.assertTrue(actual_result['results']==[{u'id': u'b4eaab5e-e7ee-4991-913b-d960e0eba239'}, {u'id': u'da7877e8-e3d2-42e9-b706-6b9d4c93cdef'}])
+        self.assertTrue(actual_result['results']==[{u'id': u'feaa4880-b117-4de6-9b3c-d1dd21c64abe'}, {u'id': u'930e38d0-c35f-4e73-991e-db1a0758b8a9'}])
         self.query = 'SELECT name, id FROM default WHERE 10 < (SELECT RAW VMs.memory FROM default.VMs)  order by meta().id limit 2'
         actual_result = self.run_cbq_query()
         print actual_result['results']
-        #self.assertTrue(actual_result['results']==[{u'id': u'00134a8d-9151-44ec-9c23-f751df2ac978'}, {u'id': u'0016ccd3-a976-4086-9be2-ee78a4a18381'}])
+        self.assertTrue(actual_result['results']==[{u'id': u'00148e19-1203-4f48-aa3d-2751b57fec8d'}, {u'id': u'0018f09f-9726-4f6f-b872-afa3f7510254'}])
 
 
     def test_subquery_joins(self):
