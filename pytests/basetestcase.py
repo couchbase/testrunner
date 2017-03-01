@@ -31,6 +31,7 @@ from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from membase.helper.cluster_helper import ClusterOperationHelper
+from security.rbac_base import RbacBase
 
 from couchbase_cli import CouchbaseCLI
 import testconstants
@@ -235,6 +236,17 @@ class BaseTestCase(unittest.TestCase):
 
                 self.change_env_variables()
                 self.change_checkpoint_params()
+
+                # Add built-in user
+                testuser = [{'id': 'temp', 'name': 'temp', 'password': 'password'}]
+                RbacBase().create_user_source(testuser, 'builtin', self.master)
+                self.sleep(10)
+
+                # Assign user to role
+                role_list = [{'id': 'temp', 'name': 'temp', 'roles': 'admin'}]
+                RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+                self.sleep(10)
+
                 self.log.info("done initializing cluster")
             else:
                 self.quota = ""
@@ -368,6 +380,10 @@ class BaseTestCase(unittest.TestCase):
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
                 ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+                role_del = ['temp']
+
+                #Remove rbac user in teardown
+                temp = RbacBase().remove_user_role(role_del, rest)
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
         except BaseException:
