@@ -3995,6 +3995,10 @@ class QueryTests(BaseTestCase):
            if self.input.tuq_client and "client" in self.input.tuq_client:
                server = self.tuq_client
         cred_params = {'creds': []}
+        rest = RestConnection(server)
+        username = rest.username
+        password = rest.password
+        cred_params['creds'].append({'user': username, 'pass': password})
         for bucket in self.buckets:
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
@@ -4029,14 +4033,16 @@ class QueryTests(BaseTestCase):
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
                 self.log.info('RUN QUERY %s' % query)
-                result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params, is_prepared=is_prepared,
+                result = rest.analytics_tool(query, 8095, query_params=query_params, is_prepared=is_prepared,
                                                         named_prepare=self.named_prepare, encoded_plan=encoded_plan,
                                                         servers=self.servers)
 
             else :
-                result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
-                                                        named_prepare=self.named_prepare, encoded_plan=encoded_plan,
-                                                        servers=self.servers)
+                result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
+                                                            is_prepared=is_prepared,
+                                                            named_prepare=self.named_prepare,
+                                                            encoded_plan=encoded_plan,
+                                                            servers=self.servers)
         else:
             #self._set_env_variable(server)
             if self.version == "git_repo":
@@ -4047,10 +4053,10 @@ class QueryTests(BaseTestCase):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    if "system" in query:
-                        cmd =  "%s/cbq  -engine=http://%s:8091/ -q -u Administrator -p password" % (self.path,server.ip)
+                    if "system" in query or "create" in query.lower():
+                        cmd =  "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path,server.ip,server.port,username,password)
                     else:
-                        cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
+                        cmd = "%scbq  -engine=http://%s:%s/ -q" % (self.path,server.ip,server.port)
 
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     if not(output[0] == '{'):
