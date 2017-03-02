@@ -277,9 +277,8 @@ class BucketOperationHelper():
                 client = MemcachedClient(ip, int(port), timeout=30)
                 client.vbucket_count = len(vbuckets)
                 bucket_info = rest.get_bucket(bucket)
-                client.sasl_auth_plain("temp",
-                                       "password")
-                client.bucket_select(bucket)
+                client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                                    bucket_info.saslPassword.encode('ascii'))
                 for i in server_dict[every_ip_port]:
                     try:
                         (a, b, c) = client.get_vbucket_state(i)

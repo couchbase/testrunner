@@ -299,21 +299,14 @@ class MemcachedClientHelper(object):
             client = MemcachedClient(server["ip"], node.memcached, timeout=timeout)
         else:
             client = MemcachedClient(server.ip, node.memcached, timeout=timeout)
-
         if vBuckets != None:
             client.vbucket_count = len(vBuckets)
         else:
             client.vbucket_count = 0
         bucket_info = rest.get_bucket(bucket)
         # todo raise exception for not bucket_info
-
-        if isinstance(bucket,Bucket):
-            bucket = bucket.name
-
-        client.sasl_auth_plain("temp",
-                               "password")
-        client.bucket_select(bucket)
-
+        client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                               bucket_info.saslPassword.encode('ascii'))
         return client
 
     @staticmethod
