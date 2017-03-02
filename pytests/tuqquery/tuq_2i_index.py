@@ -1238,7 +1238,6 @@ class QueriesIndexTests(QueryTests):
                              "AND (ANY x within %s.VMs SATISFIES x.RAM between 1 and 5  END ) " % (bucket.name) + \
                              "AND  NOT (department = 'Manager') order by name limit 10"
                 expected_result = self.run_cbq_query()
-                import pdb;pdb.set_trace()
                 self.assertTrue(sorted(actual_result_within['results']) == sorted(expected_result['results']))
             finally:
                 for idx in created_indexes:
