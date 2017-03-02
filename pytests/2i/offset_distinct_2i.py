@@ -49,7 +49,7 @@ query_definition2 = QueryDefinition(
     groups=["single_field_index"],
     index_where_clause=" name IS NOT NULL ")
 
-global_projection_value = {"PrimaryKey": True}
+global_projection_value = None
 
 
 class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
@@ -1129,8 +1129,8 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                               stale="false"):
         multiscan_content = {}
         multiscan_content["scans"] = json.dumps(scan_content)
-        multiscan_content["projection"] = json.dumps(
-            projection_val)
+        if projection_val is not None:
+            multiscan_content["projection"] = json.dumps(projection_val)
         multiscan_content["distinct"] = distinct
         multiscan_content["reverse"] = reverse
         multiscan_content["offset"] = offset
