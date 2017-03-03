@@ -1349,11 +1349,12 @@ class RestConnection(object):
                                            parameters=params)
         return status
 
-    def diag_eval(self, code):
+    def diag_eval(self, code, print_log=True):
         api = '{0}{1}'.format(self.baseUrl, 'diag/eval/')
         status, content, header = self._http_request(api, "POST", code)
-        log.info("/diag/eval status on {0}:{1}: {2} content: {3} command: {4}".
-                 format(self.ip, self.port, status, content, code))
+        if print_log:
+            log.info("/diag/eval status on {0}:{1}: {2} content: {3} command: {4}".
+                     format(self.ip, self.port, status, content, code))
         return status, content
 
     def set_chk_max_items(self, max_items):
