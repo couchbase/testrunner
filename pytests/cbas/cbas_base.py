@@ -48,6 +48,10 @@ class CBASBaseTest(BaseTestCase):
         self.mode = self.input.param('mode',None)
         self.num_concurrent_queries = self.input.param('num_queries',5000)
         self.concurrent_batch_size = self.input.param('concurrent_batch_size', 100)
+        self.compiler_param = self.input.param('compiler_param', None)
+        self.compiler_param_val = self.input.param('compiler_param_val', None)
+        self.expect_reject = self.input.param('expect_reject', False)
+        self.expect_failure = self.input.param('expect_failure', False)
 
         # Drop any existing buckets and datasets
         self.cleanup_cbas()
@@ -313,10 +317,10 @@ class CBASBaseTest(BaseTestCase):
         :param end_key: Doc Key to end the operation with
         :return:
         """
-        number = 100
-        first = ['james', 'sharon']
+        age = range(70)
+        first = ['james', 'sharon', 'dave', 'bill', 'mike', 'steve']
         template = '{{ "number": {0}, "first_name": "{1}" , "mutated":0}}'
-        gen_load = DocumentGenerator('test_docs', template, [number, ], first,
+        gen_load = DocumentGenerator('test_docs', template, age, first,
                                      start=start_key, end=end_key)
         self.log.info("%s %s documents..." % (operation, num_items))
         try:
