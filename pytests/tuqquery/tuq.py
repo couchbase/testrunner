@@ -4053,10 +4053,8 @@ class QueryTests(BaseTestCase):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    if "system" in query or "create" in query.lower():
-                        cmd =  "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path,server.ip,server.port,username,password)
-                    else:
-                        cmd = "%scbq  -engine=http://%s:%s/ -q" % (self.path,server.ip,server.port)
+
+                    cmd =  "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path,server.ip,server.port,username,password)
 
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     if not(output[0] == '{'):
