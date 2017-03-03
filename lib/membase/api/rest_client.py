@@ -960,6 +960,10 @@ class RestConnection(object):
         elif str(header['status']) == '503':
             log.info("Request Rejected")
             raise Exception("Request Rejected")
+        elif str(header['status']) == '500':
+            content = json.loads(content)
+            if "Job requirement capacity" in content['errors'][0]['msg']:
+                raise Exception("Capacity cannot meet job requirement")
         else:
             log.error("/analytics/service status:{0},content:{1}".format(
                 status, content))
