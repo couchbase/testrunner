@@ -625,7 +625,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
             bucket_params = self._create_bucket_params(server=master_node, size=bucket_size,
-                                                              replicas=self.num_replicas,
+                                                              replicas=self._num_replicas,
                                                               eviction_policy=self.eviction_policy)
             self.cluster.create_default_bucket(bucket_params)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
