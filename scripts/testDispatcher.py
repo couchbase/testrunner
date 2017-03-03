@@ -48,6 +48,7 @@ def main():
     parser.add_option('-y','--serverType', dest='serverType', default='VM')   # or could be Docker
     parser.add_option('-u','--url', dest='url', default=None)
     parser.add_option('-j','--jenkins', dest='jenkins', default=None)
+    parser.add_option('-b','--branch', dest='branch', default='master')
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
     parser.add_option('-d','--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
@@ -201,7 +202,7 @@ def main():
     # this are VM/Docker dependent - or maybe not
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}'
+                         'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}&branch={10}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
 
@@ -293,7 +294,7 @@ def main():
                                     descriptor, testsToLaunch[i]['component'], dashboardDescriptor,
                                     testsToLaunch[i]['iniFile'],
                                     urllib.quote( parameters ), options.os, testsToLaunch[i]['initNodes'],
-                                    testsToLaunch[i]['installParameters'])
+                                    testsToLaunch[i]['installParameters'], options.branch)
 
 
                         if options.serverType.lower() != 'docker':
