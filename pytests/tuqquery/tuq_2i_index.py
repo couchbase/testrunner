@@ -546,8 +546,6 @@ class QueriesIndexTests(QueryTests):
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
-                self.query = 'create primary index on default'
-                self.run_cbq_query()
                 self.query = 'select join_day from %s where join_day in [4,7,5,10] order by meta().id' %(bucket.name)
                 actual_result = self.run_cbq_query()
                 self.query = 'select join_day from %s use index(`#primary`) where join_day in [4,7,5,10] order by meta().id' %(bucket.name)
