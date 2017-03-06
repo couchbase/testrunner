@@ -85,10 +85,13 @@ class AdvancedQueryTests(QueryTests):
     def test_timeout(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
+            username = self.rest.username
+            password = self.rest.password
             for bucket in self.buckets:
                 try:
                     queries = ['\set -timeout "10ms";',"create primary index on bucketname;","select * from bucketname;"]
-                    o = shell.execute_commands_inside('%s/cbq -q ' % (self.path),'',queries,bucket.name,'',bucket.name,'')
+                    o = shell.execute_commands_inside('%scbq -q -u %s -p %s' % (self.path,username,password),
+                                                      '',queries,bucket.name,'',bucket.name,'')
                     self.assertTrue("timeout" in o)
                     if self.analytics:
                         self.query = '\set -timeout "10ms"'
