@@ -35,6 +35,8 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_cli import CouchbaseCLI
 import testconstants
 
+from scripts.collect_server_info import cbcollectRunner
+
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -321,6 +323,22 @@ class BaseTestCase(unittest.TestCase):
             self.cluster.shutdown(force=True)
             self.fail(e)
 
+
+    def get_cbcollect_info(self, server):
+        """Collect cbcollectinfo logs for all the servers in the cluster.
+        """
+        path = TestInputSingleton.input.param("logs_folder", "/tmp")
+        print "grabbing cbcollect from {0}".format(server.ip)
+        path = path or "."
+        try:
+            cbcollectRunner(server, path).run()
+            TestInputSingleton.input.test_params[
+                "get-cbcollect-info"] = False
+        except Exception as e:
+            self.log.error( "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format( server.ip, e))
+
+
+
     def tearDown(self):
         if self.skip_setup_cleanup:
                 return
@@ -338,18 +356,31 @@ class BaseTestCase(unittest.TestCase):
                 self.log.warn("CLEANUP WAS SKIPPED")
             else:
 
-                if test_failed and TestInputSingleton.input.param('get_trace', None):
-                    for server in self.servers:
-                        try:
-                            shell = RemoteMachineShellConnection(server)
-                            output, _ = shell.execute_command("ps -aef|grep %s" %
-                                                              TestInputSingleton.input.param('get_trace', None))
-                            output = shell.execute_command("pstack %s" % output[0].split()[1].strip())
-                            print output[0]
-                        except:
-                            pass
-                if test_failed and self.input.param('BUGS', False):
-                    self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+                if test_failed:
+                    # collect logs here instead of in test runner because we have not shut things down
+                    if TestInputSingleton.param("get-cbcollect-info", False):
+                        for server in self.servers:
+                            self.log.info("Collecting logs @ {0}".format(server.ip))
+                            self.get_cbcollect_info(server)
+                        # collected logs so turn it off so it is not done later
+                        TestInputSingleton.input.test_params["get-cbcollect-info"] = False
+
+                    if TestInputSingleton.input.param('get_trace', None):
+                        for server in self.servers:
+                            try:
+                                shell = RemoteMachineShellConnection(server)
+                                output, _ = shell.execute_command("ps -aef|grep %s" %
+                                                                  TestInputSingleton.input.param('get_trace', None))
+                                output = shell.execute_command("pstack %s" % output[0].split()[1].strip())
+                                print output[0]
+                            except:
+                                pass
+                    if self.input.param('BUGS', False):
+                        self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+
+
+
+
 
                 self.log.info("==============  basetestcase cleanup was started for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
