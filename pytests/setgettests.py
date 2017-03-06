@@ -4,10 +4,12 @@ import mc_bin_client
 import uuid
 import logger
 import datetime
+import time
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from security.rbac_base import RbacBase
 
 class SimpleSetGetTestBase(object):
     log = None
@@ -34,6 +36,16 @@ class SimpleSetGetTestBase(object):
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.memoryQuota)
+
+        # Add built-in user
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+        time.sleep(10)
 
     def set_get_test(self, value_size, number_of_items):
         fixed_value = MemcachedClientHelper.create_value("S", value_size)
@@ -97,6 +109,11 @@ class SimpleSetGetTestBase(object):
     def tearDown_bucket(self):
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)
 
+        # Remove rbac user in teardown
+        role_del = ['cbadminbucket']
+        temp = RbacBase().remove_user_role(role_del, RestConnection(self.master))
+
+
 
 class MembaseBucket(unittest.TestCase):
 
@@ -104,6 +121,7 @@ class MembaseBucket(unittest.TestCase):
     def setUp(self):
         self.simpleSetGetTestBase = SimpleSetGetTestBase()
         self.simpleSetGetTestBase.setUp_bucket(self)
+
         self._log_start()
 
     def test_value_100b(self):
@@ -121,7 +139,7 @@ class MembaseBucket(unittest.TestCase):
     def tearDown(self):
         if self.simpleSetGetTestBase:
             self.simpleSetGetTestBase.tearDown_bucket()
-        self._log_finish()
+
 
     def _log_start(self):
         try:

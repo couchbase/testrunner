@@ -28,6 +28,7 @@ from couchbase_helper.documentgenerator import *
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from es_base import ElasticSearchBase
+from security.rbac_base import RbacBase
 
 
 
@@ -2878,6 +2879,9 @@ class FTSBaseTest(unittest.TestCase):
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                     .format(self.__case_number, self._testMethodName))
         finally:
+            # Remove rbac user in teardown
+            role_del = ['cbadminbucket']
+            temp = RbacBase().remove_user_role(role_del, RestConnection(self._input.servers[0]))
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
 
@@ -2910,6 +2914,17 @@ class FTSBaseTest(unittest.TestCase):
             self.setup_es()
         self._cb_cluster.init_cluster(self._cluster_services,
                                       self._input.servers[1:])
+
+        # Add built-in user
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', master)
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
+        time.sleep(10)
+
         self.__set_free_servers()
         if not no_buckets:
             self.__create_buckets()

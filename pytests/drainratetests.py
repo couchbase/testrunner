@@ -8,6 +8,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from security.rbac_base import RbacBase
 
 class DrainRateTests(unittest.TestCase):
     def setUp(self):
@@ -17,14 +18,30 @@ class DrainRateTests(unittest.TestCase):
         self.master = self.input.servers[0]
         self.bucket = "default"
         self.number_of_items = -1
+        # Add built-in user
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+        time.sleep(10)
+
         self._create_default_bucket()
         self.drained_in_seconds = -1
         self.drained = False
         self.reader_shutdown = False
+
+
         self._log_start()
 
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+        rest = RestConnection(self.master)
+        # Remove rbac user in teardown
+        role_del = ['cbadminbucket']
+        temp = RbacBase().remove_user_role(role_del, rest)
         self._log_finish()
 
     def _log_start(self):

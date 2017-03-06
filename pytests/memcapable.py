@@ -16,6 +16,8 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from basetestcase import BaseTestCase
+from security.rbac_base import RbacBase
+
 
 class MemcapableTestBase(object):
     log = None
@@ -36,7 +38,19 @@ class MemcapableTestBase(object):
         self.bucket_name = bucket_name
         ClusterOperationHelper.cleanup_cluster([self.master])
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)
+
+        # Add built-in user
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+        time.sleep(10)
+
         self._create_default_bucket(unittest)
+
 
     def _create_default_bucket(self, unittest):
         name = "default"
@@ -247,6 +261,7 @@ class GetlTests(unittest.TestCase):
         self.memcapableTestBase = MemcapableTestBase()
         self.memcapableTestBase.setUp_bucket('default', 11211, 'membase', self)
 
+
     #set an item for 5 seconds
     #getl for 15 seconds and verify that setting the item again
     #throes Data exists
@@ -322,6 +337,17 @@ class GetlTests(unittest.TestCase):
         expiration = 5
         getl_timeout = 15
         node = self.memcapableTestBase.master
+
+        # Add built-in user
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', node)
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(node), 'builtin')
+        time.sleep(10)
+
         mc = MemcachedClientHelper.direct_client(node, "default")
         key = "{0}_{1}".format(prefix, str(uuid.uuid4()))
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))

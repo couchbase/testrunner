@@ -24,6 +24,7 @@ from tasks.future import TimeoutError
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
+from security.rbac_base import RbacBase
 
 
 class RenameNodeException(XDCRException):
@@ -2486,6 +2487,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                 "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
         finally:
+            # Remove rbac user in teardown
+            role_del = ['cbadminbucket']
+            temp = RbacBase().remove_user_role(role_del, RestConnection(self._input.servers[0]))
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
 
@@ -2518,6 +2522,17 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         self.__cleanup_previous()
         self.__init_clusters()
+
+        # Add built-in user
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self._input.servers[0])
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self._input.servers[0]), 'builtin')
+        time.sleep(10)
+
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
                 and str(self.__class__).find('capiXDCR') == -1:

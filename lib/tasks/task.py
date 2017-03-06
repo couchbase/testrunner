@@ -608,16 +608,18 @@ class StatsWaitTask(Task):
     def _stringify_servers(self):
         return ''.join([`server.ip + ":" + str(server.port)` for server in self.servers])
 
-    def _get_connection(self, server):
+    def _get_connection(self, server, admin_user='cbadminbucket',admin_pass='password'):
         if not self.conns.has_key(server):
             for i in xrange(3):
                 try:
-                    self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+                    self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
+                                                                             admin_pass=admin_pass)
                     return self.conns[server]
                 except (EOFError, socket.error):
                     self.log.error("failed to create direct client, retry in 1 sec")
                     time.sleep(1)
-            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
+                                                                     admin_pass=admin_pass)
         return self.conns[server]
 
     def _compare(self, cmp_type, a, b):
