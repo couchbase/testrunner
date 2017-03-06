@@ -488,3 +488,69 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._wait_for_es_replication_to_catchup()
 
         self._verify_es_results()
+
+    def test_capi_with_cb_stop_and_start(self):
+        bucket = self._input.param("bucket", 'default')
+        repl_id = self._start_es_replication(bucket=bucket)
+
+        rest_conn = RestConnection(self.src_master)
+        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+
+        self.async_perform_update_delete()
+
+        conn = RemoteMachineShellConnection(self.src_master)
+        conn.stop_couchbase()
+        conn.start_couchbase()
+
+        self._wait_for_es_replication_to_catchup()
+
+        self._verify_es_results(bucket=bucket)
+
+    def test_capi_with_erlang_crash(self):
+        bucket = self._input.param("bucket", 'default')
+        repl_id = self._start_es_replication(bucket=bucket)
+
+        rest_conn = RestConnection(self.src_master)
+        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+
+        self.async_perform_update_delete()
+
+        conn = RemoteMachineShellConnection(self.src_master)
+        conn.kill_erlang()
+        conn.start_couchbase()
+
+        self._wait_for_es_replication_to_catchup()
+
+        self._verify_es_results(bucket=bucket)
+
+    def test_capi_with_memcached_crash(self):
+        bucket = self._input.param("bucket", 'default')
+        repl_id = self._start_es_replication(bucket=bucket)
+
+        rest_conn = RestConnection(self.src_master)
+        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+
+        self.async_perform_update_delete()
+
+        conn = RemoteMachineShellConnection(self.src_master)
+        conn.pause_memcached()
+        conn.unpause_memcached()
+
+        self._wait_for_es_replication_to_catchup()
+
+        self._verify_es_results(bucket=bucket)
