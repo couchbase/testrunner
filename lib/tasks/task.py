@@ -1050,7 +1050,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         # high throughput mode requires partitioning the doc generators
         self.generators = []
         for gen in self.input_generators:
-            gen_range = int(gen.end/self.process_concurrency)
+            gen_range = max(int(gen.end/self.process_concurrency), 1)
             for pos in range(gen.start, gen.end, gen_range):
                 partition_gen = copy.deepcopy(gen)
                 partition_gen.start = pos
