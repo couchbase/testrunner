@@ -2411,13 +2411,13 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select count(1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.assertTrue(
-                    plan['~children'][0]['#operator'] == 'IndexCountScan',
+                    plan['~children'][0]['#operator'] == 'IndexCountScan2',
                     "IndexCountScan is not being used")
                 self.query = "explain select a.cnt from (select count(1) from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result2)
                 self.assertTrue(
-                    plan['~children'][0]['#operator'] != 'IndexCountScan',
+                    plan['~children'][0]['#operator'] != 'IndexCountScan2',
                     "IndexCountScan should not be used in subquery")
                 self.query = "select a.cnt from (select count(1) from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
