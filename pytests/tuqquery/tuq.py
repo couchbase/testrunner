@@ -77,6 +77,8 @@ class QueryTests(BaseTestCase):
         self.server = self.master
         self.cbas_node = self.input.cbas
         self.rest = RestConnection(self.server)
+        self.username=self.rest.username
+        self.password=self.rest.password
         #self.coverage = self.input.param("coverage",False)
         self.cover = self.input.param("cover", False)
         shell = RemoteMachineShellConnection(self.master)
