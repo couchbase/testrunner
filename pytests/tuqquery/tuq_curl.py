@@ -174,17 +174,61 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(json_curl['metrics']['resultCount'] == 10 and json_curl['results'][0]['$1'] == 10 and
                         len(json_curl['results'][0]['hits']) == 10)
 
-    '''WIP'''
+    '''Test that you can insert data from a select curl statement into couchbase
+        -inserting data pulled from another bucket
+        -inserting data with a key that already exists (should fail)'''
     def test_insert_curl(self):
         n1ql_query = 'select * from \`beer-sample\` limit 1'
         insert_query ="insert into default (key UUID(), value curl_result.results[0].\`beer-sample\`) "
         query = "select curl('POST', "+ self.query_service_url +", "
         options = "{'data' : 'statement=%s','user': 'Administrator:password'}) curl_result " % n1ql_query
-        returning ="returning meta().id as docid, * "
-        curl = self.shell.execute_commands_inside(self.cbqpath,insert_query+query+options,'', '', '',
-                                                  '', '')
+        returning ="returning meta().id, * "
+        curl = self.shell.execute_commands_inside(self.cbqpath,insert_query+query+options+returning,'', '', '','', '')
         json_curl = self.convert_to_json(curl)
-        import pdb; pdb.set_trace()
+        docid = json_curl['results'][0]['id']
+        result = self.run_cbq_query('select * from default limit 1')
+        result2= self.run_cbq_query('select * from `beer-sample` limit 1')
+        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
+                        and json_curl['metrics']['mutationCount'] == 1)
+
+        insert_query = "insert into default (key '" + docid+"', value curl_result.results[0].\`beer-sample\`) "
+        curl = self.shell.execute_commands_inside(self.cbqpath,insert_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['status'] == 'errors' and 'cause:DuplicateKey' in json_curl['errors'][0]['msg'])
+
+    '''Test that you can insert data from a select curl statement using upsert
+        -inserting data pulled from another bucket
+        -insertign data using a key that already exists(should work)'''
+    def test_upsert_curl(self):
+        n1ql_query = 'select * from \`beer-sample\` limit 1'
+        insert_query ="upsert into default (key UUID(), value curl_result.results[0].\`beer-sample\`) "
+        query = "select curl('POST', "+ self.query_service_url +", "
+        options = "{'data' : 'statement=%s','user': 'Administrator:password'}) curl_result " % n1ql_query
+        returning ="returning meta().id, * "
+        curl = self.shell.execute_commands_inside(self.cbqpath,insert_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        docid = json_curl['results'][0]['id']
+        result = self.run_cbq_query('select * from default limit 1')
+        result2= self.run_cbq_query('select * from `beer-sample` limit 1')
+        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
+                        and json_curl['metrics']['mutationCount'] == 1)
+
+        n1ql_query = 'select * from \`beer-sample\` offset 1 limit 1'
+        insert_query = "upsert into default (key '" + docid+"', value curl_result.results[0].\`beer-sample\`) "
+        options = "{'data' : 'statement=%s','user': 'Administrator:password'}) curl_result " % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath,insert_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        result = self.run_cbq_query('select * from default limit 1')
+        result2= self.run_cbq_query('select * from `beer-sample` offset 1 limit 1')
+        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
+                        and json_curl['metrics']['mutationCount'] == 1)
+
+    '''WIP'''
+    def test_update_curl(self):
+        result = self.run_cbq_query('select meta().id from default limit 1')
+        docid = result['results'][0]['id']
+
+
 
     '''Test if you can access a protected bucket with curl and authorization'''
     def test_protected_bucket(self):
