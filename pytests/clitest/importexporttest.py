@@ -10,7 +10,7 @@ from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
 from couchbase_cli import CouchbaseCLI
 from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
@@ -24,6 +24,10 @@ class ImportExportTests(CliBaseTest):
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
         self.field_separator = self.input.param("field_separator", "comma")
+        self.json_create_gen = JsonDocGenerator("imex", op_type="create",
+                                       encoding="utf-8", start=0, end=self.num_items)
+        self.json_delete_gen = JsonDocGenerator("imex", op_type="delete",
+                                       encoding="utf-8", start=0, end=self.num_items)
 
     def tearDown(self):
         super(ImportExportTests, self).tearDown()
@@ -80,6 +84,79 @@ class ImportExportTests(CliBaseTest):
     def test_export_and_import_back(self):
         options = {"load_doc": True, "docs":"1000"}
         return self._common_imex_test("export", options)
+
+    def test_export_delete_expired_updated_data(self):
+        """
+           @delete_percent = percent keys deleted
+           @udpated = update doc
+           @update_field = [fields need to update] like update_field=['dept']
+             When do update_field, "mutated" should not = 0
+
+        """
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        delete_percent = self.input.param("delete_percent", None)
+        updated = self.input.param("updated", False)
+        update_field = self.input.param("update_field", None)
+        path = self.input.param("path", None)
+        self.ex_path = self.tmp_path + "export/"
+        master = self.servers[0]
+        server = copy.deepcopy(master)
+
+        if username is None:
+            username = server.rest_username
+        if password is None:
+            password = server.rest_password
+        self.cli_command_path = "cd %s; ./" % self.cli_command_path
+        self.buckets = RestConnection(server).get_buckets()
+        tasks_ops = []
+        total_items = self.num_items
+        for bucket in self.buckets:
+            doc_create_gen = copy.deepcopy(self.json_create_gen)
+            tasks_ops.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
+                                               doc_create_gen, bucket.kvs[1], "create"))
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
+            if delete_percent is not None:
+                self.log.info("Start to delete %s %% total keys" % delete_percent)
+                doc_delete_gen = copy.deepcopy(self.json_delete_gen)
+                doc_delete_gen.end = int(self.num_items) * int(delete_percent) / 100
+                total_items -= doc_delete_gen.end
+                tasks_ops.append(self.cluster.async_load_gen_docs(self.master,
+                                                 bucket.name, doc_delete_gen,
+                                                 bucket.kvs[1], "delete"))
+            if updated and update_field is not None:
+                self.log.info("Start update data")
+                doc_updated_gen = copy.deepcopy(self.json_create_gen)
+                doc_updated_gen.update(fields_to_update=update_field)
+                tasks_ops.append(self.cluster.async_load_gen_docs(self.master,
+                                                 bucket.name, doc_updated_gen,
+                                                 bucket.kvs[1], "update"))
+            for task in tasks_ops:
+                task.result()
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
+            """ remove previous export directory at tmp dir and re-create it
+                in linux:   /tmp/export
+                in windows: /cygdrive/c/tmp/export """
+            self.log.info("remove old export dir in %s" % self.tmp_path)
+            self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
+            self.log.info("create export dir in %s" % self.tmp_path)
+            self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+            """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
+                              -p password -b default -f list -o /tmp/test4.zip """
+            export_file = self.ex_path + bucket.name
+            if self.cmd_ext:
+                export_file = export_file.replace("/cygdrive/c", "c:")
+            exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
+                         % (self.cli_command_path, "cbexport", self.cmd_ext, self.imex_type,
+                                     server.ip, username, password, bucket.name,
+                                                    self.format_type, export_file)
+            output, error = self.shell.execute_command(exe_cmd_str)
+            self._check_output("successfully", output)
+            output, _ = self.shell.execute_command("awk%s 'END {print NR}' %s"
+                                                     % (self.cmd_ext, export_file))
+            self.assertTrue(int(total_items) == int(output[0]),
+                                     "doc in bucket: %s != doc in export file: %s"
+                                      % (total_items, output[0]))
 
     def test_export_from_dgm_bucket(self):
         """
