@@ -28,8 +28,8 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6
-from multiprocessing import Process, Manager, cpu_count
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY
+from multiprocessing import Process, Manager
 
 try:
     CHECK_FLAG = False
@@ -678,8 +678,7 @@ class GenericLoadingTask(Thread, Task):
         self.server = server
         self.bucket = bucket
         self.client = VBucketAwareMemcached(RestConnection(server), bucket)
-        # set process concurrency to number of cpus
-        self.process_concurrency = max(cpu_count(), 4)
+        self.process_concurrency = THROUGHPUT_CONCURRENCY
         # task queue's for synchronization
         process_manager = Manager()
         self.wait_queue = process_manager.Queue()
