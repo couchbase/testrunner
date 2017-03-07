@@ -1210,18 +1210,18 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         temp_doc_list = []
         ms_doc_list = []
         for tr in total_result:
-            if projection["PrimaryKey"] is False and tr["docid"] != "":
+            if projection is not None and projection["PrimaryKey"] is False and tr["docid"] != "":
                 assert False
-            if projection["PrimaryKey"] is True and tr["docid"] == "":
+            if projection is not None and projection["PrimaryKey"] is True and tr["docid"] == "":
                 assert False
             temp_doc_val = str(tr["key"])
             " ".join(temp_doc_val)
             temp_doc_list.append(temp_doc_val)
 
         for ms in multiscan_result:
-            if projection["PrimaryKey"] is False and ms["docid"] != "":
+            if projection is not None and projection["PrimaryKey"] is False and ms["docid"] != "":
                 assert False
-            if projection["PrimaryKey"] is True and ms["docid"] == "":
+            if projection is not None and projection["PrimaryKey"] is True and ms["docid"] == "":
                 assert False
             ms_doc_val = str(ms["key"])
             " ".join(ms_doc_val)
