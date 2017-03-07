@@ -1269,4 +1269,3 @@ class Cluster(object):
         _task = CBASQueryExecuteTask(server, cbas_endpoint, statement, mode, pretty)
         self.task_manager.schedule(_task)
         return _task
->>>>>>> c073b21... CBQE-3879: use storageTotal Ram for containers
