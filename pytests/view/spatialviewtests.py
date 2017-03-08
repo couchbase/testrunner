@@ -480,7 +480,7 @@ class SpatialViewQueriesTests(BaseTestCase):
             if not self.thread_stopped.is_set():
                 self.thread_stopped.set()
 
-class SpatialViewTests(unittest.TestCase):
+class SpatialViewTests(BaseTestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.helper = SpatialHelper(self, "default")
