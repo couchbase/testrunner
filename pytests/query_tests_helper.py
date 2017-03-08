@@ -183,7 +183,7 @@ class QueryHelperTests(BaseTestCase):
                                           full_docs_list=self.full_docs_list,
                                           log=self.log, input=self.input,
                                           master=self.master,
-                                          use_rest=self.use_rest
+                                          use_rest=True
                                           )
             log.info(self.n1ql_server)
             if self.create_primary_index:
