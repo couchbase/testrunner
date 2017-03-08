@@ -2474,6 +2474,11 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.log.info("Collecting logs @ {0}".format(server.ip))
                 NodeHelper.collect_logs(server, self.__is_cluster_run())
 
+        # Remove rbac users in teardown
+        role_del = ['cbadminbucket']
+        RbacBase().remove_user_role(role_del, RestConnection(self.get_cb_cluster_by_name('C1').get_master_node()))
+        RbacBase().remove_user_role(role_del, RestConnection(self.get_cb_cluster_by_name('C2').get_master_node()))
+
         try:
             if self.__is_cleanup_needed() or self._input.param("skip_cleanup", False):
                 self.log.warn("CLEANUP WAS SKIPPED")
@@ -2487,9 +2492,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                 "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
         finally:
-            # Remove rbac user in teardown
-            role_del = ['cbadminbucket']
-            temp = RbacBase().remove_user_role(role_del, RestConnection(self._input.servers[0]))
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
 
@@ -2523,14 +2525,24 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cleanup_previous()
         self.__init_clusters()
 
-        # Add built-in user
+         # Add built-in user to C1
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
-        RbacBase().create_user_source(testuser, 'builtin', self._input.servers[0])
+        RbacBase().create_user_source(testuser, 'builtin', self.get_cb_cluster_by_name('C1').get_master_node())
         time.sleep(10)
 
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
-        RbacBase().add_user_role(role_list, RestConnection(self._input.servers[0]), 'builtin')
+        RbacBase().add_user_role(role_list, RestConnection(self.get_cb_cluster_by_name('C1').get_master_node()), 'builtin')
+        time.sleep(10)
+
+        # Add built-in user to C2
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.get_cb_cluster_by_name('C2').get_master_node())
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.get_cb_cluster_by_name('C2').get_master_node()), 'builtin')
         time.sleep(10)
 
         self.__set_free_servers()
