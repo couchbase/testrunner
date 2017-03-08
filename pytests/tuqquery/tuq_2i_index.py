@@ -2933,6 +2933,49 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_avoid_full_span(self):
+         for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = 'create index %s on default( join_yr,join_day )'%(idx)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "explain select * from default where join_yr in [2011,2012]"
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['spans'][0]['Range']=={u'High': [u'successor(2011)'], u'Low': [u'2011'], u'Inclusion': 1})
+                self.assertTrue(plan['~children'][0]['spans'][1]['Range']=={u'High': [u'successor(2012)'], u'Low': [u'2012'], u'Inclusion': 1})
+
+                self.query = "select * from default where join_yr in [2011,2012] order by meta().id"
+                actual_result = self.run_cbq_query()
+                self.query = 'select * from default use index(`#primary`) where join_yr in [2011,2012] order by meta().id'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'explain select * from default where join_yr =2011 and join_day in [1,2,3,$1,$2,null,""]'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['Range']=={u'High': [u'2011', u'1'], u'Low': [u'2011', u'1'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['Range'] == {u'High': [u'2011', u'2'], u'Low': [u'2011', u'2'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['Range'] == {u'High': [u'2011', u'3'], u'Low': [u'2011', u'3'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['Range']=={u'High': [u'2011', u'$1'], u'Low': [u'2011', u'$1'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['Range']=={u'High': [u'2011', u'$2'], u'Low': [u'2011', u'$2'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['Range']=={u'High': [u'2011', u'""'], u'Low': [u'2011', u'""'], u'Inclusion': 3})
+                self.query = 'select * from default where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
+                actual_result = self.run_cbq_query()
+                self.query = 'select * from default use index(`#primary`) where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
     def test_distinct_meta(self):
           for bucket in self.buckets:
             created_indexes = []
