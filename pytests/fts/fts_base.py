@@ -1621,7 +1621,10 @@ class CouchbaseCluster:
                 count, err = shell.execute_command(
                     "ls {0}/@fts |grep {1}*.pindex | wc -l".
                         format(data_dir, index_name))
-                count = int(count[0])
+                if isinstance(count, list):
+                    count = int(count[0])
+                else:
+                    count = int(count)
                 self.__log.info(count)
                 retry += 1
                 if retry > 5:
