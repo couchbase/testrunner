@@ -223,12 +223,34 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
                         and json_curl['metrics']['mutationCount'] == 1)
 
-    '''WIP'''
+    '''See if you can update a bucket using n1ql curl'''
     def test_update_curl(self):
-        result = self.run_cbq_query('select meta().id from default limit 1')
+        query = 'select meta().id from default limit 1'
+        n1ql_query = "select d.join_yr from default d where d.join_yr == 2010 limit 1"
+        result = self.run_cbq_query(query)
         docid = result['results'][0]['id']
+        update_query ="update default use keys '" + docid + "' set name ="
+        query = "(curl('POST', "+ self.query_service_url +", "
+        options = "{'data' : 'statement=%s','user': 'Administrator:password'}).results[0].join_yr) " % n1ql_query
+        returning ="returning meta().id, * "
+        curl = self.shell.execute_commands_inside(self.cbqpath,update_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['default']['name'] == 2010)
 
-
+    '''Test if curl can be used inside a delete'''
+    def test_delete_curl(self):
+        curl_query = 'select meta().id from default limit 1'
+        result = self.run_cbq_query(curl_query)
+        docid = result['results'][0]['id']
+        delete_query ="delete from default d use keys "
+        query = "(curl('POST', "+ self.query_service_url +", "
+        options = "{'data' : 'statement=%s','user': 'Administrator:password'}).results[0].id) " % curl_query
+        returning ="returning meta().id, * "
+        curl = self.shell.execute_commands_inside(self.cbqpath,delete_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        result = self.run_cbq_query('select * from default')
+        self.assertTrue(json_curl['metrics']['mutationCount'] == 1 and json_curl['results'][0]['id'] == docid and
+                        result['metrics']['resultCount'] == 2015)
 
     '''Test if you can access a protected bucket with curl and authorization'''
     def test_protected_bucket(self):
@@ -249,6 +271,7 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath,select_query+from_query+options,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['results'][0]['total_hits'] == 12 and json_curl['results'][0]['$1'] == 10)
+
 ##############################################################################################
 #
 #   External endpoint Tests
