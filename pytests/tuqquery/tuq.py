@@ -475,6 +475,27 @@ class QueryTests(BaseTestCase):
                          "WHERE join_mo > 7 and join_day > 1"
             self.prepared_common_body()
 
+    def test_leak_goroutine(self):
+     shell = RemoteMachineShellConnection(self.master)
+     for i in xrange(20):
+         cmd = 'curl http://%s:6060/debug/pprof/goroutine?debug=2 | grep NewLexer' %(self.master.ip)
+         o =shell.execute_command(cmd)
+         new_curl = json.dumps(o)
+         string_curl = json.loads(new_curl)
+         self.assertTrue([u'', u"curl: (7) couldn't connect to host"]==string_curl[1])
+         self.assertTrue(len(string_curl)==2)
+         cmd = "curl http://%s:8093/query/service -d 'statement=select * from 1+2+3'"%(self.master.ip)
+         o =shell.execute_command(cmd)
+         new_curl = json.dumps(o)
+         string_curl = json.loads(new_curl)
+         self.assertTrue(len(string_curl)==2)
+         cmd = 'curl http://%s:6060/debug/pprof/goroutine?debug=2 | grep NewLexer'%(self.master.ip)
+         o =shell.execute_command(cmd)
+         new_curl = json.dumps(o)
+         string_curl = json.loads(new_curl)
+         self.assertTrue(len(string_curl)==2)
+
+
 
 
 ##############################################################################################
