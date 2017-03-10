@@ -643,6 +643,10 @@ class QueryTests(BaseTestCase):
                 raise Exception("n1ql_port is not defined, processing will not proceed further")
         query_params = {}
         cred_params = {'creds': []}
+        rest = RestConnection(server)
+        username = rest.username
+        password = rest.password
+        cred_params['creds'].append({'user': username, 'pass': password})
         for bucket in self.buckets:
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
@@ -655,10 +659,10 @@ class QueryTests(BaseTestCase):
                 query = query + ";"
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
-                result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params)
+                result = rest.analytics_tool(query, 8095, query_params=query_params)
 
             else :
-                result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
+                result = rest.query_tool(query, self.n1ql_port, query_params=query_params)
 
 
         else:
@@ -672,10 +676,8 @@ class QueryTests(BaseTestCase):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
 
-                if "system" in query:
-                        cmd =  "%s/cbq  -engine=http://%s:8091/ -q -u Administrator -p password" % (self.path,server.ip)
-                else:
-                        cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
+                cmd =  "%s/cbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path, server.ip, server.port, username, password)
+
                 output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                 if not(output[0] == '{'):
                     output1 = '{'+str(output)
