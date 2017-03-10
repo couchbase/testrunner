@@ -2565,6 +2565,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(result1 == idx)
                 self.query = "select count(1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
+                print actual_result['results']
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexCountScan2',
                     "IndexCountScan is not being used")
@@ -2578,10 +2579,11 @@ class QueriesIndexTests(QueryTests):
                 actual_result2 = self.run_cbq_query()
                 self.query = "select count(DISTINCT 1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
-                print actual_result['results']
-                self.query = "select count(DISTINCT *) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
-                actual_result = self.run_cbq_query()
-                print actual_result['results']
+                self.assertTrue(actual_result['results']==[{u'$1': 1}])
+
+                # self.query = "select count(DISTINCT *) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
+                # actual_result = self.run_cbq_query()
+                # print actual_result['results']
                 self.query = "select count(DISTINCT meta().id) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 print actual_result['results']
@@ -3897,7 +3899,7 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             for ind in xrange(self.num_indexes):
                     index_name = "indexwitharraysum%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(department,join_yr, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in VMs END ) where join_yr=2012 USING %s" % (index_name, bucket.name,self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(name,join_yr, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in VMs END ) where join_yr=2012 USING %s" % (index_name, bucket.name,self.index_type)
                     # if self.gsi_type:
                     #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
@@ -3906,8 +3908,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             try:
                 for index_name in created_indexes:
-                    self.query = "EXPLAIN SELECT count(department)" + \
-                                 " FROM %s where join_yr=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                    self.query = "EXPLAIN SELECT count(name)" + \
+                                 " FROM %s where join_yr=2012 AND name = 'query-testemployee10317.9004497-0'  GROUP BY name" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     plan = ExplainPlanHelper(actual_result)
                     print plan
@@ -3916,13 +3918,14 @@ class QueriesIndexTests(QueryTests):
                     "IndexScan is not being used")
                     result1 = plan['~children'][0]['scan']['index']
                     self.assertTrue(result1 == index_name)
-                    self.query = "SELECT count(department)" + \
-                                 " FROM %s where join_yr=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                    self.query = "SELECT count(name)" + \
+                                 " FROM %s where join_yr=2012 AND name = 'query-testemployee10317.9004497-0'  GROUP BY name" % (bucket.name)
                     actual_result = self.run_cbq_query()
-                    self.query = "SELECT count(department)" + \
-                                 " FROM %s use index(`#primary`) where join_yr=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                    self.query = "SELECT count(name)" + \
+                                 " FROM %s use index(`#primary`) where join_yr=2012 AND name = 'query-testemployee10317.9004497-0'  GROUP BY name" % (bucket.name)
                     expected_result = self.run_cbq_query()
-                    self.assertTrue(sorted(actual_result['results']),sorted(expected_result['results']))
+                    import pdb;pdb.set_trace()
+                    self.assertTrue((actual_result['results']),(expected_result['results']))
             finally:
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)

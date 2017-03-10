@@ -382,6 +382,7 @@ class QueryTests(BaseTestCase):
             query_template = 'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' %(bucket.name) +\
                          'GROUP BY $obj0.$_obj0_int0 ORDER BY points'
             actual_result, expected_result = self.run_query_from_template(query_template)
+            import pdb;pdb.set_trace()
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_desc(self):

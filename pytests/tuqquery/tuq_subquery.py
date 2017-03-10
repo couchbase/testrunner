@@ -160,7 +160,7 @@ class QuerySubqueryTests(QueryTests):
 
 
     def test_correlated_queries_predicate_exists(self):
-        self.query = 'SELECT name, id FROM default WHERE EXISTS (SELECT 1 FROM default.VMs WHERE VMs.memory > 10 order by meta().id)' \
+        self.query = 'SELECT name, id FROM default WHERE EXISTS (SELECT 1 FROM default.VMs WHERE VMs.memory > 10 order by meta(default).id)' \
                      ' order by meta().id limit 2'
         actual_result = self.run_cbq_query()
         print "test_correlated_queries_predicate_exists is {0}".format(actual_result['results'])
@@ -168,14 +168,14 @@ class QuerySubqueryTests(QueryTests):
 
     def test_correlated_queries_predicate_not_exists(self):
         self.query = 'SELECT name, id FROM default WHERE NOT EXISTS (SELECT 1 FROM default.VMs' \
-                     ' WHERE VMs.memory < 10 order by meta().id) order by meta().id limit 2'
+                     ' WHERE VMs.memory < 10 order by meta(default).id) order by meta().id limit 2'
         self.run_cbq_query()
         actual_result = self.run_cbq_query()
         print "test_correlated_queries_predicate_not_exists is {0}".format(actual_result['results'])
         #self.assertTrue(actual_result['results']==[{u'id': u'00002fb9-7b42-45ae-b864-c21e87563dac'}, {u'id': u'0011e2e6-7788-4582-b6ac-4185549dc838'}])
 
     def test_correlated_queries_in_clause(self):
-        self.query = 'SELECT name, id FROM default WHERE "windows" IN (SELECT RAW VMs.os FROM default.VMs) order by meta().id limit 2'
+        self.query = 'SELECT name, id FROM default WHERE "windows" IN (SELECT RAW VMs.os FROM default.VMs) order by meta(default).id limit 2'
         actual_result = self.run_cbq_query()
         print "test_correlated_queries_in_clause is {0}".format(actual_result['results'])
         #self.assertTrue(actual_result['results']==[{u'id': u'feaa4880-b117-4de6-9b3c-d1dd21c64abe'}, {u'id': u'930e38d0-c35f-4e73-991e-db1a0758b8a9'}])
