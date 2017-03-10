@@ -82,8 +82,13 @@ class KVStore(object):
 
         # merge valid
         for key in partition.valid_key_set():
+            new_ts = partition.get_timestamp(key)
+            curr_ts = 0
             self_partition = self.cache[itr]["partition"]
-            if self_partition.get_key(key) is None:
+            curr_item = self_partition.get_key(key)
+            if curr_item is not None:
+                curr_ts = self_partition.get_timestamp(key)
+            if new_ts > curr_ts:
                 item = partition.get_key(key)
                 self.cache[itr]["partition"].set(
                     key,
