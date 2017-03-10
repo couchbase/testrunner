@@ -1,9 +1,16 @@
 import time
+import random
 from eviction.evictionbase import EvictionBase
 
 from memcached.helper.data_helper import MemcachedClientHelper
 import uuid
 import mc_bin_client
+
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, JSONNonDocGenerator
+from couchbase_helper.stats_tools import StatsCommon
+
+from membase.api.rest_client import RestConnection
+from sdk_client import SDKClient
 
 class EvictionKV(EvictionBase):
 
@@ -207,4 +214,156 @@ class EvictionKV(EvictionBase):
         self.cluster.wait_for_stats([self.master],
                                     "default", "",
                                     "curr_items", "==", 0, timeout=30)
+
+
+    # Ephemeral buckets tests start here
+
+
+    # Ephemeral bucket configured with no eviction
+    # 1. Configure an ephemeral bucket with no eviction
+    # 2. Set kvs until we get OOM returned - this is expected
+    # 3. Explicitly delete some KVs
+    # 4. Add more kvs - should succeed
+    # 5. Add keys until OOM is returned
+
+
+    def test_ephemeral_bucket_no_eviction(self):
+
+        generate_load = BlobGenerator(EvictionKV.KEY_ROOT, 'param2', self.value_size, start=0, end=self.num_items)
+        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0, self.num_items)
+
+
+        # figure out how many items were loaded and load 10% more
+        rest = RestConnection(self.servers[0])
+        itemCount = rest.get_bucket(self.buckets[0]).stats.itemCount
+
+        self.log.info( 'Reached OOM, the number of items is {0}'.format( itemCount))
+
+
+        # delete some things
+
+
+        # do some more adds, verify they work up to a point
+
+    """
+
+    # NRU Eviction - in general fully populate memory and then add more kvs and see what keys are
+    # evicted it should be the ones least recently used. So in order:
+    1. Populate a bunch of kvs past memory being full and then populate some more and verify the oldest ones are deleted
+    2. Populate a bunch of keys past memory being full and then access selected keys deep in the history and populate some
+       more and verify that the accessed ones are not deleted
+    3. Test the various ways of accessing: get, put, upsert, upsert_multi, replace, append, prepend, luck, touch
+       The above is generally taken from here http://docs.couchbase.com/sdk-api/couchbase-python-client-2.2.1/api/couchbase.html
+
+
+    """
+
+    """
+       test_ephemeral_bucket_NRU_eviction - this is the most basic test, populate 10% past OOM and
+       see which 10% is deleted. Note that there is a concept of chunk, let's say it takes n items to
+       fill up memory and we add 10% more. That makes 11 chunks and 1 first chunk should generally be deleted.
+       And we can make the 10% a parameter - let's say we cycle memory completely, then all the initial kvs should
+       be deleted and the new ones should reamin
+    """
+
+    KEY_ROOT = 'key-root'
+    def test_ephemeral_bucket_NRU_eviction(self):
+
+        generate_load = BlobGenerator(EvictionKV.KEY_ROOT, 'param2', self.value_size, start=0, end=self.num_items)
+        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0, self.num_items)
+
+
+        # figure out how many items were loaded and load 10% more
+        rest = RestConnection(self.servers[0])
+        itemCount = rest.get_bucket(self.buckets[0]).stats.itemCount
+
+        self.log.info( 'Reached OOM, the number of items is {0}'.format( itemCount))
+
+
+
+        incremental_kv_population = BlobGenerator(EvictionKV.KEY_ROOT, 'param2', self.value_size, start=itemCount, end=itemCount * 1.1)
+        self._load_bucket(self.buckets[0], self.master, incremental_kv_population, "create", exp=0, kv_store=1)
+
+
+        # and then probe the keys that are left. For now print out a distribution but later apply some heuristic
+        client = SDKClient(hosts = [self.master.ip], bucket = self.buckets[0])
+
+
+        NUMBER_OF_CHUNKS = 11
+        items_in_chunk = int(1.1 * itemCount / NUMBER_OF_CHUNKS)
+        for i in range(NUMBER_OF_CHUNKS):
+            keys_still_present = 0
+            for j in range( items_in_chunk):
+                rc = client.get( EvictionKV.KEY_ROOT + str(i*items_in_chunk + j),no_format=True)
+
+                if rc[2] is not None:
+                    keys_still_present = keys_still_present + 1
+
+
+            self.log.info('Chunk {0} has {1:.2f} percent items still present'.
+                          format(i, 100 * keys_still_present / (itemCount*1.1/NUMBER_OF_CHUNKS) ) )
+
+    # more tests:
+    #  - recent operations exclude a key from deletion
+    #  - enumerate those operations http://docs.couchbase.com/sdk-api/couchbase-python-client-2.2.1/api/couchbase.html#couchbase.bucket.Bucket.get
+
+
+    """
+    General idea - populate until OOM, access some kvs we think would be delete. Populate some more so that deletion
+    happens around the accessed keys and verify that the accessed keys are not deleted
+    """
+
+    def test_ephemeral_bucket_NRU_eviction_access_in_the_delete_range(self):
+
+        """
+        generate_load = BlobGenerator(EvictionKV.KEY_ROOT, 'param2', self.value_size, start=0, end=self.num_items)
+        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0, self.num_items)
+
+
+        # figure out how many items were loaded and load 10% more
+        rest = RestConnection(self.servers[0])
+        itemCount = rest.get_bucket(self.buckets[0]).stats.itemCount
+
+        self.log.info( 'Reached OOM, the number of items is {0}'.format( itemCount))
+
+
+        """
+
+
+
+        # select some keys which we expect to be adjacent to the kvs which will be deleted
+        # and how many KVs should we select, maybe that is a parameter
+
+        itemCount = 50000
+        max_delete_value = itemCount / 10
+        NUM_OF_ACCESSES = 50
+        keys_to_access = set()
+        for i in range(NUM_OF_ACCESSES):
+            keys_to_access.add( random.randint(0,max_delete_value))
+
+
+
+
+        # and then do accesses on the key set
+        client = SDKClient(hosts = [self.master.ip], bucket = self.buckets[0])
+        for i in keys_to_access:
+            # and we may want to parameterize the get at some point
+            rc = client.get( EvictionKV.KEY_ROOT + str(i),no_format=True)
+
+
+        # and then do puts to delete out stuff
+        PERCENTAGE_TO_ADD = 10
+        incremental_kv_population = BlobGenerator(EvictionKV.KEY_ROOT, 'param2',
+                                          self.value_size, start=itemCount, end=itemCount * PERCENTAGE_TO_ADD/100)
+        self._load_bucket(self.buckets[0], self.master, incremental_kv_population, "create", exp=0, kv_store=1)
+
+
+        # and verify that the touched kvs are still there
+        for i in keys_to_access:
+            # and we may want to parameterize the get at some point
+            rc = client.get( EvictionKV.KEY_ROOT + str(i),no_format=True)
+            self.assertFalse( rc is None, 'Key {0} was incorrectly deleted'.format(EvictionKV.KEY_ROOT + str(i)))
+
+
+
 
