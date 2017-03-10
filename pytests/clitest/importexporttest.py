@@ -12,6 +12,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
 from couchbase_cli import CouchbaseCLI
+from security.rbac_base import RbacBase
 from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
@@ -679,6 +680,17 @@ class ImportExportTests(CliBaseTest):
                 import_shell = RemoteMachineShellConnection(import_servers[2])
                 imp_rest.force_eject_node()
                 self.sleep(2)
+
+                """ Add built-in user cbadminbucket to second cluster """
+                self.log.info("add built-in user cbadminbucket to second cluster.")
+                testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+                RbacBase().create_user_source(testuser, 'builtin', import_servers[2])
+                self.sleep(10)
+                """ Assign user to role """
+                role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+                RbacBase().add_user_role(role_list, RestConnection(import_servers[2]), 'builtin')
+                self.sleep(10)
+
                 imp_rest = RestConnection(import_servers[2])
                 status = False
                 info = imp_rest.get_nodes_self()

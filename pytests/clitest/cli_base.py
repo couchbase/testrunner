@@ -13,6 +13,7 @@ from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
     MAC_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
 
 from couchbase_helper.cluster import Cluster
+from security.rbac_base import RbacBase
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 
@@ -29,6 +30,17 @@ class CliBaseTest(BaseTestCase):
         self.r = random.Random()
         self.vbucket_count = 1024
         self.cluster = Cluster()
+
+        """ Add built-in user cbadminbucket to second cluster """
+        self.log.info("add built-in user cbadminbucket to master cluster.")
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        self.sleep(10)
+        """ Assign user to role """
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+        self.sleep(10)
+
         self.clusters_dic = self.input.clusters
         if self.clusters_dic:
             if len(self.clusters_dic) > 1:
