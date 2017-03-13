@@ -1272,7 +1272,7 @@ class RestConnection(object):
                 count_cbserver_up = 1
                 pass
         if break_out >= 60:
-            raise Exception("Couchbase server did not start after 120 seconds")
+            raise Exception("Couchbase server did not start after 60 seconds")
 
     def fail_over(self, otpNode=None, graceful=False):
         if otpNode is None:

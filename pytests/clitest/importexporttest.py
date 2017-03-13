@@ -22,6 +22,7 @@ from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
 class ImportExportTests(CliBaseTest):
     def setUp(self):
         super(ImportExportTests, self).setUp()
+        ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
         self.field_separator = self.input.param("field_separator", "comma")
@@ -180,6 +181,49 @@ class ImportExportTests(CliBaseTest):
         """
         options = {"load_doc": True, "docs":"1000"}
         return self._common_imex_test("import", options)
+
+    def test_imex_with_special_chars_in_password(self):
+        """
+           Import and export must accept special characters in password
+           like: #, $
+           This test needs to reset password back to original one.
+           Need param:
+             @param password
+             @param test_type
+             @format_type lines/list
+             @param import_file
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        new_password = self.input.param("password", None)
+        rest_password = self.master.rest_password
+        command = "setting-cluster"
+        password_changed = False
+        try:
+            self.log.info("Change password to new one")
+            if self.input.param("password", None) is None:
+                self.fail("Need to pass param 'password' to run this test")
+            options_cli = "-u Administrator -p %s --cluster-password %s "\
+                                        % (rest_password, new_password)
+            output, _ = self.shell.couchbase_cli(command, self.master.ip, options_cli)
+            if self._check_output("SUCCESS", output):
+                self.log.info("Password was changed to %s " % new_password)
+                password_changed = True
+                self.master.rest_password = new_password
+            else:
+                self.fail("Fail to change password cluster to %s" % new_password)
+
+            self._common_imex_test(self.test_type, options)
+        finally:
+            if password_changed:
+                self.log.info("change password back to default in ini file")
+                options = "-u Administrator -p %s --cluster-password %s "\
+                                           % (new_password, rest_password)
+                output, _ = self.shell.couchbase_cli(command, self.master.ip, options)
+                if self._check_output("SUCCESS", output):
+                    self.log.info("Password was changed back to %s " % rest_password)
+                    self.master.rest_password = rest_password
+                else:
+                    self.fail("Fail to change password back to %s" % rest_password)
 
     def test_imex_during_rebalance(self):
         """ During rebalance, the test will execute the import/export command.
