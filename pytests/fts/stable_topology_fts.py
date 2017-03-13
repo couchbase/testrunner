@@ -320,7 +320,7 @@ class StableTopFTS(FTSBaseTest):
             hits2, _, _, _ = index.execute_query(self.sample_query)
         except Exception as e:
             # expected, pass test
-            self.log.error(" Expected exception: {0}".format(e))
+            self.log.info("Expected exception: {0}".format(e))
 
     def drop_bucket_check_index(self):
         self.load_data()
@@ -336,12 +336,25 @@ class StableTopFTS(FTSBaseTest):
     def delete_index_having_alias(self):
         index, alias = self.create_simple_alias()
         self._cb_cluster.delete_fts_index(index.name)
-        try:
-            hits, _, _, _ = index.execute_query(self.sample_query)
-            if hits != 0:
-                self.fail("Query alias with deleted target returns query results!")
-        except Exception as e:
-            self.log.info("Expected exception :{0}".format(e))
+        hits, _, _, _ = alias.execute_query(self.sample_query)
+        self.log.info("Hits: {0}".format(hits))
+        if hits >= 0:
+            self.fail("Query alias with deleted target returns query results!")
+
+    def delete_index_having_alias_recreate_index_query(self):
+        index, alias = self.create_simple_alias()
+        hits1, _, _, _ = alias.execute_query(self.sample_query)
+        self.log.info("Hits: {0}".format(hits1))
+        new_index = copy.copy(index)
+        index.delete()
+        self.log.info("Recreating deleted index ...")
+        new_index.create()
+        self.wait_for_indexing_complete()
+        hits2, _, _, _ = alias.execute_query(self.sample_query)
+        self.log.info("Hits: {0}".format(hits2))
+        if hits1 != hits2:
+            self.fail("Hits from alias before index recreation: %s,"
+                      " after recreation: %s" %(hits1, hits2))
 
     def create_alias_on_deleted_index(self):
         self.load_employee_dataset()

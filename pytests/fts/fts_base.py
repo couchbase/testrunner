@@ -113,13 +113,7 @@ class INDEX_DEFAULTS:
 
     ALIAS_DEFINITION = {"targets": {}}
 
-    PLAN_PARAMS = {
-        "maxPartitionsPerPIndex": 32,
-        "numReplicas": 0,
-        "hierarchyRules": None,
-        "nodePlanParams": None,
-        "planFrozen": False
-    }
+    PLAN_PARAMS = {}
 
     SOURCE_CB_PARAMS = {
         "authUser": "default",
@@ -897,6 +891,7 @@ class FTSIndex:
             rest.ip))
         status = rest.delete_fts_index(self.name)
         if status:
+            self.__cluster.get_indexes().remove(self)
             if not self.__cluster.are_index_files_deleted_from_disk(self.name):
                 self.__log.error("Status: {0} but index file for {1} not yet "
                                  "deleted!".format(status, self.name))
@@ -3011,7 +3006,7 @@ class FTSBaseTest(unittest.TestCase):
         self.index_replicas = self._input.param("index_replicas", None)
         self.index_kv_store = self._input.param("kvstore", None)
         self.partitions_per_pindex = \
-            self._input.param("max_partitions_pindex", 32)
+            self._input.param("max_partitions_pindex", 171)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
         self.num_queries = self._input.param("num_queries", 1)
         self.query_types = (self._input.param("query_types", "match")).split(',')

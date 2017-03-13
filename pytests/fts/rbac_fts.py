@@ -114,6 +114,18 @@ class RbacFTS(FTSBaseTest):
         _, defn = index.get_index_defn()
         self.log.info("New definition: %s" %defn['indexDef'])
 
+    def edit_index_different_source(self, index, new_source,
+                                    username, password):
+        rest = self.get_rest_handle_for_credentials(username, password)
+        _, defn = index.get_index_defn(rest)
+        self.log.info("Old definition: %s" % defn['indexDef'])
+        index.index_definition['sourceName'] = new_source
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update(rest)
+        _, defn = index.get_index_defn()
+        self.log.info("New definition: %s" % defn['indexDef'])
+
+
     def delete_index_with_credentials(self, index, username, password):
         rest = self.get_rest_handle_for_credentials(username, password)
         index.delete(rest)
@@ -133,9 +145,11 @@ class RbacFTS(FTSBaseTest):
                 perm =  RbacBase().check_user_permission(
                         user['id'],
                         user['password'],
-                        'cluster.bucket[%s].fts!create,cluster.bucket[%s].'
-                        'fts!manage,cluster.bucket[%s].fts!read'
-                        %(bucket.name, bucket.name, bucket.name),
+                        'cluster.bucket[%s].fts!create,'
+                        'cluster.bucket[%s].fts!manage,'
+                        'cluster.bucket[%s].fts!read,'
+                        'cluster.bucket[%s].fts!write'
+                        %(bucket.name, bucket.name, bucket.name, bucket.name),
                         rest)
                 self.log.info("Permissions for user: %s on bucket %s is: %s"
                               %(user['id'], bucket.name,perm))
@@ -374,3 +388,67 @@ class RbacFTS(FTSBaseTest):
             except Exception as e:
                 self.fail("The user failed to create a composite alias on "
                           "indexes that he has permissions to: %s"%e)
+
+    def test_alias_pointing_new_source(self):
+        """
+        This test creates 2 users - One(Will) is fts_admin of just one bucket,
+        other(John) of two. We try to create an index on default bucket using
+        Will's credentials. Then we try to point the index to a different
+        bucket that Will does not have access to. This attempt should fail.
+        Then we have Jonathan change the index source to sasl_bucket_1. And
+        using Will's credentials, we try to get an index count, this should
+        fail as permissions as based on source bucket.
+        :return: Nothing
+        """
+        self.inp_users = [{"id": "willSmith",
+                            "name": "William Smith",
+                            "password": "password2",
+                            "roles": "fts_admin[default]"},
+                          {"id": "johnDoe",
+                            "name": "Jonathan Downing",
+                            "password": "password1",
+                            "roles": "fts_admin[sasl_bucket_1]:"
+                                     "fts_admin[default]"}]
+        self.users = self.get_user_list()
+        self.roles = self.get_user_role_list()
+        self.load_data()
+        self.create_users()
+        self.assign_role()
+        self.show_user_permissions()
+
+        # create indexes for those buckets for which the user is fts admin
+        def_index = self.create_index_with_credentials(
+            username='willSmith',
+            password='password2',
+            index_name='def_index',
+            bucket_name='default')
+        try:
+            self.edit_index_different_source(index = def_index,
+                                         new_source="sasl_bucket_1",
+                                         username='willSmith',
+                                         password='password2')
+            self.fail("User is able to point his index to bucket he does "
+                      "not have access to!")
+        except Exception as e:
+            self.log.info("Expected exception: %s" %e)
+
+        try:
+            self.edit_index_different_source(index=def_index,
+                                             new_source="sasl_bucket_1",
+                                             username='johnDoe',
+                                             password='password1')
+            try:
+                # Have Will get an index count on the index he created
+                # but is now pointed to a different bucket that he has no
+                # access to
+                rest = self.get_rest_handle_for_credentials('willSmith',
+                                                            'password1')
+                index_count = def_index.get_indexed_doc_count(rest)
+                self.fail("User with no permissions on source bucket is able to"
+                          " get an index count on the index")
+            except Exception as e:
+                self.log.info("Expected exception: %s" %e)
+        except Exception as e:
+            self.fail("User with permissions is unable to change the "
+                      "index source bucket %s" %e)
+
