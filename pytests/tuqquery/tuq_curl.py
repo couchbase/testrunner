@@ -285,6 +285,7 @@ class QueryCurlTests(QueryTests):
     def test_simple_external_json(self):
         # Get the output from the actual curl and test it against the n1ql curl query
         curl_output = self.shell.execute_command("curl https://jsonplaceholder.typicode.com/todos")
+        print curl_output
         # The above command returns a tuple, we want the first element of that tuple
         expected_curl = self.convert_list_to_json(curl_output[0])
 
@@ -365,6 +366,45 @@ class QueryCurlTests(QueryTests):
 
 ##############################################################################################
 #
+#   Options Tests
+#
+##############################################################################################
+    '''WIP'''
+    def test_connect_timeout(self):
+        # Test with a connectiion time that is too small for the request to go through
+        n1ql_query = 'select * from default'
+        select_query = "select curl('POST', " + self.query_service_url + ", {'data' : 'statement=%s', 'user':'Administrator:password','connect-timeout':1})" % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+
+        # Test with a connection time that is big enough for the request to go through
+        n1ql_query = 'select * from default'
+        select_query = "select curl('POST', " + self.query_service_url + ", {'data' : 'statement=%s', 'user':'Administrator:password','connect-timeout':15})" % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+
+    '''WIP'''
+    def test_max_time(self):
+        n1ql_query = 'select * from default'
+        select_query = "select curl('POST', " + self.query_service_url + ", {'data' : 'statement=%s', 'user':'Administrator:password','max-time':1})" % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+
+    '''Tests what happens when you give two of the same option with different values.'''
+    def test_repeated_user_options(self):
+        n1ql_query = 'select * from default'
+        select_query = "select curl('POST', " + self.query_service_url + ", {'data' : 'statement=%s', 'user':'Administrator:password','user': 'Ajay:Bhullar'})" % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == 'Invalidusername/password.')
+
+        select_query = "select curl('POST', " + self.query_service_url + ", {'data' : 'statement=%s', 'user': 'Ajay:Bhullar', 'user':'Administrator:password'})" % n1ql_query
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['metrics']['resultCount'] == 2016)
+
+##############################################################################################
+#
 #   Negative tests
 #
 ##############################################################################################
@@ -410,7 +450,19 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] ==
-                        "Invalidusername/password.")
+                        "Nousersuppliedforquery.")
+
+        query = "select curl('POST', "+ self.query_service_url +", {'data' : 'statement=%s','user':'Administrator:'})" % n1ql_query
+        curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] ==
+                         "Invalidusername/password.")
+
+        query = "select curl('POST', "+ self.query_service_url +", {'data' : 'statement=%s','user':':password'})" % n1ql_query
+        curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] ==
+                         "Invalidusername/password.")
 
     '''Test an unsupported method in n1ql curl
         -DELETE.'''
