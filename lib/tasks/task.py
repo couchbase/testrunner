@@ -4598,8 +4598,8 @@ class CBASQueryExecuteTask(Task):
     def execute(self, task_manager):
         try:
             rest = RestConnection(self.server)
-            self.response = json.loads(rest.execute_statement_on_cbas(self.cbas_endpoint, self.statement,
-                                           self.mode, self.pretty))
+            self.response = json.loads(rest.execute_statement_on_cbas(self.statement,
+                                           self.mode, self.pretty, 70))
             if self.response:
                 self.state = CHECKING
                 task_manager.schedule(self)

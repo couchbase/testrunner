@@ -325,7 +325,7 @@ class CBASBaseTest(BaseTestCase):
         self.log.info("%s %s documents..." % (operation, num_items))
         try:
             self._load_all_buckets(self.master, gen_load, operation, 0)
-            self._verify_stats_all_buckets([self.master])
+            self._verify_stats_all_buckets(self.input.servers)
         except Exception as e:
             self.log.info(e.message)
 
@@ -363,12 +363,12 @@ class CBASBaseTest(BaseTestCase):
         count, mutated_count = self.get_num_items_in_cbas_dataset(dataset_name)
         tries = 12
         if expected_mutated_count:
-            while (count < expected_count or mutated_count < expected_mutated_count) and tries > 0:
+            while (count != expected_count or mutated_count != expected_mutated_count) and tries > 0:
                 self.sleep(10)
                 count, mutated_count = self.get_num_items_in_cbas_dataset(dataset_name)
                 tries -= 1
         else :
-            while count < expected_count and tries > 0:
+            while count != expected_count and tries > 0:
                 self.sleep(10)
                 count, mutated_count = self.get_num_items_in_cbas_dataset(
                     dataset_name)
@@ -459,12 +459,9 @@ class CBASBaseTest(BaseTestCase):
             task.result()
             if not task.passed:
                 fail_count += 1
-                failed_queries.append(task.query_index + 1)
 
         if fail_count:
-            self.fail("%s out of %s queries failed! - %s" % (fail_count,
-                                                             num_queries,
-                                                             failed_queries))
+            self.fail("%s out of %s queries failed!" % (fail_count, num_queries))
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           % (num_queries - fail_count, num_queries))
