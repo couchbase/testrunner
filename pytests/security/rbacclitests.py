@@ -470,7 +470,6 @@ class XdcrCLITest(CliBaseTest):
             if self.source == 'saslauthd':
                 rest = RestConnection(self.master)
                 self.setupLDAPSettings(rest)
-                #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
                 self.set_user_role(rest,self.ldapUser,user_role=self.role)
 
 
@@ -507,7 +506,7 @@ class XdcrCLITest(CliBaseTest):
                                                 password=password)
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+        status, content, header =  rest.set_user_roles(user_id=username,payload=payload)
 
     def _validate_roles(self,output,result):
         print output
