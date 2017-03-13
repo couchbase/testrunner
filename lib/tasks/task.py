@@ -18,6 +18,7 @@ from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
+from memcached.helper.kvstore import KVStore
 from couchbase_helper.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
@@ -727,6 +728,7 @@ class GenericLoadingTask(Thread, Task):
             self.state = FINISHED
             self.set_exception(error)
 
+
     def _unlocked_read(self, partition, key):
         try:
             o, c, d = self.client.get(key)
@@ -832,17 +834,27 @@ class GenericLoadingTask(Thread, Task):
             self.state = FINISHED
             self.set_exception(error)
 
+
     # start of batch methods
-    def _create_batch(self, partition_keys_dic, key_val, shared_client = None):
+    def _create_batch_client(self, key_val, shared_client = None):
+        """
+        standalone method for creating key/values in batch (sans kvstore)
+
+        arguments:
+            key_val -- array of key/value dicts to load size = self.batch_size
+            shared_client -- optional client to use for data loading
+        """
         try:
             self._process_values_for_create(key_val)
             client = shared_client or self.client
             client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
-            self._populate_kvstore(partition_keys_dic, key_val)
         except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
             self.state = FINISHED
             self.set_exception(error)
 
+    def _create_batch(self, partition_keys_dic, key_val):
+            self._create_batch_client(partition_keys_dic, key_val)
+            self._populate_kvstore(partition_keys_dic, key_val)
 
     def _update_batch(self, partition_keys_dic, key_val):
         try:
@@ -1048,7 +1060,6 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
     def run_high_throughput_mode(self):
 
-
         # high throughput mode requires partitioning the doc generators
         self.generators = []
         for gen in self.input_generators:
@@ -1067,8 +1078,6 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                         self.batch_size)
                 self.generators.append(batch_gen)
 
-
-        # run generator processes
         iterator = 0
         all_processes = []
         for generator in self.generators:
@@ -1099,18 +1108,19 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
             # merge child partitions with parent
             generator_partitions = rv["partitions"]
-            count = \
-                sum([len(p['partition'].valid_key_set()) for p in generator_partitions])
-            self.kv_store.merge_all_partitions(generator_partitions)
+            self.kv_store.merge_partitions(generator_partitions)
 
             # terminate child process
             iterator-=1
             all_processes[iterator].terminate()
 
-
     def run_generator(self, generator, iterator):
 
+
+        # create a tmp kvstore to track work
+        tmp_kv_store = KVStore()
         rv = {"err": None, "partitions": None}
+
         try:
             client = VBucketAwareMemcached(
                     RestConnection(self.server),
@@ -1119,13 +1129,22 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                 self.op_type = self.op_types[iterator]
             if self.buckets:
                 self.bucket = self.buckets[iterator]
+
             while generator.has_next() and not self.done():
-                self.next(generator, client)
+
+                # generate
+                key_value = generator.next_batch()
+
+                # create
+                self._create_batch_client(key_value, client)
+
+                # cache
+                self.cache_items(tmp_kv_store, key_value)
+
         except Exception as ex:
             rv["err"] = ex
         else:
-            process_partitions = self.kv_store.get_partitions()
-            rv["partitions"] = process_partitions
+            rv["partitions"] = tmp_kv_store.get_partitions()
         finally:
             # share the kvstore from this generator
             self.shared_kvstore_queue.put(rv)
@@ -1133,6 +1152,19 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             # release concurrency lock
             CONCURRENCY_LOCK.release()
 
+
+    def cache_items(self, store, key_value):
+        """
+            unpacks keys,values and adds them to provided store
+        """
+        for key, value in key_value.iteritems():
+            if self.only_store_hash:
+                value = str(crc32.crc32_hash(value))
+            store.partition(key)["partition"].set(
+                key,
+                value,
+                self.exp,
+                self.flag)
 
 class ESLoadGeneratorTask(Task):
     """
