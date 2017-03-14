@@ -317,6 +317,7 @@ class SpatialViewsTests(BaseTestCase):
 class SpatialViewQueriesTests(BaseTestCase):
 
     def setUp(self):
+        self.helper = SpatialHelper(self, self.bucket_name)
         super(SpatialViewQueriesTests, self).setUp()
         self.thread_crashed = Event()
         self.thread_stopped = Event()
@@ -331,7 +332,7 @@ class SpatialViewQueriesTests(BaseTestCase):
             self.bucket_name = "standard_bucket0"
         if self.sasl_buckets:
             self.bucket_name = "bucket0"
-        self.helper = SpatialHelper(self, self.bucket_name)
+
         if not self.skip_rebalance:
             self.cluster.rebalance(self.servers[:], self.servers[1:], [])
         #load some items to verify
@@ -482,13 +483,15 @@ class SpatialViewQueriesTests(BaseTestCase):
 
 class SpatialViewTests(BaseTestCase):
     def setUp(self):
-        self.log = logger.Logger.get_logger()
         self.helper = SpatialHelper(self, "default")
+        super(SpatialViewTests, self).setUp()
+        self.log = logger.Logger.get_logger()
+
         self.helper.setup_cluster()
 
 
     def tearDown(self):
-        self.helper.cleanup_cluster()
+        super(SpatialViewTests, self).tearDown()
 
 
     def test_create_x_design_docs(self):
