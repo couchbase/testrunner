@@ -946,10 +946,12 @@ class RestConnection(object):
             log.info(content)
         return status
 
-    def execute_statement_on_cbas(self, statement, mode, pretty=True, timeout=70):
+    def execute_statement_on_cbas(self, statement, mode, pretty=True,
+                                  timeout=70, client_context_id=None):
         api = self.cbas_base_url + "/analytics/service"
         headers = {'Content-type': 'application/json'}
-        params = {'statement': statement, 'mode': mode, 'pretty': pretty}
+        params = {'statement': statement, 'mode': mode, 'pretty': pretty,
+                  'client_context_id': client_context_id}
         params = json.dumps(params)
         status, content, header = self._http_request(api, 'POST',
                                                      headers=headers,
@@ -970,6 +972,25 @@ class RestConnection(object):
             log.error("/analytics/service status:{0},content:{1}".format(
                 status, content))
             raise Exception("Analytics Service API failed")
+
+    def delete_active_request_on_cbas(self, client_context_id):
+        api = self.cbas_base_url + "/analytics/admin/active_requests?client_context_id={0}".format(
+            client_context_id)
+        headers = {'Content-type': 'application/json'}
+
+        status, content, header = self._http_request(api, 'DELETE',
+                                                     headers=headers,
+                                                     timeout=60)
+        if status:
+            return header['status']
+        elif str(header['status']) == '404':
+            log.info("Request Not Found")
+            return header['status']
+        else:
+            log.error(
+                "/analytics/admin/active_requests status:{0},content:{1}".format(
+                    status, content))
+            raise Exception("Analytics Admin API failed")
 
     def get_cluster_ceritificate(self):
         api = self.baseUrl + 'pools/default/certificate'
