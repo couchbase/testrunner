@@ -403,7 +403,7 @@ class CBASBaseTest(BaseTestCase):
         else:
             return None
 
-    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None, timeout=70):
+    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None, timeout=70, client_context_id=None):
         """
         Executes a statement on CBAS using the REST API using REST Client
         """
@@ -412,7 +412,7 @@ class CBASBaseTest(BaseTestCase):
             rest = RestConnection(self.master)
         try:
             response = rest.execute_statement_on_cbas(statement, mode, pretty,
-                                                      timeout)
+                                                      timeout, client_context_id)
             response = json.loads(response)
             if "errors" in response:
                 errors = response["errors"]
@@ -465,3 +465,15 @@ class CBASBaseTest(BaseTestCase):
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           % (num_queries - fail_count, num_queries))
+
+    def delete_request(self, client_context_id):
+        """
+        Deletes a request from CBAS
+        """
+        rest = RestConnection(self.master)
+        try:
+            status = rest.delete_active_request_on_cbas(client_context_id)
+            self.log.info (status)
+            return status
+        except Exception, e:
+            raise Exception(str(e))

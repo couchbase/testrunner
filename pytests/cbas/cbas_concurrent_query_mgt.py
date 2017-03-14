@@ -57,7 +57,7 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
         threads = []
         for i in range(0, self.num_concurrent_queries):
             threads.append(Thread(target=self._run_query,
-                                  name="query thread {0}".format(i), args=()))
+                                  name="query_thread_{0}".format(i), args=()))
         i = 0
         for thread in threads:
             # Send requests in batches, and sleep for 5 seconds before sending another batch of queries.
@@ -82,10 +82,12 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
     def _run_query(self):
         # Execute query (with sleep induced)
         name = threading.currentThread().getName();
+        client_context_id = name
 
         try:
             status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
-                self.statement, mode=self.mode, rest=self.rest, timeout=3600)
+                self.statement, mode=self.mode, rest=self.rest, timeout=3600,
+                client_context_id=client_context_id)
             # Validate if the status of the request is success, and if the count matches num_items
             if self.mode == "immediate":
                 if status == "success":
@@ -111,7 +113,7 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
                     self.failed_count += 1
 
             elif self.mode == "async":
-                if status == "started" and handle:
+                if status == "running" and handle:
                     self.log.info("--------Thread %s : success----------", name)
                     self.success_count += 1
                 else:
@@ -174,3 +176,101 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
         else:
             if self.rejected_count:
                 self.fail("Some queries rejected")
+
+    def test_cancel_ongoing_request(self):
+        self._setupForTest()
+
+        client_context_id = "abcd1234"
+        statement = "select sleep(count(*),5000) from {0} where mutated=0;".format(
+            self.cbas_dataset_name)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="async", client_context_id=client_context_id)
+
+        status = self.delete_request(client_context_id)
+        if str(status) != "200":
+            self.fail ("Status is not 200")
+
+    def test_cancel_cancelled_request(self):
+        self._setupForTest()
+
+        client_context_id = "abcd1234"
+        statement = "select sleep(count(*),5000) from {0} where mutated=0;".format(
+            self.cbas_dataset_name)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="async", client_context_id=client_context_id)
+
+        status = self.delete_request(client_context_id)
+        if str(status) != "200":
+            self.fail("Status is not 200")
+
+        status = self.delete_request(client_context_id)
+        if str(status) != "404":
+            self.fail("Status is not 404")
+
+    def test_cancel_invalid_context(self):
+        client_context_id = "abcd1235"
+        status = self.delete_request(client_context_id)
+        if str(status) != "404":
+            self.fail ("Status is not 404")
+
+    def test_cancel_completed_request(self):
+        self._setupForTest()
+
+        client_context_id = "abcd1234"
+
+        statement = "select count(*) from {0};".format(self.cbas_dataset_name)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="immediate", client_context_id=client_context_id)
+
+        status = self.delete_request(client_context_id)
+        if str(status) != "404":
+            self.fail ("Status is not 404")
+
+    def test_cancel_request_in_queue(self):
+        client_context_id = "query_thread_{0}".format(int(self.num_concurrent_queries)-1)
+        self._setupForTest()
+        self._run_concurrent_queries()
+        status = self.delete_request(client_context_id)
+        if str(status) != "200":
+            self.fail ("Status is not 200")
+
+    def test_cancel_ongoing_request_null_contextid(self):
+        self._setupForTest()
+
+        client_context_id = None
+        statement = "select sleep(count(*),5000) from {0} where mutated=0;".format(
+            self.cbas_dataset_name)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="async", client_context_id=client_context_id)
+
+        status = self.delete_request(client_context_id)
+        if str(status) != "404":
+            self.fail("Status is not 404")
+
+    def test_cancel_ongoing_request_empty_contextid(self):
+        self._setupForTest()
+
+        client_context_id = ""
+        statement = "select sleep(count(*),5000) from {0} where mutated=0;".format(
+            self.cbas_dataset_name)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="async", client_context_id=client_context_id)
+
+        status = self.delete_request(client_context_id)
+        if str(status) != "200":
+            self.fail("Status is not 200")
+
+    def test_cancel_multiple_ongoing_request_same_contextid(self):
+        self._setupForTest()
+
+        client_context_id = "abcd1234"
+        statement = "select sleep(count(*),10000) from {0} where mutated=0;".format(
+            self.cbas_dataset_name)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="async", client_context_id=client_context_id)
+        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+            statement, mode="async", client_context_id=client_context_id)
+
+        status = self.delete_request(client_context_id)
+        if str(status) != "200":
+            self.fail("Status is not 200")
