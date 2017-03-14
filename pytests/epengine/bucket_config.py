@@ -167,7 +167,7 @@ class BucketConfig(unittest.TestCase):
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
             except Exception, e:
-                self.fail(e, 'unable to create bucket')
+                self.fail('unable to create bucket')
 
     # KETAKI tochange this
     def _modify_bucket(self):
