@@ -22,7 +22,6 @@ from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
 class ImportExportTests(CliBaseTest):
     def setUp(self):
         super(ImportExportTests, self).setUp()
-        ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
         self.field_separator = self.input.param("field_separator", "comma")
@@ -34,6 +33,7 @@ class ImportExportTests(CliBaseTest):
     def tearDown(self):
         super(ImportExportTests, self).tearDown()
         self.import_back = self.input.param("import_back", False)
+        ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
         if self.import_back:
             self.log.info("clean up server in import back tests")
             imp_servers = copy.deepcopy(self.servers[2:])
@@ -111,31 +111,26 @@ class ImportExportTests(CliBaseTest):
             password = server.rest_password
         self.cli_command_path = "cd %s; ./" % self.cli_command_path
         self.buckets = RestConnection(server).get_buckets()
-        tasks_ops = []
         total_items = self.num_items
         for bucket in self.buckets:
             doc_create_gen = copy.deepcopy(self.json_create_gen)
-            tasks_ops.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
-                                               doc_create_gen, bucket.kvs[1], "create"))
-            self.verify_cluster_stats(self.servers[:self.nodes_init])
+            self.cluster.load_gen_docs(self.master, bucket.name,
+                                               doc_create_gen, bucket.kvs[1], "create")
+            self.verify_cluster_stats(self.servers[:self.nodes_init], max_verify=total_items)
             if delete_percent is not None:
                 self.log.info("Start to delete %s %% total keys" % delete_percent)
                 doc_delete_gen = copy.deepcopy(self.json_delete_gen)
                 doc_delete_gen.end = int(self.num_items) * int(delete_percent) / 100
                 total_items -= doc_delete_gen.end
-                tasks_ops.append(self.cluster.async_load_gen_docs(self.master,
-                                                 bucket.name, doc_delete_gen,
-                                                 bucket.kvs[1], "delete"))
+                self.cluster.load_gen_docs(self.master, bucket.name, doc_delete_gen,
+                                                            bucket.kvs[1], "delete")
             if updated and update_field is not None:
                 self.log.info("Start update data")
                 doc_updated_gen = copy.deepcopy(self.json_create_gen)
                 doc_updated_gen.update(fields_to_update=update_field)
-                tasks_ops.append(self.cluster.async_load_gen_docs(self.master,
-                                                 bucket.name, doc_updated_gen,
-                                                 bucket.kvs[1], "update"))
-            for task in tasks_ops:
-                task.result()
-            self.verify_cluster_stats(self.servers[:self.nodes_init])
+                self.cluster.load_gen_docs(self.master, bucket.name, doc_updated_gen,
+                                                             bucket.kvs[1], "update")
+            self.verify_cluster_stats(self.servers[:self.nodes_init], max_verify=total_items)
             """ remove previous export directory at tmp dir and re-create it
                 in linux:   /tmp/export
                 in windows: /cygdrive/c/tmp/export """
@@ -154,6 +149,10 @@ class ImportExportTests(CliBaseTest):
                                                     self.format_type, export_file)
             output, error = self.shell.execute_command(exe_cmd_str)
             self._check_output("successfully", output)
+            if self.format_type == "list":
+                self.log.info("remove [] in file")
+                self.shell.execute_command("sed%s -i '/^\[\]/d' %s"
+                                                 % (self.cmd_ext,export_file))
             output, _ = self.shell.execute_command("awk%s 'END {print NR}' %s"
                                                      % (self.cmd_ext, export_file))
             self.assertTrue(int(total_items) == int(output[0]),
