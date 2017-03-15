@@ -285,7 +285,6 @@ class QueryCurlTests(QueryTests):
     def test_simple_external_json(self):
         # Get the output from the actual curl and test it against the n1ql curl query
         curl_output = self.shell.execute_command("curl https://jsonplaceholder.typicode.com/todos")
-        print curl_output
         # The above command returns a tuple, we want the first element of that tuple
         expected_curl = self.convert_list_to_json(curl_output[0])
 
@@ -364,6 +363,32 @@ class QueryCurlTests(QueryTests):
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['results'][0]['$1'] == expected_curl)
 
+    '''MB-22128 giving a header without giving data would cause an empty result set'''
+    def test_external_json_jira_with_header(self):
+        curl_output = self.shell.execute_command("curl https://jira.atlassian.com/rest/api/latest/issue/JRA-9")
+        expected_curl = self.convert_list_to_json(curl_output[0])
+        url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
+
+        query="select * from curl('GET', "+ url +") result"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0]['result'] == expected_curl)
+
+        query="select * from curl('GET', "+ url +",{'header':'Content-Type: application/json'}) result"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0]['result'] == expected_curl)
+
+    '''MB-22291 Test to make sure that endpoints returning an array of JSON docs work'''
+    def test_array_of_json(self):
+        curl_output = self.shell.execute_command("curl https://api.github.com/users/ikandaswamy/repos")
+        expected_curl = self.convert_list_to_json(curl_output[0])
+        url = "'https://api.github.com/users/ikandaswamy/repos'"
+        query="select raw curl('GET', "+ url +",{'header':'User-Agent: ikandaswamy'}) list"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0] == expected_curl)
+
 ##############################################################################################
 #
 #   Options Tests
@@ -411,7 +436,7 @@ class QueryCurlTests(QueryTests):
 
     '''Tests what happens when curl receives a protocol that isn't valid
         -misspelled protocol
-        -unsupported protocol (the expected output of this test is unclear and as such is not included currently)'''
+        -unsupported protocol (MB-23134)'''
     def test_invalid_protocol(self):
         # Test invalid protocol (misspelled)
         url = "'htpps://maps.googleapis.com/maps/api/geocode/json'"
@@ -419,6 +444,13 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['errors'][0]['msg'] =='Errorevaluatingprojection.-cause:curl:Unsupportedprotocol')
+
+        # Test unsupported protocol file
+        protocol = "'file:///Users/isha/workspace/query/src/github.com/couchbase/query/data/sampledb/default/tutorial/dave.json'"
+        query = "select curl('GET',"+protocol+")"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == 'Errorevaluatingprojection.-cause:curl:Unsupportedprotocol')
 
     '''Tests what happens when n1ql curl receives invalid urls
         -urls that don't exist
