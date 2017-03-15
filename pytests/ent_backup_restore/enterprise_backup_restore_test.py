@@ -104,11 +104,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
                 self.log.info("Done reset cluster")
             self.sleep(10)
+
+            """ Add built-in user cbadminbucket to second cluster """
+            self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
+
             self.backupset.start = start
             self.backupset.end = end
             self.log.info("*** start restore validation")
             self.backup_restore_validate(compare_uuid=False,
-                                         seqno_compare_function=">=", expected_error=self.expected_error )
+                                         seqno_compare_function=">=",
+                                         expected_error=self.expected_error )
             if self.backupset.number_of_backups == 1:
                 continue
             while "{0}/{1}".format(start, end) in restored:
@@ -224,16 +229,19 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     end = randrange(start, self.backupset.number_of_backups + 1)
             restored["{0}/{1}".format(start, end)] = ""
 
-    def _backup_restore_with_ops(self, exp=0, backup=True, compare_uuid=False, compare_function="==", replicas=False,
+    def _backup_restore_with_ops(self, exp=0, backup=True, compare_uuid=False,
+                                 compare_function="==", replicas=False,
                                  mode="memory"):
         self.ops_type = self.input.param("ops-type", "update")
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                                                      end=self.num_items)
         self.log.info("Start doing ops: %s " % self.ops_type)
         self._load_all_buckets(self.master, gen, self.ops_type, exp)
         if backup:
             self.backup_cluster_validate()
         else:
-            self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function=compare_function,
+            self.backup_restore_validate(compare_uuid=compare_uuid,
+                                         seqno_compare_function=compare_function,
                                          replicas=replicas, mode=mode)
 
     def test_backup_list(self):

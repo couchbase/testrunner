@@ -241,15 +241,7 @@ class BaseTestCase(unittest.TestCase):
                 self.change_checkpoint_params()
 
                 # Add built-in user
-                testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
-                RbacBase().create_user_source(testuser, 'builtin', self.master)
-                self.sleep(10)
-
-                # Assign user to role
-                role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
-                RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
-                self.sleep(10)
-
+                self.add_built_in_server_user(node=self.master)
                 self.log.info("done initializing cluster")
             else:
                 self.quota = ""
@@ -1989,6 +1981,32 @@ class BaseTestCase(unittest.TestCase):
                 if remove_server != None and server.ip == remove_server.ip:
                     initial_list.remove(server)
         return initial_list
+
+    def add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
+        """
+           From spock, couchbase server is built with some users that handles
+           some specific task such as:
+               cbadminbucket
+           Default added user is cbadminbucket with admin role
+        """
+        if testuser is None:
+            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                'password': 'password'}]
+        if rolelist is None:
+            rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                      'roles': 'admin'}]
+        if node is None:
+            node = self.master
+
+        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
+                                                                       node.ip))
+        RbacBase().create_user_source(testuser, 'builtin', node)
+        self.sleep(10)
+
+        self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
+                                                                testuser[0]["name"]))
+        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
+        self.sleep(10)
 
     def get_nodes(self, server):
         """ Get Nodes from list of server """

@@ -334,12 +334,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Restoring backup failed.")
 
         self.log.info("Finished restoring backup")
-
-        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets, self.skip_consistency, self.per_node)
+        self.log.info("Get current vseqno on node %s " % self.cluster_to_restore[0].ip )
+        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets,
+                                                 self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
-        status, msg = self.validation_helper.validate_restore(self.backupset.end, self.vbucket_seqno, current_vseqno,
-                                                              compare_uuid=compare_uuid, compare=seqno_compare_function,
-                                                              get_replica=replicas, mode=mode)
+        status, msg = self.validation_helper.validate_restore(self.backupset.end,
+                                              self.vbucket_seqno, current_vseqno,
+                                              compare_uuid=compare_uuid,
+                                              compare=seqno_compare_function,
+                                              get_replica=replicas, mode=mode)
 
         if not status:
             self.fail(msg)
