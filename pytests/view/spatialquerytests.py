@@ -27,7 +27,6 @@ class SpatialQueryTests(BaseTestCase):
 
     def tearDown(self):
         super(SpatialQueryTests, self).tearDown()
-        self.helper.cleanup_cluster()
 
     def test_simple_dataset_limit_queries(self):
         num_docs = self.helper.input.param("num-docs")
