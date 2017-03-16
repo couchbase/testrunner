@@ -1539,7 +1539,7 @@ class RemoteMachineShellConnection:
             if fts_query_limit:
                 self.set_environment_variable(
                     name="CBFT_ENV_OPTIONS",
-                    value="bleveMaxResultWindow={0},ftsMossDebug=1".format(int(fts_query_limit))
+                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
                 )
 
             output, error = self.execute_command("rm -f \
@@ -1664,7 +1664,7 @@ class RemoteMachineShellConnection:
             if fts_query_limit:
                 output, error = \
                     self.execute_command("sed -i 's/export PATH/export PATH\\n"
-                            "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},ftsMossDebug=1,logStatsEvery=30,hideUI=false/'\
+                            "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},hideUI=false/'\
                             {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
                                                               nonroot_path_start))
                 success &= self.log_command_output(output, error, track_words)
