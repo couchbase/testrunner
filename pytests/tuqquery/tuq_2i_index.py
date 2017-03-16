@@ -2935,6 +2935,32 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_asc_desc_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON default(join_yr ASC, join_day DESC, meta().id ASC)"%(idx)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
+                             'ORDER BY join_yr, join_day DESC LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                print actual_result
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
+                             'ORDER BY join_yr  LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                print actual_result
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
     def test_avoid_full_span(self):
          for bucket in self.buckets:
             created_indexes = []
@@ -3924,7 +3950,6 @@ class QueriesIndexTests(QueryTests):
                     self.query = "SELECT count(name)" + \
                                  " FROM %s use index(`#primary`) where join_yr=2012 AND name = 'query-testemployee10317.9004497-0'  GROUP BY name" % (bucket.name)
                     expected_result = self.run_cbq_query()
-                    import pdb;pdb.set_trace()
                     self.assertTrue((actual_result['results']),(expected_result['results']))
             finally:
                 for index_name in set(created_indexes):
@@ -4820,6 +4845,17 @@ class QueriesIndexTests(QueryTests):
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
+
+    def test_max_pushdown(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            self.query = 'CREATE INDEX idx ON default(test_rate DESC,join_mO DESC)'
+            self.run_cbq_query()
+            created_indexes.append("idx")
+            self.query = 'explain SELECT MAX(test_rate) FROM default WHERE test_rate > 10'
+            actual_result = self.run_cbq_query()
+            print actual_result
+
 
     def test_max_covering_index(self):
         for bucket in self.buckets:
