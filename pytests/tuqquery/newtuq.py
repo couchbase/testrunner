@@ -382,7 +382,8 @@ class QueryTests(BaseTestCase):
             query_template = 'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' %(bucket.name) +\
                          'GROUP BY $obj0.$_obj0_int0 ORDER BY points'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            import pdb;pdb.set_trace()
+            print "actual results are {0}".format(actual_result['results'])
+            print "expected results are {0}".format(expected_result)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_desc(self):
@@ -474,6 +475,8 @@ class QueryTests(BaseTestCase):
                                                                             bucket.name) +\
             ' WHERE $int1 >7 GROUP BY $int0, $int1 ORDER BY emp_per_month, $int1, $int0'  
             actual_result, expected_result = self.run_query_from_template(query_template)
+            print "actual results are {0}".format(actual_result['results'])
+            print "expected results are {0}".format(expected_result)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_aggr_fn(self):
