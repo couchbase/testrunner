@@ -21,6 +21,7 @@ from remote.remote_util import RemoteUtilHelper
 from couchbase_helper.stats_tools import StatsCommon
 from scripts.collect_server_info import cbcollectRunner
 from tasks.future import TimeoutError
+from security.rbac_base import RbacBase
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.exception import ServerUnavailableException, XDCRException
@@ -508,6 +509,7 @@ class XDCRBaseTest(unittest.TestCase):
     def _init_nodes(self, nodes, disabled_consistent_view=None):
         _tasks = []
         for node in nodes:
+            self._add_built_in_server_user(node=node)
             _tasks.append(self.cluster.async_init_node(node, disabled_consistent_view))
         for task in _tasks:
             mem_quota_node = task.result()
@@ -537,6 +539,30 @@ class XDCRBaseTest(unittest.TestCase):
                     continue
                 servers[i].hostname = hostnames[servers[i]]
         return hostnames
+
+    def _add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
+        """
+           From spock, couchbase server is built with some users that handles
+           some specific task such as:
+               cbadminbucket
+           Default added user is cbadminbucket with admin role
+        """
+        if testuser is None:
+            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                'password': 'password'}]
+        if rolelist is None:
+            rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                      'roles': 'admin'}]
+        if node is None:
+            node = self.master
+        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
+                                                                                  node.ip))
+        RbacBase().create_user_source(testuser, 'builtin', node)
+        self.sleep(10)
+        self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
+                                                                testuser[0]["name"]))
+        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
+        self.sleep(10)
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
