@@ -1884,6 +1884,55 @@ class RestConnection(object):
                         stats[stat_name] = samples[stat_name][last_sample]
         return stats
 
+    def get_fts_stats(self, index_name, bucket_name, stat_name):
+        """
+        List of fts stats available as of 03/16/2017 -
+        default:default_idx3:avg_queries_latency: 0,
+        default:default_idx3:batch_merge_count: 0,
+        default:default_idx3:doc_count: 0,
+        default:default_idx3:iterator_next_count: 0,
+        default:default_idx3:iterator_seek_count: 0,
+        default:default_idx3:num_bytes_live_data: 0,
+        default:default_idx3:num_bytes_used_disk: 0,
+        default:default_idx3:num_mutations_to_index: 0,
+        default:default_idx3:num_pindexes: 0,
+        default:default_idx3:num_pindexes_actual: 0,
+        default:default_idx3:num_pindexes_target: 0,
+        default:default_idx3:num_recs_to_persist: 0,
+        default:default_idx3:reader_get_count: 0,
+        default:default_idx3:reader_multi_get_count: 0,
+        default:default_idx3:reader_prefix_iterator_count: 0,
+        default:default_idx3:reader_range_iterator_count: 0,
+        default:default_idx3:timer_batch_store_count: 0,
+        default:default_idx3:timer_data_delete_count: 0,
+        default:default_idx3:timer_data_update_count: 0,
+        default:default_idx3:timer_opaque_get_count: 0,
+        default:default_idx3:timer_opaque_set_count: 0,
+        default:default_idx3:timer_rollback_count: 0,
+        default:default_idx3:timer_snapshot_start_count: 0,
+        default:default_idx3:total_bytes_indexed: 0,
+        default:default_idx3:total_bytes_query_results: 0,
+        default:default_idx3:total_compactions: 0,
+        default:default_idx3:total_queries: 0,
+        default:default_idx3:total_queries_error: 0,
+        default:default_idx3:total_queries_slow: 0,
+        default:default_idx3:total_queries_timeout: 0,
+        default:default_idx3:total_request_time: 0,
+        default:default_idx3:total_term_searchers: 0,
+        default:default_idx3:writer_execute_batch_count: 0,
+        :param index_name: name of the index
+        :param bucket_name: source bucket
+        :param stat_name: any of the above
+        :return:
+        """
+        api = "{0}{1}".format(self.fts_baseUrl, 'api/nsstats')
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        try:
+            return status, json_parsed[bucket_name+':'+index_name+':'+stat_name]
+        except:
+            self.log.error("ERROR: Stat {0} not found for {1} on bucket {2}".
+                           format(stat_name, index_name, bucket_name))
 
     def get_bucket_status(self, bucket):
         if not bucket:

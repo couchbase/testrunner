@@ -401,26 +401,30 @@ class StableTopFTS(FTSBaseTest):
     def update_index_during_large_indexing(self):
         """
             MB-22410 - Updating index with a large dirty write queue
-            items = 5M
+            items = some millions defined at run_time using items param
         """
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
         index = self.create_index(bucket, 'sample_index')
         # wait till half the keys are indexed
         self.wait_for_indexing_complete(self._num_items/2)
-        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        status, stat_value = rest.get_fts_stats(index_name=index.name,
+                                                bucket_name=bucket.name,
+                                                stat_name='num_recs_to_persist')
+        self.log.info("Data(metadata + docs) in write queue is {0}".
+                      format(stat_value))
+        self.partitions_per_pindex = 2
+        new_plan_param = self.construct_plan_params()
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
+        self.sleep(5, "Wait for index to get updated...")
+        self.is_index_partitioned_balanced(index=index)
         _, defn = index.get_index_defn()
         self.log.info(defn['indexDef'])
-        # see if the index is query-able with half items
-        self.wait_for_indexing_complete(self._num_items/2)
-        hits, _, _, _ = index.execute_query(self.sample_query,
-                                         zero_results_ok=False)
-        self.log.info("Hits: %s" % hits)
-        # see if the index is still query-able with all 5M
+        # see if the index is still query-able with all data
         self.wait_for_indexing_complete()
         hits, _, _, _ = index.execute_query(self.sample_query,
                                          zero_results_ok=False)
