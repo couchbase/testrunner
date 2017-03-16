@@ -24,6 +24,7 @@ class ImportExportTests(CliBaseTest):
         super(ImportExportTests, self).setUp()
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
+        self.localhost = self.input.param("localhost", False)
         self.field_separator = self.input.param("field_separator", "comma")
         self.json_create_gen = JsonDocGenerator("imex", op_type="create",
                                        encoding="utf-8", start=0, end=self.num_items)
@@ -84,6 +85,14 @@ class ImportExportTests(CliBaseTest):
         return self._common_imex_test("export", options)
 
     def test_export_and_import_back(self):
+        options = {"load_doc": True, "docs":"1000"}
+        return self._common_imex_test("export", options)
+
+    def test_export_with_localhost(self):
+        """
+           Set localhost param = True
+           IP address will be replaced with localhost
+        """
         options = {"load_doc": True, "docs":"1000"}
         return self._common_imex_test("export", options)
 
@@ -709,6 +718,8 @@ class ImportExportTests(CliBaseTest):
                     export_file = self.ex_path + bucket.name
                     if self.cmd_ext:
                         export_file = export_file.replace("/cygdrive/c", "c:")
+                    if self.localhost:
+                        server.ip = "localhost"
                     exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                      server.ip, username, password, bucket.name,
@@ -870,8 +881,8 @@ class ImportExportTests(CliBaseTest):
                     sample_file.close()
                     export_file.close()
             else:
-                self.fail("There is not export file in %s%s"\
-                                  % (self.ex_path, export_file_name))
+                self.fail("There is not export file '%s' in %s%s"\
+                                  % (export_file_name, self.ex_path, export_file_name))
 
     def _check_output(self, word_check, output):
         found = False
