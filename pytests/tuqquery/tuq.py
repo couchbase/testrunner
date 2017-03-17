@@ -75,7 +75,6 @@ class QueryTests(BaseTestCase):
         self.cluster_ops = self.input.param("cluster_ops",False)
         self.isprepared = False
         self.server = self.master
-        self.cbas_node = self.input.cbas
         self.rest = RestConnection(self.server)
         self.username=self.rest.username
         self.password=self.rest.password
@@ -143,11 +142,11 @@ class QueryTests(BaseTestCase):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
         if self.analytics == True:
-            data = 'use Default ;' + "\n"
+            data = 'use Default ;'
             for bucket in self.buckets:
-                data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
-                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow") + "\n"
-                data += 'drop bucket {0} if exists;'.format(bucket.name) + "\n"
+                data += 'disconnect bucket {0} if connected;'.format(bucket.name)
+                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow")
+                data += 'drop bucket {0} if exists;'.format(bucket.name)
             filename = "file.txt"
             f = open(filename,'w')
             f.write(data)
@@ -172,11 +171,12 @@ class QueryTests(BaseTestCase):
                                 self.shell.execute_command("kill -9 %s" % pid)
 
     def setup_analytics(self):
-        data = 'use Default;' + "\n"
+        data = 'use Default;'
+        self.log.info("No. of buckets : %s", len(self.buckets))
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.cbas_node.ip)  + "\n"
-            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
-            data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow")
+            data +=  'connect bucket {0} ;'.format(bucket.name)
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
@@ -766,10 +766,8 @@ class QueryTests(BaseTestCase):
 
             if self.analytics:
                 self.query = "SELECT d.job_title, AVG(d.test_rate) as avg_rate FROM %s d " % (bucket.name) +\
-                         "WHERE (ANY skill IN skills SATISFIES skill = 'skill2010' end) " % (
-                                                                      bucket.name) +\
-                         "AND (ANY vm IN VMs SATISFIES vm.RAM = 5 end) "  % (
-                                                                      bucket.name) +\
+                         "WHERE (ANY skill IN d.skills SATISFIES skill = 'skill2010' end) " +\
+                         "AND (ANY vm IN d.VMs SATISFIES vm.RAM = 5 end) "  +\
                          "GROUP BY d.job_title ORDER BY d.job_title"
 
             actual_result = self.run_cbq_query()
@@ -4057,10 +4055,8 @@ class QueryTests(BaseTestCase):
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
                 self.log.info('RUN QUERY %s' % query)
-                result = rest.analytics_tool(query, 8095, query_params=query_params, is_prepared=is_prepared,
-                                                        named_prepare=self.named_prepare, encoded_plan=encoded_plan,
-                                                        servers=self.servers)
-
+                result = rest.execute_statement_on_cbas(query, "immediate")
+                result = json.loads(result)
             else :
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
                                                             is_prepared=is_prepared,

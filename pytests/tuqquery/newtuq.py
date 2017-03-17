@@ -92,11 +92,11 @@ class QueryTests(BaseTestCase):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
         if self.analytics:
-            data = 'use Default ;' + "\n"
+            data = 'use Default ;'
             for bucket in self.buckets:
-                data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
-                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow") + "\n"
-                data += 'drop bucket {0} if exists;'.format(bucket.name) + "\n"
+                data += 'disconnect bucket {0} if connected;'.format(bucket.name)
+                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow")
+                data += 'drop bucket {0} if exists;'.format(bucket.name)
             filename = "file.txt"
             f = open(filename,'w')
             f.write(data)
@@ -128,11 +128,11 @@ class QueryTests(BaseTestCase):
         # cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
         # os.system(cmd)
         # os.remove(filename)
-        data = 'use Default;' + "\n"
+        data = 'use Default;'
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
-            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
-            data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow")
+            data +=  'connect bucket {0} ;'.format(bucket.name)
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
@@ -662,7 +662,8 @@ class QueryTests(BaseTestCase):
                 query = query + ";"
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
-                result = rest.analytics_tool(query, 8095, query_params=query_params)
+                result = rest.execute_statement_on_cbas(query, "immediate")
+                result = json.loads(result)
 
             else :
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params)

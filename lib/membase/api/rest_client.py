@@ -3014,7 +3014,7 @@ class RestConnection(object):
             if 'creds' in query_params and query_params['creds']:
                 headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
                                                          query_params['creds'][0]['pass'].encode('utf-8'))
-            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
+            api = "%s/analytics/service?%s" % (self.cbas_base_url, params)
             log.info("%s"%api)
         else:
             params = {key : query}
@@ -3026,7 +3026,7 @@ class RestConnection(object):
             params = urllib.urlencode(params)
             if verbose:
                 log.info('query params : {0}'.format(params))
-            api = "http://%s:%s/analytics/service?%s" % (self.ip, port, params)
+            api = "%s/analytics/service?%s" % (self.cbas_base_url, params)
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:
             return json.loads(content)
