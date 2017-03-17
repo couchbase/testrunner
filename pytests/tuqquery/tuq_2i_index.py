@@ -2975,8 +2975,8 @@ class QueriesIndexTests(QueryTests):
                 self.query = "explain select * from default where join_yr in [2011,2012]"
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['spans'][0]['Range']=={u'High': [u'successor(2011)'], u'Low': [u'2011'], u'Inclusion': 1})
-                self.assertTrue(plan['~children'][0]['spans'][1]['Range']=={u'High': [u'successor(2012)'], u'Low': [u'2012'], u'Inclusion': 1})
+                self.assertTrue(plan['~children'][0]['spans'][0]['range']=={u'High': [u'successor(2011)'], u'Low': [u'2011'], u'Inclusion': 1})
+                self.assertTrue(plan['~children'][0]['spans'][1]['range']=={u'High': [u'successor(2012)'], u'Low': [u'2012'], u'Inclusion': 1})
 
                 self.query = "select * from default where join_yr in [2011,2012] order by meta().id"
                 actual_result = self.run_cbq_query()
@@ -2986,12 +2986,12 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'explain select * from default where join_yr =2011 and join_day in [1,2,3,$1,$2,null,""]'
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['Range']=={u'High': [u'2011', u'1'], u'Low': [u'2011', u'1'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['Range'] == {u'High': [u'2011', u'2'], u'Low': [u'2011', u'2'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['Range'] == {u'High': [u'2011', u'3'], u'Low': [u'2011', u'3'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['Range']=={u'High': [u'2011', u'$1'], u'Low': [u'2011', u'$1'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['Range']=={u'High': [u'2011', u'$2'], u'Low': [u'2011', u'$2'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['Range']=={u'High': [u'2011', u'""'], u'Low': [u'2011', u'""'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['range']=={u'High': [u'2011', u'1'], u'Low': [u'2011', u'1'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'2'], u'Low': [u'2011', u'2'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'3'], u'Low': [u'2011', u'3'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['range']=={u'High': [u'2011', u'$1'], u'Low': [u'2011', u'$1'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['range']=={u'High': [u'2011', u'$2'], u'Low': [u'2011', u'$2'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['range']=={u'High': [u'2011', u'""'], u'Low': [u'2011', u'""'], u'Inclusion': 3})
                 self.query = 'select * from default where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
                 actual_result = self.run_cbq_query()
                 self.query = 'select * from default use index(`#primary`) where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
@@ -3950,7 +3950,7 @@ class QueriesIndexTests(QueryTests):
                     self.query = "SELECT count(name)" + \
                                  " FROM %s use index(`#primary`) where join_yr=2012 AND name = 'query-testemployee10317.9004497-0'  GROUP BY name" % (bucket.name)
                     expected_result = self.run_cbq_query()
-                    self.assertTrue((actual_result['results']),(expected_result['results']))
+                    self.assertEquals(actual_result['results'],expected_result['results'])
             finally:
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
