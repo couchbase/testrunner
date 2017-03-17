@@ -29,7 +29,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP
 from multiprocessing import Process, Manager, Semaphore
 
 try:
@@ -1015,9 +1015,12 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         # only run high throughput for batch-create workloads
         # also check number of input generators isn't greater than
         # process_concurrency as too many generators become inefficient
-        self.is_high_throughput_mode = self.op_type == "create" and \
-            self.batch_size > 1 and \
-            len(self.generators) < self.process_concurrency
+        self.is_high_throughput_mode = False
+        if ALLOW_HTP:
+            self.is_high_throughput_mode = self.op_type == "create" and \
+                self.batch_size > 1 and \
+                len(self.generators) < self.process_concurrency
+
         self.input_generators = generators
 
         self.op_types = None
@@ -1115,7 +1118,6 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             all_processes[iterator].terminate()
 
     def run_generator(self, generator, iterator):
-
 
         # create a tmp kvstore to track work
         tmp_kv_store = KVStore()
