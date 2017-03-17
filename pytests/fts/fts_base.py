@@ -946,6 +946,7 @@ class FTSIndex:
         if show_results_from_item:
             query_json['from'] = int(show_results_from_item)
         if timeout is not None:
+            query_json['ctl'] = {}
             query_json['ctl']['timeout'] = int(timeout)
         else:
             del query_json['ctl']['timeout']
