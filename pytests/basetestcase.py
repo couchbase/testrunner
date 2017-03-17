@@ -136,7 +136,9 @@ class BaseTestCase(unittest.TestCase):
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
             self.is_container = self.input.param("is_container", False)
-
+            if hasattr(self.input, 'cbas'):
+                if self.input.cbas:
+                    self.cbas_node = self.input.cbas
             # bucket parameters go here,
             self.bucket_size = self.input.param("bucket_size", None)
             self.lww = self.input.param("lww", False) # only applies to LWW but is here because the bucket is created here
