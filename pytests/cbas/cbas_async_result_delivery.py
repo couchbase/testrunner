@@ -39,7 +39,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
 
         statement = "select * from {0} where city=\"Chicago\";".format(
             self.cbas_dataset_name)
-        status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+        status, metrics, errors, results, response_handle = self.execute_statement_on_cbas_via_rest(
             statement, mode=self.mode)
 
         if self.mode == 'async' or self.mode == 'deferred':
@@ -47,29 +47,40 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
                 self.log.info("Results in Response : {0}".format(results))
                 self.fail("Results returned when mode is async/deferred")
         else:
-            if handle:
-                self.log.info("Handle in Response : {0}".format(handle))
+            if response_handle:
+                self.log.info("Handle in Response : {0}".format(response_handle))
                 self.fail("Handle returned when mode is not async/deferred")
 
-        if handle:
-            # Wait for results to be available
-            status = self.retrieve_request_status_using_handle(self.master,
-                                                               handle)
+        if response_handle:
+            if self.mode == 'async':
+                # Retrieve status first. Then, from status URI,
+                # get the handle to retrieve results
+                # Wait for results to be available at the Status URI
+                status, result_handle = self.retrieve_request_status_using_handle(self.master,
+                                                                   response_handle)
 
-            while (status.lower() != "success"):
-                self.sleep(5)
-                status = self.retrieve_request_status_using_handle(self.master,
-                                                                   handle)
+                while (status.lower() != "success"):
+                    self.sleep(5)
+                    status, result_handle = self.retrieve_request_status_using_handle(
+                        self.master, response_handle)
 
-            # Fetch response from /analytics/result endpoint
-            results = self.retrieve_result_using_handle(self.master, handle)
+                results = self.retrieve_result_using_handle(self.master,
+                                                            result_handle)
+
+            if self.mode == "deferred":
+                # Retrieve results directly from this handle.
+                results = self.retrieve_result_using_handle(self.master,
+                                                            response_handle)
 
             # Execute the same query without passing the mode param (legacy mode)
             _, _, _, immediate_results, _ = self.execute_statement_on_cbas_via_rest(
-                statement, self.mode)
+                statement)
 
             # Validate if the results with mode and without mode are the same
             if not (results == immediate_results):
+                self.log.info("Results with mode = %s : %s",(self.mode, results))
+                self.log.info("Results with legacy mode : %s", immediate_results)
+
                 self.fail("Results not correct")
         else:
             if self.mode == 'async' or self.mode == 'deferred':
@@ -100,7 +111,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
     def test_mode_invalid_handle(self):
         self.setupForTest()
 
-        handle = [999, 0]
+        handle = "http://{0}:8095/analytics/service/result/999-0".format(self.cbas_node.ip)
 
         response = self.retrieve_result_using_handle(self.master, handle)
 
@@ -148,8 +159,8 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
 
         # Validate if the status is 'started'
         self.log.info("Status = %s", status)
-        if status != "started":
-            self.fail("Status is not 'started'")
+        if status != "running":
+            self.fail("Status is not 'running'")
 
         # Validate if results key is not present in response
         if results:
@@ -158,7 +169,14 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         if handle:
             # Retrive results from handle and compute elapsed time
             a = datetime.datetime.now()
-            response = self.retrieve_result_using_handle(self.master, handle)
+            status, result_handle = self.retrieve_request_status_using_handle(
+                self.master, handle)
+            while (status.lower() != "success"):
+                self.sleep(5)
+                status, result_handle = self.retrieve_request_status_using_handle(
+                    self.master, handle)
+
+            response = self.retrieve_result_using_handle(self.master, result_handle)
             b = datetime.datetime.now()
             c = b - a
             elapsedTime = c.total_seconds() * 1000
@@ -331,9 +349,8 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
                 else:
                     # Allow the request to be processed, and then check status
                     self.sleep((delay / 1000) + 5)
-                    status = self.retrieve_request_status_using_handle(
-                        self.master,
-                        handle)
+                    status, result_handle = self.retrieve_request_status_using_handle(
+                        self.master, handle)
                     if status.lower() != "success":
                         self.fail("Status is not SUCCESS")
             elif self.mode == "deferred":
@@ -346,7 +363,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
     def test_status_with_invalid_handle(self):
         self.setupForTest()
 
-        handle = [999, 0]
+        handle = "http://{0}:8095/analytics/service/status/999-0".format(self.cbas_node.ip)
 
         # Retrive status from handle
         status = self.retrieve_request_status_using_handle(self.master,
