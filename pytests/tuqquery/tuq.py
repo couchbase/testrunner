@@ -4025,7 +4025,7 @@ class QueryTests(BaseTestCase):
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
                 self.log.info('RUN QUERY %s' % query)
-                result = rest.execute_statement_on_cbas(query, "immediate")
+                result = RestConnection(server).execute_statement_on_cbas(query, "immediate")
                 result = json.loads(result)
             else :
                 result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
