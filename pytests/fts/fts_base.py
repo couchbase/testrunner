@@ -872,6 +872,7 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.create_fts_index(self.name, self.index_definition)
+        self.__cluster.get_indexes().append(self)
 
     def update(self, rest=None):
         if not rest:
@@ -1925,7 +1926,6 @@ class CouchbaseCluster:
             source_uuid
         )
         index.create()
-        self.__indexes.append(index)
         return index
 
     def get_fts_index_by_name(self, name):
