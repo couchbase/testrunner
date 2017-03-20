@@ -223,7 +223,8 @@ class CBASBaseTest(BaseTestCase):
         response = ""
         for line in output:
             response = response + line
-        response = json.loads(response)
+        if response:
+            response = json.loads(response)
         shell.disconnect()
 
         return response
@@ -240,16 +241,18 @@ class CBASBaseTest(BaseTestCase):
         response = ""
         for line in output:
             response = response + line
-        response = json.loads(response)
+        if response:
+            response = json.loads(response)
         shell.disconnect()
 
-        status = None
-        handle = None
-        if response['status']:
+        status = ""
+        handle = ""
+        if 'status' in response:
             status = response['status']
-        if response['handle']:
+        if 'handle' in response:
             handle = response['handle']
 
+        self.log.info("status=%s, handle=%s"%(status,handle))
         return status, handle
 
     def validate_error_in_response(self, status, errors):
