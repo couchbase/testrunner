@@ -174,12 +174,12 @@ class RbacFTS(FTSBaseTest):
                         password=user['password'],
                         index_name="%s_%s_idx" %(user['id'],bucket.name),
                         bucket_name=bucket.name)
+                    self.wait_for_indexing_complete()
                     alias = self.create_alias_with_credentials(
                         username= user['id'],
                         password=user['password'],
                         target_indexes=[index],
                         alias_name="%s_%s_alias" %(user['id'],bucket.name))
-                    self.wait_for_indexing_complete()
                     try:
                         self.edit_index_with_credentials(
                             index=index,
