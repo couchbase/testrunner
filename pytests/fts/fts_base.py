@@ -3363,44 +3363,44 @@ class FTSBaseTest(unittest.TestCase):
         """
         Wait for index_count for any index to stabilize
         """
-        index_doc_count = 0
         retry = self._input.param("index_retry", 20)
-        start_time = time.time()
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
                 continue
             retry_count = retry
             prev_count = 0
             while retry_count > 0:
-                index_doc_count = index.get_indexed_doc_count()
-                bucket_doc_count = index.get_src_bucket_doc_count()
-                if not self.compare_es:
-                    self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
-                                  % (bucket_doc_count,
-                                     index.name,
-                                     index_doc_count))
-                else:
-                    self.es.update_index('es_index')
-                    self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
-                                  " %s, docs in ES index: %s "
-                                  % (bucket_doc_count,
-                                     index.name,
-                                     index_doc_count,
-                                     self.es.get_index_count('es_index')))
-                if item_count and index_doc_count > item_count:
-                    break
+                try:
+                    index_doc_count = index.get_indexed_doc_count()
+                    bucket_doc_count = index.get_src_bucket_doc_count()
+                    if not self.compare_es:
+                        self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
+                                      % (bucket_doc_count,
+                                         index.name,
+                                         index_doc_count))
+                    else:
+                        self.es.update_index('es_index')
+                        self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
+                                      " %s, docs in ES index: %s "
+                                      % (bucket_doc_count,
+                                         index.name,
+                                         index_doc_count,
+                                         self.es.get_index_count('es_index')))
+                    if item_count and index_doc_count > item_count:
+                        break
 
-                if bucket_doc_count == index_doc_count:
-                    break
+                    if bucket_doc_count == index_doc_count:
+                        break
 
-                if prev_count < index_doc_count or prev_count > index_doc_count:
-                    prev_count = index_doc_count
-                    retry_count = retry
-                else:
+                    if prev_count < index_doc_count or prev_count > index_doc_count:
+                        prev_count = index_doc_count
+                        retry_count = retry
+                    else:
+                        retry_count -= 1
+                except Exception as e:
+                    self.log.info(e)
                     retry_count -= 1
                 time.sleep(6)
-        self.log.info("FTS indexed %s docs in %s mins"
-                      % (index_doc_count, round(float((time.time() - start_time) / 60), 2)))
 
     def construct_plan_params(self):
         plan_params = {}

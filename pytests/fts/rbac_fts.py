@@ -174,6 +174,7 @@ class RbacFTS(FTSBaseTest):
                         password=user['password'],
                         index_name="%s_%s_idx" %(user['id'],bucket.name),
                         bucket_name=bucket.name)
+
                     self.wait_for_indexing_complete()
                     alias = self.create_alias_with_credentials(
                         username= user['id'],
@@ -276,6 +277,7 @@ class RbacFTS(FTSBaseTest):
 
         for user in self.users:
             for bucket in self._cb_cluster.get_buckets():
+                # creating an index
                 try:
 
                     self.create_index_with_credentials(
@@ -283,10 +285,12 @@ class RbacFTS(FTSBaseTest):
                         password=user['password'],
                         index_name="%s_%s_idx" %(user['id'],bucket.name),
                         bucket_name=bucket.name)
-                    self.fail("An fts_searcher is able to create index!")
-
                 except Exception as e:
                     self.log.info("Expected exception: %s" %e)
+                else:
+                    self.fail("An fts_searcher is able to create index!")
+
+                # creating an alias
                 try:
                     self.log.info("Creating index as administrator...")
                     index = self.create_index_with_credentials(
@@ -294,18 +298,19 @@ class RbacFTS(FTSBaseTest):
                         password='password',
                         index_name="%s_%s_idx" % ('Admin', bucket.name),
                         bucket_name=bucket.name)
+                    self.wait_for_indexing_complete()
                     self.log.info("Creating alias as fts_searcher...")
                     self.create_alias_with_credentials(
                         username=user['id'],
                         password=user['password'],
                         target_indexes=[index],
                         alias_name="%s_%s_alias" % (user['id'], bucket.name))
-                    self.fail("An fts_searcher is able to create alias!")
-
                 except Exception as e:
                     self.log.info("Expected exception: %s" %e)
+                else:
+                    self.fail("An fts_searcher is able to create alias!")
 
-                self.wait_for_indexing_complete()
+                # editing an index
                 try:
                     self.edit_index_with_credentials(index=index,
                                                      username=user['id'],
@@ -318,12 +323,18 @@ class RbacFTS(FTSBaseTest):
                     self.query_index_with_credentials(index=index,
                                                      username=user['id'],
                                                      password=user['password'])
+                else:
+                    self.fail("An fts searcher is able to edit index!")
+
+                # deleting an index
                 try:
                     self.delete_index_with_credentials(index=index,
                                                      username=user['id'],
                                                      password=user['password'])
                 except Exception as e:
                     self.log.info("Expected exception: %s" % e)
+                else:
+                    self.fail("An fts searcher is able to delete index!")
 
     def test_fts_alias_creation_multiple_buckets(self):
         """
