@@ -342,7 +342,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         if handle:
             if self.mode == "async":
                 # Retrieve status from handle
-                status = self.retrieve_request_status_using_handle(self.master,
+                status, result_handle = self.retrieve_request_status_using_handle(self.master,
                                                                    handle)
                 if status.lower() != "running":
                     self.fail("Status is not RUNNING")
@@ -366,7 +366,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         handle = "http://{0}:8095/analytics/service/status/999-0".format(self.cbas_node.ip)
 
         # Retrive status from handle
-        status = self.retrieve_request_status_using_handle(self.master,
+        status, result_handle = self.retrieve_request_status_using_handle(self.master,
                                                            handle)
 
         if status:
