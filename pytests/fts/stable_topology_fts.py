@@ -328,11 +328,14 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         index = self.create_index(bucket, "default_index")
         self._cb_cluster.delete_bucket("default")
-        self.sleep(60, "waiting for bucket deletion to be known by fts")
+        self.sleep(20, "waiting for bucket deletion to be known by fts")
         try:
             count = index.get_indexed_doc_count()
         except Exception as e:
             self.log.info("Expected exception: {0}".format(e))
+            # at this point, index has been deleted,
+            # remove index from list of indexes
+            self._cb_cluster.get_indexes().remove(index)
         if count:
             self.fail("Able to retrieve index json from index "
                       "built on bucket that was deleted")
