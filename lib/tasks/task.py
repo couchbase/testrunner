@@ -705,7 +705,7 @@ class GenericLoadingTask(Thread, Task):
     def next(self):
         raise NotImplementedError
 
-    def _unlocked_create(self, partition, key, value, is_base64_value=False, shared_client = None):
+    def _unlocked_create(self, partition, key, value, is_base64_value=False):
         try:
             value_json = json.loads(value)
             if isinstance(value_json, dict):
@@ -719,8 +719,7 @@ class GenericLoadingTask(Thread, Task):
             value = json.dumps(value)
 
         try:
-            client = shared_client or self.client
-            client.set(key, self.exp, self.flag, value)
+            self.client.set(key, self.exp, self.flag, value)
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
@@ -853,7 +852,7 @@ class GenericLoadingTask(Thread, Task):
             self.set_exception(error)
 
     def _create_batch(self, partition_keys_dic, key_val):
-            self._create_batch_client(partition_keys_dic, key_val)
+            self._create_batch_client(key_val)
             self._populate_kvstore(partition_keys_dic, key_val)
 
     def _update_batch(self, partition_keys_dic, key_val):
@@ -900,6 +899,8 @@ class GenericLoadingTask(Thread, Task):
             except ValueError:
                 index = random.choice(range(len(value)))
                 value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            except TypeError:
+                 value = json.dumps(value)
             finally:
                 key_val[key] = value
 
@@ -958,13 +959,13 @@ class LoadDocumentsTask(GenericLoadingTask):
     def has_next(self):
         return self.generator.has_next()
 
-    def next(self, override_generator = None, shared_client = None):
+    def next(self, override_generator = None):
         if self.batch_size == 1:
             key, value = self.generator.next()
             partition = self.kv_store.acquire_partition(key)
             if self.op_type == 'create':
                 is_base64_value = (self.generator.__class__.__name__ == 'Base64Generator')
-                self._unlocked_create(partition, key, value, is_base64_value=is_base64_value, shared_client = shared_client)
+                self._unlocked_create(partition, key, value, is_base64_value=is_base64_value)
             elif self.op_type == 'read':
                 self._unlocked_read(partition, key)
             elif self.op_type == 'read_replica':
@@ -985,7 +986,7 @@ class LoadDocumentsTask(GenericLoadingTask):
             key_value = doc_gen.next_batch()
             partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
             if self.op_type == 'create':
-                self._create_batch(partition_keys_dic, key_value, shared_client)
+                self._create_batch(partition_keys_dic, key_value)
             elif self.op_type == 'update':
                 self._update_batch(partition_keys_dic, key_value)
             elif self.op_type == 'delete':
