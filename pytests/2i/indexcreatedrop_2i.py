@@ -352,7 +352,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(res)
         except Exception, ex:
-            msg = "Error Connecting KV 127.0.0.1:8091 Err dial tcp {0}:11210: getsockopt: connection refused".format(servr_out[1].ip)
+            msg = "Error=Fail to build index.  Index build will retry in background"
             self.log.info(ex)
             self.assertTrue(msg in str(ex), ex)
         finally:
