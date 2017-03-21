@@ -20,6 +20,7 @@ class rbacmain:
 
     def __init__(self,
                 master_ip=None,
+                auth_type=None,
                 bucket_name=None,
                 servers=None,
                 cluster=None
@@ -29,6 +30,7 @@ class rbacmain:
         self.bucket_name = bucket_name
         self.servers = servers
         self.cluster = cluster
+        self.auth_type = auth_type
 
     roles_admin = {'admin','ro_admin','cluster_admin'}
     roles_bucket = {'bucket_admin','views_admin','replication_admin'}
@@ -46,9 +48,7 @@ class rbacmain:
         url = "/settings/rbac/roles"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
-        print status
-        print content
-        print header
+        log.info(" Retrieve all User roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _retrieve_user_roles(self):
@@ -56,31 +56,29 @@ class rbacmain:
         url = "/settings/rbac/users"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
-        print status
-        print content
-        print header
+        log.info(" Retrieve User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _set_user_roles(self,user_name,payload):
         rest = RestConnection(self.master_ip)
-        url = "settings/rbac/users/" + user_name
-        #param = urllib.urlencode(payload)
-        param = payload
+        if self.auth_type == "ldap":
+            url = "settings/rbac/users/" + user_name
+        elif self.auth_type == 'builtin':
+            url = "settings/rbac/users/builtin/" + user_name
         api = rest.baseUrl + url
-        status, content, header = rest._http_request(api, 'PUT', param)
-        print status
-        print content
-        print header
+        status, content, header = rest._http_request(api, 'PUT', params=payload)
+        log.info(" Set User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _delete_user(self,user_name):
         rest = RestConnection(self.master_ip)
-        url = "/settings/rbac/users/" + user_name
+        if self.auth_type == 'ldap':
+            url = "/settings/rbac/users/" + user_name
+        else:
+            url = "settings/rbac/users/builtin/" + user_name
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'DELETE')
-        print status
-        print content
-        print header
+        log.info (" Deleting User - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _check_user_permission(self,user_name,password,permission_set):
@@ -106,10 +104,14 @@ class rbacmain:
         return final_roles
 
     def _delete_user_from_roles(self,server):
+        rest = RestConnection(server)
         status, content, header = rbacmain(server)._retrieve_user_roles()
         content = json.loads(content)
         for temp in content:
-            status, content, header = rbacmain(server)._delete_user(temp['id'])
+            if self.auth_type == 'ldap':
+                response = rest.delete_user_roles(temp['id'])
+            elif self.auth_type == "builtin":
+                response = rest.delete_builtin_user(temp['id'])
 
 
     def _check_role_permission_validate_multiple(self,user_id,user_role,bucket_name,final_user_role,no_bucket_access=None,no_access_bucket_name=None):
@@ -118,7 +120,8 @@ class rbacmain:
         user_details = user_id.split(":")
         final_roles = self._return_roles(user_role)
         payload = "name=" + user_details[0] + "&roles=" + final_roles
-        status, content, header =  rbacmain(self.master_ip)._set_user_roles(user_name=user_details[0],payload=payload)
+        rbacmain(self.master_ip,self.auth_type)._set_user_roles(user_name=user_details[0],payload=payload)
+
         master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)
 
         if no_bucket_access:
@@ -304,7 +307,7 @@ class rbacmain:
         user_details = user_id.split(":")
         final_roles = self._return_roles(user_role)
         payload = "name=" + user_details[0] + "&roles=" + final_roles
-        status, content, header =  rbacmain(self.master_ip)._set_user_roles(user_name=user_details[0],payload=payload)
+        status, content, header =  rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0],payload=payload)
         master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)
 
 
