@@ -1119,6 +1119,175 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.fail("rebalance did not fail after erl crash")
         self.run_operation(phase="after")
 
+    def test_memcache_crash_on_kv_node_during_gsi_rebalance(self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+        # rebalance out a indexer node when querying is in progress
+        try:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+            self.sleep(2)
+            self.kill_memcached(kv_server)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        except Exception, ex:
+            self.fail("rebalance failed after memcached got killed: {0}".format(str(ex)))
+        self.run_operation(phase="after")
+
+    def test_kv_rebalance_when_cbindex_move_in_progress(self):
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
+        log.info(indexes)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        services_in = ["index"]
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
+        services_in = ["kv"]
+        to_add_nodes1 = [self.servers[self.nodes_init+1]]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes1, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], no_of_indexes)
+        self.run_operation(phase="during")
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      to_add_nodes, [], swap_rebalance=True)
+
+    def test_kv_failover_when_cbindex_move_in_progress(self):
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
+        log.info(indexes)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        services_in = ["index"]
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
+        # failover the kv node when cbindex move is in progress
+        kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=[kv_server], graceful=False)
+        failover_task.result()
+        self.sleep(30)
+        self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], no_of_indexes)
+        self.run_operation(phase="during")
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      to_add_nodes, [], swap_rebalance=True)
+        # do a full recovery and rebalance
+        self.rest.set_recovery_type('ns_1@' + kv_server.ip, "full")
+        self.rest.add_back_node('ns_1@' + kv_server.ip)
+        rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
+    # Relook once MB-23399 is fixed
+    def test_index_failover_when_cbindex_move_in_progress(self):
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        services_in = ["index"]
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        to_add_nodes = [self.servers[self.nodes_init+1]]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1], to_add_nodes, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
+        # failover the indexer node when cbindex move is in progress which is not involved in cbindex move
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=[self.servers[self.nodes_init+1]], graceful=False)
+        failover_task.result()
+        self.sleep(30)
+        self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], no_of_indexes)
+        self.run_operation(phase="during")
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [self.servers[self.nodes_init+1]], [], swap_rebalance=True)
+        # do a full recovery and rebalance
+        self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
+        self.rest.add_back_node('ns_1@' + index_server.ip)
+        rebalance = self.cluster.rebalance(self.servers[:self.nodes_init+1], [], [])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
+    def test_reboot_on_kv_node_during_gsi_rebalance(self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+        # rebalance out a indexer node
+        try:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+            self.sleep(2)
+            # reboot a kv node during gsi rebalance
+            self.reboot_node(kv_server)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        except Exception, ex:
+            if "Rebalance stopped by janitor" not in str(ex):
+                self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
+        else:
+            self.fail("rebalance did not fail after kv node reboot")
+        self.run_operation(phase="after")
+
+    def test_cbindex_move_invalid_data(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self._create_index_with_defer_build()
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
+        log.info(indexes)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        services_in = ["index"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        rebalance.result()
+        #  cbindex move with destination host not specified
+        _, error = self._cbindex_move(index_server, " ", indexes, expect_failure=True)
+        if not filter(lambda x: 'Error occured Unable to find Index service for destination' in x, error):
+            self.fail("cbindex move did not fail with expected error message")
+        # cbindex move with index names not specified
+        _, error = self._cbindex_move(index_server, self.servers[self.nodes_init], " ", expect_failure=True)
+        if not filter(lambda x: 'panic: runtime error: index out of range' in x, error):
+            self.fail("cbindex move did not fail with expected error message")
+        # cbindex move with index name which does not exist
+        self.run_async_index_operations(operation_type="drop_index")
+        _, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes, expect_failure=True)
+        if not filter(lambda x: 'Error occured index' in x, error):
+            self.fail("cbindex move did not fail with expected error message")
+
     def _return_maps(self):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
