@@ -947,10 +947,7 @@ class FTSIndex:
         if show_results_from_item:
             query_json['from'] = int(show_results_from_item)
         if timeout is not None:
-            query_json['ctl'] = {}
             query_json['ctl']['timeout'] = int(timeout)
-        else:
-            del query_json['ctl']['timeout']
         if fields:
             query_json['fields'] = fields
         if facets:
@@ -966,12 +963,10 @@ class FTSIndex:
         if consistency_level is None:
             del query_json['ctl']['consistency']['level']
         else:
-            query_json['ctl']['consistency'] = {}
             query_json['ctl']['consistency']['level'] = consistency_level
         if consistency_vectors is None:
             del query_json['ctl']['consistency']['vectors']
         elif consistency_vectors != {}:
-            query_json['ctl']['consistency'] = {}
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
         return query_json
 
