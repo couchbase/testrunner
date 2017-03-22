@@ -1697,7 +1697,6 @@ class CouchbaseCluster:
     def cleanup_cluster(
             self,
             test_case,
-            from_rest=False,
             cluster_shutdown=True):
         """Cleanup cluster.
         1. Remove all remote cluster references.
@@ -1735,6 +1734,14 @@ class CouchbaseCluster:
         finally:
             if cluster_shutdown:
                 self.__clusterop.shutdown(force=True)
+        try:
+            self.__log.info("Removing user 'cbadminbucket'...")
+            RbacBase().remove_user_role(['cbadminbucket'], RestConnection(
+                self.__master_node))
+        except Exception as e:
+            self.__log.info(e)
+
+
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
@@ -2883,9 +2890,6 @@ class FTSBaseTest(unittest.TestCase):
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                     .format(self.__case_number, self._testMethodName))
         finally:
-            # Remove rbac user in teardown
-            role_del = ['cbadminbucket']
-            temp = RbacBase().remove_user_role(role_del, RestConnection(self._input.servers[0]))
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
 
