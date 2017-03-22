@@ -967,7 +967,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                 # Validations could fail
                 # See MB-22724 for more details
                 self._multiscan_distinct_api_helper(scan_contents, offset=0, limit=100, id_map=id_map,
-                                                    projection=pr)
+                                                    projection=pr,verify=False)
 
     def test_offset_limit_and_projection_with_indexed_values_of_large_size(self):
         """

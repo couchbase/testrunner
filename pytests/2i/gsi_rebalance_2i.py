@@ -195,7 +195,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             if "Indexer Cannot Process Create Index - Rebalance In Progress" not in str(ex):
                 self.fail("index creation did not fail with expected error : {0}".format(str(ex)))
         else:
-            self.fail("drop index did not fail as expected")
+            self.fail("drop index did not fail as expected: See MB-22886 for more details")
         self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -286,6 +286,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         for result in results:
             result.join()
+        self.sleep(60)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
@@ -684,15 +685,16 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], [index_server],
                                                  services=services_in)
-        self.sleep(3)
+        self.sleep(10)
         rebalance.result()
         # start create index, build index
         t1 = threading.Thread(target=self._build_index)
         t1.start()
+        self.sleep(3)
         output, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
         # TODO : Relook at this after fixing MB-23004
         if "cannot unmarshal array into Go value of type string" not in output[0]:
-            self.fail("cbindex move succeeded during a rebalance")
+            self.fail("cbindex move succeeded during a rebalance. See MB-23004 for more details")
         self.run_operation(phase="during")
         t1.join()
         self.run_operation(phase="after")
@@ -848,7 +850,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         exceptions = self._build_index()
         self.sleep(30)
         if exceptions:
-            self.fail("build index after cbindex move failed")
+            self.fail("build index after cbindex move failed. See MB-23135 for more details")
         self.run_operation(phase="after")
 
     def test_cbindex_move_negative(self):
