@@ -1290,6 +1290,56 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if not filter(lambda x: 'Error occured index' in x, error):
             self.fail("cbindex move did not fail with expected error message")
 
+    def test_rebalance_in_with_different_topologies(self):
+        self.services_in = self.input.param("services_in")
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=[self.services_in])
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [self.servers[self.nodes_init]], [])
+        self.run_operation(phase="after")
+
+    def test_rebalance_out_with_different_topologies(self):
+        self.server_out = self.input.param("server_out")
+        self.run_operation(phase="before")
+        self.sleep(30)
+        nodes_out_list = self.servers[self.server_out]
+        # rebalance out a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        self.run_operation(phase="after")
+
+    def test_swap_rebalance_with_different_topologies(self):
+        self.server_out = self.input.param("server_out")
+        self.services_in = self.input.param("services_in")
+        self.run_operation(phase="before")
+        self.sleep(30)
+        nodes_out_list = self.servers[self.server_out]
+        # rebalance out a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                 [nodes_out_list], services=[self.services_in])
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        self.run_operation(phase="after")
+
     def _return_maps(self):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
