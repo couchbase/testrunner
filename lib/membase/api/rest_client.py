@@ -800,7 +800,10 @@ class RestConnection(object):
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
-                    log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content.rstrip('\n')))
+                    message = '{0} {1} body: {2} headers: {3} error: {4} reason: {5} {6}'.\
+                              format(method, api, params, headers, response['status'], reason,
+                                     content.rstrip('\n'))
+                    log.error(message)
                     return False, content, response
             except socket.error as e:
                 log.error("socket error while connecting to {0} error {1} ".format(api, e))
