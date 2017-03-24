@@ -804,6 +804,7 @@ class RestConnection(object):
                               format(method, api, params, headers, response['status'], reason,
                                      content.rstrip('\n'))
                     log.error(message)
+                    log.debug(''.join(traceback.format_stack()))
                     return False, content, response
             except socket.error as e:
                 log.error("socket error while connecting to {0} error {1} ".format(api, e))
