@@ -1557,6 +1557,39 @@ class RestConnection(object):
             index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
         return index_map
 
+    def get_index_storage_stats(self, timeout=120, index_map=None):
+        api = self.index_baseUrl + 'stats/storage'
+        status, content, header = self._http_request(api, timeout=timeout)
+        index_stats = dict()
+        stats = dict()
+        data = content.split("\n")
+        index = "unknown"
+        store = "unknown"
+        for line in data:
+            if "Index Instance" in line:
+                index_data = re.findall(":.*", line)
+                bucket_data = re.findall(".*:", line)
+                index = index_data[0].split()[0][1:]
+                bucket = bucket_data[0].split("Index Instance")[1][:-1].strip()
+                log.info("Bucket Name: {0}".format(bucket))
+                if bucket not in index_stats.keys():
+                    index_stats[bucket] = {}
+                if index not in index_stats[bucket].keys():
+                    index_stats[bucket][index] = dict()
+                stats = dict()
+                continue
+            if "Store" in line:
+                store = re.findall("[a-zA-Z]+", line)[0]
+                if store not in index_stats[bucket][index].keys():
+                    index_stats[bucket][index][store] = {}
+                continue
+            data = line.split("=")
+            if len(data) == 2:
+                metric = data[0].strip()
+                stats[metric] = float(data[1].strip().replace("%", ""))
+            index_stats[bucket][index][store] = stats
+        return index_stats
+
     def get_indexer_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats'
         index_map = {}

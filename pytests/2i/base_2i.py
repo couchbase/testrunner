@@ -2,6 +2,7 @@ import logging
 import random
 from newtuq import QueryTests
 from couchbase_helper.cluster import Cluster
+from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from membase.api.rest_client import RestConnection
 
@@ -26,6 +27,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.graceful = self.input.param("graceful",False)
         self.groups = self.input.param("groups", "all").split(":")
         self.use_rest = self.input.param("use_rest", False)
+        self.plasma_dgm = self.input.param("plasma_dgm", False)
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
             if self.dataset == "default" or self.dataset == "employee":
@@ -765,3 +767,52 @@ class BaseSecondaryIndexingTests(QueryTests):
         server = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(server)
         status = rest.set_indexer_params("logLevel", loglevel)
+
+    def get_dgm_for_plasma(self, indexer_nodes=None):
+        """
+        Internal Method to create OOM scenario
+        :return:
+        """
+        def validate_disk_writes(indexer_nodes=None):
+            if not indexer_nodes:
+                indexer_nodes = self.get_nodes_from_services_map(service_type="index",
+                                                    get_all_nodes=True)
+            for node in indexer_nodes:
+                indexer_rest = RestConnection(node)
+                content = indexer_rest.get_index_storage_stats()
+                for index in content.values():
+                    for stats in index.values():
+                        if stats["MainStore"]["num_rec_swapout"] == 0:
+                            return False
+            return True
+
+        def kv_mutations(self, docs=1):
+            if not docs:
+                docs = self.docs_per_day
+            gens_load = self.generate_docs(docs)
+            self.full_docs_list = self.generate_full_docs_list(gens_load)
+            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+            tasks = self.async_load(generators_load=gens_load, op_type="create",
+                                batch_size=self.batch_size)
+            return tasks
+        if self.gsi_type != "plasma":
+            return
+        if not self.plasma_dgm:
+            return
+        log.info("Trying to get all indexes in DGM...")
+        log.info("Setting indexer memory quota to 256 MB...")
+        node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(node)
+        rest.set_indexer_memoryQuota(indexMemoryQuota=256)
+        cnt = 0
+        docs = 50
+        while cnt < 100:
+            if validate_disk_writes(indexer_nodes):
+                log.info("========== DGM is achieved ==========")
+                return True
+            for task in kv_mutations(self, docs):
+                task.result()
+            self.sleep(30)
+            cnt += 1
+            docs += 20
+        return False
