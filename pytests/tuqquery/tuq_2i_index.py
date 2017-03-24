@@ -4447,7 +4447,7 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
-                    self.query = "EXPLAIN SELECT count(*),join_yr,name FROM %s where join_yr > 2009 GROUP BY join_yr,name ORDER BY name';" % (bucket.name)
+                    self.query = "EXPLAIN SELECT count(*),join_yr,name FROM %s where join_yr > 2009 GROUP BY join_yr,name ORDER BY name;" % (bucket.name)
                     if self.covering_index:
                         self.test_explain_covering_index(index_name)
                     self.query = "SELECT count(*),join_yr FROM %s  where join_yr > 2009 GROUP BY join_yr,name ORDER BY name;" % (bucket.name)
