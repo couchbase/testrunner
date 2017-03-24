@@ -782,6 +782,14 @@ class RestConnection(object):
         return {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization}
 
+    def _get_auth(self, headers):
+        key = 'Authorization'
+        if key in headers:
+            val = headers[key]
+            if val.startswith("Basic "):
+                return "auth: " + base64.decodestring(val[6:])
+        return ""
+
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
         if not headers:
             headers = self._create_headers()
@@ -800,9 +808,9 @@ class RestConnection(object):
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
-                    message = '{0} {1} body: {2} headers: {3} error: {4} reason: {5} {6}'.\
+                    message = '{0} {1} body: {2} headers: {3} error: {4} reason: {5} {6} {7}'.\
                               format(method, api, params, headers, response['status'], reason,
-                                     content.rstrip('\n'))
+                                     content.rstrip('\n'), self._get_auth(headers))
                     log.error(message)
                     log.debug(''.join(traceback.format_stack()))
                     return False, content, response
