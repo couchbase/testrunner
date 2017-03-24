@@ -195,3 +195,4 @@ QUERY_SUBQUERY = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/qu
 THROUGHPUT_CONCURRENCY = 4
 # determine wether or not to use high throughput
 ALLOW_HTP = True
+IS_CONTAINER = False

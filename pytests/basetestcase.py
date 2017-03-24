@@ -142,7 +142,6 @@ class BaseTestCase(unittest.TestCase):
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
-            self.is_container = self.input.param("is_container", False)
             if hasattr(self.input, 'cbas'):
                 if self.input.cbas:
                     self.cbas_node = self.input.cbas
@@ -488,7 +487,7 @@ class BaseTestCase(unittest.TestCase):
                                                       maxParallelReplicaIndexers, init_port,
                                                       quota_percent, services=assigned_services,
                                                       index_quota_percent=self.index_quota_percent,
-                                                      gsi_type=self.gsi_type, is_container=self.is_container))
+                                                      gsi_type=self.gsi_type))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:
