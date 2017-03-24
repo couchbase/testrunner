@@ -614,8 +614,6 @@ class FTSIndex:
             custom_analyzer_def = cm_gen.build_custom_analyzer()
             self.index_definition["params"]["mapping"]["analysis"] = \
                                                     custom_analyzer_def
-            self.index_definition['params']['mapping']['default_analyzer'] = \
-                cm_gen.get_random_value(custom_analyzer_def["analyzers"].keys())
         self.__log.info(json.dumps(self.index_definition["params"],
                                    indent=3))
 
@@ -652,8 +650,6 @@ class FTSIndex:
                     custom_analyzer_def = cm_gen.build_custom_analyzer()
                     self.index_definition["params"]["mapping"]["analysis"] = \
                         custom_analyzer_def
-                    self.index_definition['params']['mapping']['default_analyzer'] = \
-                        cm_gen.get_random_value(custom_analyzer_def["analyzers"].keys())
 
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
@@ -1740,8 +1736,6 @@ class CouchbaseCluster:
                 self.__master_node))
         except Exception as e:
             self.__log.info(e)
-
-
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
