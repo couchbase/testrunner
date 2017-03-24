@@ -56,7 +56,7 @@ def ns_clean(make, verbose = 1):
 
     clean or sys.exit(-1)
 
-def run_test(ini, conf, verbose):
+def run_test(ini, conf, verbose, debug):
     """ run testrunner process """
 
     rc = -1
@@ -68,6 +68,10 @@ def run_test(ini, conf, verbose):
 
         if verbose == 0:
             params += ",log_level=CRITICAL"
+        else:
+            if debug == 1:
+                params += ",log_level=DEBUG"
+
         args.extend(["-p", params])
 
         r, w = os.pipe()
@@ -95,6 +99,17 @@ def get_verbosity():
             exit_with_help()
     return 1
 
+def get_debug():
+    """ 1 = debug, 0 = info """
+
+    if len(sys.argv) > 5:
+        try:
+            return int(sys.argv[5])
+        except TypeError:
+            print "Error: debug must be a numerical value"
+            exit_with_help()
+    return 1
+
 def main():
 
     # parse env vars
@@ -103,6 +118,7 @@ def main():
     ini = sys.argv[2]
     conf = sys.argv[3]
     verbose = get_verbosity()
+    debug = get_debug()
     num_nodes = parse_ini_servers(ini)
 
 
@@ -113,7 +129,7 @@ def main():
     assert crm.start_nodes()
 
     # run test
-    rc = run_test(ini, conf, verbose)
+    rc = run_test(ini, conf, verbose, debug)
 
     # done
     crm.stop_nodes()

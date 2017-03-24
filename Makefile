@@ -3,6 +3,7 @@ DIRS=b conf lib longevity pytests resources scripts unittests
 FILES=Makefile README TestInput.py
 SLEEP_TIME=3
 VERBOSE=0
+DEBUG=0
 TESTNAME=conf/py-all-dev.conf
 
 .PHONY: clean testrunner test test-quick
@@ -24,7 +25,7 @@ dcp-test:
 	python testrunner.py -i b/resources/dev-4-nodes.ini -c conf/py-dcp.conf -p skip_cleanup=False,dev=True,test=$(TEST)
 
 simple-test:
-	python scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE)
+	python scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE) $(DEBUG)
 
 #test-views:
 #	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf
