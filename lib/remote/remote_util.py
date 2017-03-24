@@ -1636,12 +1636,16 @@ class RemoteMachineShellConnection:
                 success &= self.log_command_output(output, error, track_words)
 
             if vbuckets:
-                output, error = self.execute_command("sed -i 's/ulimit "
-                                                     "-c unlimited/ulimit "
-                                                     "-c unlimited\\n    export "
-                                 "{0}_NUM_VBUCKETS={1}/' {3}opt/{2}/etc/{2}_init.d".
-                                 format(server_type.upper(), vbuckets, server_type,
-                                        nonroot_path_start))
+                """
+                   From spock, the file to edit is in /opt/couchbase/bin/couchbase-server
+                """
+                output, error = self.execute_command("sed -i 's/export ERL_FULLSWEEP_AFTER/"
+                                                     "export ERL_FULLSWEEP_AFTER\\n"
+                                                     "{0}_NUM_VBUCKETS={1}\\n"
+                                                     "export {0}_NUM_VBUCKETS/' "
+                                                     "{3}opt/{2}/bin/{2}-server".
+                                                     format(server_type.upper(), vbuckets,
+                                                            server_type, nonroot_path_start))
                 success &= self.log_command_output(output, error, track_words)
             if upr is not None:
                 protocol = "tap"
