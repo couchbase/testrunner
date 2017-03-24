@@ -193,3 +193,6 @@ QUERY_JOIN = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/querie
 QUERY_SUBQUERY = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/queries_subqueries_1000.txt"
 # the maximum number of processes to allow under high_throughput data loading
 THROUGHPUT_CONCURRENCY = 4
+# determine wether or not to use high throughput
+ALLOW_HTP = True
+IS_CONTAINER = False

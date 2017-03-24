@@ -10,7 +10,7 @@ from copy import deepcopy
 from threading import Thread
 from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
-from testconstants import COUCHBASE_FROM_VERSION_4
+from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER
 
 import httplib2
 import logger
@@ -836,6 +836,8 @@ class RestConnection(object):
             time.sleep(1)
             kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
         info = self.get_nodes_self()
+
+
         cb_version = info.version[:5]
         if cb_version in COUCHBASE_FROM_VERSION_4:
             if "index" in self.node_services and "fts" not in self.node_services:
@@ -3707,6 +3709,10 @@ class RestParser(object):
                     ramKB = storageTotals["ram"]["total"]
                     node.storageTotalRam = ramKB/(1024*1024)
 
+                    if IS_CONTAINER:
+                        # the storage total values are more accurate than
+                        # mcdMemoryReserved - which is container host memory
+                        node.mcdMemoryReserved = node.storageTotalRam * 0.70
         return node
 
     def parse_get_bucket_response(self, response):

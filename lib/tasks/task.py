@@ -89,8 +89,7 @@ class NodeInitializeTask(Task):
                  maxParallelReplicaIndexers=None,
                  port=None, quota_percent=None,
                  index_quota_percent=None,
-                 services = None, gsi_type='forestdb',
-                 is_container = False):
+                 services = None, gsi_type='forestdb'):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.port = port or server.port
@@ -105,7 +104,6 @@ class NodeInitializeTask(Task):
         self.maxParallelReplicaIndexers = maxParallelReplicaIndexers
         self.services = services
         self.gsi_type = gsi_type
-        self.is_container = is_container
 
 
     def execute(self, task_manager):
@@ -123,11 +121,6 @@ class NodeInitializeTask(Task):
             self.state = FINISHED
             self.set_result(True)
             return
-
-        if self.is_container:
-           # the storage total values are more accurate than
-           # mcdMemoryReserved - which is container host memory
-           info.mcdMemoryReserved = info.storageTotalRam
 
         self.quota = int(info.mcdMemoryReserved * 2/3)
         if self.index_quota_percent:
