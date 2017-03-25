@@ -84,6 +84,11 @@ class Task(Future):
     def check(self, task_manager):
         raise NotImplementedError
 
+    def set_unexpected_exception(self, e, suffix = ""):
+        self.log.error("Unexpected exception [{0}] caught".format(e) + suffix)
+        self.log.error(''.join(traceback.format_stack()))
+        self.set_exception(e)
+
 class NodeInitializeTask(Task):
     def __init__(self, server, disabled_consistent_view=None,
                  rebalanceIndexWaitingDisabled=None,
@@ -288,8 +293,7 @@ class BucketCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -338,10 +342,8 @@ class BucketDeleteTask(Task):
 
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
             self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
-            self.set_exception(e)
-
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -354,9 +356,8 @@ class BucketDeleteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
             self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30,
@@ -496,9 +497,7 @@ class RebalanceTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught in {0} sec".
-                          format(time.time() - self.start_time))
-            self.set_exception(e)
+            self.set_unexpected_exception(e, " in {0} sec".format(time.time() - self.start_time))
         retry_get_process_num = 25
         if self.rest.is_cluster_mixed():
             """ for mix cluster, rebalance takes longer """
@@ -1921,8 +1920,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught: {0}".format(e))
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _check_key_revId(self, key, ignore_meta_data=[]):
         src_meta_data = self.__get_meta_data(self.client_src, key)
@@ -2132,8 +2130,7 @@ class ViewCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
         try:
             self.rest.create_design_document(self.bucket, ddoc)
@@ -2147,8 +2144,7 @@ class ViewCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2194,13 +2190,11 @@ class ViewCreateTask(Task):
                 task_manager.schedule(self, 2)
             else:
                 self.state = FINISHED
-                self.log.error("Unexpected Exception Caught")
-                self.set_exception(e)
+                self.set_unexpected_exception(e)
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _check_ddoc_revision(self):
         valid = False
@@ -2216,8 +2210,7 @@ class ViewCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
         return valid
 
@@ -2263,8 +2256,7 @@ class ViewCreateTask(Task):
                         self.log.info("Unexpected Exception Caught. Retrying.")
                         time.sleep(2)
                     else:
-                        self.log.error("Unexpected Exception Caught")
-                        self.set_exception(e)
+                        self.set_unexpected_exception(e)
                         self.state = FINISHED
                         break
             else:
@@ -2315,8 +2307,7 @@ class ViewDeleteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2335,8 +2326,7 @@ class ViewDeleteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class ViewQueryTask(Task):
     def __init__(self, server, design_doc_name, view_name,
@@ -2374,8 +2364,7 @@ class ViewQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2415,8 +2404,7 @@ class ViewQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class N1QLQueryTask(Task):
     def __init__(self,
@@ -2467,8 +2455,7 @@ class N1QLQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2495,8 +2482,7 @@ class N1QLQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class CreateIndexTask(Task):
     def __init__(self,
@@ -2577,8 +2563,7 @@ class BuildIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2593,8 +2578,7 @@ class BuildIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class MonitorIndexTask(Task):
     def __init__(self,
@@ -2626,8 +2610,7 @@ class MonitorIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2641,8 +2624,7 @@ class MonitorIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class DropIndexTask(Task):
     def __init__(self,
@@ -2674,8 +2656,7 @@ class DropIndexTask(Task):
         # catch and set all unexpected exceptions
         except DropIndexException as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2692,8 +2673,7 @@ class DropIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class MonitorViewQueryResultsTask(Task):
     def __init__(self, servers, design_doc_name, view,
@@ -2962,8 +2942,7 @@ class ModifyFragmentationConfigTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 
 class MonitorActiveTask(Task):
@@ -3130,8 +3109,7 @@ class MonitorViewFragmentationTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 
     def _get_current_auto_compaction_percentage(self):
@@ -3253,8 +3231,7 @@ class ViewCompactionTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     # verify compaction history incremented and some defraging occurred
     def check(self, task_manager):
@@ -3331,8 +3308,7 @@ class ViewCompactionTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _get_compaction_details(self):
         status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
@@ -3370,8 +3346,7 @@ class FailoverTask(Task):
 
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _failover_nodes(self, task_manager):
         rest = RestConnection(self.servers[0])
@@ -3417,8 +3392,7 @@ class GenerateExpectedViewResultsTask(Task):
             task_manager.schedule(self)
         except Exception, ex:
             self.state = FINISHED
-            self.log.error("Unexpected Exception: %s" % str(ex))
-            self.set_exception(ex)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -3879,8 +3853,7 @@ class BucketFlushTask(Task):
 
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -3893,8 +3866,7 @@ class BucketFlushTask(Task):
             self.state = FINISHED
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class MonitorDBFragmentationTask(Task):
 
@@ -4190,8 +4162,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     # verify compaction history incremented and some defraging occurred
     def check(self, task_manager):
@@ -4265,8 +4236,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _get_disk_size(self):
         nodes_ddoc_info = MonitorViewFragmentationTask.aggregate_ddoc_info(self.rest, self.design_doc_name,
@@ -4640,9 +4610,8 @@ class CBASQueryExecuteTask(Task):
 
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
             self.passed = False
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -4681,8 +4650,7 @@ class CBASQueryExecuteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 
 class AutoFailoverNodesFailureTask(Task):
