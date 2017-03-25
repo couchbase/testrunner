@@ -355,7 +355,7 @@ class RestConnection(object):
             api = self.baseUrl + 'pools/default/bucketsStreaming/{0}'.format(bucket.name)
         try:
             httplib2.Http(timeout=timeout).request(api, 'GET', '',
-                                                   headers=self._create_capi_headers_with_auth(self.username, self.password))
+                                                   headers=self._create_capi_headers())
         except Exception, ex:
             log.warn('Exception while streaming: %s' % str(ex))
 
@@ -421,7 +421,8 @@ class RestConnection(object):
     def init_http_request(self, api):
         content = None
         try:
-            status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
+            status, content, header = self._http_request(api, 'GET',
+                                                         headers=self._create_capi_headers())
             json_parsed = json.loads(content)
             if status:
                 return json_parsed, True
@@ -448,7 +449,7 @@ class RestConnection(object):
         api = 'http://{0}:{1}/pools/default/tasks'.format(self.ip, self.port)
         try:
             status, content, header = self._http_request(api, 'GET',
-                          headers=self._create_capi_headers_with_auth(self.username, self.password))
+                                                         headers=self._create_capi_headers())
             json_parsed = json.loads(content)
         except ValueError as e:
             print(e)
@@ -480,13 +481,8 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = '%s/%s/%s' % (self.capiBaseUrl, bucket.name, design_doc_name)
 
-        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
-            status, content, header = self._http_request(api, 'PUT', str(design_doc),
-                                                headers=self._create_capi_headers_with_auth(
-                                                username=bucket.name, password=bucket.saslPassword))
-        else:
-            status, content, header = self._http_request(api, 'PUT', str(design_doc),
-                                                 headers=self._create_capi_headers())
+        status, content, header = self._http_request(api, 'PUT', str(design_doc),
+                                                     headers=self._create_capi_headers())
         if not status:
             raise DesignDocCreationException(design_doc_name, content)
         return json.loads(content)
@@ -538,13 +534,8 @@ class RestConnection(object):
                                                   view_name,
                                                   urllib.urlencode(query))
         log.info("index query url: {0}".format(api))
-        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
-            status, content, header = self._http_request(api, headers=self._create_capi_headers_with_auth(
-                                                username=bucket.name, password=bucket.saslPassword),
-                                                timeout=timeout)
-        else:
-            status, content, header = self._http_request(api, headers=self._create_capi_headers(),
-                                             timeout=timeout)
+        status, content, header = self._http_request(api, headers=self._create_capi_headers(),
+                                                     timeout=timeout)
         return status, content, header
 
     def view_results(self, bucket, ddoc_name, params, limit=100, timeout=120,
@@ -676,11 +667,7 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
 
-        if isinstance(bucket, Bucket) and bucket.authType == "sasl" and bucket.name != "default":
-            status, content, header = self._http_request(api, headers=self._create_capi_headers_with_auth(
-                                                username=bucket.name, password=bucket.saslPassword))
-        else:
-            status, content, header = self._http_request(api, headers=self._create_capi_headers())
+        status, content, header = self._http_request(api, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         meta_parsed = ""
         if status:
@@ -701,11 +688,8 @@ class RestConnection(object):
         api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
         if isinstance(bucket, Bucket):
             api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
-        if isinstance(bucket, Bucket) and bucket.authType == "sasl" and bucket.name != "default":
-            status, content, header = self._http_request(api, 'DELETE', headers=self._create_capi_headers_with_auth(
-                                                username=bucket.name, password=bucket.saslPassword))
-        else:
-            status, content, header = self._http_request(api, 'DELETE', headers=self._create_capi_headers())
+        status, content, header = self._http_request(api, 'DELETE',
+                                                     headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         return status, json_parsed
 
@@ -715,11 +699,8 @@ class RestConnection(object):
             api = self.capiBaseUrl + \
             '/%s/_design/%s/_spatial/_compact' % (bucket.name, design_name)
 
-        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
-            status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
-                                                username=bucket.name, password=bucket.saslPassword))
-        else:
-            status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers())
+        status, content, header = self._http_request(api, 'POST',
+                                                     headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         return status, json_parsed
 
@@ -732,15 +713,8 @@ class RestConnection(object):
         else:
             api += '_set_view/{0}/_design/{1}/_info'.format(bucket, design_name)
 
-        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
-            headers = self._create_capi_headers_with_auth(
-                username=bucket.name, password=bucket.saslPassword)
-            status, content, header = self._http_request(api, 'POST',
-                                                         headers=headers)
-        else:
-            headers = self._create_capi_headers()
-            status, content, header = self._http_request(api, 'GET',
-                                                         headers=headers)
+        status, content, header = self._http_request(api, 'GET',
+                                                     headers=self._create_capi_headers())
         if not status:
             raise SetViewInfoNotFound(design_name, content)
         json_parsed = json.loads(content)
@@ -756,11 +730,7 @@ class RestConnection(object):
         return status, json_parsed
 
     def _create_capi_headers(self):
-        return {'Content-Type': 'application/json',
-                'Accept': '*/*'}
-
-    def _create_capi_headers_with_auth(self, username, password):
-        authorization = base64.encodestring('%s:%s' % (username, password))
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         return {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
@@ -2467,9 +2437,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api,
                                     'PUT',
                                     json.dumps(params, ensure_ascii=False),
-                                    headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password),
+                                    headers=self._create_capi_headers(),
                                     timeout=30)
         if status:
             log.info("Index {0} created".format(index_name))
@@ -2483,9 +2451,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api,
                                     'PUT',
                                     json.dumps(index_def, ensure_ascii=False),
-                                    headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password),
+                                    headers=self._create_capi_headers(),
                                     timeout=30)
         if status:
             log.info("Index/alias {0} updated".format(index_name))
@@ -2499,9 +2465,7 @@ class RestConnection(object):
         api = self.fts_baseUrl + "api/index/{0}".format(name)
         status, content, header = self._http_request(
             api,
-            headers=self._create_capi_headers_with_auth(
-                        self.username,
-                        self.password),
+            headers=self._create_capi_headers(),
             timeout=timeout)
         if status:
             json_parsed = json.loads(content)
@@ -2513,9 +2477,7 @@ class RestConnection(object):
         api = self.fts_baseUrl + "api/index/{0}/count".format(name)
         status, content, header = self._http_request(
             api,
-            headers=self._create_capi_headers_with_auth(
-                        self.username,
-                        self.password),
+            headers=self._create_capi_headers(),
             timeout=timeout)
         if status:
             json_parsed = json.loads(content)
@@ -2527,9 +2489,7 @@ class RestConnection(object):
         api = self.fts_baseUrl + "api/index/{0}/".format(name)
         status, content, header = self._http_request(
             api,
-            headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password),
+            headers=self._create_capi_headers(),
             timeout=timeout)
         if status:
             json_parsed = json.loads(content)
@@ -2541,9 +2501,7 @@ class RestConnection(object):
         status, content, header = self._http_request(
             api,
             'DELETE',
-            headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password))
+            headers=self._create_capi_headers())
         return status
 
     def stop_fts_index_update(self, name):
@@ -2553,9 +2511,7 @@ class RestConnection(object):
             api,
             'POST',
             '',
-            headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password))
+            headers=self._create_capi_headers())
         return status
 
     def freeze_fts_index_partitions(self, name):
@@ -2565,9 +2521,7 @@ class RestConnection(object):
             api,
             'POST',
             '',
-            headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password))
+            headers=self._create_capi_headers())
         return status
 
     def disable_querying_on_fts_index(self, name):
@@ -2577,9 +2531,7 @@ class RestConnection(object):
             api,
             'POST',
             '',
-            headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password))
+            headers=self._create_capi_headers())
         return status
 
     def enable_querying_on_fts_index(self, name):
@@ -2589,17 +2541,13 @@ class RestConnection(object):
             api,
             'POST',
             '',
-            headers=self._create_capi_headers_with_auth(
-                                                self.username,
-                                                self.password))
+            headers=self._create_capi_headers())
         return status
 
     def run_fts_query(self, index_name, query_json, timeout=70):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
-        headers = self._create_capi_headers_with_auth(
-                    self.username,
-                    self.password)
+        headers = self._create_capi_headers()
         status, content, header = self._http_request(
             api,
             "POST",
@@ -2615,9 +2563,7 @@ class RestConnection(object):
     def run_fts_query_with_facets(self, index_name, query_json):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
-        headers = self._create_capi_headers_with_auth(
-            self.username,
-            self.password)
+        headers = self._create_capi_headers()
         status, content, header = self._http_request(
             api,
             "POST",
