@@ -90,7 +90,7 @@ class StatsCrashRepro(BaseTestCase):
 
         # wait for draining of data before restart and warm up
         for bucket in self.buckets:
-            RebalanceHelper.wait_for_persistence(self.nodes_server[0], bucket)
+            RebalanceHelper.wait_for_persistence(self.nodes_server[0], bucket, bucket_type=self.bucket_type)
 
 
         while 1:
