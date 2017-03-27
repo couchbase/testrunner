@@ -292,7 +292,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             expected_result = self.gen_results.generate_expected_result(print_expected_result=False)
         self.query = self.gen_results.query
         log.info("Query : {0}".format(self.query))
-        msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=420,
+        msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=500,
                                             expected_result=expected_result, scan_consistency=scan_consistency,
                                             scan_vector=scan_vector, verify_results=verify_results)
         self.assertTrue(check, msg)
