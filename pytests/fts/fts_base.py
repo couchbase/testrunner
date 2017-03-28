@@ -214,7 +214,7 @@ class NodeHelper:
         shell.disconnect()
 
     @staticmethod
-    def reboot_server(server, test_case, wait_timeout=60):
+    def reboot_server(server, test_case, wait_timeout=120):
         """Reboot a server and wait for couchbase server to run.
         @param server: server object, which needs to be rebooted.
         @param test_case: test case object, since it has assert() function

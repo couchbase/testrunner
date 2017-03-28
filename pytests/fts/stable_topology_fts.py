@@ -1119,7 +1119,7 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Doc IDs: %s" % raw_hits)
                 if hits:
                     result = index.validate_sorted_results(raw_hits,
-                                                       self.sort_fields)
+                                                       self.sort_fields_list)
                     if not result:
                         self.fail(
                             "Testcase failed. Actual results do not match expected.")
