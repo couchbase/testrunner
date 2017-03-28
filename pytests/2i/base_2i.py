@@ -768,6 +768,28 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(server)
         status = rest.set_indexer_params("logLevel", loglevel)
 
+    def wait_until_cluster_is_healthy(self):
+        master_node = self.master
+        if self.targetMaster:
+            if len(self.servers) > 1:
+                master_node = self.servers[1]
+        rest = RestConnection(master_node)
+        is_cluster_healthy = False
+        count = 0
+        while not is_cluster_healthy and count < 10:
+            count += 1
+            cluster_nodes = rest.node_statuses()
+            for node in cluster_nodes:
+                if node.status != "healthy":
+                    is_cluster_healthy = False
+                    log.info("Node {0} is in {1} state...".format(node.ip,
+                                                                  node.status))
+                    self.sleep(5)
+                    break
+                else:
+                    is_cluster_healthy = True
+        return is_cluster_healthy
+
     def get_dgm_for_plasma(self, indexer_nodes=None):
         """
         Internal Method to create OOM scenario

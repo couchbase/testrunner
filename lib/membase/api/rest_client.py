@@ -4,7 +4,7 @@ import urllib
 import httplib2
 import socket
 import time
-import logger
+import re
 import uuid
 from copy import deepcopy
 from threading import Thread
