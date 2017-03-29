@@ -244,17 +244,25 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
 
     def test_ephemeral_bucket_no_deletions(self):
 
-        import pdb;pdb.set_trace()
+        #import pdb;pdb.set_trace()
 
         generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0, end=self.num_items)
         self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0, self.num_items)
 
 
-        # figure out how many items were loaded and load 10% more
-        rest = RestConnection(self.servers[0])
-        itemCount = rest.get_bucket(self.buckets[0]).stats.itemCount
+        # load more until we are out of memory
 
-        self.log.info( 'Reached OOM, the number of items is {0}'.format( itemCount))
+        client = SDKClient(hosts = [self.master.ip], bucket = self.buckets[0])
+        mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
+
+        for i in range(100000):
+            rc = mc_client.set(EphemeralBucketsOOM.KEY_ROOT+str(i),0,0,'anyoldval'*100)
+            #rc = client.set(EphemeralBucketsOOM.KEY_ROOT+str(i), 'anyoldval' )
+            print 'the rc is', rc
+            if i % 1000 == 0:
+                pass #pdb.set_trace()
+
+
 
 
         # delete some things using the Blob deleter
@@ -281,7 +289,9 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
 
 
         # delete in a different range
-        # add more
+
+
+        # add more kvs, they should succeed up to the point of the delete
 
         # done
 
