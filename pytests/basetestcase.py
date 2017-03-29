@@ -151,6 +151,12 @@ class BaseTestCase(unittest.TestCase):
             self.num_replicas = self.input.param("replicas", 1)
             self.enable_replica_index = self.input.param("index_replicas", 1)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
+                           # for ephemeral bucket is can be noEviction or nruEviction
+            if self.bucket_type == 'ephemeral' and self.eviction_policy == 'valueOnly':
+                # use the ephemeral bucket default
+                self.eviction_policy = 'noEviction'
+
+                                          # for ephemeral buckets it
             self.sasl_password=self.input.param("sasl_password", 'password')
             self.lww = self.input.param("lww",
                                         False)  # only applies to LWW but is here because the bucket is created here
@@ -532,6 +538,7 @@ class BaseTestCase(unittest.TestCase):
         bucket_params['bucket_type'] = bucket_type
         bucket_params['enable_replica_index'] = enable_replica_index
         bucket_params['eviction_policy'] = eviction_policy
+
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
