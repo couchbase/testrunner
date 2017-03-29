@@ -705,14 +705,25 @@ class QueryMonitoringTests(QueryTests):
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertTrue(result['metrics']['resultCount'] == 10)
 
-        # 0 should disable the limit
-        num_entries = 0
+        # negative should disable the limit
+        num_entries = -1
         response, content = self.rest.set_completed_requests_max_entries(self.master, num_entries)
         result = json.loads(content)
         self.assertTrue(result['completed-limit'] == num_entries)
 
         for i in range(100):
             self.run_cbq_query('select * from default')
+
+        result = self.run_cbq_query('select * from system:completed_requests')
+        self.assertTrue(result['metrics']['resultCount'] == 110)
+
+        # 0 should disable logging
+        num_entries = 0
+        response, content = self.rest.set_completed_requests_max_entries(self.master, num_entries)
+        result = json.loads(content)
+        self.assertTrue(result['completed-limit'] == num_entries)
+
+        self.run_cbq_query('select * from default')
 
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertTrue(result['metrics']['resultCount'] == 110)
@@ -730,7 +741,7 @@ class QueryMonitoringTests(QueryTests):
         self.run_cbq_query('delete from system:completed_requests')
 
         # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 8 seconds
-        min_duration = 8000
+        min_duration = 5000
         # Change the collection setting
         response,content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
         result = json.loads(content)
