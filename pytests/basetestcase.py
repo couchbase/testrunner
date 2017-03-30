@@ -141,7 +141,7 @@ class BaseTestCase(unittest.TestCase):
             self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
             self.enable_time_sync = self.input.param("enable_time_sync", False)
-            self.gsi_type = self.input.param("gsi_type", 'forestdb')
+            self.gsi_type = self.input.param("gsi_type", 'plasma')
             if hasattr(self.input, 'cbas'):
                 if self.input.cbas:
                     self.cbas_node = self.input.cbas
