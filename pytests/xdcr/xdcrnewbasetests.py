@@ -21,7 +21,7 @@ from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 from tasks.future import TimeoutError
 
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 
@@ -1556,21 +1556,37 @@ class CouchbaseCluster:
         tasks = []
         for bucket in self.__buckets:
             if op_type == OPS.UPDATE:
-                self.__kv_gen[OPS.UPDATE] = BlobGenerator(
-                    self.__kv_gen[OPS.CREATE].name,
-                    self.__kv_gen[OPS.CREATE].seed,
-                    self.__kv_gen[OPS.CREATE].value_size,
-                    start=0,
-                    end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                    self.__kv_gen[OPS.UPDATE] = BlobGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].seed,
+                        self.__kv_gen[OPS.CREATE].value_size,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                    self.__kv_gen[OPS.UPDATE] = DocumentGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].template,
+                        self.__kv_gen[OPS.CREATE].args,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
                 gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
             elif op_type == OPS.DELETE:
-                self.__kv_gen[OPS.DELETE] = BlobGenerator(
-                    self.__kv_gen[OPS.CREATE].name,
-                    self.__kv_gen[OPS.CREATE].seed,
-                    self.__kv_gen[OPS.CREATE].value_size,
-                    start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
-                        100 - perc) / 100),
-                    end=self.__kv_gen[OPS.CREATE].end)
+                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                    self.__kv_gen[OPS.DELETE] = BlobGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].seed,
+                        self.__kv_gen[OPS.CREATE].value_size,
+                        start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
+                            100 - perc) / 100),
+                        end=self.__kv_gen[OPS.CREATE].end)
+                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                    self.__kv_gen[OPS.DELETE] = DocumentGenerator(
+                        self.__kv_gen[OPS.CREATE].name,
+                        self.__kv_gen[OPS.CREATE].template,
+                        self.__kv_gen[OPS.CREATE].args,
+                        start=0,
+                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
                 gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
             else:
                 raise XDCRException("Unknown op_type passed: %s" % op_type)
@@ -2466,7 +2482,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cleanup_previous()
         self.__init_clusters()
         self.__set_free_servers()
-        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
+        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
+                and str(self.__class__).find('capiXDCR') == -1:
             self.__create_buckets()
 
     def __init_parameters(self):
@@ -2637,12 +2654,13 @@ class XDCRNewBaseTest(unittest.TestCase):
             quota_percent = None
 
         dgm_run = self._input.param("dgm_run", 0)
+        bucket_size = 0
         if dgm_run:
             # buckets cannot be created if size<100MB
             bucket_size = 256
-        elif quota_percent is not None:
-             bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
-        else:
+        elif quota_percent is not None and num_buckets > 0:
+            bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
+        elif num_buckets > 0:
             bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
         return bucket_size
 
