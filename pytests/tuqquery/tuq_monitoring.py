@@ -746,7 +746,7 @@ class QueryMonitoringTests(QueryTests):
         response,content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
         result = json.loads(content)
         self.assertTrue(result['completed-threshold'] == min_duration)
-        # Construct nonsense queries that run for 8 seconds
+        # Construct nonsense queries that run for 5 seconds
         self.run_cbq_query('select * from default union select * from default union select * from default')
         self.run_cbq_query('select * from default union select * from default union select * from default')
         # Run a query that runs for a normal amount of time ~2 seconds
@@ -776,6 +776,7 @@ class QueryMonitoringTests(QueryTests):
         response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
         result = json.loads(content)
         self.assertTrue(result['completed-threshold'] == min_duration)
+        self.run_cbq_query('delete from system:completed_requests')
         self.run_cbq_query('select * from default')
         self.run_cbq_query('select * from default')
 
