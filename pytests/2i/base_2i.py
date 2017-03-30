@@ -682,6 +682,19 @@ class BaseSecondaryIndexingTests(QueryTests):
                         (bucket.name, query.index_name, bucket_count, index_count))
         self.log.info("Items Indexed Verified with bucket count...")
 
+    def _check_all_bucket_items_indexed(self, query_definitions=None, buckets=None):
+        """
+        :param bucket:
+        :param index:
+        :return:
+        """
+        count = 0
+        while not self._verify_items_count() and count < 15:
+            self.log.info("All Items Yet to be Indexed...")
+            self.sleep(10)
+            count += 1
+        self.assertTrue(self._verify_items_count(),"All Items didn't get Indexed...")
+
     def _create_operation_map(self):
         map_initial = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
         map_before = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
