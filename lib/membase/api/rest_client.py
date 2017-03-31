@@ -3581,7 +3581,7 @@ class RestConnection(object):
 
     def full_table_scan_gsi_index_with_rest(self, id, body):
         if "limit" not in body.keys():
-            body["limit"] = 30000
+            body["limit"] = 900000
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = 'api/index/{0}?scanall=true'.format(id)
         api = self.index_baseUrl + url
@@ -3871,6 +3871,7 @@ class RestParser(object):
             index_map[bucket_name][index_name]['progress'] = str(map['progress']).encode('ascii', 'ignore')
             index_map[bucket_name][index_name]['definition'] = map['definition'].encode('ascii', 'ignore')
             index_map[bucket_name][index_name]['hosts'] = map['hosts'][0].encode('ascii', 'ignore')
+            index_map[bucket_name][index_name]['id'] = map['id']
         return index_map
 
     def parse_index_stats_response(self, parsed, index_map=None):
