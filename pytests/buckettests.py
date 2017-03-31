@@ -27,7 +27,7 @@ class CreateBucketTests(BaseTestCase):
         self.server = self.master
         self.rest = RestConnection(self.server)
         self.node_version = self.rest.get_nodes_version()
-        self.total_items_travel_sample =  31569
+        self.total_items_travel_sample = 31569
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
             self.total_items_travel_sample = 31591
         shell = RemoteMachineShellConnection(self.master)
@@ -343,10 +343,12 @@ class CreateBucketTests(BaseTestCase):
     # Start of tests for ephemeral buckets
     #
     def test_ephemeral_buckets(self):
+        eviction_policy = self.input.param("eviction_policy", 'noEviction')
         shared_params = self._create_bucket_params(server=self.server, size=100,
-                                                              replicas=self.num_replicas, bucket_type='ephemeral')
+                                                   replicas=self.num_replicas, bucket_type='ephemeral',
+                                                   eviction_policy=eviction_policy)
         # just do sasl for now, pending decision on support of non-sasl buckets in 5.0
-        self.cluster.create_sasl_bucket(name=self.bucket_name, password=self.sasl_password,bucket_params=shared_params)
+        self.cluster.create_sasl_bucket(name=self.bucket_name, password=self.sasl_password, bucket_params=shared_params)
         self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=self.sasl_password,
                                            num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, master_id=self.server))

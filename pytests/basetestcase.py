@@ -508,18 +508,19 @@ class BaseTestCase(unittest.TestCase):
         return quota
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
-                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
-                             bucket_priority=None, flush_enabled=1, lww=False):
+                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                              bucket_priority=None, flush_enabled=1, lww=False):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
-            bucket_name - The name of the bucket to be created. (String)
             port - The port to create this bucket on. (String)
             password - The password for this bucket. (String)
             size - The size of the bucket to be created. (int)
             enable_replica_index - can be 0 or 1, 1 enables indexing of replica bucket data (int)
             replicas - The number of replicas for this bucket. (int)
-            eviction_policy - The eviction policy for the bucket, can be valueOnly or fullEviction. (String)
+            eviction_policy - The eviction policy for the bucket (String). Can be
+                ephemeral bucket: noEviction or nruEviction
+                non-ephemeral bucket: valueOnly or fullEviction.
             bucket_priority - The priority of the bucket:either none, low, or high. (String)
             bucket_type - The type of bucket. (String)
             flushEnabled - Enable or Disable the flush functionality of the bucket. (int)
@@ -538,7 +539,6 @@ class BaseTestCase(unittest.TestCase):
         bucket_params['bucket_type'] = bucket_type
         bucket_params['enable_replica_index'] = enable_replica_index
         bucket_params['eviction_policy'] = eviction_policy
-
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
@@ -640,7 +640,7 @@ class BaseTestCase(unittest.TestCase):
 
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
-            port= STANDARD_BUCKET_PORT + i + 1
+            port = STANDARD_BUCKET_PORT + i + 1
             bucket_priority = None
             if self.standard_bucket_priority is not None:
                 bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
