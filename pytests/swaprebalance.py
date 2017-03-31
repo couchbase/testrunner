@@ -99,8 +99,12 @@ class SwapRebalanceBase(unittest.TestCase):
             SwapRebalanceBase._log_finish(self)
 
         # Remove rbac user in teardown
-        role_del = ['cbadminbucket']
-        RbacBase().remove_user_role(role_del, RestConnection(self.servers[0]))
+        try:
+            role_del = ['cbadminbucket']
+            RbacBase().remove_user_role(role_del, RestConnection(
+                self.servers[0]))
+        except:
+            pass
 
     @staticmethod
     def reset(self):
