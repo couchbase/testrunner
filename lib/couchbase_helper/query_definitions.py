@@ -42,9 +42,10 @@ class QueryDefinition(object):
 		self.index_drop_template = index_drop_template
 		self.query_template = query_template
 		self.groups = groups
+		self.num_replica = 1
 
 	def generate_index_create_query(self, bucket = "default", use_gsi_for_secondary = True,
-	        deploy_node_info = None, defer_build = None, index_where_clause = None, gsi_type=None):
+	        deploy_node_info = None, defer_build = None, index_where_clause = None, gsi_type=None, num_replica=None):
 		deployment_plan = {}
 		query = "CREATE INDEX {0} ON {1}({2})".format(self.index_name,bucket, ",".join(self.index_fields))
 		if index_where_clause:
@@ -59,6 +60,8 @@ class QueryDefinition(object):
 			deployment_plan["nodes"] = deploy_node_info
 		if defer_build != None:
 			deployment_plan["defer_build"] = defer_build
+		if num_replica:
+			deployment_plan["num_replica"] = num_replica
 		if len(deployment_plan) != 0 and use_gsi_for_secondary:
 			query += " WITH " + str(deployment_plan)
 		return query

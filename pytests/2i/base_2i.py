@@ -54,6 +54,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
+        self.num_replicas = self.input.param("num_replica",0)
+        self.expected_err_msg = self.input.param("expected_err_msg",None)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -76,7 +78,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                   use_gsi_for_secondary=self.use_gsi_for_secondary,
                                                                   deploy_node_info=deploy_node_info,
                                                                   defer_build=self.defer_build,
-                                                                  index_where_clause=index_where_clause)
+                                                                  index_where_clause=index_where_clause, num_replica=self.num_replicas)
         create_index_task = self.gsi_thread.async_create_index(server=self.n1ql_node, bucket=bucket,
                                                                query=self.query, n1ql_helper=self.n1ql_helper,
                                                                index_name=query_definition.index_name,

@@ -487,6 +487,18 @@ class N1QLHelper():
                 try_count += 1
         return "ran query with success and validated results" , check
 
+    def get_index_names(self, server=None):
+        query = "select distinct(name) from system:indexes where `using`='gsi'"
+        index_names = []
+        if server == None:
+            server = self.master
+
+        res = self.run_cbq_query(query=query, server=server)
+        for item in res['results']:
+            index_names.append(item['name'])
+
+        return index_names
+
     def is_index_online_and_in_list(self, bucket, index_name, server=None, timeout=600.0):
         check = self._is_index_in_list(bucket, index_name, server = server)
         init_time = time.time()
@@ -769,6 +781,42 @@ class N1QLHelper():
         self.log.info("Distribution of indexes after rebalance")
         for k, v in index_distribution_map_after_rebalance.iteritems():
             print k, v
+
+
+    def verify_replica_indexes(self, index_map, num_replicas):
+        # 1. Validate count of no_of_indexes
+        # 2. Validate index names
+        # 3. Validate index replica have the same id
+        # 4. Validate index replicas are on different hosts
+
+        index_names = self.get_index_names()
+
+        for index_name in index_names:
+            index_host_name, index_id = self.get_index_details_using_index_name(index_name, index_map)
+
+            for i in range(1, num_replicas):
+                index_replica_name = index_name + " (replica {0})".format(str(i))
+        #index_replica_name = index_name + " (replica 1)"
+
+                index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(index_replica_name, index_map)
+
+                self.log.info("Hostnames : %s , %s" % (index_host_name, index_replica_hostname))
+                self.log.info("Index IDs : %s, %s" %( index_id, index_replica_id))
+
+                if index_id != index_replica_id:
+                    self.log.info("Index ID for main index and replica indexes not same")
+                    raise Exception("index id different for replicas")
+
+                if index_host_name == index_replica_hostname:
+                    self.log.info("Index hostname for main index and replica indexes are same")
+                    raise Exception("index hostname same for replicas")
+
+    def get_index_details_using_index_name(self, index_name, index_map):
+        for key in index_map.iterkeys():
+            if index_name in index_map[key].keys():
+                return index_map[key][index_name]['hosts'], index_map[key][index_name]['id']
+            else:
+                raise Exception ("Index name %s does not exist", index_name)
 
 
 

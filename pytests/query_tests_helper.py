@@ -145,7 +145,7 @@ class QueryHelperTests(BaseTestCase):
         defer_build = True
         query = query_definition.generate_index_create_query(
             bucket=bucket, use_gsi_for_secondary=self.use_gsi_for_secondary,
-            deploy_node_info=deploy_node_info, defer_build=defer_build)
+            deploy_node_info=deploy_node_info, defer_build=defer_build, num_replica=self.num_replicas)
         log.info(query)
         create_index_task = self.cluster.async_create_index(
             server=self.n1ql_server, bucket=bucket, query=query,
