@@ -310,14 +310,13 @@ class CouchbaseCliTest(CliBaseTest):
         else:
             self.fail("server-info return error output")
 
-    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_password=None, \
+    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase",
                         bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
         options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}".\
             format(bucket, bucket_type, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica), "")[enable_index_replica is None]
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
-        options += (" --bucket-password={0}".format(bucket_password), "")[bucket_password is None]
         options += (" --wait", "")[wait]
         cli_command = "bucket-create"
 
@@ -1196,7 +1195,7 @@ class CouchbaseCliTest(CliBaseTest):
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
-                _, _, success = cli.bucket_create(bucket_name, '""', init_bucket_type, 256, None, None, None, None,
+                _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None, None,
                                                   None, None)
                 self.assertTrue(success, "Bucket not created during test setup")
 
@@ -1214,7 +1213,6 @@ class CouchbaseCliTest(CliBaseTest):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         bucket_name = self.input.param("bucket-name", None)
-        bucket_password = self.input.param("bucket-password", None)
         bucket_type = self.input.param("bucket-type", None)
         memory_quota = self.input.param("memory-quota", None)
         eviction_policy = self.input.param("eviction-policy", None)
@@ -1238,13 +1236,13 @@ class CouchbaseCliTest(CliBaseTest):
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
-        stdout, _, _ = cli.bucket_create(bucket_name, bucket_password, bucket_type, memory_quota, eviction_policy,
+        stdout, _, _ = cli.bucket_create(bucket_name, bucket_type, memory_quota, eviction_policy,
                                          replica_count, enable_index_replica, priority, enable_flush, wait)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket created"),
                             "Expected command to succeed")
-            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_password, bucket_type, memory_quota,
+            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_type, memory_quota,
                                                       eviction_policy, replica_count, enable_index_replica, priority,
                                                       enable_flush),
                             "Bucket settings not set properly")
@@ -1258,7 +1256,6 @@ class CouchbaseCliTest(CliBaseTest):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         bucket_name = self.input.param("bucket-name", None)
-        bucket_password = self.input.param("bucket-password", None)
         memory_quota = self.input.param("memory-quota", None)
         eviction_policy = self.input.param("eviction-policy", None)
         replica_count = self.input.param("replica-count", None)
@@ -1280,18 +1277,18 @@ class CouchbaseCliTest(CliBaseTest):
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
-                _, _, success = cli.bucket_create(bucket_name, '""', init_bucket_type, 256, None, None, None,
+                _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None,
                                                   None, 0, None)
                 self.assertTrue(success, "Bucket not created during test setup")
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.bucket_edit(bucket_name, bucket_password, memory_quota, eviction_policy, replica_count,
+        stdout, _, _ = cli.bucket_edit(bucket_name, memory_quota, eviction_policy, replica_count,
                                        priority, enable_flush)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket edited"),
                             "Expected command to succeed")
-            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_password, None, memory_quota,
+            self.assertTrue(self.verifyBucketSettings(server, bucket_name, None, memory_quota,
                                                       eviction_policy, replica_count, None, priority, enable_flush),
                             "Bucket settings not set properly")
         else:
@@ -1320,7 +1317,7 @@ class CouchbaseCliTest(CliBaseTest):
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
-                _, _, success = cli.bucket_create(bucket_name, '""', init_bucket_type, 256, None, None, None,
+                _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None,
                                                   None, 0, None)
                 self.assertTrue(success, "Bucket not created during test setup")
 
@@ -1361,7 +1358,7 @@ class CouchbaseCliTest(CliBaseTest):
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
-                _, _, success = cli.bucket_create(bucket_name, '""', init_bucket_type, 256, None, None, None,
+                _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None,
                                                   None, init_enable_flush, None)
                 self.assertTrue(success, "Bucket not created during test setup")
 
@@ -1573,7 +1570,7 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(errored, "Unable to add initial servers")
                 _, _, errored = cli.rebalance(None)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
-            _, _, success = cli.bucket_create("bucket", '""', "couchbase", 256, None, None, None, None,
+            _, _, success = cli.bucket_create("bucket", "couchbase", 256, None, None, None, None,
                                                   None, None)
             self.assertTrue(success, "Bucket not created during test setup")
             time.sleep(10)

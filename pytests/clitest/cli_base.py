@@ -277,17 +277,11 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
-    def verifyBucketSettings(self, server, bucket_name, bucket_password,
-                             bucket_type, memory_quota, eviction_policy,
-                             replica_count, enable_index_replica, priority,
-                             enable_flush):
+    def verifyBucketSettings(self, server, bucket_name, bucket_type, memory_quota,
+                             eviction_policy, replica_count, enable_index_replica,
+                             priority, enable_flush):
         rest = RestConnection(server)
         result = rest.get_bucket_json(bucket_name)
-        if bucket_password is not None and bucket_password != result[
-            "saslPassword"]:
-            log.info("Bucket password does not match (%s vs %s)",
-                     bucket_password, result["saslPassword"])
-            return False
 
         if bucket_type == "couchbase":
             bucket_type = "membase"

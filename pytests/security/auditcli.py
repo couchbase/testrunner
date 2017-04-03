@@ -96,15 +96,13 @@ class auditcli(BaseTestCase):
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
-
-    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_password=None, \
-                        bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
+    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase",
+                       bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
         options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}".\
             format(bucket, bucket_type, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica), "")[enable_index_replica is None]
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
-        options += (" --bucket-password={0}".format(bucket_password), "")[bucket_password is None]
         options += (" --wait", "")[wait]
         cli_command = "bucket-create"
 
@@ -112,6 +110,7 @@ class auditcli(BaseTestCase):
 
     def testClusterEdit(self):
         options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
+        remote_client = RemoteMachineShellConnection(self.master)
         output, error = remote_client.execute_couchbase_cli(cli_command='cluster-edit', options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
 
     def testAddRemoveNodes(self):
@@ -222,14 +221,13 @@ class auditcli(BaseTestCase):
 
         remote_client = RemoteMachineShellConnection(self.master)
 
-        self._create_bucket(remote_client, bucket, bucket_type=bucket_type, bucket_password=bucket_password, \
-                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
+        self._create_bucket(remote_client, bucket, bucket_type=bucket_type, bucket_ramsize=bucket_ramsize,
+                            bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
 
         cli_command = "bucket-edit"
         options = "--bucket={0}".format(bucket)
         options += (" --enable-flush={0}".format(enable_flush_new), "")[enable_flush_new is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica_new), "")[enable_index_replica_new is None]
-        options += (" --bucket-password={0}".format(bucket_password_new), "")[bucket_password_new is None]
         options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), "")[bucket_ramsize_new is None]
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
