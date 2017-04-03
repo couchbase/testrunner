@@ -353,7 +353,7 @@ class CBASBucketOperations(CBASBaseTest):
         failover_task.result()
 
         # Wait for Failover & CBAS rollback to complete
-        self.sleep(60)
+        self.sleep(120)
 
         # Count no. of items in CB & CBAS Buckets
         items_in_cb_bucket = self.get_item_count(self.master,
