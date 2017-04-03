@@ -75,7 +75,7 @@ class DCPBase(BaseTestCase):
         """ create an dcp client from Node spec and opens connnection of specified type"""
         client = self.client_helper(node, DCP, vbucket)
         if auth_user:
-            client.sasl_auth_plain(auth_user, auth_password)
+            client.sasl_auth_plain('cbadminbucket', 'password')
 
         assert connection_type in (PRODUCER, CONSUMER, NOTIFIER)
         name = name or DEFAULT_CONN_NAME
@@ -96,7 +96,9 @@ class DCPBase(BaseTestCase):
 
         client = self.client_helper(node, MCD, vbucket)
         if auth_user:
-            client.sasl_auth_plain(auth_user, auth_password)
+            #admin_user='cbadminbucket',admin_pass='password'
+            client.sasl_auth_plain('cbadminbucket', 'password')
+            client.bucket_select('default')
         return client
 
     def client_helper(self, node, type_, vbucket):
@@ -147,6 +149,9 @@ class DCPBase(BaseTestCase):
 
     def all_vb_info(self, node, table_entry = 0, bucket = 'default', password = ''):
 
+
+        print '*****in all vbinfo'
+
         vbInfoMap = {}
         clientVbMap = {}
         rest = RestConnection(node)
@@ -180,6 +185,7 @@ class DCPBase(BaseTestCase):
 
     def vb_failover_entry(self, node, vbucket, table_entry = 0,
                           bucket = 'default', password = ''):
+
 
         mcd_client = self.mcd_client(
             node, vbucket, auth_user = bucket, auth_password = password)
