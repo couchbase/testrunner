@@ -317,14 +317,14 @@ class CBASFunctionalTests(CBASBaseTest):
             ds_name)
 
         # Run query on full dataset with filters applied in the query
-        status, metrics, errors, results = self.execute_statement_on_cbas(
-            stmt_count_records_on_full_ds, self.master)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            stmt_count_records_on_full_ds)
         count_full_ds = results[0]["$1"]
         self.log.info("**Count of records in full dataset = %s", count_full_ds)
 
         # Run query on the filtered dataset to retrieve all records
-        status, metrics, errors, results = self.execute_statement_on_cbas(
-            stmt_count_records_on_filtered_ds, self.master)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            stmt_count_records_on_filtered_ds)
         count_filtered_ds = results[0]["$1"]
         self.log.info("**Count of records in filtered dataset ds1 = %s",
                       count_filtered_ds)
