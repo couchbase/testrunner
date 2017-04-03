@@ -1,6 +1,7 @@
 import paramiko
 from membase.api.rest_client import RestConnection
 import testconstants
+import json
 from remote.remote_util import RemoteMachineShellConnection
 from tuq import QueryTests
 
@@ -229,6 +230,20 @@ class AdvancedQueryTests(QueryTests):
             print o
             o = shell.execute_commands_inside('%s/cbq -s="\HELP VERSION"' % (self.path),'','','','','','' )
             print o
+
+    def test_pretty_false(self):
+        shell = RemoteMachineShellConnection(self.master)
+        queries = ['\SET -pretty true;',
+                   'select * from default limit 5;']
+        pretty = shell.execute_commands_inside(self.cbqpath,'',queries,'','','','')
+        pretty_json = json.loads(pretty)
+        pretty_size = pretty_json['metrics']['resultSize']
+        queries = ['\SET -pretty false;',
+                   'select * from default limit 5;']
+        ugly = shell.execute_commands_inside(self.cbqpath, '', queries, '', '', '', '')
+        ugly_json = json.loads(ugly)
+        ugly_size = ugly_json['metrics']['resultSize']
+        self.assertTrue(pretty_size > ugly_size)
 
     #
     # def test_invalid_input_url(self):
