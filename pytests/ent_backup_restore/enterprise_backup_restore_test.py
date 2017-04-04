@@ -401,6 +401,48 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_compact()
         self.backup_restore_validate()
 
+    def test_restore_with_invalid_bucket_config_json(self):
+        """
+            When bucket-config.json in latest backup corrupted,
+            The restore should failed.
+            1. Create a bucket and load docs into it.
+            2. Create a backup and validate it.
+            3. Run full backup
+            4. Load more docs into bucket
+            5. Run backup (incremental) and verify.
+            6. Modify backup-config.json to make invalid json in content
+            7. Run restore to other bucket, restore should fail with error
+        """
+        gen = BlobGenerator("ent-backup_1", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=self.backupset.number_of_backups)
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        backup_count = 0
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}",
+                                                                                line).group()
+                if backup_name in self.backups:
+                    backup_count += 1
+                    self.log.info("{0} matched in list command output".format(backup_name))
+        backup_bucket_config_path = self.backupset.directory + "/backup" +\
+                    "/" + self.backups[self.backupset.number_of_backups -1] + \
+                    "/" + self.buckets[0].name + "-*"\
+                    "/bucket-config.json"
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.log.info("Remore } in bucket-config.json to make it invalid json ")
+        remote_client.execute_command("sed -i 's/}//' %s " % backup_bucket_config_path)
+        self.log.info("Start to merge backup")
+        self.backupset.start = randrange(1, self.backupset.number_of_backups)
+        self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
+        result, output, _ = self.backup_merge()
+        if result:
+            self.log.info("Here is the output from command %s " % output[0])
+            self.fail("merge should failed since bucket-config.json is invalid")
+
     def test_backup_restore_with_nodes_reshuffle(self):
         """
         1. Creates specified bucket on the cluster and loads it with given number of items
