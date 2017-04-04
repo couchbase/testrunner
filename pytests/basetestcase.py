@@ -2276,21 +2276,23 @@ class BaseTestCase(unittest.TestCase):
                     src_nodes.append(src_node)
         return src_nodes
 
-    def load(self, generators_load, exp=0, flag=0,
+    def load(self, generators_load, buckets=None, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
              timeout_secs=30, op_type='create', start_items=0, verify_data=True):
+        if not buckets:
+            buckets = self.buckets
         gens_load = {}
-        for bucket in self.buckets:
+        for bucket in buckets:
             tmp_gen = []
             for generator_load in generators_load:
                 tmp_gen.append(copy.deepcopy(generator_load))
             gens_load[bucket] = copy.deepcopy(tmp_gen)
         tasks = []
         items = 0
-        for bucket in self.buckets:
+        for bucket in buckets:
             for gen_load in gens_load[bucket]:
                 items += (gen_load.end - gen_load.start)
-        for bucket in self.buckets:
+        for bucket in buckets:
             self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
             tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
                                                           gens_load[bucket],
