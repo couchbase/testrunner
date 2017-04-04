@@ -2687,7 +2687,7 @@ class QueryTests(BaseTestCase):
     def test_hours(self):
         self.query = 'select date_part_str(now_str(), "hour") as hour, ' +\
         'date_part_str(now_str(),"minute") as minute, date_part_str(' +\
-        'now_str(),"second") as sec, date_part_str(now_str(),"milliseconds") as msec'
+        'now_str(),"second") as sec, date_part_str(now_str(),"millisecond") as msec'
         now = datetime.datetime.now()
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["hour"] == now.hour or res["results"][0]["hour"] == (now.hour + 1),
