@@ -3581,7 +3581,6 @@ class FTSBaseTest(unittest.TestCase):
             alias_def = {"targets": {}}
             for index in target_indexes:
                 alias_def['targets'][index.name] = {}
-                alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
 
         return self._cb_cluster.create_fts_index(name=name,
                                                  index_type='fulltext-alias',
