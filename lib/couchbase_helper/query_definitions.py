@@ -409,7 +409,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(index_name=index_name_prefix + "_travel_history_distinct",
 							index_fields=["DISTINCT ARRAY t FOR t in `travel_history` END"],
 							query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-								emit_fields,"`travel_history` IS NOT NULL","`travel_history`, _id"),
+								emit_fields,"`travel_history` IS NOT NULL"," _id"),
 							groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
 									FULL_SCAN, ORDER_BY, "isnotnull"],
 							index_where_clause=" travel_history IS NOT NULL "))
@@ -438,7 +438,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(index_name=index_name_prefix + "_travel_history_code_distinct",
 							index_fields=["DISTINCT ARRAY t FOR t in `travel_history_code` END"],
 							query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-								emit_fields,"`travel_history_code` IS NOT NULL","`travel_history_code`, _id"),
+								emit_fields,"`travel_history_code` IS NOT NULL"," _id"),
 							groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
 									FULL_SCAN, ORDER_BY, "isnotnull"],
 							index_where_clause=" travel_history_code IS NOT NULL "))
@@ -467,7 +467,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(index_name=index_name_prefix + "_credit_cards_distinct",
 							index_fields=["DISTINCT ARRAY t FOR t in `credit_cards` END"],
 							query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-								emit_fields,"`credit_cards` IS NOT NULL","`credit_cards`, _id"),
+								emit_fields,"`credit_cards` IS NOT NULL", "_id"),
 							groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
 									FULL_SCAN, ORDER_BY, "isnotnull"],
 							index_where_clause=" credit_cards IS NOT NULL "))
@@ -496,7 +496,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(index_name=index_name_prefix + "_question_values_duplicate",
 							index_fields=["DISTINCT ARRAY t FOR t in `question_values` END"],
 							query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-								emit_fields,"`question_values` IS NOT NULL","`question_values`, _id"),
+								emit_fields,"`question_values` IS NOT NULL"," _id"),
 							groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
 									FULL_SCAN, ORDER_BY, "isnotnull"],
 							index_where_clause=" question_values IS NOT NULL "))
@@ -516,7 +516,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(index_name=index_name_prefix + "_secret_combination",
 							index_fields=["DISTINCT ARRAY t FOR t in `secret_combination` END"],
 							query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-								emit_fields,"`secret_combination` IS NOT NULL","`secret_combination`, _id"),
+								emit_fields,"`secret_combination` IS NOT NULL"," _id"),
 							groups=["all", ARRAY, SIMPLE_INDEX, SIMPLE_ARRAY, DISTINCT_ARRAY,
 									FULL_SCAN, ORDER_BY, "isnotnull"],
 							index_where_clause=" secret_combination IS NOT NULL "))

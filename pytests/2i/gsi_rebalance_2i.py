@@ -1355,18 +1355,20 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         return index_map, stats_map
 
     def _cbindex_move(self, src_node, dst_node, index_list, username="Administrator", password="password",
-                      expect_failure=False):
+                      expect_failure=False, bucket="default"):
         ip_address = str(dst_node).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "")
-        cmd = """cbindex -type move -indexes '{0}' -with '{{"dest":"{1}"}}' -auth '{2}:{3}'""".format(index_list,
-                                                                                                      ip_address,
-                                                                                                      username,
-                                                                                                      password)
+        cmd = """cbindex -type move -index '{0}' -bucket {1} -with '{{"nodes":"{2}"}}' -auth '{3}:{4}'""".format(
+            index_list,
+            bucket,
+            ip_address,
+            username,
+            password)
         log.info(cmd)
         remote_client = RemoteMachineShellConnection(src_node)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error:
+        if error and not filter(lambda x: 'Moving Index for' in x, output):
             if expect_failure:
                 log.info("cbindex move failed")
                 return output, error
@@ -1377,12 +1379,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         return output, error
 
     def _get_indexes_in_move_index_format(self, index_map):
-        bucket_index_array = []
         for bucket in index_map:
             for index in index_map[bucket]:
-                bucket_index_array.append(bucket + ":" + index)
-        bucket_index_string = ",".join(bucket_index_array[:len(bucket_index_array) / 2])
-        return bucket_index_string, len(bucket_index_array) / 2
+                return index, 1
 
     def wait_for_cbindex_move_to_complete(self, dst_node, count):
         no_of_indexes_moved = 0
