@@ -794,6 +794,42 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_covering_like_array_index(self):
+        created_indexes = []
+        idx = "ix"
+        try:
+           for bucket in self.buckets:
+            self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s.%s END) where VMs[0].os = 'ubuntu' USING %s" % (
+                    idx, bucket.name,bucket.name, "tasks", self.index_type)
+            actual_result =self.run_cbq_query()
+            self._wait_for_index_online(bucket, idx)
+            self._verify_results(actual_result['results'], [])
+            created_indexes.append(idx)
+            self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+            self.query = "explain select meta().id from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END and VMs[0].os = 'ubuntu'"  % (bucket.name,bucket.name)
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index'] == idx)
+            self.query = 'explain select meta().id from {0} WHERE ANY i IN tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1 like "{1}" end) END and VMs[0].os = "ubuntu"' .format(bucket.name,'Sou%')
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index'] == idx )
+        finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_panic_in_null(self):
+        self.query = 'create index ix5 on default(join_yr)'
+        actual_result = self.run_cbq_query()
+        self.query = 'explain select join_yr from default where join_yr IN [NULL]'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index'] == "ix5")
+
+
 
     def test_covering_index_collections(self):
         created_indexes = []
@@ -1600,6 +1636,13 @@ class QueriesIndexTests(QueryTests):
                 result1 = plan['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx)
 
+                self.query = "explain select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END"  % (
+                bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                print plan
+                result1 = plan['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx)
                 self.query = "select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
                 bucket.name,bucket.name) + \
                              "order BY name limit 10"
@@ -2118,6 +2161,490 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                     self.run_cbq_query()
 
+
+    def test_index_projection(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s(%s,%s) " %(idx,bucket.name,'join_yr','_id')+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = "EXPLAIN select join_yr from %s WHERE _id like '%s' and join_yr=2010 " %(bucket.name,'query-test%')
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index_projection']['entry_keys']==[0, 1])
+                self.query = "EXPLAIN select count(join_yr) from %s WHERE _id like '%s' and join_yr=2010 " %(bucket.name,'query-test%')
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountScan2')
+                self.query = "select join_yr from %s WHERE _id like '%s' and join_yr=2010 order by meta().id limit 10" %(bucket.name,'query-test%')
+                actual_result = self.run_cbq_query()
+                self.query = "select join_yr from %s use index(`#primary`) WHERE _id like '%s' and join_yr=2010 order by meta().id limit 10" %(bucket.name,'query-test%')
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = "EXPLAIN select count(DISTINCT join_yr) from %s WHERE _id like '%s' and join_yr=2010 " %(bucket.name,'query-test%')
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+
+                self.query = 'EXPLAIN select _id from %s WHERE _id= "query-testemployee10317.9004497-0"' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index']=='#primary')
+                self.query = "EXPLAIN select count( DISTINCT join_yr) from %s WHERE join_yr is not null " %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+                self.query = "EXPLAIN select count(DISTINCT _id) from %s WHERE _id is not null " %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index']=='#primary')
+
+                self.query = "select join_yr from %s WHERE join_yr=2010 order by meta().id limit 10" %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select join_yr from %s use index(`#primary`) WHERE join_yr=2010 order by meta().id limit 10" %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = "select count(join_yr) from %s WHERE join_yr=2010 " %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select count(join_yr) from %s use index(`#primary`) WHERE join_yr=2010 " %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result['results'])==sorted(expected_result['results']))
+
+                self.query = "EXPLAIN select meta().id,join_yr from %s WHERE join_yr=2010 " %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index_projection']['entry_keys']==[0])
+                self.query = "EXPLAIN select count(meta().id),count(join_yr) from %s WHERE join_yr is not missing" %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index_projection']['entry_keys']==[0])
+                self.query = "EXPLAIN select meta().id,join_yr from %s WHERE join_yr between 2010 and 2012 " %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index_projection']['entry_keys']==[0])
+                self.query = "EXPLAIN select count(meta().id),count(join_yr) from %s WHERE join_yr between 2010 and 2012 " %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index_projection']['entry_keys']==[0])
+
+                self.query = "select meta().id,join_yr from %s WHERE join_yr is not missing order by meta().id limit 10" %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select meta().id,join_yr from %s use index(`#primary`)  WHERE join_yr is not missing order by meta().id limit 10" %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "select meta().id,join_yr from %s WHERE join_yr between 2010 and 2012 order by meta().id limit 10" %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select meta().id,join_yr from %s use index(`#primary`)  WHERE join_yr between 2010 and 2012 order by meta().id limit 10" %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "select count(meta().id),count(join_yr) from %s WHERE join_yr between 2010 and 2012 " %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select count(meta().id),count(join_yr) from %s use index(`#primary`) WHERE join_yr between 2010 and 2012 " %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = 'explain select _id,meta().id from %s WHERE join_yr > 2010' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue("index_projection" not in str(plan))
+                self.query = 'select _id,meta().id from %s WHERE join_yr > 2010 order by meta().id limit 10' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select _id,meta().id from %s use index(`#primary`)  WHERE join_yr > 2010 order by meta().id limit 10' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query= 'explain select join_yr from default where join_yr = 2010 or join_yr = 2012'
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+
+                self.assertTrue(plan['~children'][0]['scan']['#operator']=='IndexScan2')
+                self.assertTrue(plan['~children'][0]['scan']['index_projection']['entry_keys']==[0])
+                self.query= 'select join_yr from default where join_yr = 2010 or join_yr = 2012'
+                actual_result = self.run_cbq_query()
+                self.query= 'select join_yr from default use index(`#primary`) where join_yr = 2010 or join_yr = 2012'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = 'explain select join_yr,join_day from %s where join_yr in [2010,2011,2012]'  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index_projection']=={u'primary_key': True})
+                self.query = 'explain select count(join_yr),count(join_day) from %s where join_yr in [2010,2011,2012]'  %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index_projection']=={u'primary_key': True})
+                self.query = 'select join_yr,join_day from %s where join_yr in [2010,2011,2012] order by meta().id limit 10' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_yr,join_day from %s use index(`#primary`) where join_yr in [2010,2011,2012] order by meta().id limit 10' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_count_distinct(self):
+         for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'job_title')+\
+                             "where email  like '%@%.%' " + \
+                             "USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "explain select count(1) from default where job_title IN ['Support','',null,'Engineer'] AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountScan2')
+                self.query = "select count(1) from default where job_title IN ['Support','',null,'Engineer'] AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                self.query = "select count(1) from default use index(`#primary`) where job_title IN ['Support','',null,'Engineer'] AND email like '%@%.%'"
+                expected_result=self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(1) from default where job_title ='Support' AND  email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountScan2')
+                self.query = "select count(1) from default where job_title ='Support' AND  email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                self.query = "select count(1) from default use index(`#primary`) where job_title ='Support' AND  email like '%@%.%'"
+                expected_result=self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(1) from default where (job_title ='Support' or job_title is not null) AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['scan']['#operator']=='IndexScan2')
+                self.query = "select count(1) from default where (job_title ='Support' or job_title is not null) AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                self.query = "select count(1) from default  use index(`#primary`) where (job_title ='Support' or job_title is not null) AND email like '%@%.%'"
+                expected_result=self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(1) from default where (job_title ='Support' or job_title is not missing) AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountScan2')
+                self.query = "select count(1) from default where (job_title ='Support' or job_title is not missing) AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                self.query = "select count(1) from default use index(`#primary`) where (job_title ='Support' or job_title is not missing) AND email like '%@%.%'"
+                expected_result=self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query ="explain select count(1) from default where (job_title ='Support' or job_title = 'Engineer') AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['scan']['#operator']=='IndexScan2')
+                self.query ="select count(1) from default where (job_title ='Support' or job_title = 'Engineer') AND email like '%@%.%'"
+                actual_result=self.run_cbq_query()
+                self.query ="select count(1) from default use index(`#primary`)  where (job_title ='Support' or job_title = 'Engineer') AND email like '%@%.%'"
+                expected_result=self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                idx2 = "idx2"
+                self.query = "CREATE INDEX %s ON %s(%s,%s) " %(idx2,bucket.name,'VMs[1].os','tasks_points.task1')+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                idx = "idx3"
+                self.query = "CREATE INDEX %s ON %s(%s,%s) where tasks_points.task1=1 " %(idx,bucket.name,'VMs[1].os','name')+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1>1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1>1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default use index(`#primary`) where VMs[1].os='windows' and tasks_points.task1>1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1 in [1,2,3]"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1 in [1,2,3]"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default use index(`#primary`) where VMs[1].os='windows' and tasks_points.task1 in [1,2,3]"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os='windows' or tasks_points.task1>1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['scan']['#operator']=='IndexScan2')
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os='windows' or tasks_points.task1>1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default use index(`#primary`)  where VMs[1].os='windows' or tasks_points.task1>1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1!=1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['scan']['#operator']=='IndexScan2')
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1!=1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default  use index(`#primary`) where VMs[1].os='windows' and tasks_points.task1!=1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os='windows' and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default use index(`#primary`) where VMs[1].os='windows' and tasks_points.task1=1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os in ['centos','windows','ubuntu'] and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os in ['centos','windows','windows','centos','ubuntu','ubuntu',null] and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os in ['centos','windows','ubuntu'] and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default use index(`#primary`) where VMs[1].os in ['centos','windows','ubuntu'] and tasks_points.task1=1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os in ['centos','windows','windows','centos','ubuntu','ubuntu',null] and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default use index(`#primary`) where VMs[1].os in ['centos','windows','windows','centos','ubuntu','ubuntu',null] and tasks_points.task1=1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os in ['$1','centos','windows','ubuntu'] and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+
+                self.query = "explain select count(distinct VMs[1].os) from default where VMs[1].os in ['centos','windows','ubuntu'] and tasks_points.task1 in [1,2,3]"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexCountDistinctScan2')
+                self.query = "select count(distinct VMs[1].os) from default where VMs[1].os in ['centos','windows','ubuntu'] and tasks_points.task1 in [1,2,3]"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct VMs[1].os) from default use index(`#primary`) where VMs[1].os in ['centos','windows','ubuntu'] and tasks_points.task1 in [1,2,3]"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct name) from default where VMs[1].os='windows' and name = 'employee-1' and tasks_points.task1>1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexScan2')
+                self.query = "select count(distinct name) from default where VMs[1].os='windows' and name = 'employee-1' and tasks_points.task1>1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct name) from default use index(`#primary`) where VMs[1].os='windows' and name = 'employee-1' and tasks_points.task1>1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct name) from default  where VMs[1].os='windows' and name is not null and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexScan2')
+                self.query = "select count(distinct name) from default  where VMs[1].os='windows' and name is not null and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct name) from default use index(`#primary`) where VMs[1].os='windows' and name is not null and tasks_points.task1=1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "explain select count(distinct name) from default where VMs[1].os='windows' and name in ['employee-1','employee-2','employee-3']" \
+                             " and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                plan =ExplainPlanHelper(actual_result)
+                self.assertTrue( plan['~children'][0]['#operator']=='IndexScan2')
+                self.query = "select count(distinct name) from default where VMs[1].os='windows' and name in ['employee-1','employee-2','employee-3']" \
+                             " and tasks_points.task1=1"
+                actual_result = self.run_cbq_query()
+                self.query = "select count(distinct name) from default use index(`#primary`) where VMs[1].os='windows' and name in ['employee-1','employee-2','employee-3']" \
+                             " and tasks_points.task1=1"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_asc_desc_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON default(join_yr ASC, join_day DESC, meta().id ASC)"%(idx)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
+                             'ORDER BY join_yr, join_day DESC LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
+                             'ORDER BY join_yr,meta().id ASC LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and join_day <10 ' \
+                             'ORDER BY join_yr asc,join_day desc LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and join_day <10 and meta().id like "query-test%"' \
+                             'ORDER BY join_yr asc,join_day desc,meta().id ASC LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+    def test_avoid_full_span(self):
+         for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = 'create index %s on default( join_yr,join_day )'%(idx)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "explain select * from default where join_yr in [2011,2012]"
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['spans'][0]['range']=={u'High': [u'successor(2011)'], u'Low': [u'2011'], u'Inclusion': 1})
+                self.assertTrue(plan['~children'][0]['spans'][1]['range']=={u'High': [u'successor(2012)'], u'Low': [u'2012'], u'Inclusion': 1})
+
+                self.query = "select * from default where join_yr in [2011,2012] order by meta().id"
+                actual_result = self.run_cbq_query()
+                self.query = 'select * from default use index(`#primary`) where join_yr in [2011,2012] order by meta().id'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'explain select * from default where join_yr =2011 and join_day in [1,2,3,$1,$2,null,""]'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['range']=={u'High': [u'2011', u'1'], u'Low': [u'2011', u'1'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'2'], u'Low': [u'2011', u'2'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'3'], u'Low': [u'2011', u'3'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['range']=={u'High': [u'2011', u'$1'], u'Low': [u'2011', u'$1'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['range']=={u'High': [u'2011', u'$2'], u'Low': [u'2011', u'$2'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['range']=={u'High': [u'2011', u'""'], u'Low': [u'2011', u'""'], u'Inclusion': 3})
+                self.query = 'select * from default where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
+                actual_result = self.run_cbq_query()
+                self.query = 'select * from default use index(`#primary`) where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+    def test_distinct_meta(self):
+          for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s(%s,meta().id) " %(idx,bucket.name,'_id')+\
+                             " where _id like '%s' " %('query-test%') + \
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = "explain SELECT DISTINCT _id, meta().id FROM default WHERE _id like 'query-test%'"
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['distinct']==True)
+                self.query = "SELECT DISTINCT _id, meta().id FROM default WHERE _id like 'query-test%'"
+                actual_result = self.run_cbq_query()
+                self.query = "SELECT DISTINCT _id, meta().id FROM default use index(`#primary`) WHERE _id like 'query-test%'"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                idx = "idx2"
+                self.query = "CREATE INDEX %s ON %s(%s,meta().id) " %(idx,bucket.name,'_id')+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                self.query = 'explain SELECT DISTINCT _id, meta().id FROM default WHERE _id > "query-testemployee10317.9004497-0"'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['distinct']==True)
+                self.query = 'SELECT DISTINCT _id, meta().id FROM default WHERE _id > "query-testemployee10317.9004497-0"'
+                actual_result = self.run_cbq_query()
+                self.query = 'SELECT DISTINCT _id, meta().id FROM default use index(`#primary`) WHERE _id > "query-testemployee10317.9004497-0"'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = 'explain SELECT DISTINCT _id, meta().id FROM default WHERE _id in ["query-testemployee10317.9004497-0","query-testemployee10317.9004497-1","query-testemployee10317.9004497-2"]'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['distinct']==True)
+                self.query = 'SELECT DISTINCT _id, meta().id FROM default WHERE _id in ["query-testemployee10317.9004497-0","query-testemployee10317.9004497-1","query-testemployee10317.9004497-2"]'
+                actual_result = self.run_cbq_query()
+                self.query = 'SELECT DISTINCT _id, meta().id FROM default use index(`#primary`) WHERE _id in ["query-testemployee10317.9004497-0","query-testemployee10317.9004497-1","query-testemployee10317.9004497-2"]'
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_create_index_desc(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s(%s DESC) " %(idx,bucket.name,'_id')
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_partial_like_covering(self):
         for bucket in self.buckets:
@@ -3330,6 +3857,15 @@ class QueriesIndexTests(QueryTests):
             finally:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+
+    def test_covering_meta(self):
+                self.query = 'CREATE INDEX `iy` ON `default`((distinct (array (`v`.`os`) for `v` in `VMs` end)))'
+                self.run_cbq_query()
+                self.query = 'EXPLAIN SELECT meta().id FROM default WHERE ANY v IN VMs SATISFIES v.os = "ubuntu" END'
+                res = self.run_cbq_query()
+                plan = ExplainPlanHelper(res)
+                self.assertTrue('cover ((meta(`default`).`id`))' in str(plan['~children']))
+
 
     def test_covering_index(self):
         for bucket in self.buckets:
