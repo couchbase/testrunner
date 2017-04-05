@@ -1131,6 +1131,42 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_covering_like_array_index(self):
+        created_indexes = []
+        idx = "ix"
+        try:
+           for bucket in self.buckets:
+            self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s.%s END) where VMs[0].os = 'ubuntu' USING %s" % (
+                    idx, bucket.name,bucket.name, "tasks", self.index_type)
+            actual_result =self.run_cbq_query()
+            self._wait_for_index_online(bucket, idx)
+            self._verify_results(actual_result['results'], [])
+            created_indexes.append(idx)
+            self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+            self.query = "explain select meta().id from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END and VMs[0].os = 'ubuntu'"  % (bucket.name,bucket.name)
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index'] == idx)
+            self.query = 'explain select meta().id from {0} WHERE ANY i IN tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1 like "{1}" end) END and VMs[0].os = "ubuntu"' .format(bucket.name,'Sou%')
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index'] == idx )
+        finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_panic_in_null(self):
+        self.query = 'create index ix5 on default(join_yr)'
+        actual_result = self.run_cbq_query()
+        self.query = 'explain select join_yr from default where join_yr IN [NULL]'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index'] == "ix5")
+
+
 
     def test_covering_index_collections(self):
         created_indexes = []
@@ -2074,6 +2110,13 @@ class QueriesIndexTests(QueryTests):
                 result1 = plan['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx)
 
+                self.query = "explain select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END"  % (
+                bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                print plan
+                result1 = plan['~children'][0]['scan']['index']
+                self.assertTrue(result1 == idx)
                 self.query = "select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
                 bucket.name,bucket.name) + \
                              "order BY name limit 10"
@@ -2949,11 +2992,23 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
                              'ORDER BY join_yr, join_day DESC LIMIT 100 OFFSET 200'
                 actual_result = self.run_cbq_query()
-                print actual_result
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
                 self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr  LIMIT 100 OFFSET 200'
+                             'ORDER BY join_yr,meta().id ASC LIMIT 100 OFFSET 200'
                 actual_result = self.run_cbq_query()
-                print actual_result
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and join_day <10 ' \
+                             'ORDER BY join_yr asc,join_day desc LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
+                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and join_day <10 and meta().id like "query-test%"' \
+                             'ORDER BY join_yr asc,join_day desc,meta().id ASC LIMIT 100 OFFSET 200'
+                actual_result = self.run_cbq_query()
+                plan=ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -4290,6 +4345,15 @@ class QueriesIndexTests(QueryTests):
             finally:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+
+    def test_covering_meta(self):
+                self.query = 'CREATE INDEX `iy` ON `default`((distinct (array (`v`.`os`) for `v` in `VMs` end)))'
+                self.run_cbq_query()
+                self.query = 'EXPLAIN SELECT meta().id FROM default WHERE ANY v IN VMs SATISFIES v.os = "ubuntu" END'
+                res = self.run_cbq_query()
+                plan = ExplainPlanHelper(res)
+                self.assertTrue('cover ((meta(`default`).`id`))' in str(plan['~children']))
+
 
     def test_covering_index(self):
         for bucket in self.buckets:
