@@ -22,6 +22,8 @@ class QueriesIndexTests(QueryTests):
             self.log.error("MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED")
             self.fail('MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED')
         self.rest = RestConnection(self.master)
+        self.shell = RemoteMachineShellConnection(self.master)
+        self.delete_sample = self.input.param("delete_sample", False)
 
     def suite_setUp(self):
         super(QueriesIndexTests, self).suite_setUp()
@@ -31,6 +33,64 @@ class QueriesIndexTests(QueryTests):
 
     def suite_tearDown(self):
         super(QueriesIndexTests, self).suite_tearDown()
+
+    '''MB-22321: test that ordered intersectscan is used for pagination use cases'''
+    def test_orderedintersectscan(self):
+        rest = RestConnection(self.master)
+        self.shell.execute_command("""curl -v -u {0}:{1} \
+                     -X POST http://{2}:{3}/sampleBuckets/install \
+                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
+        time.sleep(1)
+        created_indexes = []
+        try:
+            idx = "idx_abv"
+            self.query = "CREATE INDEX %s ON `beer-sample`(abv)" % (idx)
+            self.run_cbq_query()
+            time.sleep(15)
+            idx2 = "idx_name"
+            self.query = "CREATE INDEX %s ON `beer-sample`(name)" % (idx2)
+            self.run_cbq_query()
+            time.sleep(15)
+            created_indexes.append(idx)
+            created_indexes.append(idx2)
+            self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 0 order by abv limit 10"
+            result = self.run_cbq_query()
+            self.assertTrue(result['results'][0]['plan']['~children'][0]['~children'][0]['#operator']
+                            == 'OrderedIntersectScan')
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
+                actual_result = self.run_cbq_query()
+            if self.delete_sample:
+                self.shell.execute_command(
+                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
+                    % (self.master.ip, self.master.port))
+
+    '''MB-22412: equality predicates and constant keys should be removed from order by clause'''
+    def test_remove_equality_orderby(self):
+        rest = RestConnection(self.master)
+        self.shell.execute_command("""curl -v -u {0}:{1} \
+                     -X POST http://{2}:{3}/sampleBuckets/install \
+                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
+        time.sleep(1)
+        created_indexes = []
+        try:
+            idx = "idx_abv"
+            self.query = "CREATE INDEX %s ON `beer-sample`(abv)" % (idx)
+            self.run_cbq_query()
+            time.sleep(15)
+            created_indexes.append(idx)
+            self.query = "EXPLAIN SELECT * FROM `beer-sample` WHERE abv = 0 ORDER BY abv"
+            result = self.run_cbq_query()
+            self.assertTrue('Order' not in result['results'][0]['plan'])
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
+                actual_result = self.run_cbq_query()
+            if self.delete_sample:
+                self.shell.execute_command(
+                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
+                    % (self.master.ip, self.master.port))
 
     def test_meta_indexcountscan(self):
         for bucket in self.buckets:
