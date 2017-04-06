@@ -819,7 +819,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 content = indexer_rest.get_index_storage_stats()
                 for index in content.values():
                     for stats in index.values():
-                        if stats["MainStore"]["resident_ratio"] == 1.00:
+                        if stats["MainStore"]["resident_ratio"] >= 1.00:
                             return False
             return True
 
