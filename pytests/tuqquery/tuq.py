@@ -235,6 +235,9 @@ class QueryTests(BaseTestCase):
             concat_string = ''.join(new_list)
             json_output = json.loads(concat_string)
             self.assertTrue(json_output['metrics']['resultCount'] == result_count)
+        self.shell.execute_command(
+            "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
+            % (self.master.ip, self.master.port))
 
 ##############################################################################################
 #
