@@ -21,6 +21,8 @@ class QueriesIndexTests(QueryTests):
             self.input.test_params["stop-on-failure"] = True
             self.log.error("MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED")
             self.fail('MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED')
+        self.shell = RemoteMachineShellConnection(self.master)
+        self.delete_sample = self.input.param("delete_sample", False)
 
     def suite_setUp(self):
         super(QueriesIndexTests, self).suite_setUp()
@@ -30,6 +32,64 @@ class QueriesIndexTests(QueryTests):
 
     def suite_tearDown(self):
         super(QueriesIndexTests, self).suite_tearDown()
+
+    '''MB-22321: test that ordered intersectscan is used for pagination use cases'''
+    def test_orderedintersectscan(self):
+        rest = RestConnection(self.master)
+        self.shell.execute_command("""curl -v -u {0}:{1} \
+                     -X POST http://{2}:{3}/sampleBuckets/install \
+                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
+        time.sleep(1)
+        created_indexes = []
+        try:
+            idx = "idx_abv"
+            self.query = "CREATE INDEX %s ON `beer-sample`(abv)" % (idx)
+            self.run_cbq_query()
+            time.sleep(15)
+            idx2 = "idx_name"
+            self.query = "CREATE INDEX %s ON `beer-sample`(name)" % (idx2)
+            self.run_cbq_query()
+            time.sleep(15)
+            created_indexes.append(idx)
+            created_indexes.append(idx2)
+            self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 0 order by abv limit 10"
+            result = self.run_cbq_query()
+            self.assertTrue(result['results'][0]['plan']['~children'][0]['~children'][0]['#operator']
+                            == 'OrderedIntersectScan')
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
+                actual_result = self.run_cbq_query()
+            if self.delete_sample:
+                self.shell.execute_command(
+                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
+                    % (self.master.ip, self.master.port))
+
+    '''MB-22412: equality predicates and constant keys should be removed from order by clause'''
+    def test_remove_equality_orderby(self):
+        rest = RestConnection(self.master)
+        self.shell.execute_command("""curl -v -u {0}:{1} \
+                     -X POST http://{2}:{3}/sampleBuckets/install \
+                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
+        time.sleep(1)
+        created_indexes = []
+        try:
+            idx = "idx_abv"
+            self.query = "CREATE INDEX %s ON `beer-sample`(abv)" % (idx)
+            self.run_cbq_query()
+            time.sleep(15)
+            created_indexes.append(idx)
+            self.query = "EXPLAIN SELECT * FROM `beer-sample` WHERE abv = 0 ORDER BY abv"
+            result = self.run_cbq_query()
+            self.assertTrue('Order' not in result['results'][0]['plan'])
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
+                actual_result = self.run_cbq_query()
+            if self.delete_sample:
+                self.shell.execute_command(
+                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
+                    % (self.master.ip, self.master.port))
 
     def test_meta_indexcountscan(self):
         for bucket in self.buckets:
@@ -472,17 +532,18 @@ class QueriesIndexTests(QueryTests):
 
                 plan3 = ExplainPlanHelper(actual_result)
                 self.assertTrue(len(plan3['~children'][0]['spans'])==1)
-                self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0]=="null")
+                self.assertTrue(plan3['~children'][0]['spans'][0]['Range']['Low'][0] == 'array_min($1)')
+
                 self.query = 'explain select join_day from %s where join_day in  [] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan4 = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0]=="null")
+                self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0] == "null")
 
                 self.query = 'explain select join_day from %s where join_day in  [] and join_day is not null '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan7 = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan7['~children'][0]['spans'][0]['Range']['High'][0]=="null")
-                
+                self.assertTrue(plan4['~children'][0]['spans'][0]['Range']['High'][0] == "null")
+
                 self.query = 'explain select join_day from %s where join_day in  [$1,$2,$3] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan5 = ExplainPlanHelper(actual_result)
@@ -492,7 +553,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan6 = ExplainPlanHelper(actual_result)
                 self.assertTrue(len(plan6['~children'][0]['~children'][0]['scan']['spans'])==3)
-                self.assertTrue(plan6["~children"][0]["~children"][0]['scan']['limit'] == "5")
+                self.assertTrue( plan6["~children"][1]['expr'] == "5" and plan6["~children"][1]['#operator'] == 'Limit')
 
             finally:
                 for idx in created_indexes:
