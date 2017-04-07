@@ -868,16 +868,16 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
         rebalance.result()
         #  cbindex move with invalid source host
-        _, error = self._cbindex_move(self.servers[self.nodes_init + 1], self.servers[self.nodes_init], indexes,
+        output, error = self._cbindex_move(self.servers[self.nodes_init + 1], self.servers[self.nodes_init], indexes,
                                       expect_failure=True)
-        if not filter(lambda x: 'Error occured index' in x, error):
+        if not filter(lambda x: 'Error occured' in x, error):
             self.fail("cbindex move did not fail with expected error message")
         # cbindex move with invalid destination host
-        _, error = self._cbindex_move(index_server, self.servers[self.nodes_init + 1], indexes, expect_failure=True)
+        output, error = self._cbindex_move(index_server, self.servers[self.nodes_init + 1], indexes, expect_failure=True)
         if not filter(lambda x: 'Error occured Unable to find Index service for destination' in x, error):
             self.fail("cbindex move did not fail with expected error message")
         # cbindex move with destination host not reachable
-        _, error = self._cbindex_move(index_server, "some_junk_value", indexes, expect_failure=True)
+        output, error = self._cbindex_move(index_server, "some_junk_value", indexes, expect_failure=True)
         if not filter(lambda x: 'Error occured Unable to find Index service for destination' in x, error):
             self.fail("cbindex move did not fail with expected error message")
 
@@ -1000,7 +1000,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         #  cbindex move with invalid src host
         _, error = self._cbindex_move(self.servers[self.nodes_init + 1], "", indexes, expect_failure=True)
-        if not filter(lambda x: 'Error occured index' in x, error):
+        if not filter(lambda x: 'Error occured invalid index specified' in x, error):
             self.fail("cbindex move did not fail with expected error message")
 
     def test_kv_failover_when_ddl_in_progress(self):
@@ -1291,12 +1291,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.fail("cbindex move did not fail with expected error message")
         # cbindex move with index names not specified
         _, error = self._cbindex_move(index_server, self.servers[self.nodes_init], " ", expect_failure=True)
-        if not filter(lambda x: 'panic: runtime error: index out of range' in x, error):
+        if not filter(lambda x: 'Error occured invalid index specified' in x, error):
             self.fail("cbindex move did not fail with expected error message")
         # cbindex move with index name which does not exist
         self.run_async_index_operations(operation_type="drop_index")
         _, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes, expect_failure=True)
-        if not filter(lambda x: 'Error occured index' in x, error):
+        if not filter(lambda x: 'Error occured invalid index specified' in x, error):
             self.fail("cbindex move did not fail with expected error message")
 
     def test_rebalance_in_with_different_topologies(self):
@@ -1338,10 +1338,16 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.services_in = self.input.param("services_in")
         self.run_operation(phase="before")
         self.sleep(30)
+        # do a swap rebalance
         nodes_out_list = self.servers[self.server_out]
-        # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
-                                                 [nodes_out_list], services=[self.services_in])
+                                                 [], services=[self.services_in])
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
+                                                 [nodes_out_list])
         self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
