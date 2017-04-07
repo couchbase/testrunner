@@ -1194,8 +1194,8 @@ class QueriesIndexTests(QueryTests):
     def test_covering_like_array_index(self):
         created_indexes = []
         idx = "ix"
-        try:
-           for bucket in self.buckets:
+        for bucket in self.buckets:
+          try:
             self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s.%s END) where VMs[0].os = 'ubuntu' USING %s" % (
                     idx, bucket.name,bucket.name, "tasks", self.index_type)
             actual_result =self.run_cbq_query()
@@ -1211,7 +1211,7 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['scan']['index'] == idx )
-        finally:
+          finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
@@ -1220,12 +1220,82 @@ class QueriesIndexTests(QueryTests):
 
     def test_panic_in_null(self):
         self.query = 'create index ix5 on default(join_yr)'
-        actual_result = self.run_cbq_query()
+        self.run_cbq_query()
         self.query = 'explain select join_yr from default where join_yr IN [NULL]'
         actual_result = self.run_cbq_query()
         plan = ExplainPlanHelper(actual_result)
         self.assertTrue(plan['~children'][0]['index'] == "ix5")
 
+    def test_avoid_intersect_scan(self):
+        created_indexes = []
+        idx = "idx_country"
+        idx2 = "gix_USMales"
+        try:
+            self.query = "CREATE INDEX {0} ON `default`(`address[1][0]`.`country`) WHERE (`_id` = 'query-testemployee10194.855617-0')".format(idx)
+            self.run_cbq_query()
+            created_indexes.append(idx)
+            self.query = "CREATE INDEX gix_USMales ON `default`(distinct (pairs(self))) WHERE (`_id` = 'query-testemployee10194.855617-0') and (`gender` = 'M') and (`address[1][0]`.`country` = 'United States of America')"
+            self.run_cbq_query()
+            created_indexes.append(idx2)
+            self.query = "explain select count(*) from default where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("cover" not in str(plan))
+            self.assertTrue("IntersectScan" not in str(plan))
+            self.assertTrue(plan['~children'][0]['index']=='idx_country')
+        finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+
+    def test_index_join(self):
+        created_indexes = []
+        idx = "idx_parent_chkey"
+        idx2 = "idx_parent_chkeyw"
+        try:
+            self.query = 'insert into standard_bucket0 values("child1",{"x":1,"y":9,"z":999})'
+            self.run_cbq_query()
+            self.query = 'insert into default values("parent1",{"a":1,"b":9,"c":999,"chkey":"1"})'
+            self.run_cbq_query()
+            self.query = 'create index {0} on default(chkey)'.format(idx)
+            self.run_cbq_query()
+            created_indexes.append(idx)
+            self.query = 'select default,standard_bucket0 from standard_bucket0 left outer join default on key ("child1" || default.chkey) for standard_bucket0'
+            try:
+                self.run_cbq_query()
+            except CBQError as ex:
+                    self.log.error(ex)
+                    self.assertTrue(str(ex).find("No index available for join term default") != -1,
+                                    "Error is incorrect.")
+            else:
+                    self.fail("There was no errors. Error expected: %s" % "No index available for join term default")
+
+            self.query = 'select default,standard_bucket0 from standard_bucket0 left outer join default on key ("standard_bucket0" || default.chkey) for standard_bucket0'
+            try:
+                self.run_cbq_query()
+            except CBQError as ex:
+                    self.log.error(ex)
+                    self.assertTrue(str(ex).find("No index available for join term default") != -1,
+                                    "Error is incorrect.")
+            else:
+                    self.fail("There was no errors. Error expected: %s" % "No index available for join term default")
+
+            self.query = 'create index {0} on default("standard_bucket0" || default.chkey)'.format(idx2)
+            self.run_cbq_query()
+            created_indexes.append(idx2)
+            self.query = 'select default,standard_bucket0 from standard_bucket0 left outer join default on key ("standard_bucket0" || default.chkey) for standard_bucket0 order by meta(default).id limit 2'
+            actual_result =self.run_cbq_query()
+            self.assertTrue(actual_result['results']==[{u'standard_bucket0': {u'y': 9, u'x': 1, u'z': 999}}, {u'standard_bucket0': {u'tasks_points': {u'task1': 1, u'task2': 1}, u'name': u'employee-9', u'mutated': 0, u'skills': [u'skill2010', u'skill2011'], u'join_day': 9, u'email': u'9-mail@couchbase.com', u'test_rate': 10.1, u'join_mo': 10, u'join_yr': 2011, u'_id': u'query-testemployee10153.1877827-0', u'VMs': [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], u'job_title': u'Engineer'}}])
+            self.query = 'delete from default use keys("parent1")'
+            self.run_cbq_query()
+            self.query = 'delete from standard_bucket0 use keys("child1")'
+            self.run_cbq_query()
+        finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
 
 
     def test_covering_index_collections(self):
