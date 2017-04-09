@@ -930,6 +930,23 @@ class RestConnection(object):
             log.info(content)
         return status
 
+    def set_indexer_num_replica(self,
+                                 num_replica=0):
+        api = self.index_baseUrl + 'settings'
+        params = {'indexer.settings.num_replica': num_replica}
+        params = json.dumps(params)
+        status, content, header = self._http_request(api, 'POST',
+                                                     params=params,
+                                                     timeout=60)
+        error_message = ""
+        log.info('settings params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status and error_message in content:
+            # TODO: Currently it just acknowledges if there is an error.
+            # And proceeds with further initialization.
+            log.info(content)
+        return status
+
     def execute_statement_on_cbas(self, statement, mode, pretty=True,
                                   timeout=70, client_context_id=None):
         api = self.cbas_base_url + "/analytics/service"

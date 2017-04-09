@@ -783,25 +783,29 @@ class N1QLHelper():
             print k, v
 
 
-    def verify_replica_indexes(self, index_map, num_replicas):
+    def verify_replica_indexes(self, index_map, num_replicas, expected_nodes=None):
         # 1. Validate count of no_of_indexes
         # 2. Validate index names
         # 3. Validate index replica have the same id
         # 4. Validate index replicas are on different hosts
 
+        nodes = []
+
         index_names = self.get_index_names()
 
         for index_name in index_names:
             index_host_name, index_id = self.get_index_details_using_index_name(index_name, index_map)
+            nodes.append(index_host_name)
 
             for i in range(1, num_replicas):
                 index_replica_name = index_name + " (replica {0})".format(str(i))
-        #index_replica_name = index_name + " (replica 1)"
 
                 index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(index_replica_name, index_map)
 
                 self.log.info("Hostnames : %s , %s" % (index_host_name, index_replica_hostname))
                 self.log.info("Index IDs : %s, %s" %( index_id, index_replica_id))
+
+                nodes.append(index_replica_hostname)
 
                 if index_id != index_replica_id:
                     self.log.info("Index ID for main index and replica indexes not same")
@@ -811,12 +815,56 @@ class N1QLHelper():
                     self.log.info("Index hostname for main index and replica indexes are same")
                     raise Exception("index hostname same for replicas")
 
+        if expected_nodes:
+            expected_nodes = expected_nodes.sort()
+            nodes = nodes.sort()
+
+            if not expected_nodes == nodes:
+                self.fail ("Replicas not created on expected hosts")
+
+    def verify_replica_indexes_build_status(self, index_map, num_replicas, defer_build=False):
+
+        index_names = self.get_index_names()
+
+        for index_name in index_names:
+            index_status, index_build_progress = self.get_index_status_using_index_name(index_name, index_map)
+            if not defer_build and index_status != "Ready":
+                self.log.info("Expected %s status to be Ready, but it is %s" % (
+                    index_name, index_status))
+                raise Exception("Index status incorrect")
+            elif defer_build and index_status != "Created":
+                self.log.info(
+                    "Expected %s status to be Created, but it is %s" % (
+                        index_name, index_status))
+                raise Exception("Index status incorrect")
+
+            for i in range(1, num_replicas):
+                index_replica_name = index_name + " (replica {0})".format(
+                    str(i))
+
+                index_replica_status, index_replica_progress = self.get_index_status_using_index_name(index_replica_name, index_map)
+
+                if not defer_build and index_replica_status != "Ready":
+                    self.log.info("Expected %s status to be Ready, but it is %s" % (index_replica_name, index_replica_status))
+                    raise Exception ("Index status incorrect")
+                elif defer_build and index_replica_status != "Created":
+                    self.log.info("Expected %s status to be Created, but it is %s" % (index_replica_name, index_replica_status))
+                    raise Exception("Index status incorrect")
+
     def get_index_details_using_index_name(self, index_name, index_map):
         for key in index_map.iterkeys():
             if index_name in index_map[key].keys():
                 return index_map[key][index_name]['hosts'], index_map[key][index_name]['id']
             else:
                 raise Exception ("Index name %s does not exist", index_name)
+
+    def get_index_status_using_index_name(self, index_name, index_map):
+        for key in index_map.iterkeys():
+            if index_name in index_map[key].keys():
+                return index_map[key][index_name]['status'], \
+                       index_map[key][index_name]['progress']
+            else:
+                raise Exception("Index name %s does not exist", index_name)
 
 
 
