@@ -1928,6 +1928,13 @@ class RestConnection(object):
 
         return status
 
+    '''Load any of the three sample buckets'''
+    def load_sample(self,sample_name):
+        api = '{0}{1}'.format(self.baseUrl, "sampleBuckets/install")
+        data = '["{0}"]'.format(sample_name)
+        status, content, header = self._http_request(api, 'POST', data)
+        return status
+
     # figure out the proxy port
     def create_bucket(self, bucket='',
                       ramQuotaMB=1,

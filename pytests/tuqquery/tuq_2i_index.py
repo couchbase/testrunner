@@ -36,9 +36,7 @@ class QueriesIndexTests(QueryTests):
     '''MB-22321: test that ordered intersectscan is used for pagination use cases'''
     def test_orderedintersectscan(self):
         rest = RestConnection(self.master)
-        self.shell.execute_command("""curl -v -u {0}:{1} \
-                     -X POST http://{2}:{3}/sampleBuckets/install \
-                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
+        rest.load_sample("beer-sample")
         time.sleep(1)
         created_indexes = []
         try:
@@ -52,7 +50,8 @@ class QueriesIndexTests(QueryTests):
             time.sleep(15)
             created_indexes.append(idx)
             created_indexes.append(idx2)
-            self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 0 order by abv limit 10"
+            self.query = "explain select * from `beer-sample` where name like 'A%' " \
+                         "and abv > 0 order by abv limit 10"
             result = self.run_cbq_query()
             self.assertTrue(result['results'][0]['plan']['~children'][0]['~children'][0]['#operator']
                             == 'OrderedIntersectScan')
@@ -61,16 +60,12 @@ class QueriesIndexTests(QueryTests):
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
                 actual_result = self.run_cbq_query()
             if self.delete_sample:
-                self.shell.execute_command(
-                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
-                    % (self.master.ip, self.master.port))
+                rest.delete_bucket("beer-sample")
 
     '''MB-22412: equality predicates and constant keys should be removed from order by clause'''
     def test_remove_equality_orderby(self):
         rest = RestConnection(self.master)
-        self.shell.execute_command("""curl -v -u {0}:{1} \
-                     -X POST http://{2}:{3}/sampleBuckets/install \
-                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
+        rest.load_sample("beer-sample")
         time.sleep(1)
         created_indexes = []
         try:
@@ -87,9 +82,42 @@ class QueriesIndexTests(QueryTests):
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
                 actual_result = self.run_cbq_query()
             if self.delete_sample:
-                self.shell.execute_command(
-                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
-                    % (self.master.ip, self.master.port))
+                rest.delete_bucket("beer-sample")
+
+    '''MB-22470: Like matching should use suffixes index if it is available, also need to test
+       token indexes'''
+    def test_use_suffixes_and_tokens(self):
+        rest = RestConnection(self.master)
+        rest.load_sample("beer-sample")
+        time.sleep(1)
+        created_indexes = []
+        try:
+            idx = "idx_name_suffixes"
+            self.query = "CREATE INDEX %s ON `beer-sample`( DISTINCT ARRAY s FOR s IN SUFFIXES(name) " \
+                         "END )" % (idx)
+            self.run_cbq_query()
+            time.sleep(15)
+            created_indexes.append(idx)
+            self.query = "EXPLAIN SELECT name FROM `beer-sample` WHERE name LIKE '%21%'"
+            result = self.run_cbq_query()
+            self.assertTrue(result['results'][0]['plan']['~children'][0]['scan']['index'] == idx)
+
+            idx2 = "idx_descr_tokens"
+            self.query = "CREATE INDEX %s ON `beer-sample`( DISTINCT ARRAY t FOR t IN TOKENS" \
+                         "(description) END )" % (idx2)
+            self.run_cbq_query()
+            time.sleep(15)
+            created_indexes.append(idx2)
+            self.query = "EXPLAIN SELECT description FROM `beer-sample` WHERE HAS_TOKEN(description, " \
+                         "'Great' )"
+            result = self.run_cbq_query()
+            self.assertTrue(result['results'][0]['plan']['~children'][0]['scan']['index'] == idx2)
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
+                actual_result = self.run_cbq_query()
+            if self.delete_sample:
+                rest.delete_bucket("beer-sample")
 
     def test_meta_indexcountscan(self):
         for bucket in self.buckets:
