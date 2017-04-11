@@ -97,7 +97,13 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
             time.sleep(15)
             created_indexes.append(idx)
+            # Test that LIKE uses suffixes index
             self.query = "EXPLAIN SELECT name FROM `beer-sample` WHERE name LIKE '%21%'"
+            result = self.run_cbq_query()
+            self.assertTrue(result['results'][0]['plan']['~children'][0]['scan']['index'] == idx)
+
+            # Test that contains uses suffixes index
+            self.query = "EXPLAIN SELECT * FROM `beer-sample` WHERE CONTAINS( name, 'Cafe' )"
             result = self.run_cbq_query()
             self.assertTrue(result['results'][0]['plan']['~children'][0]['scan']['index'] == idx)
 
@@ -107,6 +113,7 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
             time.sleep(15)
             created_indexes.append(idx2)
+            # Test that has_token uses tokens index
             self.query = "EXPLAIN SELECT description FROM `beer-sample` WHERE HAS_TOKEN(description, " \
                          "'Great' )"
             result = self.run_cbq_query()
