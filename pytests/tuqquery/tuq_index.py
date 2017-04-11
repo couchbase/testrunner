@@ -204,6 +204,74 @@ class QueriesViewsTests(QueryTests):
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
 
+    def test_push_limit_intersect_unionscan(self):
+      created_indexes = []
+      try:
+        self.query = "create index ix1 on default(k0,k1)"
+        self.run_cbq_query()
+        created_indexes.append("ix1")
+        self.query = "create index ix2 on default(k2)"
+        self.run_cbq_query()
+        created_indexes.append("ix2")
+        self.query = "explain select * from default where k0 > 10 AND k2 > 20 LIMIT 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
+        self.query = "explain select * from default where k0 > 10 OR k2 > 20 LIMIT 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
+      finally:
+        for idx in created_indexes:
+            self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+            self.run_cbq_query()
+
+    def test_meta_no_duplicate_results(self):
+        self.query = 'insert into default values ("k01",{"name":"abc"})'
+        self.run_cbq_query()
+        self.query = 'select name,meta().id from default where meta().id IN ["k01",""]'
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'id': u'k01', u'name': u'abc'}])
+        self.query = 'delete from default use keys ["k01"]'
+        self.run_cbq_query()
+
+    def test_notin_notwithin(self):
+      created_indexes = []
+      try:
+        idx = "ix"
+        self.query = 'create index {0} on default(join_day)'.format(idx)
+        self.run_cbq_query()
+        self.query = 'explain select 1 from default where NOT (join_day IN [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+        self.query = 'explain select 1 from default where NOT (join_day WITHIN [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index'] ==idx)
+        self.query = 'explain select 1 from default where (join_day IN NOT [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index']==idx)
+        self.query = 'explain select 1 from default where (join_day WITHIN NOT [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index']==idx)
+        self.query = 'explain select 1 from default where join_day NOT WITHIN [ 1]'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index'] ==idx)
+        self.query = 'explain select 1 from default where join_day NOT IN [ 1]'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+      finally:
+        for idx in created_indexes:
+            self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+            self.run_cbq_query()
+
+
+
     def test_explain_index_with_fn(self):
         for bucket in self.buckets:
             index_name = "my_index_fn"
