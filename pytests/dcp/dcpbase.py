@@ -71,11 +71,12 @@ class DCPBase(BaseTestCase):
 
     def dcp_client(
         self, node, connection_type = PRODUCER, vbucket = None, name = None,
-        auth_user = None, auth_password = ''):
+        auth_user = "cbadminbucket", auth_password = "password", bucket_name="default"):
         """ create an dcp client from Node spec and opens connnection of specified type"""
         client = self.client_helper(node, DCP, vbucket)
         if auth_user:
-            client.sasl_auth_plain('cbadminbucket', 'password')
+            client.sasl_auth_plain(auth_user, auth_password)
+            client.bucket_select(bucket_name)
 
         assert connection_type in (PRODUCER, CONSUMER, NOTIFIER)
         name = name or DEFAULT_CONN_NAME

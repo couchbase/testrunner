@@ -25,7 +25,7 @@ class DCPMultiBucket(DCPBase):
 
         for bucket in buckets:
 
-            dcp_client = self.dcp_client(nodeA, PRODUCER, auth_user = bucket)
+            dcp_client = self.dcp_client(nodeA, PRODUCER, bucket_name=bucket)
             for vb in vbuckets[0:16]:
                 vbucket = vb.id
                 vb_uuid, _, high_seqno = self.vb_info(nodeA, vbucket, bucket = bucket)
@@ -59,7 +59,7 @@ class DCPMultiBucket(DCPBase):
         time.sleep(2)
 
         # verify original vbInfo can be streamed
-        dcp_client = self.dcp_client(nodeA, PRODUCER, auth_user = bucket)
+        dcp_client = self.dcp_client(nodeA, PRODUCER, bucket_name=bucket)
         for vbucket in originalVbInfo:
             vb_uuid, _, high_seqno = originalVbInfo[vbucket]
             stream = dcp_client.stream_req(vbucket, 0, 0, high_seqno, vb_uuid)
