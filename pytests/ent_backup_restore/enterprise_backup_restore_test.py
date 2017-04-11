@@ -1,10 +1,12 @@
 import re, copy
 from random import randrange
+from threading import Thread
 
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection, Bucket
+from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
 from newupgradebasetest import NewUpgradeBaseTest
@@ -404,7 +406,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
     def test_restore_with_invalid_bucket_config_json(self):
         """
             When bucket-config.json in latest backup corrupted,
-            The restore should failed.
+            The merge backups should fail.
             1. Create a bucket and load docs into it.
             2. Create a backup and validate it.
             3. Run full backup
@@ -437,11 +439,155 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         remote_client.execute_command("sed -i 's/}//' %s " % backup_bucket_config_path)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
-        self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
+        self.backupset.end = randrange(self.backupset.start + 1,
+                                       self.backupset.number_of_backups + 1)
         result, output, _ = self.backup_merge()
         if result:
             self.log.info("Here is the output from command %s " % output[0])
             self.fail("merge should failed since bucket-config.json is invalid")
+        remote_client.disconnect()
+
+    def test_merge_backup_from_old_and_new_bucket(self):
+        """
+            1. Create a bucket A
+            2. Load docs with key 1
+            3. Do backup
+            4. Delete bucket A
+            5. Re-create bucket A
+            6. Load docs with key 2
+            7. Do backup
+            8. Do merge backup.  Verify backup only contain docs key 2
+        """
+        gen = BlobGenerator("ent-backup1_", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.log.info("Start doing backup")
+        self.backup_create()
+        self.backup_cluster()
+        if self.bucket_delete:
+            self.log.info("Start to delete bucket")
+            BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+            BucketOperationHelper.create_bucket(serverInfo=self.master, test_case=self)
+        elif self.bucket_flush:
+            self.log.info("Start to flush bucket")
+            self._all_buckets_flush()
+        gen = BlobGenerator("ent-backup2_", "ent-backup-", self.value_size, end=self.num_items)
+        self.log.info("Start to load bucket again with different key")
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_cluster()
+        self.backupset.number_of_backups += 1
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        self.log.info("Start to merge backup")
+        self.backupset.start = randrange(1, self.backupset.number_of_backups)
+        self.backupset.end = randrange(self.backupset.start,
+                                       self.backupset.number_of_backups + 1)
+        self.merged = True
+        result, output, _ = self.backup_merge()
+        self.backupset.end -= 1
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets,
+                                                 self.skip_consistency, self.per_node)
+        self.log.info("*** Start to validate data in merge backup ")
+        self.validate_backup_data(self.backupset.backup_host, [self.master],
+                                       "ent-backup", False, False, "memory",
+                                       self.num_items, "ent-backup1")
+        self.backup_cluster_validate(skip_backup=True)
+
+    def test_merge_backup_with_merge_kill_and_re_merge(self):
+        """
+            1. Create a bucket A
+            2. Load docs
+            3. Do backup
+            4. Load docs
+            5. Do backup
+            6. Merge backup
+            7. Kill merge process
+            8. Merge backup again
+            Result:  2nd merge should run ok
+        """
+        gen = BlobGenerator("ent-backup1", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=self.backupset.number_of_backups)
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        self.log.info("Start to merge backup")
+        self.backupset.start = randrange(1, self.backupset.number_of_backups)
+        self.backupset.end = randrange(self.backupset.start,
+                                       self.backupset.number_of_backups + 1)
+        self.merged = True
+        merge_threads = []
+        merge_thread = Thread(target=self.backup_merge)
+        merge_threads.append(merge_thread)
+        merge_thread.start()
+        merge_kill_thread = Thread(target=self._kill_cbbackupmgr)
+        merge_threads.append(merge_kill_thread)
+        merge_kill_thread.start()
+        for merge_thread in merge_threads:
+            merge_thread.join()
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        result, output, _ = self.backup_merge()
+        self.backupset.end -= 1
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+
+    def test_merge_backup_with_partial_backup(self):
+        """
+            1. Create a bucket A
+            2. Load docs
+            3. Do backup
+            4. Load docs
+            5. Do backup and kill backup process
+            6. Merge backup.  Merge should fail
+        """
+        gen = BlobGenerator("ent-backup1", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=self.backupset.number_of_backups)
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        backup_threads = []
+        backup_thread = Thread(target=self.backup_cluster)
+        backup_threads.append(backup_thread)
+        backup_thread.start()
+        backup_kill_thread = Thread(target=self._kill_cbbackupmgr)
+        backup_threads.append(backup_kill_thread)
+        backup_kill_thread.start()
+        for backup_thread in backup_threads:
+            backup_thread.join()
+        self.backupset.number_of_backups += 1
+        self.log.info("Start to merge backup")
+        self.backupset.start = randrange(1, self.backupset.number_of_backups)
+        self.backupset.end = randrange(self.backupset.start,
+                                       self.backupset.number_of_backups + 1)
+        self.merged = True
+        status, output, _ = self.backup_merge()
+        if status:
+            self.fail("This merge should fail due to last backup killed, not complete yet")
+        elif "Error merging data: Backup Meta " in output[0]:
+            self.log.info("Test failed as expected as last backup failed to complete")
+        self.backupset.end -= 1
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+
+    def _kill_cbbackupmgr(self):
+        """
+            kill all cbbackupmgr processes
+        """
+        self.sleep(1, "times need for cbbackupmgr process run")
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        if self.cmd_ext == "":
+            cmd = "ps aux | grep cbbackupmgr | awk '{print $2}' | xargs kill -9"
+            output, error = shell.execute_command(cmd)
 
     def test_backup_restore_with_nodes_reshuffle(self):
         """
@@ -1111,6 +1257,45 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         self.log.info("Successfully merged new backups with already merged backup")
+
+    def test_merge_backup_with_multi_threads(self):
+        """
+            1. Create a cluster with default bucket
+            2. Load default bucket with key1
+            3. Create backup with default one thread
+            4. Load again to bucket with key2
+            5. Create backup with 2 threads
+            6. Merge backup.  All backup should contain doc key1 and key2
+        """
+        gen = BlobGenerator("ent-backup1", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.log.info("Start doing backup")
+        self.backup_create()
+        self.backup_cluster()
+        gen = BlobGenerator("ent-backup2", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_cluster(self.threads_count)
+        self.backupset.number_of_backups += 1
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        self.log.info("Start to merge backup")
+        self.backupset.start = randrange(1, self.backupset.number_of_backups)
+        self.backupset.end = randrange(self.backupset.start,
+                                       self.backupset.number_of_backups + 1)
+        self.merged = True
+        status, output, _ = self.backup_merge()
+        self.backupset.end -= 1
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets,
+                                                 self.skip_consistency, self.per_node)
+        self.log.info("*** Start to validate data in merge backup ")
+        self.validate_backup_data(self.backupset.backup_host, [self.master],
+                                       "ent-backup", False, False, "memory",
+                                       self.num_items, None)
+        self.backup_cluster_validate(skip_backup=True)
 
     def test_backup_purge(self):
         """

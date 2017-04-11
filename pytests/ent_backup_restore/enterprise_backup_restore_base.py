@@ -3,6 +3,7 @@ import shutil
 import testconstants
 
 from basetestcase import BaseTestCase
+from couchbase_helper.data_analysis_helper import DataCollector
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -54,6 +55,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.same_cluster = self.input.param("same-cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
         self.no_progress_bar = self.input.param("no-progress-bar", True)
+        self.multi_threads = self.input.param("multi_threads", False)
+        self.threads_count = self.input.param("threads_count", 1)
+        self.bucket_delete = self.input.param("bucket_delete", False)
+        self.bucket_flush = self.input.param("bucket_flush", False)
         if self.same_cluster:
             self.backupset.restore_cluster_host = self.servers[0]
             self.backupset.restore_cluster_host_username = self.servers[0].rest_username
@@ -196,7 +201,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail(msg)
         self.log.info(msg)
 
-    def backup_cluster(self):
+    def backup_cluster(self, threads_count=1):
         args = "backup --archive {0} --repo {1} {6} http://{2}:{3} --username {4} --password {5}". \
             format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
@@ -207,11 +212,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --purge"
         if self.no_progress_bar:
             args += " --no-progress-bar"
+        if self.multi_threads:
+            args += " --threads %s " % threads_count
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Backup successfully completed" not in output[0]:
+        if error or (output and "Backup successfully completed" not in output[0]):
             return output, error
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -221,10 +228,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Finished taking backup  with args: {0}".format(args))
         return output, error
 
-    def backup_cluster_validate(self):
-        output, error = self.backup_cluster()
-        if error or "Backup successfully completed" not in output[-1]:
-            self.fail("Taking cluster backup failed.")
+    def backup_cluster_validate(self, skip_backup=False):
+        if not skip_backup:
+            output, error = self.backup_cluster()
+            if error or "Backup successfully completed" not in output[-1]:
+                self.fail("Taking cluster backup failed.")
         status, msg = self.validation_helper.validate_backup()
         if not status:
             self.fail(msg)
@@ -428,7 +436,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                          self.backupset.directory)
             dump_output, error = conn.execute_command(cmd)
             if dump_output:
-                key_ids =        [x.split(":")[1].strip(' ') for x in dump_output[0::8]]
+                key_ids = [x.split(":")[1].strip(' ') for x in dump_output[0::8]]
                 miss_keys = [x for x in delete_keys if x not in key_ids]
                 if miss_keys:
                     raise Exception("Lost some keys %s ", miss_keys)
@@ -462,8 +470,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Merge completed successfully" not in output[0]:
+        if error:
             return False, error, "Merging backup failed"
+        elif output and "Merge completed successfully" not in output[0]:
+            return False, output, "Merging backup failed"
+        elif not output:
+            self.log.info("process cbbackupmge may be killed")
+            return False, [] , "cbbackupmgr may be killed"
         del self.backups[self.backupset.start - 1:self.backupset.end]
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -474,6 +487,59 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         return True, output, "Merging backup succeeded"
+
+    def validate_backup_data(self, server_host, server_bucket, master_key,
+                                   perNode, getReplica, mode, items, key_check):
+        """
+            Compare data in backup file with data in bucket
+        """
+        data_matched = True
+        data_collector = DataCollector()
+        backup_data = data_collector.get_kv_dump_from_backup_file(server_host,
+                                      self.cli_command_location, self.cmd_ext,
+                                      self.backupset.directory, master_key,
+                                      self.buckets)
+        buckets_data = {}
+        for bucket in self.buckets:
+            headerInfo, bucket_data = data_collector.collect_data(server_bucket, [bucket],
+                                                              perNode=False,
+                                                              getReplica=getReplica,
+                                                              mode=mode)
+            buckets_data[bucket.name] = bucket_data[bucket.name]
+            for key in buckets_data[bucket.name]:
+                value = buckets_data[bucket.name][key]
+                value = ",".join(value.split(',')[4:5])
+                buckets_data[bucket.name][key] = value
+            self.log.info("*** Compare data in bucket and in backup file of bucket %s ***"
+                                                                            % bucket.name)
+            count = 0
+            key_count = 0
+            for key in buckets_data[bucket.name]:
+                if buckets_data[bucket.name][key] != backup_data[bucket.name][key]["Value"]:
+                    if count < 20:
+                        self.log.error("Data does not match at key %s. bucket: %s != %s file"
+                                               % (key, buckets_data[bucket.name][key],
+                                                  backup_data[bucket.name][key]["Value"]))
+                        data_matched = False
+                        count += 1
+                    else:
+                        raise Exception ("Data not match in backup bucket %s" % bucket.name)
+                key_count += 1
+            if len(backup_data[bucket.name]) != key_count:
+                raise Exception ("Total key counts do not match.  Backup %s != %s bucket"
+                                  % (backup_data[bucket.name], key_count))
+            self.log.info("******** Data macth in backup file and bucket %s ******** "
+                                                                        % bucket.name)
+            print "Total items in backup file:   ", len(backup_data[bucket.name])
+            print "Total items in bucket:   ", key_count
+            if self.merged:
+                if key_check:
+                    print "go to merge check"
+                    for key in backup_data[bucket.name]:
+                        if key == key_check:
+                            raise Exception ("There is an old key after delete bucket,"
+                                         " backup and merged ")
+        return data_matched
 
 class Backupset:
     def __init__(self):
