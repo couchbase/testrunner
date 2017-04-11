@@ -40,7 +40,7 @@ class RbacBase:
 
     '''
     user_role_list = list of user information and role assignment
-                     [{'id':ritam,'name'=ritamsharma,'roles'=[cluster_admin,admin]}]
+                     [{'id':ritam,'name'=ritamsharma,'roles'='cluster_admin:admin'}]
     '''
     def add_user_role(self,user_role_list,rest,source=None):
         if source:
