@@ -2661,7 +2661,7 @@ class QueryTests(BaseTestCase):
     def test_hours(self):
         self.query = 'select date_part_str(now_str(), "hour") as hour, ' +\
         'date_part_str(now_str(),"minute") as minute, date_part_str(' +\
-        'now_str(),"second") as sec, date_part_str(now_str(),"milliseconds") as msec'
+        'now_str(),"second") as sec, date_part_str(now_str(),"millisecond") as msec'
         now = datetime.datetime.now()
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["hour"] == now.hour or res["results"][0]["hour"] == (now.hour + 1),
@@ -2739,7 +2739,7 @@ class QueryTests(BaseTestCase):
         now_millis = now_millis * 1000
         self.query = 'select date_part_millis(%s, "hour") as hour, ' % (now_millis) +\
         'date_part_millis(%s,"minute") as minute, date_part_millis(' % (now_millis) +\
-        '%s,"second") as sec, date_part_millis(%s,"milliseconds") as msec' % (now_millis,now_millis)
+        '%s,"second") as sec, date_part_millis(%s,"millisecond") as msec' % (now_millis,now_millis)
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["hour"] == now_time.hour,
                         "Result expected: %s. Actual %s" % (now_time.hour, res["results"]))
