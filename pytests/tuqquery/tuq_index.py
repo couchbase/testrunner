@@ -270,6 +270,13 @@ class QueriesViewsTests(QueryTests):
             self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
             self.run_cbq_query()
 
+    def test_create_arrays_ranging_over_object(self):
+        self.query = 'select array j for i:j in {"a":1, "b":2} end'
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'$1': [1, 2]}])
+        self.query = 'select array j for i:j in {"a":1, "b":2, "c":[2,3], "d": "%s", "e":2, "f": %s } end'%("verbose",'{"a":1}')
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'$1': [1, 2, [2, 3], u'verbose', 2, {u'a': 1}]}])
 
 
     def test_explain_index_with_fn(self):
@@ -277,8 +284,6 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_fn"
             try:
                 self.query = "CREATE INDEX %s ON %s(round(test_rate)) USING %s" % (index_name, bucket.name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN select name, round(test_rate) as rate from %s WHERE round(test_rate) = 2' % (bucket.name, bucket.name)
@@ -298,8 +303,6 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "my_attr_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     self.query = "EXPLAIN SELECT * FROM %s WHERE %s = 'abc'" % (bucket.name, self.FIELDS_TO_INDEX[ind - 1])
@@ -318,8 +321,6 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_non_index"
             try:
                 self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = "EXPLAIN SELECT * FROM %s WHERE email = 'abc'" % (bucket.name)
