@@ -255,6 +255,19 @@ class QueryTests(BaseTestCase):
                      t3.join(100)
                 self._verify_results(actual_result['results'], [])
 
+    '''MB-22550: Simple check that ensures
+       OBJECT_RENAME and OBJECT_REPLACE functions work as intended'''
+    def test_object_rename_replace(self):
+        rename_result = self.run_cbq_query('select OBJECT_RENAME( { "a": 1, "b": 2 }, "b", "c" ) ')
+        self.assertTrue("b" not in rename_result['results'][0]['$1']
+                        and "c" in rename_result['results'][0]['$1'])
+
+        replace_result = self.run_cbq_query('select OBJECT_REPLACE( { "a": 1, "b": 2 }, 2, 3 )')
+        self.assertTrue(replace_result['results'][0]['$1']['b'] == 3)
+
+        str_replace = self.run_cbq_query('select OBJECT_REPLACE( { "a": 1, "b": 2 }, 2, "ajay" ) ')
+        self.assertTrue(str_replace['results'][0]['$1']['b'] == "ajay")
+
 ##############################################################################################
 #
 #   LIMIT OFFSET CHECKS
