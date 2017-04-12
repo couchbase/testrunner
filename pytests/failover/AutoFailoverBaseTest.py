@@ -105,7 +105,6 @@ class AutoFailoverBaseTest(BaseTestCase):
             self.node_monitor_task.stop = True
         self.task_manager.shutdown(force=True)
 
-
     def enable_autofailover(self):
         """
         Enable the autofailover setting with the given timeout.
@@ -168,13 +167,19 @@ class AutoFailoverBaseTest(BaseTestCase):
         Enable firewall on the nodes to fail in the tests.
         :return: Nothing
         """
-        self.time_start = time.time()
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip)
+            node_down_timer_tasks.append(node_failure_timer_task)
         task = AutoFailoverNodesFailureTask(self.orchestrator,
                                             self.server_to_fail,
                                             "enable_firewall", self.timeout,
                                             self.pause_between_failover_action,
                                             self.failover_expected,
-                                            self.timeout_buffer)
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
         try:
             task.result()
@@ -205,14 +210,20 @@ class AutoFailoverBaseTest(BaseTestCase):
         Restart couchbase server on the nodes to fail in the tests
         :return: Nothing
         """
-        self.time_start = time.time()
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip, node.port)
+            node_down_timer_tasks.append(node_failure_timer_task)
         task = AutoFailoverNodesFailureTask(self.orchestrator,
                                             self.server_to_fail,
                                             "restart_couchbase",
                                             self.timeout,
                                             self.pause_between_failover_action,
                                             self.failover_expected,
-                                            self.timeout_buffer)
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
         try:
             task.result()
