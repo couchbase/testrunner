@@ -37,7 +37,7 @@ from testconstants import WIN_COUCHBASE_BIN_PATH,\
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH
 
-from testconstants import MAC_CB_PATH
+from testconstants import MAC_CB_PATH, MAC_COUCHBASE_BIN_PATH
 
 from testconstants import CB_VERSION_NAME
 from testconstants import CB_REPO
@@ -227,6 +227,16 @@ class RemoteMachineShellConnection:
                                                    {0}".format(e, self.ip))
                     exit(1)
         log.info("Connected to {0}".format(serverInfo.ip))
+        """ self.info.distribution_type.lower() == "ubuntu" """
+        self.cmd_ext = ""
+        self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        if self.nonroot:
+            self.bin_path = self.nr_home_path + self.bin_path
+        self.extract_remote_info()
+        os_type = self.info.type.lower()
+        if os_type == "windows":
+            self.cmd_ext = ".exe"
+            self.bin_path = WIN_COUCHBASE_BIN_PATH
 
     """
         In case of non root user, we need to switch to root to
@@ -3601,7 +3611,7 @@ class RemoteMachineShellConnection:
             cb_data_path = "/home/%s/" % self.username
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            couch_dbinfo_command = "%scouch_dbinfo.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            couch_dbinfo_command = "%scouch_dbinfo.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
@@ -3611,27 +3621,32 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_cbepctl(self, bucket, persistence, param_type, param, value):
+    def execute_cbepctl(self, bucket, persistence, param_type, param, value,
+                                                  cbadmin_user="cbadminbucket",
+                                                  cbadmin_password="password"):
         cbepctl_command = "%scbepctl" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbepctl_command = "/home/%s%scbepctl" % (self.username,
                                                      LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbepctl_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbepctl_command = "%scbepctl.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbepctl_command = "%scbepctl" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbepctl_command = "%scbepctl" % (MAC_COUCHBASE_BIN_PATH)
 
         if bucket.saslPassword == None:
             bucket.saslPassword = ''
         if persistence != "":
-            command = "%s %s:11210 -b %s -p \"%s\" %s" % (cbepctl_command, self.ip,
-                                                          bucket.name, bucket.saslPassword,
-                                                          persistence)
+            command = "%s %s:11210  -u %s -p %s -b %s %s"\
+                                            % (cbepctl_command, self.ip,
+                                               cbadmin_user, cbadmin_password,
+                                               bucket.name, persistence)
         else:
-            command = "%s %s:11210 -b %s -p \"%s\" %s %s %s" % (cbepctl_command, self.ip,
-                                                                bucket.name, bucket.saslPassword,
-                                                                param_type, param, value)
+            command = "%s %s:11210 -u %s -p %s -b %s %s %s %s"\
+                                            % (cbepctl_command, self.ip,
+                                               cbadmin_user, cbadmin_password,
+                                               bucket.name, param_type,
+                                               param, value)
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
