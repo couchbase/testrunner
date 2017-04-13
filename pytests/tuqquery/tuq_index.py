@@ -207,20 +207,33 @@ class QueriesViewsTests(QueryTests):
     def test_push_limit_intersect_unionscan(self):
       created_indexes = []
       try:
-        self.query = "create index ix1 on default(k0,k1)"
+        self.query = "create index ix1 on default(join_day)"
         self.run_cbq_query()
         created_indexes.append("ix1")
-        self.query = "create index ix2 on default(k2)"
+        self.query = "create index ix2 on default(VMs[0].os)"
         self.run_cbq_query()
         created_indexes.append("ix2")
-        self.query = "explain select * from default where k0 > 10 AND k2 > 20 LIMIT 10"
+        self.query = "explain select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.query = "select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
+        self.query = "explain select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
         self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
-        self.query = "explain select * from default where k0 > 10 OR k2 > 20 LIMIT 10"
+        self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
+        self.query = "explain select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
+        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.query = "select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
       finally:
         for idx in created_indexes:
             self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
@@ -270,6 +283,13 @@ class QueriesViewsTests(QueryTests):
             self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
             self.run_cbq_query()
 
+    def test_create_arrays_ranging_over_object(self):
+        self.query = 'select array j for i:j in {"a":1, "b":2} end'
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'$1': [1, 2]}])
+        self.query = 'select array j for i:j in {"a":1, "b":2, "c":[2,3], "d": "%s", "e":2, "f": %s } end'%("verbose",'{"a":1}')
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'$1': [1, 2, [2, 3], u'verbose', 2, {u'a': 1}]}])
 
 
     def test_explain_index_with_fn(self):
@@ -277,8 +297,6 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_fn"
             try:
                 self.query = "CREATE INDEX %s ON %s(round(test_rate)) USING %s" % (index_name, bucket.name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN select name, round(test_rate) as rate from %s WHERE round(test_rate) = 2' % (bucket.name, bucket.name)
@@ -298,8 +316,6 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "my_attr_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     self.query = "EXPLAIN SELECT * FROM %s WHERE %s = 'abc'" % (bucket.name, self.FIELDS_TO_INDEX[ind - 1])
@@ -318,8 +334,6 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_non_index"
             try:
                 self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = "EXPLAIN SELECT * FROM %s WHERE email = 'abc'" % (bucket.name)
@@ -953,17 +967,16 @@ class QueriesViewsTests(QueryTests):
 
 	    plan = ExplainPlanHelper(res)
             print plan
-            # import pdb;pdb.set_trace()
+            #import pdb;pdb.set_trace()
             self.log.info('-'*100)
             if (query.find("CREATE INDEX") < 0):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
                         else plan["~children"][0]
                 print result
-                # import pdb;pdb.set_trace()
+                #import pdb;pdb.set_trace()
                 if not(result['scans'][0]['#operator']=='DistinctScan'):
-                    if not (result["#operator"] == 'UnionScan'):
-                        self.assertTrue(result["#operator"] == 'IntersectScan',
-                                        "Index should be intersect scan and is %s" % (plan))
+                    self.assertTrue(result["#operator"] == 'IntersectScan',
+                                    "Index should be intersect scan and is %s" % (plan))
                     # actual_indexes = []
                     # for scan in result['scans']:
                     #     print scan
@@ -974,12 +987,10 @@ class QueriesViewsTests(QueryTests):
                     #         actual_indexes.append([result['scans'][0]['scan']['index']])
                     #     else:
                     #          actual_indexes.append(scan['index'])
-                    if result["#operator"] == 'UnionScan':
-                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
-                                          for results in result['scans'] for scan in results['scans']]
-                    else:
-                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
-                                for scan in result['scans']]
+
+
+                    actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                            for scan in result['scans']]
 
                     print actual_indexes
 
