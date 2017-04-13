@@ -3670,25 +3670,31 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_cbstats(self, bucket, command, keyname="", vbid=0):
+    def execute_cbstats(self, bucket, command, keyname="", vbid=0,
+                                      cbadmin_user="cbadminbucket",
+                                      cbadmin_password="password"):
         cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbstat_command = "/home/%s%scbstats" % (self.username,
                                                     LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbstat_command = "%scbstats.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbstat_command = "%scbstats" % (MAC_COUCHBASE_BIN_PATH)
 
         if command != "key" and command != "raw":
-            if bucket.saslPassword == None:
-                bucket.saslPassword = ''
-            command = "%s %s:11210 %s -b %s -p \"%s\" " % (cbstat_command, self.ip, command,
-                                                                bucket.name, bucket.saslPassword)
+            command = "%s %s:11210 %s -u %s -p %s -b %s " % (cbstat_command,
+                                                             self.ip, command,
+                                                             cbadmin_user,
+                                                             cbadmin_password,
+                                                             bucket.name)
         else:
-            command = "%s %s:11210 %s %s %s " % (cbstat_command, self.ip, command,
-                                                                keyname, vbid)
+            command = "%s %s:11210 %s -u %s -p %s %s %s " % (cbstat_command,
+                                                             self.ip, command,
+                                                             cbadmin_user,
+                                                             cbadmin_password,
+                                                             keyname, vbid)
 
 
         output, error = self.execute_command(command)
