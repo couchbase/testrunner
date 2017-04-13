@@ -130,6 +130,62 @@ class QueriesViewsTests(QueryTests):
             self.assertTrue('limit' in str(res['results']),
                             "Limit is not pushed to primary scan")
 
+    '''MB-22129: Test that the created index coveries the queries using LET and LETTING'''
+    def test_explain_let_letting(self):
+        idx = "idx_bc"
+        self.query = 'CREATE INDEX %s ON default( join_mo, join_yr) ' % idx
+        self.run_cbq_query()
+
+        # Test let
+        # Number of expected hits for the select query
+        result_count = 504
+        self.query = "EXPLAIN SELECT d, e FROM default LET d = join_mo, e = join_yr " \
+                     "WHERE d > 11 AND e > 2010"
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = "SELECT d, e FROM default LET d = join_mo, e = join_yr " \
+                     "WHERE d > 11 AND e > 2010"
+        result = self.run_cbq_query()
+        self.assertTrue(plan['~children'][0]['index'] == idx
+                        and 'join_mo' in plan['~children'][0]['covers'][0]
+                        and 'join_yr' in plan['~children'][0]['covers'][1]
+                        and result['metrics']['resultCount'] == result_count)
+
+        # Test letting
+        result_count = 2
+        self.query = 'EXPLAIN SELECT d, e FROM default LET d = join_mo ' \
+                     'WHERE d > 10 GROUP BY d LETTING e = SUM(join_yr) HAVING e > 20'
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = 'SELECT d, e FROM default LET d = join_mo ' \
+                     'WHERE d > 10 GROUP BY d LETTING e = SUM(join_yr) HAVING e > 20'
+        result = self.run_cbq_query()
+        self.assertTrue(plan['~children'][0]['index'] == idx
+                        and 'join_mo' in plan['~children'][0]['covers'][0]
+                        and 'join_yr' in plan['~children'][0]['covers'][1]
+                        and result['metrics']['resultCount'] == result_count)
+
+        self.query = "DROP INDEX default.%s USING %s" % (idx,self.index_type)
+
+    '''MB-22148: The span produced by an OR predicate should be variable in length'''
+    def test_variable_length_sarging_or(self):
+        idx = "idx_ab"
+        result_count = 468
+        self.query = 'CREATE INDEX %s ON default( join_day, join_mo) ' % idx
+        self.run_cbq_query()
+
+        self.query = "EXPLAIN SELECT * FROM default " \
+                     "WHERE join_day = 5 OR ( join_day = 10 AND join_mo = 10 )"
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = "SELECT * FROM default WHERE join_day = 5 OR ( join_day = 10 AND join_mo = 10 )"
+        result = self.run_cbq_query()
+        self.assertTrue(result['metrics']['resultCount'] == result_count
+                        and len(plan['~children'][0]['scans'][1]['spans'][0]['Range']['High']) == 2
+                        and len(plan['~children'][0]['scans'][1]['spans'][0]['Range']['Low']) == 2)
+
+        self.query = "DROP INDEX default.%s USING %s" % (idx, self.index_type)
+
     def test_explain_query_count(self):
         for bucket in self.buckets:
             index_name = "my_index_child"
