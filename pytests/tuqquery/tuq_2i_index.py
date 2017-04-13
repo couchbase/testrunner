@@ -55,6 +55,10 @@ class QueriesIndexTests(QueryTests):
             result = self.run_cbq_query()
             self.assertTrue(result['results'][0]['plan']['~children'][0]['~children'][0]['#operator']
                             == 'OrderedIntersectScan')
+            self.query = "explain select * from `beer-sample` where name = 'abc' and age = 10 and  abv > 0  limit 10"
+            result = self.run_cbq_query()
+            plan = ExplainPlanHelper(result)
+            self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)

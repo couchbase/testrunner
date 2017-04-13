@@ -317,20 +317,33 @@ class QueriesViewsTests(QueryTests):
     def test_push_limit_intersect_unionscan(self):
       created_indexes = []
       try:
-        self.query = "create index ix1 on default(k0,k1)"
+        self.query = "create index ix1 on default(join_day)"
         self.run_cbq_query()
         created_indexes.append("ix1")
-        self.query = "create index ix2 on default(k2)"
+        self.query = "create index ix2 on default(VMs[0].os)"
         self.run_cbq_query()
         created_indexes.append("ix2")
-        self.query = "explain select * from default where k0 > 10 AND k2 > 20 LIMIT 10"
+        self.query = "explain select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.query = "select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
+        self.query = "explain select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
         self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
-        self.query = "explain select * from default where k0 > 10 OR k2 > 20 LIMIT 10"
+        self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
+        self.query = "explain select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
+        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.query = "select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
       finally:
         for idx in created_indexes:
             self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
