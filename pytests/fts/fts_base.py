@@ -971,7 +971,7 @@ class FTSIndex:
         Constructs the facets definition of the query json
         """
         facets = TestInputSingleton.input.param("facets", None).split(",")
-        size = TestInputSingleton.input.param("facets_size", 5)
+        size = TestInputSingleton.input.param("facets_size", 10)
         terms_field = "dept"
         terms_facet_name = "Department"
         numeric_range_field = "salary"
@@ -1112,7 +1112,7 @@ class FTSIndex:
         Validate the facet data returned in the query response JSON.
         """
         facets = TestInputSingleton.input.param("facets", None).split(",")
-        size = TestInputSingleton.input.param("facets_size", 5)
+        size = TestInputSingleton.input.param("facets_size", 10)
         field_indexed = TestInputSingleton.input.param("field_indexed", True)
         terms_facet_name = "Department"
         numeric_range_facet_name = "Salaries"
@@ -1826,6 +1826,9 @@ class CouchbaseCluster:
         start_port = STANDARD_BUCKET_PORT
         if port:
             start_port = port
+
+        if not bucket_type:
+            bucket_type = 'membase'
 
         for i in range(num_buckets):
             if not (num_buckets == 1 and name):
