@@ -184,6 +184,30 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
 
+    def test_increase_decrease_mem_quota(self):
+        memory_quanta = [50, 100, 150, 200]
+        pre_operation_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_operation_tasks])
+        kvOps_tasks = self.async_run_doc_ops()
+        mid_operation_tasks = self.async_run_operations(phase="in_between")
+        indexer_memQuota = self.get_indexer_mem_quota()
+        log.info("Current Indexer Memory Quota is {0}".format(indexer_memQuota))
+        for cnt in range(5):
+            for memory_quantum in memory_quanta:
+                indexer_memQuota += memory_quantum
+                log.info("Increasing Indexer Memory Quota to {0}".format(indexer_memQuota))
+                rest = RestConnection(self.dgmServer)
+                rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+                self.sleep(30)
+                indexer_memQuota -= memory_quantum
+                log.info("Decreasing Indexer Memory Quota to {0}".format(indexer_memQuota))
+                rest = RestConnection(self.dgmServer)
+                rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+                self.sleep(30)
+        self._run_tasks([kvOps_tasks, mid_operation_tasks])
+        post_operation_tasks = self.async_run_operations(phase="after")
+        self._run_tasks([post_operation_tasks])
+
     def _get_indexer_out_of_dgm(self, indexer_nodes=None):
         body = {"stale": "False"}
         for bucket in self.buckets:
@@ -193,6 +217,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                     log.info("Running Full Table Scan on {0}".format(
                         query_definition.index_name))
                     self.rest.full_table_scan_gsi_index_with_rest(index_id, body)
+                self.sleep(10)
         disk_writes = self.validate_disk_writes(indexer_nodes)
         return disk_writes
 
