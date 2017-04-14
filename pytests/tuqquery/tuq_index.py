@@ -166,6 +166,7 @@ class QueriesViewsTests(QueryTests):
                         and result['metrics']['resultCount'] == result_count)
 
         self.query = "DROP INDEX default.%s USING %s" % (idx,self.index_type)
+        self.run_cbq_query()
 
     '''MB-22148: The span produced by an OR predicate should be variable in length'''
     def test_variable_length_sarging_or(self):
@@ -185,6 +186,59 @@ class QueriesViewsTests(QueryTests):
                         and len(plan['~children'][0]['scans'][1]['spans'][0]['Range']['Low']) == 2)
 
         self.query = "DROP INDEX default.%s USING %s" % (idx, self.index_type)
+        self.run_cbq_query()
+
+    '''MB-22111: Unnest array covering indexes should not have DistinctScan unless a Distinct array
+       is being used in the index'''
+    def test_unnest_covering_array_index(self):
+        idx = "by_VMs"
+        self.query = 'CREATE INDEX %s ON default (ALL ARRAY r.`name` FOR r IN VMs END, email)' % idx
+        self.run_cbq_query()
+
+        result_count = 5880
+        self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` IN [ "vm_12", "vm_13" ]'
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = 'SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` IN [ "vm_12", "vm_13" ]'
+        query_result = self.run_cbq_query()
+        # plan.values()[1][0].values() is where DistinctScan would appear if it exists
+        self.assertTrue("DistinctScan" not in plan.values()[1][0].values()
+                        and query_result['metrics']['resultCount'] == result_count)
+
+        result_count = 3360
+        self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        result = self.run_cbq_query()
+        plan2 = ExplainPlanHelper(result)
+        self.query = 'SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        query_result2 = self.run_cbq_query()
+        # plan.values()[1][0].values() is where DistinctScan would appear if it exists
+        self.assertTrue("DistinctScan" not in plan2.values()[1][0].values()
+                        and query_result2['metrics']['resultCount'] == result_count)
+        self.query = "DROP INDEX default.%s USING %s" % (idx, self.index_type)
+        self.run_cbq_query()
+
+        idx2 = "by_VMs2"
+        self.query = 'CREATE INDEX %s ON ' \
+                     'default (DISTINCT ARRAY r.`name` FOR r IN VMs END,VMs, email)' % idx2
+        self.run_cbq_query()
+
+        self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        result = self.run_cbq_query()
+        plan3 = ExplainPlanHelper(result)
+        self.query = 'SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        query_result3 = self.run_cbq_query()
+        # Since DistinctScan does exist we can just look for its specific key
+        self.assertTrue("DistinctScan" in plan3.values()[1][0].values()
+                        and plan3['~children'][0]['#operator'] == "DistinctScan"
+                        and query_result3['metrics']['resultCount'] == result_count)
+        self.query = "DROP INDEX default.%s USING %s" % (idx2, self.index_type)
+        self.run_cbq_query()
 
     def test_explain_query_count(self):
         for bucket in self.buckets:
