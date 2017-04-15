@@ -2,6 +2,7 @@ import logging
 import random
 from newtuq import QueryTests
 from couchbase_helper.cluster import Cluster
+from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from membase.api.rest_client import RestConnection
 
@@ -291,7 +292,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             expected_result = self.gen_results.generate_expected_result(print_expected_result=False)
         self.query = self.gen_results.query
         log.info("Query : {0}".format(self.query))
-        msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=420,
+        msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=500,
                                             expected_result=expected_result, scan_consistency=scan_consistency,
                                             scan_vector=scan_vector, verify_results=verify_results)
         self.assertTrue(check, msg)
@@ -681,6 +682,19 @@ class BaseSecondaryIndexingTests(QueryTests):
                         (bucket.name, query.index_name, bucket_count, index_count))
         self.log.info("Items Indexed Verified with bucket count...")
 
+    def _check_all_bucket_items_indexed(self, query_definitions=None, buckets=None):
+        """
+        :param bucket:
+        :param index:
+        :return:
+        """
+        count = 0
+        while not self._verify_items_count() and count < 15:
+            self.log.info("All Items Yet to be Indexed...")
+            self.sleep(10)
+            count += 1
+        self.assertTrue(self._verify_items_count(),"All Items didn't get Indexed...")
+
     def _create_operation_map(self):
         map_initial = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
         map_before = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
@@ -766,3 +780,25 @@ class BaseSecondaryIndexingTests(QueryTests):
         server = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(server)
         status = rest.set_indexer_params("logLevel", loglevel)
+
+    def wait_until_cluster_is_healthy(self):
+        master_node = self.master
+        if self.targetMaster:
+            if len(self.servers) > 1:
+                master_node = self.servers[1]
+        rest = RestConnection(master_node)
+        is_cluster_healthy = False
+        count = 0
+        while not is_cluster_healthy and count < 10:
+            count += 1
+            cluster_nodes = rest.node_statuses()
+            for node in cluster_nodes:
+                if node.status != "healthy":
+                    is_cluster_healthy = False
+                    log.info("Node {0} is in {1} state...".format(node.ip,
+                                                                  node.status))
+                    self.sleep(5)
+                    break
+                else:
+                    is_cluster_healthy = True
+        return is_cluster_healthy
