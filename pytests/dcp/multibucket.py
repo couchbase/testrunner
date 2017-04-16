@@ -14,7 +14,8 @@ class DCPMultiBucket(DCPBase):
             'dcpdata', 'dcpdata-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, doc_gen, "create", 0)
 
-
+        user_name = self.input.param("user_name",None)
+        password = self.input.param("password",None)
         nodeA = self.servers[0]
         rest = RestConnection(nodeA)
         vbuckets = rest.get_vbuckets()
@@ -24,8 +25,13 @@ class DCPMultiBucket(DCPBase):
             buckets.append('standard_bucket'+str(i))
 
         for bucket in buckets:
+            if user_name is not None:
+                self.add_built_in_server_user([{'id': user_name, 'name': user_name, 'password': password}], \
+                                              [{'id': user_name, 'name': user_name, 'roles': 'data_dcp_reader[default]'}], self.master)
+                dcp_client = self.dcp_client(nodeA, PRODUCER, bucket_name=bucket, auth_user=user_name, auth_password=password)
+            else:
+                dcp_client = self.dcp_client(nodeA, PRODUCER, bucket_name=bucket)
 
-            dcp_client = self.dcp_client(nodeA, PRODUCER, bucket_name=bucket)
             for vb in vbuckets[0:16]:
                 vbucket = vb.id
                 vb_uuid, _, high_seqno = self.vb_info(nodeA, vbucket, bucket = bucket)
