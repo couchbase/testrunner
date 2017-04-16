@@ -61,7 +61,7 @@ class rbacmain:
 
     def _set_user_roles(self,user_name,payload):
         rest = RestConnection(self.master_ip)
-        if self.auth_type == "ldap":
+        if self.auth_type == "ldap" or self.auth_type == "pam":
             url = "settings/rbac/users/" + user_name
         elif self.auth_type == 'builtin':
             url = "settings/rbac/users/builtin/" + user_name
@@ -72,7 +72,7 @@ class rbacmain:
 
     def _delete_user(self,user_name):
         rest = RestConnection(self.master_ip)
-        if self.auth_type == 'ldap':
+        if self.auth_type == 'ldap' or self.auth_type == "pam":
             url = "/settings/rbac/users/" + user_name
         else:
             url = "settings/rbac/users/builtin/" + user_name
@@ -108,7 +108,7 @@ class rbacmain:
         status, content, header = rbacmain(server)._retrieve_user_roles()
         content = json.loads(content)
         for temp in content:
-            if self.auth_type == 'ldap':
+            if self.auth_type == 'ldap' or self.auth_type == "pam":
                 response = rest.delete_user_roles(temp['id'])
             elif self.auth_type == "builtin":
                 response = rest.delete_builtin_user(temp['id'])

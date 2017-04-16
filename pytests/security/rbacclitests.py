@@ -201,7 +201,7 @@ class rbacclitests(BaseTestCase):
         enable_index_replica = self.input.param("enable_index_replica", None)
 
         remote_client = RemoteMachineShellConnection(self.master)
-        output = self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
+        output = self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, \
                         bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
         self._validate_roles(output,result)
         remote_client.disconnect()
@@ -214,7 +214,6 @@ class rbacclitests(BaseTestCase):
             result = 'SUCCESS'
         cli_command = "bucket-edit"
         bucket_type = self.input.param("bucket_type", "couchbase")
-        bucket_password = self.input.param("bucket_password", None)
         enable_flush = self.input.param("enable_flush", None)
         bucket_port_new = self.input.param("bucket_port_new", None)
         bucket_password_new = self.input.param("bucket_password_new", None)

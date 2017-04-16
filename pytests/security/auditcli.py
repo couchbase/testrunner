@@ -182,14 +182,13 @@ class auditcli(BaseTestCase):
         bucket_type = self.input.param("bucket_type", "couchbase")
         bucket_port = self.input.param("bucket_port", 11211)
         bucket_replica = self.input.param("bucket_replica", 1)
-        bucket_password = self.input.param("bucket_password", None)
         bucket_ramsize = self.input.param("bucket_ramsize", 200)
         wait = self.input.param("wait", False)
         enable_flush = self.input.param("enable_flush", None)
         enable_index_replica = self.input.param("enable_index_replica", None)
 
         remote_client = RemoteMachineShellConnection(self.master)
-        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_password=bucket_password, \
+        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, \
                         bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
         expectedResults = {'bucket_name':'default', 'ram_quota':209715200, 'num_replicas':1,
                                'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
