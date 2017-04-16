@@ -783,7 +783,7 @@ class N1QLHelper():
             print k, v
 
 
-    def verify_replica_indexes(self, index_map, num_replicas, expected_nodes=None):
+    def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None):
         # 1. Validate count of no_of_indexes
         # 2. Validate index names
         # 3. Validate index replica have the same id
@@ -791,16 +791,19 @@ class N1QLHelper():
 
         nodes = []
 
-        index_names = self.get_index_names()
-
         for index_name in index_names:
             index_host_name, index_id = self.get_index_details_using_index_name(index_name, index_map)
             nodes.append(index_host_name)
 
-            for i in range(1, num_replicas):
-                index_replica_name = index_name + " (replica {0})".format(str(i))
+            for i in range(0, num_replicas):
+                index_replica_name = index_name + " (replica {0})".format(str(i+1))
 
-                index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(index_replica_name, index_map)
+                try:
+                    index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
+                        index_replica_name, index_map)
+                except Exception, ex:
+                    self.log.info(str(ex))
+                    raise Exception(str(ex))
 
                 self.log.info("Hostnames : %s , %s" % (index_host_name, index_replica_hostname))
                 self.log.info("Index IDs : %s, %s" %( index_id, index_replica_id))
@@ -837,12 +840,18 @@ class N1QLHelper():
                     "Expected %s status to be Created, but it is %s" % (
                         index_name, index_status))
                 raise Exception("Index status incorrect")
+            else:
+                self.log.info("index_name = %s, defer_build = %s, index_status = %s" % (index_name, defer_build, index_status))
 
-            for i in range(1, num_replicas):
+            for i in range(1, num_replicas+1):
                 index_replica_name = index_name + " (replica {0})".format(
                     str(i))
 
-                index_replica_status, index_replica_progress = self.get_index_status_using_index_name(index_replica_name, index_map)
+                try:
+                    index_replica_status, index_replica_progress = self.get_index_status_using_index_name(index_replica_name, index_map)
+                except Exception, ex:
+                    self.log.info(str(ex))
+                    raise Exception (str(ex))
 
                 if not defer_build and index_replica_status != "Ready":
                     self.log.info("Expected %s status to be Ready, but it is %s" % (index_replica_name, index_replica_status))
@@ -850,13 +859,16 @@ class N1QLHelper():
                 elif defer_build and index_replica_status != "Created":
                     self.log.info("Expected %s status to be Created, but it is %s" % (index_replica_name, index_replica_status))
                     raise Exception("Index status incorrect")
+                else:
+                    self.log.info("index_name = %s, defer_build = %s, index_replica_status = %s" % (
+                        index_replica_name, defer_build, index_status))
 
     def get_index_details_using_index_name(self, index_name, index_map):
         for key in index_map.iterkeys():
             if index_name in index_map[key].keys():
                 return index_map[key][index_name]['hosts'], index_map[key][index_name]['id']
             else:
-                raise Exception ("Index name %s does not exist", index_name)
+                raise Exception ("Index does not exist - {0}".format(index_name))
 
     def get_index_status_using_index_name(self, index_name, index_map):
         for key in index_map.iterkeys():
@@ -864,7 +876,7 @@ class N1QLHelper():
                 return index_map[key][index_name]['status'], \
                        index_map[key][index_name]['progress']
             else:
-                raise Exception("Index name %s does not exist", index_name)
+                raise Exception("Index does not exist - {0}".format(index_name))
 
 
 

@@ -54,13 +54,6 @@ class BaseSecondaryIndexingTests(QueryTests):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
-        self.num_replicas = self.input.param("num_replica",0)
-        self.expected_err_msg = self.input.param("expected_err_msg",None)
-        self.nodes = self.input.param("nodes",None)
-        self.override_default_num_replica_with_num = self.input.param("override_with_num",0)
-        self.override_default_num_replica_with_nodes = self.input.param("override_with_nodes",None)
-        if self.override_default_num_replica_with_nodes:
-            self.nodes=self.override_default_num_replica_with_nodes
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
