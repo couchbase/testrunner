@@ -8,6 +8,7 @@ from couchbase.bucket import Bucket
 from threading import Thread, Event
 from remote.remote_util import RemoteMachineShellConnection
 from security.auditmain import audit
+from security.rbac_base import RbacBase
 
 class x509tests(BaseTestCase):
 
@@ -106,10 +107,12 @@ class x509tests(BaseTestCase):
     def _sdk_connection(self,root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE,bucket='default',host_ip=None):
         self.sleep(30)
         result = False
+        self.add_built_in_server_user([{'id': bucket, 'name': bucket,'password': 'password'}], \
+                                      [{'id': bucket, 'name': bucket,'roles': 'admin'}], self.master)
         connection_string = 'couchbases://'+ host_ip + '/' + bucket + '?certpath='+root_ca_path
         print connection_string
         try:
-            cb = Bucket(connection_string)
+            cb = Bucket(connection_string, password='password')
             if cb is not None:
                 result = True
                 return result, cb
