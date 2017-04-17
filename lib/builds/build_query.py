@@ -771,10 +771,14 @@ class BuildQuery(object):
                    "-" + centos_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "suse" in distribution_version:
-                build.distribution_version = "suse11"
-                os_name = "suse11"
+                if "suse linux enterprise server 12" in distribution_version:
+                    suse_version="suse12"
+                    build.distribution_version = "suse12"
+                else:
+                    suse_version="suse11"
+                    build.distribution_version = "suse11"
                 build.name = edition_type + "-" + build.product_version + \
-                   "-" + os_name + "." + build.architecture_type + \
+                   "-" + suse_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "oracle linux" in distribution_version:
                 build.distribution_version = "oracle linux"
