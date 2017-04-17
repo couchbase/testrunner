@@ -2,13 +2,14 @@ from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
 from testconstants import COUCHBASE_FROM_WATSON
 
+
 class epctlTests(CliBaseTest):
 
     def setUp(self):
         super(epctlTests, self).setUp()
         #You have 3 choices: start, stop, drain
         self.persistence = self.input.param("persistence_choice", "")
-        #You have 3 choices: checkpoint_param,flush_param,tap_param
+        #You have 3 choices: checkpoint_param, flush_param, tap_param
         self.param_type = self.input.param("param_type", "set flush_param")
         self.param = self.input.param("param", "max_size")
         self.param_value = self.input.param("param_value", 1000000)
@@ -20,7 +21,7 @@ class epctlTests(CliBaseTest):
         super(epctlTests, self).tearDown()
 
     def epctl_test(self):
-        """We use cbepctl to do persistence or set param operatoins and verify
+        """We use cbepctl to do persistence or set param operatins and verify
         verify the result by checking the command output"""
 
         for bucket in self.buckets:
@@ -64,5 +65,5 @@ class epctlTests(CliBaseTest):
                                 "Please check the output of remote_util")
             if output[1].find(self.param) == -1 or \
                output[1].find(str(self.param_value)) == -1:
-                raise Exception("set %s failed" % (self.param))
+                raise Exception("set %s failed" % self.param)
 

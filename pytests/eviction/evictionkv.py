@@ -7,22 +7,19 @@ import uuid
 import mc_bin_client
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, JSONNonDocGenerator
-from couchbase_helper.stats_tools import StatsCommon
+from remote.remote_util import RemoteMachineShellConnection
 
 from membase.api.rest_client import RestConnection
-from sdk_client import SDKClient
 from dcp.dcpbase import DCPBase
-from dcp.constants import *
 import memcacheConstants as constants
 
+
 class EvictionKV(EvictionBase):
-
-
     def verify_all_nodes(self):
         stats_tasks = []
         for s in self.servers:
-            stats_tasks.append( self.cluster.async_wait_for_stats([s], "default", "",
-                                    "curr_items", "==", 0) )
+            stats_tasks.append(self.cluster.async_wait_for_stats([s], "default", "",
+                                                                 "curr_items", "==", 0))
 
         for task in stats_tasks:
             task.result(60)
@@ -30,9 +27,9 @@ class EvictionKV(EvictionBase):
     def test_verify_expiry_via_compactor_cancelled_compact(self):
 
         self.load_set_to_be_evicted(20, 10000)
-        self.log.info("sleeping {0} seconds to allow keys to be evicted".format(self.expires + 30 ))
+        self.log.info("sleeping {0} seconds to allow keys to be evicted".format(self.expires + 30))
         time.sleep(self.expires + 30)
-        self.run_expiry_pager(60*60*24)   # effectively disable it by setting it far off in the future
+        self.run_expiry_pager(60 * 60 * 24)  # effectively disable it by setting it far off in the future
 
         compacted = self.cluster.compact_bucket(self.master, 'default')
         self.assertTrue(compacted, msg="unable compact_bucket")
@@ -44,32 +41,22 @@ class EvictionKV(EvictionBase):
         compacted = self.cluster.compact_bucket(self.master, 'default')
         self.assertTrue(compacted, msg="unable compact_bucket")
 
-
         self.cluster.wait_for_stats([self.master],
                                     "default", "",
                                     "curr_items", "==", 0, timeout=30)
 
-
     def test_verify_expiry_via_compactor(self):
 
-
-
-        self.run_expiry_pager(60*60*24*7)      # effectively disable it by setting it one week ahead
+        self.run_expiry_pager(60 * 60 * 24 * 7)  # effectively disable it by setting it one week ahead
         self.load_set_to_be_evicted(self.expires, self.keys_count)
 
-        self.log.info("sleeping {0} seconds to allow keys to be evicted".format(self.expires + 30 ))
-        time.sleep(self.expires + 30 )   # 30 seconds grace period
-
+        self.log.info("sleeping {0} seconds to allow keys to be evicted".format(self.expires + 30))
+        time.sleep(self.expires + 30)  # 30 seconds grace period
 
         # run the compactor which should expire the kyes
         compacted = self.cluster.compact_bucket(self.master, 'default')
 
         self.verify_all_nodes()
-
-
-
-
-
 
     """
     add new keys at the same rate as keys are expiring
@@ -83,58 +70,49 @@ class EvictionKV(EvictionBase):
     """
 
     def test_steady_state_eviction(self):
-        serverInfo = self.master
-        client = MemcachedClientHelper.direct_client(serverInfo, 'default')
+        # serverInfo = self.master
+        client = MemcachedClientHelper.direct_client(self.master, 'default')
 
         expiry_time = self.input.param("expiry_time", 30)
         keys_expired_per_interval = self.input.param("keys_expired_per_interval", 100)
         key_float = self.input.param("key_float", 1000)
 
         # we want to have keys expire after all the key are initialized, thus the below parameter
-        init_time_delay = self.input.param("init_time_delay",30)
-        test_time_in_minutes = self.input.param( "test_time_in_minutes",30)
-
-
+        init_time_delay = self.input.param("init_time_delay", 30)
+        test_time_in_minutes = self.input.param("test_time_in_minutes", 30)
 
         # rampup - create a certain number of keys
         float_creation_chunks = key_float / keys_expired_per_interval
         print 'float_creation_chunks', float_creation_chunks
-        for i in range( float_creation_chunks):
-            #print 'setting', keys_expired_per_interval, ' keys to expire in', expiry_time * (i+1)
+        for i in range(float_creation_chunks):
+            # print 'setting', keys_expired_per_interval, ' keys to expire in', expiry_time * (i+1)
             for j in range(keys_expired_per_interval):
-               key = str(uuid.uuid4()) + str(i) + str(j)
-               client.set(key, init_time_delay + expiry_time * (i+1), 0, key)
+                key = str(uuid.uuid4()) + str(i) + str(j)
+                client.set(key, init_time_delay + expiry_time * (i + 1), 0, key)
 
+        for i in range(test_time_in_minutes * 60 / expiry_time):
 
-        for i in range(test_time_in_minutes * 60/expiry_time):
-
-
-            key_set_time = int( time.time())
+            key_set_time = int(time.time())
 
             # ClusterOperationHelper.set_expiry_pager_sleep_time(self.master, 'default')
-            testuuid = uuid.uuid4()
-            keys = ["key_%s_%d" % (testuuid, i) for i in range(keys_expired_per_interval)]
+            # testuuid = uuid.uuid4()
+            keys = ["key_%s_%d" % (uuid.uuid4(), i) for i in range(keys_expired_per_interval)]
             self.log.info("pushing keys with expiry set to {0}".format(expiry_time))
             for key in keys:
                 try:
-                    client.set(key, expiry_time + key_float/expiry_time, 0, key)
+                    client.set(key, expiry_time + key_float / expiry_time, 0, key)
                 except mc_bin_client.MemcachedError as error:
                     msg = "unable to push key : {0} to bucket : {1} error : {2}"
                     self.log.error(msg.format(key, client.vbucketId, error.status))
                     self.fail(msg.format(key, client.vbucketId, error.status))
             self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry_time))
-            self.log.info('sleeping {0} seconds'.format(expiry_time - (time.time()- key_set_time) ) )
-
+            self.log.info('sleeping {0} seconds'.format(expiry_time - (time.time() - key_set_time)))
 
             # have the compactor do the expiry
             compacted = self.cluster.compact_bucket(self.master, 'default')
 
             self.cluster.wait_for_stats([self.master], "default", "", "curr_items", "==", key_float, timeout=30)
-            time.sleep( expiry_time - (time.time()- key_set_time))
-
-
-
-
+            time.sleep(expiry_time - (time.time() - key_set_time))
 
     def test_verify_expiry(self):
         """
@@ -152,16 +130,15 @@ class EvictionKV(EvictionBase):
                                     "default", "",
                                     "curr_items", "==", 0, timeout=60)
 
-
     def test_eject_all_ops(self):
         """
-            eject all items and ensure items can still be retrieved, deleted, and udpated
+            eject all items and ensure items can still be retrieved, deleted, and udpdated
             when fulleviction enabled
         """
         self.load_ejected_set(600)
         self.load_to_dgm()
 
-        self.ops_on_ejected_set("read",   1,   200)
+        self.ops_on_ejected_set("read", 1, 200)
         self.ops_on_ejected_set("delete", 201, 400)
         self.ops_on_ejected_set("update", 401, 600)
 
@@ -176,12 +153,10 @@ class EvictionKV(EvictionBase):
         self.load_ejected_set(num_ejected)
         self.load_to_dgm(ttl=ttl)
 
-
         while ttl > 0:
             self.log.info("%s seconds until loaded docs expire" % ttl)
             time.sleep(10)
-            ttl = ttl - 10
-
+            ttl -= 10
 
         # compact to purge expiring docs
         compacted = self.cluster.compact_bucket(self.master, 'default')
@@ -192,15 +167,12 @@ class EvictionKV(EvictionBase):
                                            "curr_items", "==", num_ejected, timeout=120)
         self.assertTrue(iseq, msg="curr_items != {0}".format(num_ejected))
 
-
         # delete remaining non expiring docs
         self.ops_on_ejected_set("delete", 0, num_ejected)
         iseq = self.cluster.wait_for_stats([self.master],
-                                            "default", "",
-                                            "curr_items", "==", 0, timeout=30)
+                                           "default", "",
+                                           "curr_items", "==", 0, timeout=30)
         self.assertTrue(iseq, msg="curr_items != {0}".format(0))
-
-
 
     def test_update_ejected_expiry_time(self):
         """
@@ -218,21 +190,74 @@ class EvictionKV(EvictionBase):
                                     "default", "",
                                     "curr_items", "==", 0, timeout=30)
 
+    def test_ephemeral_bucket_stats(self):
+        shell = RemoteMachineShellConnection(self.master)
+        rest = RestConnection(self.servers[0])
+
+        generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0,
+                                      end=self.num_items)
+        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0,
+                                                              self.num_items, percentage=0.8)
+
+        self.log.info('Memory almost full')
+        output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default"
+                                              " all -u Administrator -p password | grep ephemeral")
+        if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
+            self.assertEquals([' ep_bucket_type:                                        ephemeral',
+                               ' ep_ephemeral_full_policy:                              fail_new_data'], output)
+        else:
+            self.assertEquals([' ep_bucket_type:                                        ephemeral',
+                              ' ep_ephemeral_full_policy:                              auto_delete'], output)
+
+        output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
+                                              "vbucket-details -u Administrator -p password "
+                                              "| grep seqlist_deleted_count")
+        self.assertEquals(' vb_0:seqlist_deleted_count:              0', output[0])
+
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
+                                              " -u Administrator -p password | grep curr_items")
+        self.assertEquals(' curr_items:                                            %s' % item_count, output[0])
+
+        self.log.info('Reached OOM, the number of items is {0}'.format(item_count))
+
+        # keys_that_were_accessed = []
+
+        # load some more, this should trigger some deletes
+        mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
+
+        for i in xrange(200):
+            key = random.randint(0, 1200)
+            mc_client.get(EphemeralBucketsOOM.KEY_ROOT + str(key))
+        # add ~20% of new items
+        for i in range(item_count, int(item_count * 1.2)):
+            mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(i), 0, 0, 'a' * self.value_size)
+        self.sleep(10)
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
+                                              " -u Administrator -p password | grep curr_items")
+        self.assertEquals(' curr_items:                                            %s' % item_count, output[0])
+        output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
+                                              "vbucket-details -u Administrator -p password "
+                                              "| grep seqlist_deleted_count")
+        if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
+            self.assertEquals(' vb_0:seqlist_deleted_count:              0', output[0], 'have deleted items!')
+        else:
+            self.assertTrue(int(output[0].replace(' vb_0:seqlist_deleted_count:              ', '')) > 0,
+                            'no deleted items!')
+
+
 class EphemeralBucketsOOM(EvictionBase, DCPBase):
-
-
     KEY_ROOT = 'key-root'
     KEY_ROOT_LENGTH = len('key-root')
 
     def setUp(self):
         super(EphemeralBucketsOOM, self).setUp()
 
-
     def tearDown(self):
         super(EphemeralBucketsOOM, self).tearDown()
 
     # Ephemeral buckets tests start here
-
 
     # Ephemeral bucket configured with no eviction
     # 1. Configure an ephemeral bucket with no eviction
@@ -243,85 +268,71 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
 
     # Need command line parameter to specify eviction mode as no_delete or something similar
 
-
     def test_ephemeral_bucket_no_deletions(self):
-
 
         # Coarse grained load to 90%
 
-        generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0, end=self.num_items)
-        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0, self.num_items)
-
+        generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0,
+                                      end=self.num_items)
+        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0,
+                                                              self.num_items)
 
         rest = RestConnection(self.servers[0])
-        itemCount = rest.get_bucket(self.buckets[0]).stats.itemCount
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
 
         # load more until we are out of memory. Note these are different than the Blob generator - is that good or bad?
 
-        #client = SDKClient(hosts = [self.master.ip], bucket = self.buckets[0])
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
 
-
         # fine grained load until OOM
-        i = itemCount
+        i = item_count
         have_available_memory = True
         while have_available_memory:
             try:
-                rc = mc_client.set(EphemeralBucketsOOM.KEY_ROOT+str(i),0,0,'anyoldval'*1000)
-                #rc = client.set(EphemeralBucketsOOM.KEY_ROOT+str(i), 'b'*self.value_size )
-                i = i + 1
+                mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(i), 0, 0, 'O' * self.value_size)
+                i += 1
             except:
                 have_available_memory = False
                 self.log.info('Memory is full at {0} items'.format(i))
-
 
         stats = rest.get_bucket(self.buckets[0]).stats
         itemCountWhenOOM = stats.itemCount
         memoryWhenOOM = stats.memUsed
         self.log.info('Item count when OOM {0} and memory used {1}'.format(itemCountWhenOOM, memoryWhenOOM))
 
-
         # delete some things using the Blob deleter
         NUMBER_OF_DOCUMENTS_TO_DELETE = 10000
 
-
-        generate_delete = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0, end=NUMBER_OF_DOCUMENTS_TO_DELETE)
-        self._load_all_buckets(self.master, generate_delete, "delete", 0) #, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-
+        for i in xrange(NUMBER_OF_DOCUMENTS_TO_DELETE):
+            mc_client.delete(EphemeralBucketsOOM.KEY_ROOT + str(i))
 
         stats = rest.get_bucket(self.buckets[0]).stats
-        itemCountAfterDelete = stats.itemCount
-        self.log.info('After the delete, item count {0} and memory used {1}'.format(itemCountAfterDelete, stats.memUsed))
-
-
+        self.log.info(
+            'After the delete, item count {0} and memory used {1}'.format(stats.itemCount, stats.memUsed))
 
         newly_added_items = 0
-        have_available_memory =  True
-        i = 1
+        have_available_memory = True
         while have_available_memory:
             try:
-                rc = mc_client.set(EphemeralBucketsOOM.KEY_ROOT+str(i+itemCountWhenOOM),0,0,'c'*self.value_size)
-                i = i + 1
-                newly_added_items = newly_added_items + 1
+                mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(newly_added_items + itemCountWhenOOM + 1), 0, 0,
+                              'N' * self.value_size)
+                newly_added_items += 1
             except Exception as e:
-                self.log.info('While repopulating {0} got an exception {1}'.format(i,str(e)))
+                self.log.info('While repopulating {0} got an exception {1}'.format(newly_added_items + 1, str(e)))
                 have_available_memory = False
 
         stats = rest.get_bucket(self.buckets[0]).stats
         self.log.info('Memory is again full at {0} items and memory used is {1}'.
                       format(stats.itemCount, stats.memUsed))
         self.log.info('Compared to previous fullness, we are at {0:.1f}% items and {1:.1f}% memory'.
-                    format(100*stats.itemCount/itemCountWhenOOM, 100*stats.memUsed/memoryWhenOOM) )
-
+                      format(100 * stats.itemCount / itemCountWhenOOM, 100 * stats.memUsed / memoryWhenOOM))
 
         self.assertTrue(newly_added_items > 0.95 * NUMBER_OF_DOCUMENTS_TO_DELETE,
-                        'Deleted {0} items and were only able to add back {1} items'.format(NUMBER_OF_DOCUMENTS_TO_DELETE,
-                                newly_added_items))
-
-
+                        'Deleted {0} items and were only able to add back {1} items'.format(
+                            NUMBER_OF_DOCUMENTS_TO_DELETE,
+                            newly_added_items))
 
     """
-
 
     # NRU Eviction - in general fully populate memory and then add more kvs and see what keys are
     # evicted using a DCP connection to monitor the deletes. Also check the delete stat e.g. auto_delete_count
@@ -330,24 +341,20 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
     # Monitoring is done with a DCP stream to collect the deletes and verify the accessed keys are not part
     # of the deletes.
 
-
    """
 
     KEY_ROOT = 'key-root'
     KEY_ROOT_LENGTH = len('key-root')
 
-
     def test_ephemeral_bucket_NRU_eviction(self):
-
-
-
 
         rest = RestConnection(self.servers[0])
         vbuckets = rest.get_vbuckets()
 
-        generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0, end=self.num_items)
-        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0, self.num_items)
-
+        generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0,
+                                      end=self.num_items)
+        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0,
+                                                              self.num_items, percentage=0.8)
 
         self.log.info('Memory is full')
 
@@ -358,74 +365,105 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
             vb_uuid, seqno, high_seqno = self.vb_info(self.master, v)
             pre_delete_sequence_numbers[v] = high_seqno
 
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
 
+        self.log.info('Reached OOM, the number of items is {0}'.format(item_count))
 
-
-
-        print 'pre_delete_sequence_numbers', pre_delete_sequence_numbers
-
-        itemCount = rest.get_bucket(self.buckets[0]).stats.itemCount
-
-        self.log.info( 'Reached OOM, the number of items is {0}'.format( itemCount))
-
-
-
-
-
-        # To do: access random KVs, save the keys. Access different ways, get, set, incr etc.
         keys_that_were_accessed = []
 
-
         # load some more, this should trigger some deletes
-
-        #client = SDKClient(hosts = [self.master.ip], bucket = self.buckets[0])
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
-
 
         # figure out how many items were loaded and load a certain percentage more
 
-        for i in range(itemCount, int(itemCount*1.2)):
-            rc = mc_client.set(EphemeralBucketsOOM.KEY_ROOT+str(i), 0,0, 'a'*self.value_size )
-            if i % 1000 == 0:
-                pass #pdb.set_trace()
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.item_count.info('The number of items is {0}'.format(item_count))
 
+        dcp_client = self.dcp_client(self.servers[0], 'producer')
+        num = 0
+        deleted_keys = []
+        for vb in vbuckets[0:self.vbuckets]:
+            vbucket = vb.id
+            vb_uuid, _, high_seqno = self.vb_info(self.servers[0], vbucket, bucket=self.buckets[0])
+            stream = dcp_client.stream_req(vbucket, 0, pre_delete_sequence_numbers[vb.id], high_seqno, vb_uuid)
+            responses = stream.run()
+            for i in responses:
+                if i['opcode'] == constants.CMD_DELETION:  #
+                    # have a delete, get the key number
+                    index = int(i['key'][EphemeralBucketsOOM.KEY_ROOT_LENGTH:])
+                    deleted_keys.append(index)
+                    num += 1
+        self.assertEquals([], deleted_keys)
 
+        for i in xrange(200):
+            key = random.randint(0, 1200)
+            mc_client.get(EphemeralBucketsOOM.KEY_ROOT + str(key))
+            keys_that_were_accessed.append(key)
+        # add ~20% of new items
+        for i in range(item_count, int(item_count * 1.2)):
+            mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(i), 0, 0, 'a' * self.value_size)
 
-        import pdb;pdb.set_trace()
-        incremental_kv_population = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=itemCount, end=itemCount * 1.2)
-        #self._load_bucket(self.buckets[0], self.master, incremental_kv_population, "create", exp=0, kv_store=1)
-
-
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info('The number of items is {0}'.format(item_count))
         deleted_keys = []
 
+        # creating a DCP client fails, maybe an auth issue?
+        dcp_client = self.dcp_client(self.servers[0], 'producer')
+        num = 0
+        for vb in vbuckets[0:self.vbuckets]:
+            vbucket = vb.id
+            vb_uuid, _, high_seqno = self.vb_info(self.servers[0], vbucket, bucket=self.buckets[0])
+            stream = dcp_client.stream_req(vbucket, 0, pre_delete_sequence_numbers[vb.id], high_seqno, vb_uuid)
+            responses = stream.run()
+            for i in responses:
+                if i['opcode'] == constants.CMD_DELETION:  #
+                    # have a delete, get the key number
+                    index = int(i['key'][EphemeralBucketsOOM.KEY_ROOT_LENGTH:])
+                    deleted_keys.append(index)
+                    num += 1
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info('The number of items is {0}'.format(item_count))
+        self.assertEquals(set([]), set(keys_that_were_accessed).intersection(deleted_keys))
+
+        # one more iteration
+        deleted_keys = []
+        keys_that_were_accessed = []
+        set(keys_that_were_accessed).intersection(deleted_keys)
+
+        for i in xrange(200):
+            key = random.randint(0, 12000)
+            try:
+                mc_client.get(EphemeralBucketsOOM.KEY_ROOT + str(key))
+                keys_that_were_accessed.append(key)
+            except mc_bin_client.MemcachedError:
+                self.log.info('key %s already deleted' % key)
+        # add ~10% of new items
+        for i in range(int(item_count * 1.2), int(item_count * 1.4)):
+            mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(i), 0, 0, 'a' * self.value_size)
+            keys_that_were_accessed.append(i)
+
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info('The number of items is {0}'.format(item_count))
+
+        for v in range(self.vbuckets):
+            vb_uuid, seqno, high_seqno = self.vb_info(self.master, v)
+            pre_delete_sequence_numbers[v] = high_seqno
 
         # creating a DCP client fails, maybe an auth issue?
-        dcp_client = self.dcp_client(self.servers[0], 'producer', auth_user=True)
-
+        dcp_client = self.dcp_client(self.servers[0], 'producer')
+        num = 0
         for vb in vbuckets[0:self.vbuckets]:
-                vbucket = vb.id
-                print 'vbucket', vbucket
-                vb_uuid, _, high_seqno = self.vb_info(self.servers[0], vbucket, bucket = self.buckets[0])
-                print vb.id, 'streaming from', pre_delete_sequence_numbers[vb.id], ' to ', high_seqno
-                stream = dcp_client.stream_req(vbucket, 0, pre_delete_sequence_numbers[vb.id], high_seqno, vb_uuid)
-                responses = stream.run()
-                for i in responses:
-                    #if 'value' in i: del i['value']
-                    #print 'the response opcode is', i #['opcode'],
-                    #if 'key' in i: print 'key', i['key'],
-                    #print ' ',
-
-                    if i['opcode'] == constants.CMD_DELETION: #
-                        # have a delete, get the key number
-                        index = int(i['key'][EphemeralBucketsOOM.KEY_ROOT_LENGTH:])
-                        print 'delete:the key number is', index
-                        deleted_keys.append( index )
-
-
-
-
-
-        # verify that the intersection of deleted_keys and keys_that_were_accessed is empty
-
-        pdb.set_trace()
-
+            vbucket = vb.id
+            vb_uuid, _, high_seqno = self.vb_info(self.servers[0], vbucket, bucket=self.buckets[0])
+            print vb.id, 'streaming from', pre_delete_sequence_numbers[vb.id], ' to ', high_seqno
+            stream = dcp_client.stream_req(vbucket, 0, pre_delete_sequence_numbers[vb.id], high_seqno, vb_uuid)
+            responses = stream.run()
+            for i in responses:
+                if i['opcode'] == constants.CMD_DELETION:  #
+                    # have a delete, get the key number
+                    index = int(i['key'][EphemeralBucketsOOM.KEY_ROOT_LENGTH:])
+                    deleted_keys.append(index)
+                    num += 1
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info('The number of items is {0}'.format(item_count))
+        self.assertEquals(set([]), set(keys_that_were_accessed).intersection(deleted_keys))

@@ -905,7 +905,7 @@ class BaseTestCase(unittest.TestCase):
 
     def _load_all_ephemeral_buckets_until_no_more_memory(self, server, kv_gen, op_type, exp, increment, kv_store=1, flag=0,
                           only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
-                          proxy_client=None):
+                          proxy_client=None, percentage=0.90):
 
 
 
@@ -915,12 +915,12 @@ class BaseTestCase(unittest.TestCase):
 
         for bucket in self.buckets:
             memory_is_full = False
-            while  not memory_is_full:
+            while not memory_is_full:
                 memory_used = \
                     stats_all_buckets[bucket.name].get_stats([self.master], bucket, '',
                                                              'mem_used')[ server]
                 # memory is considered full if mem_used is at say 90% of the available memory
-                if int(memory_used) < 0.90 * self.bucket_size * 1000000:
+                if int(memory_used) < percentage * self.bucket_size * 1000000:
                     self.log.info(
                         "Still have memory. %s used is less than %s MB quota for %s in bucket %s. Continue loading to the cluster" %
                         (memory_used, self.bucket_size , self.master.ip, bucket.name))
@@ -929,7 +929,7 @@ class BaseTestCase(unittest.TestCase):
                     only_store_hash=True, batch_size=batch_size, pause_secs=5, timeout_secs=60)
                     kv_gen.start = kv_gen.start + increment
                     kv_gen.end = kv_gen.end + increment
-                    generate_load = BlobGenerator('key-root', 'param2', self.value_size, start=0, end=self.num_items)
+                    kv_gen = BlobGenerator('key-root', 'param2', self.value_size, start=kv_gen.start, end=kv_gen.end)
                 else:
                     memory_is_full = True
                     self.log.info("Memory is full, %s bytes in use for %s and bucket %s!" %
