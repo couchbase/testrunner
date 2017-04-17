@@ -45,7 +45,7 @@ class rbacTest(ldaptest):
         self.no_bucket_access = self.input.param("no_bucket_access",False)
         self.no_access_bucket_name = self.input.param("no_access_bucket_name",None)
         self.ldap_users = rbacmain().returnUserList(self.user_id)
-        if self.auth_type == 'ldap':
+        if self.auth_type == 'ldap' or self.auth_type == 'pam':
             rbacmain(self.master, 'builtin')._delete_user('cbadminbucket')
         rbacmain(self.master, self.auth_type)._delete_user_from_roles(self.master)
         if self.auth_type == 'ldap':
