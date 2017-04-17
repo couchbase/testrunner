@@ -9,7 +9,8 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
-from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH
+from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
+                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -21,17 +22,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.cluster_flag = "--cluster"
         self.backupset = Backupset()
         self.cmd_ext = ""
+        self.database_path = COUCHBASE_DATA_PATH
+        self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+        self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
             if self.nonroot:
-                self.cli_command_location = "/home/%s%s" % (self.master.ssh_username,
-                                                            LINUX_COUCHBASE_BIN_PATH)
-            else:
-                self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
-            self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
+                base_path = "/home/%s" % self.master.ssh_username
+                self.cli_command_location = "%s%s" % (base_path,
+                                                      LINUX_COUCHBASE_BIN_PATH)
+                self.database_path = "%s%s" % (base_path, COUCHBASE_DATA_PATH)
         elif info == 'windows':
             self.cmd_ext = ".exe"
+            self.database_path = WIN_COUCHBASE_DATA_PATH
             self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
             self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
@@ -540,6 +544,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             raise Exception ("There is an old key after delete bucket,"
                                          " backup and merged ")
         return data_matched
+
+    def get_info_in_database(self, server, bucket, text_search):
+        """
+            Get info from database file like couch.1
+        """
+        shell = RemoteMachineShellConnection(server)
+        cmd = "%s/couch_dbdump " % self.cli_command_location
+        """ since there is no load, it should have only one file per vbucket """
+        output, error = shell.execute_command("%s %s/%s/0.couch.* | grep deleted"
+                                               % (cmd, self.database_path,
+                                                  bucket.name))
+        found = False
+        if output:
+            self.log.info("Search for '%s' in database info" % text_search)
+            for x in output:
+                if text_search in x:
+                    self.log.info("Found %s in database" % text_search)
+                    found = True
+                    break
+        else:
+            self.log.info("output is empty")
+        shell.disconnect()
+        return found
 
 class Backupset:
     def __init__(self):

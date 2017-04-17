@@ -11,7 +11,8 @@ from remote.remote_util import RemoteMachineShellConnection
 
 
 class BackupRestoreValidations(BackupRestoreValidationBase):
-    def __init__(self, backupset, cluster, restore_cluster, bucket, backup_validation_path, backups, num_items):
+    def __init__(self, backupset, cluster, restore_cluster, bucket, backup_validation_path,
+                 backups, num_items):
         BackupRestoreValidationBase.__init__(self)
         self.backupset = backupset
         self.cluster = cluster
@@ -107,13 +108,15 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         success_msg += "Data validation success"
         return True, success_msg
 
-    def validate_backup_list(self, output):
+    def validate_backup_list(self, output, num_backup=1, bucket_items=None):
         """
         Validates list command output
         :param output: list command output
         :return: status and message
+
+        TODO: this function validates list command output for 1 backup / 1 bucket only
+         - need to be enhanced for multiple backups
         """
-        #TODO: this function validates list command output for 1 backup / 1 bucket only - need to be enhanced for multiple backups
         backup_name = False
         bucket_name = False
         backup_folder_timestamp = False

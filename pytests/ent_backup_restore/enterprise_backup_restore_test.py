@@ -3,9 +3,10 @@ from random import randrange
 from threading import Thread
 
 from couchbase_helper.cluster import Cluster
+from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
@@ -15,6 +16,7 @@ from couchbase_helper.document import View
 from tasks.future import TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
+from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID= 20485
@@ -588,6 +590,168 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.cmd_ext == "":
             cmd = "ps aux | grep cbbackupmgr | awk '{print $2}' | xargs kill -9"
             output, error = shell.execute_command(cmd)
+
+    def test_merge_backup_with_purge_deleted_keys(self):
+        """
+           1. Load 100K docs to a bucket A with key 1
+           2. Delete 50K docs from bucket A
+           3. Load 50K docs with key 2 to bucket A
+           4. Take backup
+           5. Run compaction on each vbucket to purge all delete keys
+           6. Load again 25K docs with key 3
+           7. Run backup again
+           8. Load another 25K docs with key 4
+           9. Run backup.  It should not fail
+        """
+        self.log.info("Load 1st batch docs")
+        create_gen1 = BlobGenerator("ent-backup1", "ent-backup-", self.value_size,
+                                    end=self.num_items)
+        self._load_all_buckets(self.master, create_gen1, "create", 0)
+        self.log.info("Delete half docs of 1st batch")
+        delete_gen = BlobGenerator("ent-backup1", "ent-backup-", self.value_size,
+                                    end=self.num_items/2)
+        self._load_all_buckets(self.master, delete_gen, "delete", 0)
+        self.log.info("Load 2nd batch docs")
+        create_gen2 = BlobGenerator("ent-backup2", "ent-backup-", self.value_size,
+                                    end=self.num_items/2)
+        self._load_all_buckets(self.master, create_gen2, "create", 0)
+        self.log.info("Start backup")
+        self.backup_create()
+        self.backup_cluster()
+        nodes = []
+        upto_seq = 100000
+        self.log.info("Start compact each vbucket in bucket")
+        for bucket in self.buckets:
+            """ get all nodes IP in cluster """
+            for node in bucket.nodes:
+                nodes.append(node.ip)
+            found = self.get_info_in_database(self.backupset.cluster_host, bucket, "deleted")
+            if found:
+                shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+                shell.compact_vbuckets(len(bucket.vbuckets), nodes, upto_seq)
+            found = self.get_info_in_database(self.backupset.cluster_host, bucket, "deleted")
+            if not found:
+                self.log.info("Load another docs to bucket %s " % bucket.name)
+                create_gen3 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
+                                                                     end=self.num_items/4)
+                self._load_bucket(bucket.name, self.master, create_gen3, "create")
+                self.backup_cluster()
+                create_gen4 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
+                                                                     end=self.num_items/4)
+                self._load_bucket(bucket.name, self.master, create_gen4, "create")
+                self.backup_cluster()
+                status, output, message = self.backup_merge()
+                if not status:
+                    self.fail(message)
+
+    def test_merge_backup_with_failover_logs(self):
+        """
+            1. Load 100K docs into bucket.
+            2. Wait for all docs persisted.
+            3. Stop persistence.
+            4. Load another 100K docs to bucket.
+            5. Kill memcached will generate about 4 failover logs.
+               ./cbstats localhost:11210 -u username -p pass failovers | grep num_entries
+            6. Take backup.
+            7. Load another 100K docs
+            8. Take backup again.
+            Verify:
+               Only 1st backup is full backup
+               All backup after would be incremental backup
+            In 4.5.1, all backups would be full backup
+        """
+        self.log.info("Load 1st batch docs")
+        create_gen1 = BlobGenerator("ent-backup1", "ent-backup-", self.value_size,
+                                    end=self.num_items)
+        self._load_all_buckets(self.master, create_gen1, "create", 0)
+        failed_persisted_bucket = []
+
+        cluster_nodes = None
+        for bucket in self.buckets:
+            cluster_nodes = bucket.nodes
+            ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
+                                                          bucket.name, 'ep_queue_size',
+                                                          0, timeout_in_seconds=120)
+            if not ready:
+                failed_persisted_bucket.append(bucket.name)
+        if failed_persisted_bucket:
+            self.fail("Buckets %s did not persisted." % failed_persisted_bucket)
+        self.log.info("Stop persistence at each node")
+        clusters = copy.deepcopy(cluster_nodes)
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        for bucket in self.buckets:
+            for node in clusters:
+                shell.execute_command("%scbstats%s %s:11210 -b %s stop" % \
+                                              (self.cli_command_location,
+                                               self.cmd_ext,
+                                               node.ip,
+                                               bucket.name))
+        shell.disconnect()
+        self.log.info("Load 2nd batch docs")
+        create_gen2 = BlobGenerator("ent-backup2", "ent-backup-", self.value_size,
+                                    end=self.num_items)
+        self._load_all_buckets(self.master, create_gen2, "create", 0)
+        self.sleep(5)
+        self.log.info("Crash cluster via kill memcached")
+        for node in clusters:
+            for server in self.servers:
+                if node.ip == server.ip:
+                    num_entries = 4
+                    reach_num_entries = False
+                    while not reach_num_entries:
+                        shell = RemoteMachineShellConnection(server)
+                        shell.kill_memcached()
+                        ready = False
+                        while not ready:
+                            if not RestHelper(RestConnection(server)).is_ns_server_running():
+                                print "to sleep"
+                                self.sleep(10)
+                            else:
+                                print "to true"
+                                ready = True
+                        cmd = "%scbstats%s %s:11210 failovers -u %s -p %s | grep num_entries "\
+                              "| awk%s '{print $2}' | grep -m 5 '4\|5\|6\|7'"\
+                                % (self.cli_command_location, self.cmd_ext, server.ip,
+                                  "cbadminbucket", "password", self.cmd_ext)
+                        output, error = shell.execute_command(cmd)
+                        if output:
+                            self.log.info("number failover logs entries reached. %s " % output)
+                            reach_num_entries = True
+        self.backup_create()
+        self.log.info("Start backup data")
+        self.backup_cluster()
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        self.log.info("Load 3rd batch docs")
+        create_gen3 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
+                                    end=self.num_items)
+        self._load_all_buckets(self.master, create_gen3, "create", 0)
+        self.backup_cluster()
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+
+    def test_backupmgr_with_short_option(self):
+        cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
+        cmd += "%s " % self.input.param("command", "backup")
+        options = " -%s %s " % (self.input.param("repo", "-repo"),
+                                self.backupset.name)
+        options += " -%s %s" % (self.input.param("archive", "-archive"),
+                                self.backupset.directory)
+        if self.input.param("command", "backup") != "list":
+            options += " -%s http://%s:%s" % (self.input.param("cluster", "-cluster"),
+                              self.backupset.cluster_host.ip,
+                              self.backupset.cluster_host.port)
+            options += " -%s Administrator" % self.input.param("bkusername", "-username")
+            options += " -%s password" % self.input.param("bkpassword", "-password")
+        self.backup_create()
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        output, error = shell.execute_command("%s %s " % (cmd, options))
+        shell.log_command_output(output, error)
+        if error:
+            self.fail("There is a error in %s " % error)
+
 
     def test_backup_restore_with_nodes_reshuffle(self):
         """

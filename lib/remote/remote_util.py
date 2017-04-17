@@ -1323,6 +1323,23 @@ class RemoteMachineShellConnection:
         sftp.close()
         return capture_iss_file
 
+    def compact_vbuckets(self, vbuckets, nodes, upto_seq, cbadmin_user="cbadminbucket",
+                                                          cbadmin_password="password"):
+        """
+            compact each vbucket with cbcompact tools
+        """
+        for node in nodes:
+            log.info("Purge delete keys in %s vbuckets.  It will take times " % vbuckets)
+            for vbucket in range(0, vbuckets):
+                self.execute_command("%scbcompact%s %s:11210 compact %s --dropdeletes "
+                                     " --purge-only-up-to-seq=%s" % (self.bin_path,
+                                                                     self.cmd_ext,
+                                                                     node, cbadmin_user,
+                                                                     cbadmin_password,
+                                                                     vbucket,
+                                                                     upto_seq),
+                                                                     debug=False)
+
     def set_vbuckets_win(self, vbuckets):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
