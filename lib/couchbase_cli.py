@@ -138,7 +138,7 @@ class CouchbaseCLI:
         remote_client.disconnect()
         print_msg = "Cluster initialized"
         if self.cb_version is not None and \
-                        self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                        self.cb_version[:3] == "4.6":
             print_msg = "init/edit %s" % self.server.ip
         return stdout, stderr, self._was_success(stdout, print_msg)
 
@@ -453,7 +453,7 @@ class CouchbaseCLI:
         stdout, stderr = remote_client.couchbase_cli("setting-compaction",
                                                      self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "set compaction settings")
+        return stdout, stderr, self._was_success(stdout, "Compaction settings modified")
 
     def setting_index(self, max_rollbacks, stable_snap_interval,
                       mem_snap_interval, storage_mode, threads,
