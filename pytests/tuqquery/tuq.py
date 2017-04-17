@@ -1435,28 +1435,80 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = 'select ARRAY_SORT(ARRAY_UNION(["skill1","skill2","skill2010","skill2011"],skills)) as skills_union from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            print actual_result['results']
-            #self.assertTrue(actual_result['results']==([{u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}]))
+            self.assertTrue(actual_result['results']==([{u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']},
+                            {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']},
+                            {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}]))
 
             self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF(["skill1","skill2","skill2010","skill2011"],skills)) as skills_diff1 from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            print actual_result['results']
-            #self.assertTrue(actual_result['results']==([{u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}]))
+            self.assertTrue(actual_result['results']==[{u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}])
+
             self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF1(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff2 from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result1 = self.run_cbq_query()
             self.assertTrue(actual_result1['results'] == [{u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}])
+
             self.query = 'select ARRAY_SORT(ARRAY_SYMDIFFN(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff3 from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            print actual_result['results']
-            #self.assertTrue(actual_result['results'] == [{u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}])
-
+            self.assertTrue(actual_result['results'] == [{u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}])
 
     def test_let(self):
         for bucket in self.buckets:
             self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
             actual_result = self.run_cbq_query()
-            print actual_result['results']
-            #self.assertTrue(actual_result['results']==([{u'default': {u'tasks_points': {u'task1': 1, u'task2': 1}, u'name': u'employee-9', u'mutated': 0, u'skills': [u'skill2010', u'skill2011'], u'join_day': 9, u'email': u'9-mail@couchbase.com', u'test_rate': 10.1, u'join_mo': 10, u'join_yr': 2011, u'_id': u'query-testemployee10153.1877827-0', u'VMs': [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], u'job_title': u'Engineer'}, u'x1': {u'name': 1}}]))
+            self.assertTrue(actual_result['results']==[{u'default': {u'tasks_points': {u'task1': 1, u'task2': 1}, u'name': u'employee-9', u'mutated': 0, u'skills': [u'skill2010', u'skill2011'], u'join_day': 9, u'email': u'9-mail@couchbase.com', u'test_rate': 10.1, u'join_mo': 10, u'join_yr': 2011, u'_id': u'query-testemployee10153.1877827-0', u'VMs': [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], u'job_title': u'Engineer'}, u'x1': {u'name': 1}}])
+
+    def test_let_missing(self):
+      created_indexes = []
+      for bucket in self.buckets:
+       try:
+            self.query = 'CREATE INDEX ix1 on default(x1)'
+            self.run_cbq_query()
+            created_indexes.append("ix1")
+            self.query = 'INSERT INTO default VALUES ("k01",{"x1":5, "type":"doc", "x2": "abc"}), ' \
+                         '("k02",{"x1":5, "type":"d", "x2": "def"})'
+            self.run_cbq_query()
+            self.query = 'EXPLAIN SELECT x1, x2 FROM default o LET o = CASE WHEN o.type = "doc" THEN o ELSE MISSING END WHERE x1 = 5'
+            try:
+                    self.run_cbq_query(self.query)
+            except CBQError as ex:
+                    self.assertTrue(str(ex).find("Duplicate variable o already in scope") != -1,
+                                    "Error is incorrect.")
+            else:
+                    self.fail("There was no errors.")
+            self.query = 'delete from default use keys["k01","k02"]'
+            self.run_cbq_query()
+       finally:
+            for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+
+
+    def test_optimized_let(self):
+        self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
+        res =self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue(plan == {u'#operator': u'Sequence', u'~children': [{u'index': u'#primary', u'#operator':
+            u'PrimaryScan', u'namespace': u'default', u'using': u'gsi', u'keyspace': u'default'},
+            {u'keyspace': u'default', u'#operator': u'Fetch', u'namespace': u'default'},
+            {u'#operator': u'Parallel', u'~child': {u'#operator': u'Sequence',
+            u'~children': [{u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr': u'substr((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
+            {u'#operator': u'Filter', u'condition': u'(`name1` = "employeefi")'}, {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]},
+            {u'#operator': u'FinalProject'}]}}]})
+        self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi" limit 2'
+        res =self.run_cbq_query()
+        self.assertTrue(res['results'] == [{u'name1': u'employeefi'}, {u'name1': u'employeefi'}])
+        self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4"'
+        res =self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue(plan == {u'#operator': u'Sequence', u'~children': [{u'index': u'#primary', u'#operator':
+            u'PrimaryScan', u'namespace': u'default', u'using': u'gsi', u'keyspace': u'default'}, {u'keyspace': u'default'
+            , u'#operator': u'Fetch', u'namespace': u'default'}, {u'#operator': u'Parallel', u'~child': {u'#operator': u'Sequence',
+            u'~children': [{u'#operator': u'Filter', u'condition': u'((((`default`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
+            {u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr': u'substr((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
+            {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}]}}]})
+        self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4" limit 10'
+        res =self.run_cbq_query()
+        self.assertTrue(res['results']==[])
 
     def test_correlated_queries(self):
         for bucket in self.buckets:
