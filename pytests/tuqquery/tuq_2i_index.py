@@ -693,6 +693,25 @@ class QueriesIndexTests(QueryTests):
                 result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
                 self.assertTrue(result1 == idx2 or result1 == idx)
                 self.assertTrue(result2 == idx or result2 == idx2)
+
+                self.query = "EXPLAIN select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) " % (bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+
+                self.query = "select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id" % (bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select meta().id from %s use index(`#primary`) where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id" % (bucket.name)
+                expected_result = self.run_cbq_query()
+
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
                 self.query = "select name from %s where any v in %s.join_yr satisfies v = 2016 END " % (
                 bucket.name, bucket.name) + \
                              "AND (ANY x IN %s.VMs SATISFIES x.RAM between 1 and 5 END) " % (bucket.name) + \
@@ -1687,8 +1706,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "unnest_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( ALL array j for j in i end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -1699,18 +1716,12 @@ class QueriesIndexTests(QueryTests):
                 bucket.name,bucket.name) + \
                              "AND (ANY x IN %s.tasks SATISFIES x = 'Sales' END) " % (bucket.name) + \
                              "AND  NOT (%s.department = 'Manager') order BY %s.name limit 10" % (bucket.name,bucket.name)
-                # self.query = "EXPLAIN select %s.name from %s UNNEST tasks as i UNNEST i as j WHERE j = 'Search' " % (
-                #  bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
-                # self.assertTrue(
-                #     plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
-                #     "Intersect Scan is not being used in and query for 2 array indexes")
+
                 result1 =plan['~children'][0]['~children'][0]['scan']['index']
 
-                #result2 =plan['~children'][0]['~children'][0]['scans'][1]['scans'][0]['index']
                 self.assertTrue(result1 == idx )
-                #self.assertTrue(result2 == idx or result2 == idx2)
                 self.query = "select %s.name from %s  UNNEST tasks as i UNNEST i as j WHERE j = 'Search'  " % (
                 bucket.name,bucket.name) + \
                              "AND (ANY x IN %s.tasks SATISFIES x = 'Sales' END) " % (bucket.name) + \

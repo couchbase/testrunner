@@ -566,6 +566,17 @@ class QueryTests(BaseTestCase):
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
 
+
+    def test_new_contains_functions(self):
+            self.query = 'SELECT * FROM default WHERE ANY v IN tokens(default, {"specials":true}) SATISFIES REGEXP_LIKE(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})")END order by meta().id'
+            expected_result = self.run_cbq_query()
+            self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\\d{2}-\\d{4})|(\\b\\d{9}\\b)|(\\d{3}[ ]\\d{2}[ ]\\d{4})") order by meta().id'
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'],expected_result['results'])
+            self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})") order by meta().id'
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'],expected_result['results'])
+
 ##############################################################################################
 #
 #   COMMON FUNCTIONS

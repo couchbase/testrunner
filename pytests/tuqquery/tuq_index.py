@@ -317,23 +317,58 @@ class QueriesViewsTests(QueryTests):
     def test_push_limit_intersect_unionscan(self):
       created_indexes = []
       try:
-        self.query = "create index ix1 on default(join_day)"
+        self.query = "create index ix1 on default(join_day,VMs[0].os)"
         self.run_cbq_query()
         created_indexes.append("ix1")
         self.query = "create index ix2 on default(VMs[0].os)"
         self.run_cbq_query()
         created_indexes.append("ix2")
+        self.query = "create index ix3 on default(VMs[0].memory) where VMs[0].memory > 10"
+        self.run_cbq_query()
+        created_indexes.append("ix3")
         self.query = "explain select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
         self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.query = "explain select * from default where join_day > 10 AND VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("covers" not in str(plan))
+        self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" not in str(plan))
+        self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+        expected_result = self.run_cbq_query()
+        self.query = "create index ix4 on default(VMs[0].memory,join_day) where VMs[0].memory > 10"
+        self.run_cbq_query()
+        created_indexes.append("ix4")
+        self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" in str(plan))
+        self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+        actual_result = self.run_cbq_query()
+        self.assertTrue(actual_result['results']==expected_result['results'])
+        self.query = "select join_day from default use index(`#primary`) where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+        expected_result = self.run_cbq_query()
+        self.assertTrue(actual_result['results']==expected_result['results'])
         self.query = "select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         self.assertTrue(res['metrics']['resultCount']==10)
-        self.query = "explain select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
+        self.query = "explain select * from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
+        self.assertTrue("cover" not in str(plan))
+        self.query = "explain select join_day from default where join_day > 10 OR VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" in str(plan))
+        self.query = "explain select join_day from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" not  in str(plan))
+        #self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
         self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         self.assertTrue(res['metrics']['resultCount']==10)
@@ -357,6 +392,42 @@ class QueriesViewsTests(QueryTests):
         self.assertTrue(res['results']==[{u'id': u'k01', u'name': u'abc'}])
         self.query = 'delete from default use keys ["k01"]'
         self.run_cbq_query()
+
+    def test_unnest_when(self):
+        created_indexes = []
+        for bucket in self.buckets:
+            try:
+                idx1 = "unnest_idx"
+                idx2 = "idx"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i.memory FOR i in %s  when i.memory > 10 END) " % (
+                    idx1, bucket.name, "VMs")
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx1)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx1)
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i.memory FOR i in %s END) " % (
+                    idx2, bucket.name, "VMs")
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx1)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                self.assertTrue(self._is_index_in_list(bucket, idx1), "Index is not in list")
+                self.query = "EXPLAIN select %s.name from %s UNNEST VMs as x where any i in default.VMs satisfies i.memory > 9 END" % (bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                result1 =plan['~children'][0]['scan']['index']
+                self.assertTrue(result1==idx2)
+                self.query = "EXPLAIN select %s.name from %s UNNEST VMs as x where any i in default.VMs satisfies i.memory > 10 END" % (bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                result1 =plan['~children'][0]['scans'][0]['scan']['index']
+                self.assertTrue(result1==idx1)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+                    self.run_cbq_query()
+
+
 
     def test_notin_notwithin(self):
       created_indexes = []
