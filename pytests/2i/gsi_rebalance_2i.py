@@ -12,9 +12,11 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase, Backupset
 from pytests.fts.fts_base import NodeHelper
 from pytests.query_tests_helper import QueryHelperTests
+from pytests.tuqquery.tuq import QueryTests
 
 
-class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTests, NodeHelper):
+class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTests, NodeHelper,
+                                      EnterpriseBackupRestoreBase):
     def setUp(self):
         super(SecondaryIndexingRebalanceTests, self).setUp()
         self.rest = RestConnection(self.servers[0])
@@ -31,6 +33,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
         else:
             raise Exception("OS not supported.")
+        self.rand = random.randint(1, 1000000000)
 
     def tearDown(self):
         super(SecondaryIndexingRebalanceTests, self).tearDown()
@@ -694,7 +697,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         t1 = threading.Thread(target=self._build_index)
         t1.start()
         self.sleep(3)
-        output, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
+        output, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes, expect_failure=True)
         # TODO : Relook at this after fixing MB-23004
         if "cannot unmarshal array into Go value of type string" not in output[0]:
             self.fail("cbindex move succeeded during a rebalance. See MB-23004 for more details")
@@ -869,11 +872,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         #  cbindex move with invalid source host
         output, error = self._cbindex_move(self.servers[self.nodes_init + 1], self.servers[self.nodes_init], indexes,
-                                      expect_failure=True)
+                                           expect_failure=True)
         if not filter(lambda x: 'Error occured' in x, error):
             self.fail("cbindex move did not fail with expected error message")
         # cbindex move with invalid destination host
-        output, error = self._cbindex_move(index_server, self.servers[self.nodes_init + 1], indexes, expect_failure=True)
+        output, error = self._cbindex_move(index_server, self.servers[self.nodes_init + 1], indexes,
+                                           expect_failure=True)
         if not filter(lambda x: 'Error occured Unable to find Index service for destination' in x, error):
             self.fail("cbindex move did not fail with expected error message")
         # cbindex move with destination host not reachable
@@ -1355,6 +1359,98 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.sleep(30)
         self.run_operation(phase="after")
 
+    def test_backup_restore_after_gsi_rebalance(self):
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        # rebalance out a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [],
+                                                      [nodes_out_list])
+        self.run_operation(phase="after")
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        self._create_backup(kv_node)
+        self._create_restore(kv_node)
+
+    def test_backup_restore_while_gsi_rebalance_is_running(self):
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        # rebalance out a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        self._create_backup(kv_node)
+        self._create_restore(kv_node)
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [],
+                                                      [nodes_out_list])
+        self._run_prepare_statement()
+        self.run_operation(phase="after")
+
+    def test_gsi_rebalance_using_couchbase_cli(self):
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        # rebalance out a node
+        shell = RemoteMachineShellConnection(kv_node)
+        command = "{0}couchbase-cli rebalance -c {1} -u {2} -p {3} --server-remove={4}:8091".format(
+            self.cli_command_location,
+            kv_node.ip, kv_node.rest_username,
+            kv_node.rest_password,
+            nodes_out_list.ip)
+        o, e = shell.execute_non_sudo_command(command)
+        shell.log_command_output(o, e)
+        self.sleep(30)
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [],
+                                                      [nodes_out_list])
+        # rebalance in a node
+        command = "{0}couchbase-cli server-add -c {1} -u {2} -p {3} --server-add={4}:8091 --server-add-username={5} " \
+                  "--server-add-password={6}".format(
+            self.cli_command_location,
+            kv_node.ip, kv_node.rest_username,
+            kv_node.rest_password,
+            self.servers[self.nodes_init].ip, self.servers[self.nodes_init].rest_username,
+            self.servers[self.nodes_init].rest_password)
+        o, e = shell.execute_non_sudo_command(command)
+        shell.log_command_output(o, e)
+        if e or not filter(lambda x: 'SUCCESS: Server added' in x, o):
+            self.fail("server-add failed")
+        self.sleep(30)
+        command = "{0}couchbase-cli rebalance -c {1} -u {2} -p {3}".format(
+            self.cli_command_location,
+            kv_node.ip, kv_node.rest_username,
+            kv_node.rest_password)
+        o, e = shell.execute_non_sudo_command(command)
+        shell.log_command_output(o, e)
+        if e or not filter(lambda x: 'SUCCESS: Rebalance complete' in x, o):
+            self.fail("rebalance failed")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        self.run_operation(phase="after")
+
     def _return_maps(self):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
@@ -1474,16 +1570,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         finally:
             return exceptions
 
-    def _run_backup(self):
-        remote_client = RemoteMachineShellConnection(self.servers[0])
-        command = "{0}/cbbackupmgr config --archive /data/backups --repo example ".format(self.cli_command_location)
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
-        command = "{0}/cbbackupmgr backup --archive /data/backups --repo example --cluster {1} --username Administrator --password password".format(
-            self.cli_command_location, self.servers[0].ip)
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
-
     def _set_indexer_compaction(self):
         DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         date = datetime.now()
@@ -1565,3 +1651,41 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.stop_firewall_on_node(node)
         # wait till node is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self, wait_if_warmup=True)
+
+    def _create_backup(self, server, username="Administrator", password="password"):
+        remote_client = RemoteMachineShellConnection(server)
+        command = self.cli_command_location + "cbbackupmgr config --archive /data/backups --repo example{0}".format(
+            self.rand)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error and not filter(lambda x: 'created successfully in archive' in x, output):
+            self.fail("cbbackupmgr config failed")
+        cmd = "cbbackupmgr backup --archive /data/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
+            self.rand, username, password)
+        command = "{0}{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error and not filter(lambda x: 'Backup successfully completed' in x, output):
+            self.fail("cbbackupmgr backup failed")
+
+    def _create_restore(self, server, username="Administrator", password="password"):
+        remote_client = RemoteMachineShellConnection(server)
+        cmd = "cbbackupmgr restore --archive /data/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
+            self.rand, username, password)
+        command = "{0}{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error and not filter(lambda x: 'Restore completed successfully' in x, output):
+            self.fail("cbbackupmgr restore failed")
+
+    def _run_prepare_statement(self):
+        query = "SELECT * FROM system:indexes"
+        result_no_prepare = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)['results']
+        query = "PREPARE %s" % query
+        prepared = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)['results'][0]
+        result_with_prepare = self.n1ql_helper.run_cbq_query(query=prepared, is_prepared=True, server=self.n1ql_server)[
+            'results']
+        msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
+        self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
+                        msg % (result_no_prepare[:100], result_no_prepare[-100:],
+                               result_with_prepare[:100], result_with_prepare[-100:]))
