@@ -13,14 +13,13 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.use_replica = True
         super(SecondaryIndexingRecoveryTests, self).setUp()
         self.load_query_definitions = []
-        query_template = "SELECT {0} FROM %s "
-        self.query_template = query_template.format("name")
         self.initial_index_number = self.input.param("initial_index_number", 10)
         for x in range(self.initial_index_number):
-            index_name = "index_name_"+str(x)
+            index_name = "index_name_" + str(x)
             query_definition = QueryDefinition(
-                index_name=index_name, index_fields = ["sales"],
-                        query_template = self.query_template, groups = ["simple"])
+                index_name=index_name, index_fields=["VMs"],
+                query_template="SELECT * FROM %s ", groups=["simple"],
+                index_where_clause = " VMs IS NOT NULL ")
             self.load_query_definitions.append(query_definition)
         if self.load_query_definitions:
             self.multi_create_index(buckets=self.buckets,
