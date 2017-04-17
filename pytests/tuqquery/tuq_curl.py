@@ -213,8 +213,7 @@ class QueryCurlTests(QueryTests):
         docid = json_curl['results'][0]['id']
         result = self.run_cbq_query('select * from default limit 1')
         result2= self.run_cbq_query('select * from `beer-sample` limit 1')
-        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
-                        and json_curl['metrics']['mutationCount'] == 1)
+        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample'])
 
         n1ql_query = 'select * from \`beer-sample\` offset 1 limit 1'
         insert_query = "upsert into default (key '" + docid+"', value curl_result.results[0].\`beer-sample\`) "
@@ -223,8 +222,7 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         result = self.run_cbq_query('select * from default limit 1')
         result2= self.run_cbq_query('select * from `beer-sample` offset 1 limit 1')
-        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
-                        and json_curl['metrics']['mutationCount'] == 1)
+        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample'])
 
     '''See if you can update a bucket using n1ql curl'''
     def test_update_curl(self):
@@ -483,11 +481,13 @@ class QueryCurlTests(QueryTests):
 
     '''Tests what happens when you give two of the same option with different values.'''
     def test_repeated_user_options(self):
+        error_message = 'Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.' \
+                        'select!execute.AddroleQuerySelect[default]toallowthequerytorun.'
         n1ql_query = 'select * from default limit 5'
         select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','user': 'Ajay:Bhullar'})" % (n1ql_query,self.username,self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == 'Userdoesnotbelongtoaspecifiedrole.Keyspacedefault:default.')
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_message)
 
         select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user': 'Ajay:Bhullar', 'user':'%s:%s'})" % (n1ql_query,self.username,self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
@@ -554,26 +554,27 @@ class QueryCurlTests(QueryTests):
 
     '''Test if a protected bucket can be accessed without giving its password'''
     def test_protected_bucket_noauth(self):
+        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[bucket0]." \
+                    "n1ql.select!execute.AddroleQuerySelect[bucket0]toallowthequerytorun."
         # The query that curl will send to couchbase
         n1ql_query = 'select * from bucket0 limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl("+ self.query_service_url +", {'data' : 'statement=%s'})" % n1ql_query
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] ==
-                        "Userdoesnotbelongtoaspecifiedrole.Keyspacedefault:bucket0.")
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
 
-        query = "select curl("+ self.query_service_url +", {'data' : 'statement=%s','user':'%s:'})" % (n1ql_query,self.username)
+        query = "select curl("+ self.query_service_url +", {'data' : 'statement=%s','user':'%s:'})" \
+                                                        % (n1ql_query,self.username)
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] ==
-                         "Userdoesnotbelongtoaspecifiedrole.Keyspacedefault:bucket0.")
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
 
-        query = "select curl("+ self.query_service_url +", {'data' : 'statement=%s','user':':%s'})" % (n1ql_query,self.password)
+        query = "select curl("+ self.query_service_url +", {'data' : 'statement=%s','user':':%s'})" \
+                                                        % (n1ql_query,self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] ==
-                         "Userdoesnotbelongtoaspecifiedrole.Keyspacedefault:bucket0.")
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
 
     '''Test an unsupported method in n1ql curl
         -DELETE.'''
