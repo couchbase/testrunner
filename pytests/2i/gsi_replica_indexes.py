@@ -24,7 +24,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests):
             self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
         else:
             raise Exception("OS not supported.")
-        self.num_replicas = self.input.param("num_replica", 0)
+
         self.expected_err_msg = self.input.param("expected_err_msg", None)
         self.nodes = self.input.param("nodes", None)
         self.override_default_num_replica_with_num = self.input.param(

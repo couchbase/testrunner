@@ -54,6 +54,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
+        self.num_replicas = self.input.param("num_replica", 0)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
