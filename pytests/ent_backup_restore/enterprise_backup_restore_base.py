@@ -572,9 +572,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
             Compare content of of the list with sample output
         """
-        for x in range(0, len(output)):
-            if output[x] != source[x]:
-                print "element   ", x
+        for x in range(0, len(source)):
+            if ' '.join(output[x].split()) != ' '.join(source[x].split()):
                 self.log.error("Element %s in output did not match " % x)
                 self.log.error("Output => %s != %s <= Source" % (output[x], source[x]))
                 raise Exception("Content does not match "

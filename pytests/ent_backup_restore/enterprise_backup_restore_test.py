@@ -759,6 +759,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
     def test_backupmgr_help_display(self):
         """
            Test display help manual in each option
+           We do not test compare the whole content but only
+           few first lines to make sure manual page displayed.
         """
         display_option = self.input.param("display", "-h")
         subcommand = ""
@@ -771,7 +773,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = shell.execute_command("%s " % (cmd))
         self.log.info("Verify print out help message")
         if display_option == "-h":
-            message = ""
             if subcommand is None:
                 content = ['cbbackupmgr [<command>] [<args>]', '',
                                 '  backup    Backup a Couchbase cluster']
@@ -779,14 +780,22 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 content = ['cbbackupmgr %s [<args>]' % subcommand, '',
                            'Required Flags:']
             self.validate_help_content(output[:3], content)
-        else:
-            content  =  ['CBBACKUPMGR(1)                   Backup Manual                  CBBACKUPMGR(1)',
-                              '', '', '', 'NAME',
-                              '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
-                              '       cluster', '', 'SYNOPSIS',
-                              '       cbbackupmgr [--version] [--help] <command> [<args>]']
-            self.validate_help_content(output[:10], content)
-        shell.log_command_output(output, error)
+        elif display_option == "--help":
+            content = None
+            if subcommand is None:
+                content  =  \
+                 ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
+                  '', '', '', 'NAME',
+                  '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
+                  '       cluster', '', 'SYNOPSIS',
+                  '       cbbackupmgr [--version] [--help] <command> [<args>]']
+            else:
+                subcmd_cap = subcommand.upper()
+                content = \
+                 ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
+                                                               % (subcmd_cap, subcmd_cap),
+                   '', '', '', 'NAME']
+            self.validate_help_content(output[:5], content)
         shell.disconnect()
 
     def test_backup_restore_with_nodes_reshuffle(self):
