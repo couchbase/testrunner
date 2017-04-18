@@ -947,6 +947,31 @@ class RestConnection(object):
             log.info(content)
         return status
 
+    def cleanup_indexer_rebalance(self, server):
+        if server:
+            api = "http://{0}:{1}/".format(server.ip, self.index_port) + 'cleanupRebalance'
+        else:
+            api = self.baseUrl + 'cleanupRebalance'
+        status, content, _ = self._http_request(api, 'GET')
+        if status:
+            return content
+        else:
+            log.error("cleanupRebalance:{0},content:{1}".format(status, content))
+            raise Exception("indexer rebalance cleanup failed")
+
+    def list_indexer_rebalance_tokens(self, server):
+        if server:
+            api = "http://{0}:{1}/".format(server.ip, self.index_port) + 'listRebalanceTokens'
+        else:
+            api = self.baseUrl + 'listRebalanceTokens'
+        print api
+        status, content, _ = self._http_request(api, 'GET')
+        if status:
+            return content
+        else:
+            log.error("listRebalanceTokens:{0},content:{1}".format(status, content))
+            raise Exception("list rebalance tokens failed")
+
     def execute_statement_on_cbas(self, statement, mode, pretty=True,
                                   timeout=70, client_context_id=None):
         api = self.cbas_base_url + "/analytics/service"

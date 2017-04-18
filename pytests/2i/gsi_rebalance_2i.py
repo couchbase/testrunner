@@ -5,7 +5,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 import random
 import threading
 from lib import testconstants
-from lib.couchbase_helper.query_definitions import SQLDefinitionGenerator
+from lib.couchbase_helper.query_definitions import SQLDefinitionGenerator, QueryDefinition, RANGE_SCAN_TEMPLATE
 from lib.couchbase_helper.tuq_generators import TuqGenerators
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -61,8 +61,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         # rebalance in a node
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [])
-        self.run_operation(phase="during")
+        services_in = ["index"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -90,6 +91,13 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        for i in xrange(20):
+            output = self.rest.list_indexer_rebalance_tokens(server=index_server)
+            if "rebalancetoken" in output:
+                log.info(output)
+                break
+            self.sleep(2)
         self.run_async_index_operations(operation_type="query")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -536,6 +544,22 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         t1.join()
         t2.join()
         t3.join()
+        # do a cbindex move after a indexer failure
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
+        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
+        self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], no_of_indexes)
+        self.run_operation(phase="during")
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [self.servers[self.nodes_init]], [], swap_rebalance=True)
+        index_servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        # run a /cleanupRebalance after a rebalance failure
+        for index_server in index_servers:
+            output = self.rest.cleanup_indexer_rebalance(server=index_server)
+            log.info(output)
 
     def test_cbindex_move_after_kv_rebalance(self):
         self.run_operation(phase="before")
@@ -1449,6 +1473,53 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.fail("rebalance failed")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        self.run_operation(phase="after")
+
+    def test_long_running_scan_with_gsi_rebalance(self):
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        to_remove_nodes = [nodes_out_list]
+        emit_fields = "*"
+        body = {"stale": "False"}
+        query_definition = QueryDefinition(
+            index_name="multiple_field_index",
+            index_fields=["name", "age", "email", "premium_customer"],
+            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                      "name > \"Adara\" AND "
+                                                      "name < \"Winta\" "
+                                                      "AND age > 0 AND age "
+                                                      "< 100 ORDER BY _id"),
+            groups=["multiple_field_index"],
+            index_where_clause=" name IS NOT NULL ")
+        self.rest = RestConnection(nodes_out_list)
+        id_map = self.create_index_using_rest(self.buckets[0], query_definition)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        services_in = ["index"]
+        # run a long running scan during a gsi rebalance
+        t1 = threading.Thread(target=RestConnection(nodes_out_list).full_table_scan_gsi_index_with_rest, args=(id_map["id"], body,))
+        t1.start()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        t1.join()
+        t2 = threading.Thread(target=RestConnection(self.servers[self.nodes_init]).full_table_scan_gsi_index_with_rest, args=(id_map["id"], body,))
+        t2.start()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
+        self.run_async_index_operations(operation_type="query")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        t2.join()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
         self.run_operation(phase="after")
 
     def _return_maps(self):
