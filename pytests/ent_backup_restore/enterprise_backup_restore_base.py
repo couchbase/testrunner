@@ -568,6 +568,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
         return found
 
+    def validate_help_content(self, output, source):
+        """
+            Compare content of of the list with sample output
+        """
+        for x in range(0, len(output)):
+            if output[x] != source[x]:
+                print "element   ", x
+                self.log.error("Element %s in output did not match " % x)
+                self.log.error("Output => %s != %s <= Source" % (output[x], source[x]))
+                raise Exception("Content does not match "
+                                "Output => %s != %s <= Source" % (output[x], source[x]))
+
 class Backupset:
     def __init__(self):
         self.backup_host = None

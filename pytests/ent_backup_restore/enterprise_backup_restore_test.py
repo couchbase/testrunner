@@ -733,6 +733,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
 
     def test_backupmgr_with_short_option(self):
+        """
+            Test short option flags at each option
+        """
         cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
         cmd += "%s " % self.input.param("command", "backup")
         options = " -%s %s " % (self.input.param("repo", "-repo"),
@@ -749,9 +752,42 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         output, error = shell.execute_command("%s %s " % (cmd, options))
         shell.log_command_output(output, error)
+        shell.disconnect()
         if error:
             self.fail("There is a error in %s " % error)
 
+    def test_backupmgr_help_display(self):
+        """
+           Test display help manual in each option
+        """
+        display_option = self.input.param("display", "-h")
+        subcommand = ""
+        if self.input.param("subcommand", None) is not None:
+            subcommand = self.input.param("subcommand", None)
+        cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
+        cmd += " %s %s " % (subcommand, display_option)
+
+        shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+        output, error = shell.execute_command("%s " % (cmd))
+        self.log.info("Verify print out help message")
+        if display_option == "-h":
+            message = ""
+            if subcommand is None:
+                content = ['cbbackupmgr [<command>] [<args>]', '',
+                                '  backup    Backup a Couchbase cluster']
+            else:
+                content = ['cbbackupmgr %s [<args>]' % subcommand, '',
+                           'Required Flags:']
+            self.validate_help_content(output[:3], content)
+        else:
+            content  =  ['CBBACKUPMGR(1)                   Backup Manual                  CBBACKUPMGR(1)',
+                              '', '', '', 'NAME',
+                              '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
+                              '       cluster', '', 'SYNOPSIS',
+                              '       cbbackupmgr [--version] [--help] <command> [<args>]']
+            self.validate_help_content(output[:10], content)
+        shell.log_command_output(output, error)
+        shell.disconnect()
 
     def test_backup_restore_with_nodes_reshuffle(self):
         """
