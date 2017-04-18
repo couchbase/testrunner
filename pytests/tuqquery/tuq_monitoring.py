@@ -75,7 +75,8 @@ class QueryMonitoringTests(QueryTests):
         #Check to see that completed_requests does not contain info from the downed node
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertTrue(result['metrics']['resultCount'] == 2)
-        result = self.run_cbq_query('select * from system:completed_requests where node = "%s"' % self.servers[1].ip)
+        result = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
+                                    %(self.servers[1].ip,self.servers[1].port))
         self.assertTrue(result['metrics']['resultCount'] == 0)
 
         #The info from the down node should not have been restored by the node coming back online
@@ -83,7 +84,8 @@ class QueryMonitoringTests(QueryTests):
         time.sleep(30)
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertTrue(result['metrics']['resultCount'] == 2)
-        result = self.run_cbq_query('select * from system:completed_requests where node = "%s"' % self.servers[1].ip)
+        result = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
+                                    % (self.servers[1].ip,self.servers[1].port))
         self.assertTrue(result['metrics']['resultCount'] == 0)
 
 ##############################################################################################
@@ -162,20 +164,20 @@ class QueryMonitoringTests(QueryTests):
 
                 # check if the queries' node fields accurately reflect the node they were started from
                 logging.info("VERIFYING THAT ACTIVE_REQUESTS HAVE THE QUERIES MARKED WITH THE CORRECT NODES")
-                node1 = self.run_cbq_query('select * from system:active_requests where node  =  "%s"'
-                                           % self.servers[1].ip)
+                node1 = self.run_cbq_query('select * from system:active_requests where node  =  "%s:%s"'
+                                           % (self.servers[1].ip,self.servers[1].port))
                 if not node1['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE QUERY ON THE REQUESTED NODE: "%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
-                                  % self.servers[1].ip)
+                                  % (self.servers[1].ip,self.servers[1].port))
                     print node1
                     return
-                node2 = self.run_cbq_query('select * from system:active_requests where node  =  "%s"'
-                                           % self.servers[2].ip)
+                node2 = self.run_cbq_query('select * from system:active_requests where node  =  "%s:%s"'
+                                           % (self.servers[2].ip,self.servers[2].port))
                 if not node2['metrics']['resultCount'] == 1:
                     self.threadFailure = True
-                    logging.error('THE QUERY ON THE REQUESTED NODE: "%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
-                                  % self.servers[2].ip)
+                    logging.error('THE QUERY ON THE REQUESTED NODE: "%s:%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
+                                  % (self.servers[2].ip,self.servers[2].port))
                     print node2
                     return
 
@@ -267,12 +269,14 @@ class QueryMonitoringTests(QueryTests):
 
                 # check if the queries can be purged selectively
                 logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS CAN BE PURGED BY NODE')
-                self.run_cbq_query('delete from system:completed_requests where node = "%s"' % self.servers[2].ip)
+                self.run_cbq_query('delete from system:completed_requests where node = "%s:%s"'
+                                   % (self.servers[2].ip,self.servers[2].port))
                 result = self.run_cbq_query('select * from system:completed_requests')
                 if not result['metrics']['resultCount'] == 2:
                     self.threadFailure = True
-                    logging.error('DELETE FAILED, THERE ARE STILL ITEMS FROM NODE: "%s"'
-                                  'INSIDE SYSTEM:COMPLETED_REQUESTS' % self.servers[2].ip)
+                    logging.error('DELETE FAILED, THERE ARE STILL ITEMS FROM NODE: "%s:%s"'
+                                  'INSIDE SYSTEM:COMPLETED_REQUESTS'
+                                  % (self.servers[2].ip,self.servers[2].port))
                     print (json.dumps(result, sort_keys=True, indent=3))
                     return
 
@@ -296,8 +300,8 @@ class QueryMonitoringTests(QueryTests):
             if event_is_set:
                 logging.info('CHECKING IF SYSTEM:ACTIVE_REQUESTS RESULTS CAN BE FILTERED BY NODE')
                 result = self.run_cbq_query('select * from system:active_requests')
-                node1 = self.run_cbq_query('select * from system:active_requests where node = "%s"'
-                                           % self.servers[2].ip)
+                node1 = self.run_cbq_query('select * from system:active_requests where node = "%s:%s"'
+                                           % (self.servers[2].ip,self.servers[2].port))
                 if not node1['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INCORRECT')
@@ -305,8 +309,8 @@ class QueryMonitoringTests(QueryTests):
                     print node1
                     return
 
-                node2 = self.run_cbq_query('select * from system:active_requests where node = "%s"'
-                                           % self.servers[1].ip)
+                node2 = self.run_cbq_query('select * from system:active_requests where node = "%s:%s"'
+                                           % (self.servers[1].ip,self.servers[1].port))
                 if not node2['metrics']['resultCount'] == 3:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INCORRECT')
@@ -318,8 +322,8 @@ class QueryMonitoringTests(QueryTests):
 
                 logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS RESULTS CAN BE FILTERED BY NODE')
                 result = self.run_cbq_query('select * from system:completed_requests')
-                node1 = self.run_cbq_query('select * from system:completed_requests where node = "%s"'
-                                           % self.servers[2].ip)
+                node1 = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
+                                           % (self.servers[2].ip,self.servers[1].port))
                 if not node1['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INACCURATE')
@@ -327,8 +331,8 @@ class QueryMonitoringTests(QueryTests):
                     print node1
                     return
 
-                node2 = self.run_cbq_query('select * from system:completed_requests where node = "%s"'
-                                           % self.servers[1].ip)
+                node2 = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
+                                           % (self.servers[1].ip,self.servers[1].port))
                 if not node2['metrics']['resultCount'] == 3:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INACCURATE')
@@ -395,12 +399,14 @@ class QueryMonitoringTests(QueryTests):
         self.test_prepared_common_body()
 
         #Check if you can delete from system:prepareds by node
-        self.query = "delete from system:prepareds where node = '%s'" % self.servers[0].ip
+        self.query = "delete from system:prepareds where node = '%s:%s'" \
+                     % (self.servers[0].ip,self.servers[0].port)
         self.run_cbq_query()
         result = self.run_cbq_query("select * from system:prepareds")
         self.assertTrue(result['metrics']['resultCount'] == 1)
 
-        self.query = "delete from system:prepareds where node = '%s'" % self.servers[1].ip
+        self.query = "delete from system:prepareds where node = '%s:%s'" \
+                     % (self.servers[1].ip,self.servers[1].port)
         self.run_cbq_query()
         result = self.run_cbq_query("select * from system:prepareds")
         self.assertTrue(result['metrics']['resultCount'] == 0)
@@ -448,17 +454,20 @@ class QueryMonitoringTests(QueryTests):
         self.assertTrue(name2['metrics']['resultCount'] == 1)
 
         # Check to see if system:prepareds can be filtered by node
-        self.query = "select * from system:prepareds where node = '%s'" % self.servers[0].ip
+        self.query = "select * from system:prepareds where node = '%s:%s'" % \
+                     (self.servers[0].ip,self.servers[0].port)
         node1 = self.run_cbq_query()
         self.assertTrue(node1['metrics']['resultCount'] == 1)
 
         # Check to see if system:prepareds can be filtered by node
-        self.query = "select * from system:prepareds where node = '%s'" % self.servers[1].ip
+        self.query = "select * from system:prepareds where node = '%s:%s'" \
+                             % (self.servers[1].ip,self.servers[1].port)
         node2 = self.run_cbq_query()
         self.assertTrue(node2['metrics']['resultCount'] == 1)
 
         # Check to see if system:prepareds can be filtered by node
-        self.query = "select * from system:prepareds where node = '%s'" % self.servers[2].ip
+        self.query = "select * from system:prepareds where node = '%s:%s'" \
+                     % (self.servers[2].ip,self.servers[2].port)
         node3 = self.run_cbq_query()
         self.assertTrue(node3['metrics']['resultCount'] == 0)
 
@@ -645,9 +654,10 @@ class QueryMonitoringTests(QueryTests):
 
                 # Check if a request can be killed by query node
                 logging.info("CHECKING IF A QUERY CAN BE KILLED BY NODE")
-                self.run_cbq_query('delete from system:active_requests where node  =  "%s"' % self.servers[0].ip)
-                result = self.run_cbq_query('select * from system:active_requests  where node  =  "%s"'
-                                            % self.servers[0].ip)
+                self.run_cbq_query('delete from system:active_requests where node  =  "%s:%s"'
+                                   % (self.servers[0].ip,self.servers[0].port))
+                result = self.run_cbq_query('select * from system:active_requests  where node  =  "%s:%s"'
+                                            % (self.servers[0].ip,self.servers[0].port))
                 if not result['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE QUERIES FOR node "%s" WERE NOT KILLED AND ARE STILL IN ACTIVE_REQUESTS'
@@ -700,9 +710,10 @@ class QueryMonitoringTests(QueryTests):
 
         # Run more than num_entries(10) queries
         for i in range(num_entries*2):
-            self.run_cbq_query('select * from default')
+            self.run_cbq_query('select * from default union select * from default')
 
         result = self.run_cbq_query('select * from system:completed_requests')
+        print (json.dumps(result, sort_keys=True, indent=3))
         self.assertTrue(result['metrics']['resultCount'] == 10)
 
         # negative should disable the limit
@@ -802,6 +813,10 @@ class QueryMonitoringTests(QueryTests):
            if self.input.tuq_client and "client" in self.input.tuq_client:
                server = self.tuq_client
         cred_params = {'creds': []}
+        rest = RestConnection(server)
+        username = rest.username
+        password = rest.password
+        cred_params['creds'].append({'user': username, 'pass': password})
         for bucket in self.buckets:
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
@@ -817,12 +832,12 @@ class QueryMonitoringTests(QueryTests):
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
                 self.log.info('RUN QUERY %s' % query)
-                result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params,
+                result = rest.analytics_tool(query, 8095, query_params=query_params,
                                                                is_prepared=is_prepared, named_prepare=self.named_prepare,
                                                                encoded_plan=encoded_plan, servers=self.servers)
 
             else :
-                result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params,
+                result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
                                                            is_prepared=is_prepared, named_prepare=self.named_prepare,
                                                            encoded_plan=encoded_plan, servers=self.servers)
         else:
@@ -833,10 +848,8 @@ class QueryMonitoringTests(QueryTests):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    if "system" in query:
-                        cmd =  "%s/cbq  -engine=http://%s:8091/ -q -u Administrator -p password" % (self.path,server.ip)
-                    else:
-                        cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
+                    cmd = "%s/cbq  -engine=http://%s:%s/ -q -u %s -p %s" % (
+                    self.path, server.ip, server.port, username, password)
 
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     if not(output[0] == '{'):
