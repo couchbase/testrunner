@@ -42,111 +42,98 @@ class rbacclitest(rbacTest):
         super(rbacclitest, self).tearDown()
 
     def execute_admin_role_manage(self, options):
-        cli_command = 'admin-role-manage'
+        cli_command = 'user-manage'
         options = options
         remote_client = RemoteMachineShellConnection(self.master)
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         return output, error
 
-    def check_role_assignment(self,final_user_id, user_role,output,msg=None ):
-        if msg == None:
-            self.assertTrue("SUCCESS: set roles for" in output[0],"Issue with role assignment")
-        else:
-            self.assertTrue(msg in output[0],"Issue with role assignment")
-
-    def setup_user_roles(self):
+    def _get_user_role(self):
         final_user_id = rbacmain().returnUserList(self.user_id)
         final_roles = rbacmain()._return_roles(self.user_role)
-        payload = "name=" + self.user_name + "&roles=" + final_roles
-        for final_user in final_user_id:
-            status, content, header =  rbacmain(self.master)._set_user_roles(user_name=final_user[0],payload=payload)
-            self.assertTrue(status,"Issue with setting role")
-            status = rbacmain()._parse_get_user_response(json.loads(content),final_user[0],self.user_name,final_roles)
-            self.assertTrue(status,"Role assignment not matching")
+        return final_user_id, final_roles
 
-    def test_get_roles(self):
-        self.setup_user_roles()
-        output, error = self.execute_admin_role_manage("--get-roles")
-        final_user_id = rbacmain().returnUserList(self.user_id)
-        self.check_role_assignment(final_user_id,self.user_role,output,"SUCCESS: user/role list:")
-
-    def test_set_roles(self):
-        final_user_id = rbacmain().returnUserList(self.user_id)
-        print final_user_id
-        user_list = ""
-        if len(final_user_id) == 1:
-            user_list = str(final_user_id[0])
-        else:
-            for final_user in final_user_id:
-                user_list = user_list + "," + str(final_user[0])
-            user_list = user_list[1:]
-
-        final_roles = rbacmain()._return_roles(self.user_role)
-        options = "--set-users=" + user_list + " --roles=" + final_roles
+    def test_create_user_without_auth(self):
+        users, roles = self._get_user_role()
+        options = "--set " + "--rbac-username " + users[0][0] + " --rbac-password " + users[0][1] + " --roles " + roles
         output, error = self.execute_admin_role_manage(options)
-        self.check_role_assignment(final_user_id,self.user_role,output)
+        self.assertTrue("ERROR: --auth-type is required with the --set option" in output[0], "Issue with command without auth")
 
-    def test_delete_user_role(self):
-        self.setup_user_roles()
-        final_user_id = rbacmain().returnUserList(self.user_id)
-        print final_user_id
-        user_list = ""
-        if len(final_user_id) == 1:
-            user_list = str(final_user_id[0][0])
-        else:
-            for final_user in final_user_id:
-                user_list = user_list + "," + str(final_user[0])
-            user_list = user_list[1:]
-
-        options = "--delete-users=" + user_list
+    def test_create_user_without_rbac_user(self):
+        users, roles = self._get_user_role()
+        options = "--set " + " --rbac-password " + users[0][1] + " --roles " + roles
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("SUCCESS: removed users" in output[0],"Issue with user deletion")
+        self.assertTrue("ERROR: --rbac-username is required with the --set option" in output[0], "Issue with command without rbacusername")
 
-
-    def test_delete_user_role_not_exits(self):
-        user_list = "temp1"
-        options = "--delete-users=" + user_list
+    def test_create_user_without_rbac_pass(self):
+        users, roles = self._get_user_role()
+        options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles + " --auth-type builtin"
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("User was not found." in output[0],"Incorrect error message for incorrect user to delete")
+        self.assertTrue("ERROR: --rbac-password is required with the --set option" in output[0], "Issue with command without rbac_pass")
 
-    def test_without_roles(self):
-        user_list = "temp1"
-        options = "--set-users=" + user_list
+    def test_create_user_without_role(self):
+        users, roles = self._get_user_role()
+        options = "--set " + "--rbac-username " + users[0][0] + " --rbac-password " + users[0][1] +  \
+                  " --auth-type " + self.auth_type
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("ERROR: You must specify lists of both users and roles for those users." in output[0],"Incorrect error message for missing roles in cli")
-        self.assertTrue(" --set-users=[comma delimited user list] --roles=[comma-delimited list of one or more from full_admin, readonly_admin, cluster_admin, replication_admin, bucket_admin(opt bucket name), view_admin]" in output[1],"Incorrect error message for missing roles in cli")
+        self.assertTrue("ERROR: --roles is required with the --set option" in output[0],"Issue with command without role")
 
-
-    def test_incorrect_option(self):
-        user_list = "temp1"
-        options = "--roles=" + user_list
+    def test_create_user(self):
+        users, roles = self._get_user_role()
+        options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles \
+                  + " --auth-type " + self.auth_type
+        if self.auth_type == "builtin":
+            options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("ERROR: You must specify lists of both users and roles for those users." in output[0],"for incorrect switch")
+        self.assertTrue("SUCCESS: RBAC user set" in output[0],"Issue with command create_user")
 
-
-    def test_set_roles_with_name(self):
-        self.user_name = self.input.param("user_name",None)
-        final_user_name = rbacmain().returnUserList(self.user_name)
-        final_user_id = rbacmain().returnUserList(self.user_id)
-
-        user_list = ""
-        user_name = ""
-        if len(final_user_id) == 1:
-            user_list = str(final_user_id[0])
-            user_name = str(final_user_name[0])
-        else:
-            for final_user in final_user_id:
-                user_list = user_list + "," + str(final_user[0])
-
-            for final_name in final_user_name:
-                user_name = user_name + "," + str(final_name)
-
-            user_list = user_list[1:]
-            user_name = user_name[3:-2]
-            user_name = "\"" + user_name + "\""
-
-        final_roles = rbacmain()._return_roles(self.user_role)
-        options = "--set-users=" + user_list + " --roles=" + final_roles + " --set-names=" + user_name
+    def test_create_user_name(self):
+        users, roles = self._get_user_role()
+        options = "--set " + "--rbac-username " + users[0][0] + " --rbac-password " + users[0][1] + " --roles " + roles \
+                  + " --auth-type " + self.auth_type + " --rbac-name " + self.user_name
+        if self.auth_type == "builtin":
+            options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
-        self.check_role_assignment(final_user_id,self.user_role,output)
+        self.assertTrue("SUCCESS: RBAC user set" in output[0],"Issue with command create user name")
+
+    def test_delete_user(self):
+        self.test_create_user()
+        users, roles = self._get_user_role()
+        options = "--delete " + "--rbac-username " + users[0][0] + " --auth-type=" + self.auth_type
+        output, error = self.execute_admin_role_manage(options)
+        self.assertTrue("SUCCESS: RBAC user removed" in output[0], "Issue with command of delete user")
+
+    def test_delete_user_noexist(self):
+        users, roles = self._get_user_role()
+        options = "--delete " + "--rbac-username userdoesexist --auth-type=" + self.auth_type
+        output, error = self.execute_admin_role_manage(options)
+        self.assertTrue("ERROR: \"User was not found." in output[0], "Issue with delete user that does not exist")
+
+    def test_my_role(self):
+        final_out = ''
+        options = "--my-roles "
+        self.test_create_user()
+        users, roles = self._get_user_role()
+        self.ldapUser = users[0][0]
+        self.ldapPass = users[0][1]
+        output, error = self.execute_admin_role_manage(options)
+        for out in output:
+            final_out = final_out + out
+        test = json.loads(final_out)
+        for role in test['roles']:
+            self.assertTrue(role['role'] in roles,"Issue with --my-roles")
+
+    def test_list_roles(self):
+        final_out = ''
+        options = "--list "
+        self.test_create_user()
+        users, roles = self._get_user_role()
+        self.ldapUser = users[0][0]
+        self.ldapPass = users[0][1]
+        output, error = self.execute_admin_role_manage(options)
+        for out in output:
+            final_out = final_out + out
+        test = json.loads(final_out)
+        for role in test['roles']:
+            self.assertTrue(role['role'] in roles,"Issue with --my-roles")
