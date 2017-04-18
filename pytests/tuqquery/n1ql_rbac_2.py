@@ -107,11 +107,11 @@ class RbacN1QL(QueryTests):
         old_name = "employee-14"
         new_name = "employee-14-2"
         cmd = "curl -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1 returning a.name'".\
+              "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'".\
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, new_name, old_name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+        self.assertTrue(any("success" in line for line in output), "Unable to update from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
         self.log.info("Query executed successfully")
 
@@ -121,11 +121,11 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" }) RETURNING *'"%\
+              "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" })'"%\
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+        self.assertTrue(any("success" in line for line in output), "Unable to insert into {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
         self.log.info("Query executed successfully")
 
@@ -136,10 +136,107 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         del_name = "employee-14"
         cmd = "curl -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM {3} a WHERE name = '{4}' RETURNING a.name'".\
+              "'statement=DELETE FROM {3} a WHERE name = '{4}''".\
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, del_name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+        self.assertTrue(any("success" in line for line in output), "Unable to delete from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
         self.log.info("Query executed successfully")
+
+    def test_upsert(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=UPSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" }) RETURNING *'"%\
+                (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to upsert into {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Query executed successfully")
+
+    def test_create_build_index(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI WITH {\"defer_build\":true}'"%\
+                (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to create index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Create Query executed successfully")
+        cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=BUILD INDEX ON %s(`age-index`) USING GSI'"%\
+                (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to build index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Build Query executed successfully")
+
+    def test_create_drop_index(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI'"%\
+                (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to create index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Create Query executed successfully")
+        cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=DROP INDEX %s.`age-index` USING GSI'"%\
+                (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to build index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Drop Query executed successfully")
+
+    def test_prepare(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "curl -u {0}:{1} http://{2}:8093/query/service -d 'statement=PREPARE SELECT * from {3} LIMIT 10'".\
+                format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to prepare select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Prepare query executed successfully")
+
+    def test_infer(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "curl -u %s:%s http://%s:8093/query/service -d 'statement=INFER %s WITH {\"sample_size\":10,\"num_sample_values\":2}'"%\
+                (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to infer from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Infer query executed successfully")
+
+    def test_explain(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "curl -u {0}:{1} http://{2}:8093/query/service -d 'statement=EXPLAIN SELECT * from {3} LIMIT 10'".\
+                format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), "Unable to explain select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Explain query executed successfully")
