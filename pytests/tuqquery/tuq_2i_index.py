@@ -660,8 +660,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "idxjoin_yr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY v FOR v in %s END) USING %s" % (
                     idx, bucket.name, "join_yr", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -671,8 +669,7 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "idxVM"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY x.RAM FOR x in %s END) USING %s" % (
                     idx2, bucket.name, "VMs", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
+
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -699,17 +696,87 @@ class QueriesIndexTests(QueryTests):
                              "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) " % (bucket.name)
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" not in str(plan))
+                self.query = "EXPLAIN select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+
+                self.query = "EXPLAIN select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "OR (ANY v IN %s.join_yr SATISFIES v = 2014 END) " % (bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" not in str(plan))
+
+                self.query = "select meta().id from default where ANY v IN join_yr SATISFIES v IN [ 2016,2014] END order by meta().id limit 3"
+                actual_result = self.run_cbq_query()
+                self.query = "select meta().id from default use index (`#primary`) where ANY v IN join_yr SATISFIES v IN [ 2016,2014] END order by meta().id limit 3"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = "select meta().id from default where ANY v IN join_yr SATISFIES v = 2016 OR v= 2014 END order by meta().id limit 3"
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+
+                self.query = "select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select meta().id from %s use index(`#primary`) where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = "select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "OR (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select meta().id from %s use index(`#primary`) where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "OR (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                idx8 = "idxjoin_yr4"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY v FOR v in %s END,join_yr) USING %s" % (
+                    idx8, bucket.name, "join_yr", self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx8)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx8)
+                self.assertTrue(self._is_index_in_list(bucket, idx8), "Index is not in list")
+                self.query = "EXPLAIN select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) " % (bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+
+                self.query = "EXPLAIN select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "OR (ANY v IN %s.join_yr SATISFIES v = 2014 END) " % (bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
 
                 self.query = "select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
                 bucket.name, bucket.name) + \
-                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id" % (bucket.name)
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
                 actual_result = self.run_cbq_query()
                 self.query = "select meta().id from %s use index(`#primary`) where any v in %s.join_yr satisfies v = 2016 END " % (
                 bucket.name, bucket.name) + \
-                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id" % (bucket.name)
+                             "AND (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
                 expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
 
+                self.query = "select meta().id from %s where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "OR (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = "select meta().id from %s use index(`#primary`) where any v in %s.join_yr satisfies v = 2016 END " % (
+                bucket.name, bucket.name) + \
+                             "OR (ANY v IN %s.join_yr SATISFIES v = 2014 END) order by meta().id limit 3" % (bucket.name)
+                expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
 
                 self.query = "select name from %s where any v in %s.join_yr satisfies v = 2016 END " % (
@@ -733,12 +800,15 @@ class QueriesIndexTests(QueryTests):
                 self._verify_results(drop_result['results'], [])
                 self.assertFalse(self._is_index_in_list(bucket, idx2), "Index is in list")
                 created_indexes.remove(idx2)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx8, self.index_type)
+                drop_result = self.run_cbq_query()
+                self._verify_results(drop_result['results'], [])
+                self.assertFalse(self._is_index_in_list(bucket, idx8), "Index is in list")
+                created_indexes.remove(idx8)
 
                 idx3 = "idxjoin_yr2"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY v FOR v within %s END) USING %s" % (
                     idx3, bucket.name, "join_yr", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
                 self._verify_results(create_result['results'], [])
@@ -747,8 +817,6 @@ class QueriesIndexTests(QueryTests):
                 idx4 = "idxVM2"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY x.RAM FOR x within %s END) USING %s" % (
                     idx4, bucket.name, "VMs", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
                 self._verify_results(create_result['results'], [])
