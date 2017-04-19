@@ -13,7 +13,6 @@ class EvictionBase(BaseTestCase):
     def tearDown(self):
         super(EvictionBase, self).tearDown()
 
-        
 
     def load_set_to_be_evicted(self, ttl, end=100):
         gen_create = BlobGenerator('ejected', 'ejected-', 128, start=0, end=end)

@@ -1,6 +1,9 @@
 import time
 import random
 from eviction.evictionbase import EvictionBase
+from couchbase_helper.document import View
+from membase.api.exception import DesignDocCreationException
+from membase.helper.bucket_helper import BucketOperationHelper
 
 from memcached.helper.data_helper import MemcachedClientHelper
 import uuid
@@ -245,6 +248,67 @@ class EvictionKV(EvictionBase):
         else:
             self.assertTrue(int(output[0].replace(' vb_0:seqlist_deleted_count:              ', '')) > 0,
                             'no deleted items!')
+
+    #https://issues.couchbase.com/browse/MB-23988
+    def test_ephemeral_bucket_views(self):
+        default_map_func = "function (doc, meta) {emit(meta.id, null);}"
+        default_view_name = ("xattr", "default_view")[False]
+        view = View(default_view_name, default_map_func, None, False)
+
+        ddoc_name = "ddoc1"
+        tasks = self.async_create_views(self.master, ddoc_name, [view], self.buckets[0].name)
+        for task in tasks:
+            try:
+                task.result()
+                self.fail("Views not allowed for ephemeral buckets")
+            except DesignDocCreationException as e:
+                self.assertEquals(e._message, 'Error occured design document _design/ddoc1: {"error":"not_found","reason":"no_couchbase_bucket_exists"}\n')
+
+
+class EphemeralBackupRestoreTest(EvictionBase):
+    def setUp(self):
+        super(EvictionBase, self).setUp()
+        self.only_store_hash = False
+        self.shell = RemoteMachineShellConnection(self.master)
+
+    def tearDown(self):
+        super(EvictionBase, self).tearDown()
+
+    def _load_all_buckets(self):
+        generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0,
+                                      end=self.num_items)
+        self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0,
+                                                              self.num_items, percentage=0.80)
+    # https://issues.couchbase.com/browse/MB-23992
+    def test_backup_restore(self):
+        self._load_all_buckets()
+        self.shell.execute_command("rm -rf /tmp/backups")
+        output, error = self.shell.execute_command("/opt/couchbase/bin/cbbackupmgr config "
+                                                   "--archive /tmp/backups --repo example")
+        self.log.info(output)
+        self.assertEquals('Backup repository `example` created successfully in archive `/tmp/backups`', output[0])
+        output, error = self.shell.execute_command(
+            "/opt/couchbase/bin/cbbackupmgr backup --archive /tmp/backups --repo example "
+            "--cluster couchbase://127.0.0.1 --username Administrator --password password")
+        self.log.info(output)
+        self.assertEquals('Backup successfully completed', output[1])
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        imp_rest = RestConnection(self.master)
+        info = imp_rest.get_nodes_self()
+        if info.memoryQuota and int(info.memoryQuota) > 0:
+            self.quota = info.memoryQuota
+        bucket_params = self._create_bucket_params(server=self.master, size=250, bucket_type='ephemeral',
+                                                   replicas=self.num_replicas,
+                                                   enable_replica_index=self.enable_replica_index,
+                                                   eviction_policy=self.eviction_policy)
+        self.cluster.create_default_bucket(bucket_params)
+        output, error = self.shell.execute_command('ls /tmp/backups/example')
+        output, error = self.shell.execute_command("/opt/couchbase/bin/cbbackupmgr restore --archive /tmp/backups"
+                                                   " --repo example --cluster couchbase://127.0.0.1 "
+                                                   "--username Administrator --password password --start %s" % output[0])
+        self.log.info(output)
+        self.assertEquals('Restore completed successfully', output[1])
+        self._verify_all_buckets(self.master)
 
 
 class EphemeralBucketsOOM(EvictionBase, DCPBase):
