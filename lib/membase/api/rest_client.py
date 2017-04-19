@@ -3732,7 +3732,7 @@ class RestConnection(object):
     payload=name=<nameofuser>&roles=admin,cluster_admin&password=<password>
     if roles=<empty> user will be created with no roles'''
     def add_set_builtin_user(self, user_id, payload):
-        url = "settings/rbac/users/builtin/" + user_id
+        url = "settings/rbac/users/local/" + user_id
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'PUT', payload)
         if not status:
@@ -3743,7 +3743,7 @@ class RestConnection(object):
     Delete built-in user
     '''
     def delete_builtin_user(self, user_id):
-        url = "settings/rbac/users/builtin/" + user_id
+        url = "settings/rbac/users/local/" + user_id
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'DELETE')
         if not status:
