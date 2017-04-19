@@ -194,6 +194,7 @@ class QueryMonitoringTests(QueryTests):
 
                 # check if a query can be killed from system:active_requests using its requestId
                 logging.info("CHECKING IF A QUERY CAN BE KILLED")
+                time.sleep(1)
                 self.run_cbq_query('delete from system:active_requests where requestId  =  "%s"' % requestId)
                 result = self.run_cbq_query('select * from system:active_requests  where requestId  =  "%s"'
                                             % requestId)

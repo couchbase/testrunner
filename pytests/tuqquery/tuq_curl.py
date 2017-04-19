@@ -39,6 +39,7 @@ class QueryCurlTests(QueryTests):
     def setUp(self):
         super(QueryCurlTests, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
+        self.info = self.shell.extract_remote_info()
         self.rest = RestConnection(self.master)
         self.cbqpath = '%scbq' % self.path + " -u %s -p %s" % (self.rest.username,self.rest.password)
         self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip,self.n1ql_port)
@@ -624,8 +625,12 @@ class QueryCurlTests(QueryTests):
         For some reason you cannot treat the output of execute_commands_inside as normal unicode, this is a workaround
         to convert the output to json'''
     def convert_to_json(self,output_curl):
-        # There are 48 unnecessary characters in the output of execute_commands_inside that must be removed
-        new_curl = json.dumps(output_curl[47:])
+        # There are 48 unnecessary characters in the output that must be removed(centos)
+        # There are 64 unnescessary characters in the output that must be removed(windows)
+        if self.info.type.lower() == 'windows':
+            new_curl = json.dumps(output_curl[64:])
+        else:
+            new_curl = json.dumps(output_curl[47:])
         string_curl = json.loads(new_curl)
         json_curl = json.loads(string_curl)
         return json_curl
