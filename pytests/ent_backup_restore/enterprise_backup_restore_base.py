@@ -92,6 +92,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.backup_incr_backup = self.input.param("incr-backup", None)
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
+        self.backupset.map_buckets = self.input.param("map-buckets", None)
         self.backups = []
         self.validation_helper = BackupRestoreValidations(self.backupset, self.cluster_to_backup, self.cluster_to_restore,
                                                           self.buckets, self.backup_validation_files_location, self.backups,
@@ -292,19 +293,40 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             rest_helper = RestHelper(rest_conn)
+            count = 0
+            buckets = []
             for bucket in self.buckets:
                 if not rest_helper.bucket_exists(bucket.name):
-                    self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
-                                                                                   self.backupset.restore_cluster_host.ip))
-                    rest_conn.create_bucket(bucket=bucket.name,
-                                            ramQuotaMB=512,
-                                            authType=bucket.authType if bucket.authType else 'none',
-                                            proxyPort=bucket.port,
-                                            saslPassword=bucket.saslPassword,
-                                            lww=self.lww_new)
-                    bucket_ready = rest_helper.vbucket_map_ready(bucket.name)
-                    if not bucket_ready:
-                        self.fail("Bucket %s not created after 120 seconds." % bucket.name)
+                    if self.backupset.map_buckets is None:
+                        self.log.info("Creating bucket {0} in restore host {1}"
+                                                    .format(bucket.name,
+                                                     self.backupset.restore_cluster_host.ip))
+                        rest_conn.create_bucket(bucket=bucket.name,
+                                        ramQuotaMB=512,
+                                        authType=bucket.authType if bucket.authType else 'none',
+                                        proxyPort=bucket.port,
+                                        saslPassword=bucket.saslPassword,
+                                        lww=self.lww_new)
+                        bucket_ready = rest_helper.vbucket_map_ready(bucket.name)
+                        if not bucket_ready:
+                            self.fail("Bucket %s not created after 120 seconds." % bucket.name)
+                    elif self.backupset.map_buckets:
+                        self.log.info("Create new bucket name to restore to this bucket")
+                        bucket_name = bucket.name + "_" + str(count)
+                        rest_conn.create_bucket(bucket=bucket_name,
+                                        ramQuotaMB=512,
+                                        authType=bucket.authType if bucket.authType else 'none',
+                                        proxyPort=bucket.port,
+                                        saslPassword=bucket.saslPassword,
+                                        lww=self.lww_new)
+                        bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
+                        if not bucket_ready:
+                            self.fail("Bucket %s not created after 120 seconds." % bucket_name)
+                    buckets.append("%s=%s" % (bucket.name, bucket_name))
+                count +=1
+                bucket_maps = ",".join(buckets)
+        if self.backupset.map_buckets:
+            args += " --map-buckets %s " % bucket_maps
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -611,3 +633,4 @@ class Backupset:
         self.backup_incr_backup = ''
         self.bucket_backup = ''
         self.backup_to_compact = ''
+        self.map_buckets = None
