@@ -776,7 +776,7 @@ class BaseTestCase(unittest.TestCase):
             for task in stats_tasks:
                 task.result(timeout)
         except Exception as e:
-            print e;
+            self.log.info("{0}".format(e))
             for task in stats_tasks:
                 task.cancel()
             self.log.error("unable to get expected stats for any node! Print taps for all nodes:")
