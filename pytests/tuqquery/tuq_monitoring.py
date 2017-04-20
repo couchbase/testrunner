@@ -168,7 +168,7 @@ class QueryMonitoringTests(QueryTests):
                                            % (self.servers[1].ip,self.servers[1].port))
                 if not node1['metrics']['resultCount'] == 1:
                     self.threadFailure = True
-                    logging.error('THE QUERY ON THE REQUESTED NODE: "%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
+                    logging.error('THE QUERY ON THE REQUESTED NODE: "%s:%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
                                   % (self.servers[1].ip,self.servers[1].port))
                     print node1
                     return
@@ -711,7 +711,7 @@ class QueryMonitoringTests(QueryTests):
 
         # Run more than num_entries(10) queries
         for i in range(num_entries*2):
-            self.run_cbq_query('select * from default union select * from default')
+            self.run_cbq_query('select * from default')
 
         result = self.run_cbq_query('select * from system:completed_requests')
         print (json.dumps(result, sort_keys=True, indent=3))
