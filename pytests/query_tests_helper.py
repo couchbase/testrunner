@@ -54,6 +54,7 @@ class QueryHelperTests(BaseTestCase):
         if self.dataset == "array":
             self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
         self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        self.num_index_replicas = self.input.param("num_replica", 0)
 
     def tearDown(self):
         super(QueryHelperTests, self).tearDown()
@@ -145,7 +146,7 @@ class QueryHelperTests(BaseTestCase):
         defer_build = True
         query = query_definition.generate_index_create_query(
             bucket=bucket, use_gsi_for_secondary=self.use_gsi_for_secondary,
-            deploy_node_info=deploy_node_info, defer_build=defer_build, num_replica=self.num_replicas)
+            deploy_node_info=deploy_node_info, defer_build=defer_build, num_replica=self.num_index_replicas)
         log.info(query)
         create_index_task = self.cluster.async_create_index(
             server=self.n1ql_server, bucket=bucket, query=query,

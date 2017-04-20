@@ -42,7 +42,6 @@ class QueryDefinition(object):
 		self.index_drop_template = index_drop_template
 		self.query_template = query_template
 		self.groups = groups
-		self.num_replica = 1
 
 	def generate_index_create_query(self, bucket = "default", use_gsi_for_secondary = True,
 	        deploy_node_info = None, defer_build = None, index_where_clause = None, gsi_type=None, num_replica=None):
