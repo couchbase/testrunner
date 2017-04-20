@@ -613,6 +613,156 @@ class QueriesIndexTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+
+
+
+    def test_stable_scan(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s ( join_day )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                idx = "idx2"
+                self.query = "CREATE INDEX %s ON %s ( meta().id )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.query = 'select join_day from %s where join_day in [4,7,5,10] order by meta().id' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where join_day in [4,7,5,10] order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'select join_day from %s where join_day = 4 OR join_day > 5 OR join_day < 10 order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where join_day = 4 OR join_day > 5 OR join_day < 10 order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query ='select join_day from %s where join_day != 10 order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query ='select join_day from %s use index(`#primary`) where join_day != 10 order by meta().id'%(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'select join_day from %s where meta().id in ["query-testemployee10153.1877827-0","","query-testemployee10194.855617-0"] order by meta().id' %(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where meta().id in ["query-testemployee10153.1877827-0","","query-testemployee10194.855617-0"] order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.assertTrue(actual_result['results']==[{u'join_day': 9}, {u'join_day': 4}])
+                self.query = 'select join_day from %s where meta().id = "query-testemployee10231.2819054-0" OR meta().id > "" OR meta().id < "query-testemployee10317.9004497-0" order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query = 'select join_day from %s use index(`#primary`) where meta().id = "query-testemployee10231.2819054-0" OR meta().id > "" OR meta().id < "query-testemployee10317.9004497-0" order by meta().id' %(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = 'select join_day from %s where meta().id = "query-testemployee10231.2819054-0" OR meta().id > "" OR meta().id < "query-testemployee10317.9004497-0" order by meta().id limit 10'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==[{u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}])
+                self.query ='select join_day from %s where meta().id != "query-testemployee10231.2819054-0" order by meta().id'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.query ='select join_day from %s use index(`#primary`) where meta().id != "query-testemployee10231.2819054-0" order by meta().id'%(bucket.name)
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query ='select join_day from %s where meta().id != "query-testemployee10231.2819054-0" order by meta().id limit 10'%(bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==[{u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 9}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}, {u'join_day': 4}])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_meta_cas_expiration(self):
+         for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "CREATE INDEX %s ON %s ( meta().cas )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                idx = "idx2"
+                self.query = "CREATE INDEX %s ON %s ( meta().expiration )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                idx = "idx3"
+                self.query = "CREATE INDEX %s ON %s ( meta().id, meta().cas, meta().expiration )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                idx = "idx4"
+                self.query = "CREATE INDEX %s ON %s ( meta().id )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                idx = "idx5"
+                self.query = "CREATE INDEX %s ON %s ( meta().cas, meta().expiration )" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                idx = "idx6"
+                self.query = "CREATE INDEX %s ON %s ( meta().cas ) where meta().cas > 1487875768758304768" %(idx,bucket.name)+\
+                             " USING %s" % (self.index_type)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.query = 'explain SELECT  meta().id , meta().cas, meta().expiration FROM default where meta().id > ""'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(plan['~children'][0]['index'] == 'idx3')
+                self.query = 'explain SELECT  meta().id , meta().cas, meta().expiration FROM default where meta().id !="query-testemployee10231.2819054-0" or meta().cas > 0 or meta().expiration = 0'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index'] =='#primary')
+                self.query = 'explain SELECT meta().cas, meta().expiration,meta().id FROM default where meta().cas = 1487875768758304768 and meta().expiration > 0'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['index'] =='idx5')
+                self.query = 'explain SELECT meta().cas, meta().expiration FROM default where meta().cas !=1487875768758304768 or meta().expiration != 0'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue(plan['~children'][0]['#operator']=='UnionScan')
+                self.query = 'explain SELECT  meta().id  FROM default where meta().id in ["",null,"query-testemployee10231.2819054-0","query-testemployee9987.55838821-0"]'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(plan['~children'][0]['index'] == "#primary")
+                self.query = 'explain SELECT  meta().cas,meta().id  FROM default where meta().cas > 1487875768758304768'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(plan['~children'][0]['index'] == "idx6")
+                self.query = 'explain SELECT  meta().expiration,meta().id  FROM default where meta().expiration > 0'
+                actual_result = self.run_cbq_query()
+                plan = ExplainPlanHelper(actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.assertTrue(plan['~children'][0]['index'] == "idx2")
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+
     def test_suffix(self):
         for bucket in self.buckets:
             created_indexes = []
@@ -1177,6 +1327,88 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_pushdown_complex_filter(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                for bucket in self.buckets:
+                    idx = "idxjoining"
+                    self.query = "create index {1} on {0}(join_yr,join_day)".format(bucket.name,idx)
+                    actual_result =self.run_cbq_query()
+                    self._wait_for_index_online(bucket, idx)
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append(idx)
+                    self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                    self.query = 'explain select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr = 2011'
+                    actual_result= self.run_cbq_query()
+                    plan=ExplainPlanHelper(actual_result)
+                    self.assertTrue(plan['~children'][0]['index']==idx)
+                    self.assertTrue("covers" in str(plan))
+                    self.query = 'select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr = 2011'
+                    actual_result= self.run_cbq_query(query_params={'profile' : 'timings'})
+                    self.assertTrue("covers" in str( actual_result['profile']['executionTimings']['~children'][0]['~child']['~children']))
+                    self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][0]['index'] == idx)
+                    all_docs_list = self.generate_full_docs_list(self.gens_load)
+                    expected_result = [doc for doc in all_docs_list if  doc['join_day'] >= 0 and doc['join_day'] <= 5 and doc['join_yr'] == 2011 ]
+                    num_of_items = len(expected_result)
+                    for i in [0,1,2]:
+                        self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1]['~children'][i]['#stats']['#itemsIn'] == num_of_items)
+                        self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1]['~children'][i]['#stats']['#itemsOut'] == num_of_items)
+
+                    self.query = 'explain select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr != 2011'
+                    actual_result= self.run_cbq_query()
+                    plan=ExplainPlanHelper(actual_result)
+                    self.assertTrue(plan['~children'][0]['scan']['index']==idx)
+                    self.assertTrue("covers" in str(plan))
+                    self.query = 'select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr != 2011'
+                    actual_result= self.run_cbq_query(query_params={'profile' : 'timings'})
+                    self.assertTrue("covers" in str( actual_result['profile']['executionTimings']['~children'][0]['~child']['~children']))
+                    self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][0]['scan']['index'] == idx)
+                    expected_result = [doc for doc in all_docs_list if  doc['join_day'] >= 0 and doc['join_day'] <= 5 and doc['join_yr'] != 2011 ]
+                    num_of_items = len(expected_result)
+                    for i in [0,1,2]:
+                        self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1]['~children'][i]['#stats']['#itemsIn'] == num_of_items)
+                        self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][1]['~children'][i]['#stats']['#itemsOut'] == num_of_items)
+
+                    self.query = 'select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr != 2015 order by meta().id'
+                    actual_result= self.run_cbq_query()
+                    self.query = 'select meta().id from default use index(`#primary`) where join_day between 0 and 5 and ' \
+                                 'join_yr != 2015 order by meta().id'
+                    expected_result= self.run_cbq_query()
+                    self.assertTrue(actual_result['results']==expected_result['results'])
+
+                    self.query = 'select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr != 2011 order by meta().id'
+                    actual_result= self.run_cbq_query()
+                    self.query = 'select meta().id from default use index(`#primary`) where join_day between 0 and 5 and ' \
+                                 'join_yr != 2011 order by meta().id'
+                    expected_result= self.run_cbq_query()
+                    self.assertTrue(actual_result['results']==expected_result['results'])
+                    self.query = 'select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr = 2015 order by meta().id'
+                    actual_result= self.run_cbq_query()
+                    self.query = 'select meta().id from default use index(`#primary`) where join_day between 0 and 5 and ' \
+                                 'join_yr = 2015 order by meta().id'
+                    expected_result= self.run_cbq_query()
+                    self.assertTrue(actual_result['results']==expected_result['results'])
+                    self.query = 'select meta().id from default where join_day between 0 and 5 and ' \
+                                 'join_yr = 2011 order by meta().id'
+                    actual_result= self.run_cbq_query()
+                    self.query = 'select meta().id from default use index(`#primary`) where join_day between 0 and 5 and ' \
+                                 'join_yr = 2011 order by meta().id'
+                    expected_result= self.run_cbq_query()
+                    self.assertTrue(actual_result['results']==expected_result['results'])
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_simple_array_index_all(self):
         for bucket in self.buckets:
@@ -2775,44 +3007,6 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
-    def test_asc_desc_index(self):
-        for bucket in self.buckets:
-            created_indexes = []
-            try:
-                idx = "idx"
-                self.query = "CREATE INDEX %s ON default(join_yr ASC, join_day DESC, meta().id ASC)"%(idx)
-                actual_result = self.run_cbq_query()
-                self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
-                created_indexes.append(idx)
-                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr, join_day DESC LIMIT 100 OFFSET 200'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr,meta().id ASC LIMIT 100 OFFSET 200'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and join_day <10 ' \
-                             'ORDER BY join_yr asc,join_day desc LIMIT 100 OFFSET 200'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and join_day <10 and meta().id like "query-test%"' \
-                             'ORDER BY join_yr asc,join_day desc,meta().id ASC LIMIT 100 OFFSET 200'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
-            finally:
-                for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
-                    self.run_cbq_query()
-                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-
-
     def test_avoid_full_span(self):
          for bucket in self.buckets:
             created_indexes = []
@@ -3108,8 +3302,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "idx"
                 self.query = "CREATE INDEX %s ON %s( all array i FOR i in %s END) WHERE (department = 'Support')  USING %s" % (
                   idx, bucket.name, "hobbies.hobby", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -4699,6 +4891,17 @@ class QueriesIndexTests(QueryTests):
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
+
+    def test_max_pushdown(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            self.query = 'CREATE INDEX idx ON default(test_rate DESC,join_mO DESC)'
+            self.run_cbq_query()
+            created_indexes.append("idx")
+            self.query = 'explain SELECT MAX(test_rate) FROM default WHERE test_rate > 10'
+            actual_result = self.run_cbq_query()
+            print actual_result
+
 
     def test_max_covering_index(self):
         for bucket in self.buckets:
