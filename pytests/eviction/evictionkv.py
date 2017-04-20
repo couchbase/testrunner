@@ -56,7 +56,7 @@ class EvictionKV(EvictionBase):
         self.log.info("sleeping {0} seconds to allow keys to be evicted".format(self.expires + 30))
         time.sleep(self.expires + 30)  # 30 seconds grace period
 
-        # run the compactor which should expire the kyes
+        # run the compactor which should expire the keys
         compacted = self.cluster.compact_bucket(self.master, 'default')
 
         self.verify_all_nodes()
@@ -64,7 +64,7 @@ class EvictionKV(EvictionBase):
     """
     add new keys at the same rate as keys are expiring
     Here is the algorithm:
-      - initally set n keys to expire in chunk, the first chunk expiring after the keys are initially set - thus
+      - initially set n keys to expire in chunk, the first chunk expiring after the keys are initially set - thus
         the init time delay value added to the expiry time - this may need to be adjusted
       - in each interval set the same number of keys as is expected to expire
 
