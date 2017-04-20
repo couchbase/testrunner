@@ -791,9 +791,15 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                                       swap_rebalance=True)
         self.run_operation(phase="after")
 
-    def test_when_indexer_is_paused_when_gsi_rebalance_in_progress(self):
+    def test_gsi_rebalance_when_indexer_is_in_paused_state(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         self.run_operation(phase="before")
+        for i in xrange(5):
+            query_definition_generator = SQLDefinitionGenerator()
+            self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+            self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+            self.run_operation(phase="before")
         self.sleep(30)
         services_in = ["index"]
         # rebalance in a node
@@ -805,7 +811,14 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         for task in tasks:
             task.result()
         # Ensure indexer reaches to paused state
+        failover_nodes = [kv_server[1], index_server]
         self._push_indexer_off_the_cliff()
+        # Try kv and index failover when indexer is in paused state
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=failover_nodes, graceful=False)
+        failover_task.result()
+        for failover_node in failover_nodes:
+            self.rest.add_back_node(failover_node.id)
+            self.rest.set_recovery_type(otpNode=failover_node.id, recoveryType="full")
         # rebalance out a node
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
@@ -1661,6 +1674,154 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             output = self.rest.cleanup_indexer_rebalance(server=index_server)
             log.info(output)
 
+    def test_autofailover_with_gsi_rebalance(self):
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        RestConnection(self.master).update_autofailover_settings(True, 30)
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        remote = RemoteMachineShellConnection(kv_node[1])
+        remote.stop_server()
+        self.sleep(40, "Wait for autofailover")
+        try:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     [], [index_node, kv_node[1]])
+            self.run_operation(phase="during")
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        except Exception, ex:
+            self.fail("rebalance failed with  error : {0}".format(str(ex)))
+        finally:
+            remote.start_server()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [index_node])
+        self.run_operation(phase="after")
+        self.sleep(30)
+
+    def test_gsi_rebalance_can_be_resumed_after_failed_gsi_rebalance(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+        # rebalance out a indexer node
+        try:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+            self.sleep(2)
+            # reboot a kv node during gsi rebalance
+            self.reboot_node(index_server)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        except Exception, ex:
+            if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
+                self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
+        else:
+            self.fail("rebalance did not fail after index node reboot")
+        self.sleep(60)
+        # Rerun rebalance to check if it can recover from failure
+        for i in xrange(5):
+            try:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+                self.sleep(2)
+                reached = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                rebalance.result()
+            except Exception, ex:
+                if "Rebalance failed. See logs for detailed reason. You can try again" in str(ex) and i == 4:
+                    self.fail("rebalance did not recover from failure : {0}".format(str(ex)))
+                    # Rerun after MB-23900 is fixed.
+            else:
+                break
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [index_server])
+        self.run_operation(phase="after")
+
+    def test_induce_fts_failure_during_gsi_rebalance(self):
+        self.run_operation(phase="before")
+        fts_node = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=False)
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        to_remove_nodes = [nodes_out_list]
+        services_in = ["index"]
+        log.info(self.servers[:self.nodes_init])
+        # do a swap rebalance
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        self.sleep(5)
+        for i in xrange(20):
+            self._kill_fts_process(fts_node)
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
+        # kill fts while rebalance is running
+        self.sleep(5)
+        for i in xrange(20):
+            self._kill_fts_process(fts_node)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      to_add_nodes, to_remove_nodes, swap_rebalance=True)
+        self.run_operation(phase="after")
+
+    def test_cbindex_move_on_deferred_index_then_build_index(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        # create index with defer_build = True
+        self._create_index_with_defer_build()
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+        # Move the indexes
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes = []
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                indexes.append(index)
+        log.info(indexes)
+        self.sleep(2)
+        i = 1
+        for index in indexes:
+            self._cbindex_move(index_server, self.servers[self.nodes_init], index)
+            self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], i)
+            i += 1
+        self.sleep(60)
+        # Now build the index on the new node
+        exceptions = self._build_index()
+        if exceptions:
+            self.fail("build index after rebalance failed")
+        # Move the indexes again
+        j = 1
+        for index in indexes:
+            self._cbindex_move(self.servers[self.nodes_init], index_server, index)
+            self.wait_for_cbindex_move_to_complete(index_server, j)
+            j += 1
+        self.sleep(60)
+        self.run_operation(phase="after")
+
     def _return_maps(self):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
@@ -1912,3 +2073,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def _kill_all_processes_index(self, server):
         shell = RemoteMachineShellConnection(server)
         shell.execute_command("killall indexer")
+
+    def _kill_fts_process(self, server):
+        shell = RemoteMachineShellConnection(server)
+        shell.kill_cbft_process()
+        shell.disconnect()
