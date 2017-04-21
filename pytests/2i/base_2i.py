@@ -1,5 +1,6 @@
 import logging
 import random
+
 from newtuq import QueryTests
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.tuq_generators import TuqGenerators
@@ -54,7 +55,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
-        self.num_index_replicas = self.input.param("num_replica", 0)
+        self.num_index_replicas = self.input.param("num_index_replica", 0)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()

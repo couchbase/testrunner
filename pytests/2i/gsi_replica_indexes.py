@@ -38,6 +38,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.server_grouping = self.input.param("server_grouping", None)
         self.eq_index_node = self.input.param("eq_index_node", None)
         self.recovery_type = self.input.param("recovery_type", None)
+        self.dest_node = self.input.param("dest_node",None)
 
     def tearDown(self):
         super(GSIReplicaIndexesTests, self).tearDown()
@@ -1721,12 +1722,196 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not load_balanced:
             self.fail("Load is not balanced amongst index replicas")
 
-    def _get_node_list(self):
+    def test_move_index(self):
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(nodes) - 1, nodes)
+
+        dest_nodes = self._get_node_list(self.dest_node)
+        self.log.info(dest_nodes)
+        expect_failure = False
+        if self.expected_err_msg:
+            expect_failure=True
+        output, error = self._cbindex_move(src_node=self.servers[0], node_list=dest_nodes, index_list=index_name_prefix, expect_failure=expect_failure)
+        self.sleep(30)
+        if self.expected_err_msg:
+            if self.expected_err_msg not in error[0]:
+                self.fail("Move index failed with unexpected error")
+        else:
+            #self.wait_for_cbindex_move_cmd_to_complete(self.servers[self.dest_node], 1)
+            index_map = self.get_index_map()
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, len(dest_nodes) - 1, dest_nodes)
+
+    def test_move_index_failed_node(self):
+        node_out = self.servers[self.node_out]
+        failover_task = self.cluster.async_failover(
+            self.servers[:self.nodes_init],
+            [node_out],
+            self.graceful)
+
+        failover_task.result()
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(nodes) - 1, nodes)
+
+        dest_nodes = self._get_node_list(self.dest_node)
+        self.log.info(dest_nodes)
+        expect_failure = False
+        if self.expected_err_msg:
+            expect_failure = True
+        output, error = self._cbindex_move(src_node=self.servers[0],
+                                          node_list=dest_nodes,
+                                          index_list=index_name_prefix,
+                                          expect_failure=expect_failure)
+        self.sleep(30)
+        if self.expected_err_msg:
+            if self.expected_err_msg not in error[0]:
+                self.fail("Move index failed with unexpected error")
+        else:
+            # self.wait_for_cbindex_move_cmd_to_complete(self.servers[self.dest_node], 1)
+            index_map = self.get_index_map()
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(dest_nodes) - 1,
+                                                    dest_nodes)
+
+    def test_dest_node_fails_during_move_index(self):
+        node_out = self.servers[self.node_out]
+
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(nodes) - 1, nodes)
+
+        dest_nodes = self._get_node_list(self.dest_node)
+        self.log.info(dest_nodes)
+        expect_failure = False
+        if self.expected_err_msg:
+            expect_failure = True
+
+        threads = []
+        threads.append(
+            Thread(target=self._cbindex_move, name="move_index",
+                   args=(self.servers[0], dest_nodes, index_name_prefix, expect_failure)))
+        threads.append(
+            Thread(target=self.cluster.async_failover, name="failover", args=(
+                self.servers[:self.nodes_init], [node_out], self.graceful)))
+
+        try:
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.sleep(30)
+
+        except Exception, ex:
+            self.log.info("***** Exception : %s", str(ex))
+
+    def test_index_metadata_replicated(self):
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed")
+
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, self.num_index_replicas)
+
+        index_metadata = None
+        for i in range(0, len(self.servers)):
+            node_index_metadata = RestConnection(self.servers[i]).get_indexer_metadata()
+            self.log.info("Index metadata for %s : %s" %(self.servers[i].ip, node_index_metadata))
+            if index_metadata:
+                if node_index_metadata != index_metadata:
+                    self.fail("Index metadata not replicated properly")
+            else:
+                index_metadata = node_index_metadata
+
+
+
+    def _get_node_list(self, node_list=None):
         # 1. Parse node string
+        if node_list:
+            src_nodes = node_list
+        else:
+            src_nodes = self.nodes
         nodes = []
         invalid_ip = "10.111.151.256"
-        if self.nodes:
-            nodes = self.nodes.split(":")
+        if src_nodes:
+            nodes = src_nodes.split(":")
             for i in range(0, len(nodes)):
                 if nodes[i] not in ("empty", "invalid"):
                     nodes[i] = self.servers[int(nodes[i])].ip + ":" + \
@@ -1777,3 +1962,31 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
         return index_map, stats_map
+
+    def _cbindex_move(self, src_node, node_list, index_list,
+                     expect_failure=False, bucket="default",
+                     username="Administrator", password="password"):
+        node_list = str(node_list).replace("\'", "\"")
+        src_node_ip = src_node.ip + ":" + src_node.port
+        cmd = """cbindex -type move -server '{0}' -auth '{4}:{5}' -index '{1}' -bucket {2} -with '{{"nodes":{3}}}'""".format(
+            src_node_ip,
+            index_list,
+            bucket,
+            str(node_list),
+            username,
+            password)
+        log.info(cmd)
+        remote_client = RemoteMachineShellConnection(src_node)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error:
+            if expect_failure:
+                log.info("cbindex move failed as expected")
+            else:
+                log.info("Output : %s", output)
+                log.info("Error : %s", error)
+                self.fail("cbindex move failed")
+        else:
+            log.info("cbindex move started successfully : {0}".format(output))
+        return output, error

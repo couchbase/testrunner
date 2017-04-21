@@ -54,7 +54,7 @@ class QueryHelperTests(BaseTestCase):
         if self.dataset == "array":
             self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
         self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
-        self.num_index_replicas = self.input.param("num_replica", 0)
+        self.num_index_replicas = self.input.param("num_index_replica", 0)
 
     def tearDown(self):
         super(QueryHelperTests, self).tearDown()

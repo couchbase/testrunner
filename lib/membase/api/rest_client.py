@@ -1630,6 +1630,20 @@ class RestConnection(object):
                     index_map[field] = val
         return index_map
 
+    def get_indexer_metadata(self, timeout=120, index_map=None):
+        api = self.index_baseUrl + 'getIndexStatus'
+        index_map = {}
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            for key in json_parsed.keys():
+                tokens = key.split(":")
+                val = json_parsed[key]
+                if len(tokens) == 1:
+                    field = tokens[0]
+                    index_map[field] = val
+        return index_map
+
     def get_indexer_internal_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'settings?internal=ok'
         index_map = {}
