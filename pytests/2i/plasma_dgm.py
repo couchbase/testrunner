@@ -1,6 +1,7 @@
 import copy
 import logging
 
+from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from base_2i import BaseSecondaryIndexingTests
@@ -10,6 +11,7 @@ log = logging.getLogger(__name__)
 class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
     def setUp(self):
         super(SecondaryIndexDGMTests, self).setUp()
+        self.num_plasma_buckets = self.input.param("standard_buckets", 1)
         self.indexMemQuota = self.input.param("indexMemQuota", 256)
         self.dgmServer = self.get_nodes_from_services_map(service_type="index")
         self.rest = RestConnection(self.dgmServer)
@@ -207,6 +209,30 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
+
+    def test_lru(self):
+        self.multi_create_index(
+            buckets=self.buckets, query_definitions=self.query_definitions,
+            deploy_node_info=self.deploy_node_info)
+        self.index_map = self.rest.get_index_status()
+        self.sleep(30)
+        self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer])
+        for i in range(5):
+            self.multi_query_using_index()
+        query_definitions = []
+        query_definitions.append(QueryDefinition(
+            index_name="lru_job_title", index_fields=["job_title"],
+            query_template="SELECT * FROM %s WHERE {0}".format(
+                " %s " % "job_title = \"Engineer\" ORDER BY _id"),
+            groups = ["employee"],
+            index_where_clause=" job_title IS NOT NULL "))
+        query_definitions.append(QueryDefinition(
+            index_name="lru_join_yr", index_fields=["join_yr"],
+            query_template="SELECT * FROM %s WHERE {0}".format(
+                " %s " % "join_yr = 2008  ORDER BY _id"),
+            groups = ["employee"],
+            index_where_clause=" join_yr IS NOT NULL "))
+        self.multi_query_using_index(query_definitions=query_definitions)
 
     def _get_indexer_out_of_dgm(self, indexer_nodes=None):
         body = {"stale": "False"}
