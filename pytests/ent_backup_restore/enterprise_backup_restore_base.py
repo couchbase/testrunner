@@ -1,6 +1,5 @@
 import os, re
 import shutil
-import testconstants
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
@@ -10,7 +9,9 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
-                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH
+                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
+                          WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
+                          MAC_COUCHBASE_BIN_PATH
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -37,10 +38,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         elif info == 'windows':
             self.cmd_ext = ".exe"
             self.database_path = WIN_COUCHBASE_DATA_PATH
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
-            self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH_RAW + "entbackup")
+            self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
+            self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
-            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+            self.cli_command_location = MAC_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
@@ -89,6 +90,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.number_of_backups = self.input.param("number_of_backups", 1)
         self.backupset.filter_keys = self.input.param("filter-keys", "")
         self.backupset.filter_values = self.input.param("filter-values", "")
+        self.backupset.no_ssl_verify = self.input.param("no-ssl-verify", False)
+        self.backupset.secure_conn = self.input.param("secure-conn", False)
         self.backupset.backup_list_name = self.input.param("list-names", None)
         self.backupset.backup_incr_backup = self.input.param("incr-backup", None)
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
@@ -120,7 +123,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if info == 'linux' or info == 'mac':
                 backup_directory = "/tmp/entbackup"
             elif info == 'windows':
-                backup_directory = testconstants.WIN_TMP_PATH_RAW + "entbackup"
+                backup_directory = WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
             validation_files_location = "/tmp/backuprestore"
@@ -208,10 +211,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info(msg)
 
     def backup_cluster(self, threads_count=1):
-        args = "backup --archive {0} --repo {1} {6} http://{2}:{3} --username {4} --password {5}". \
+        url_format = ""
+        if self.backupset.secure_conn:
+            self.backupset.cluster_host.port = 18091
+            url_format = "s"
+        args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{3} --username {4} --password {5}". \
             format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
-                   self.backupset.cluster_host_password, self.cluster_flag)
+                   self.backupset.cluster_host_password, self.cluster_flag, url_format)
+        if self.backupset.no_ssl_verify:
+            args += " --no-ssl-verify"
         if self.backupset.resume:
             args += " --resume"
         if self.backupset.purge:
@@ -656,6 +665,8 @@ class Backupset:
         self.number_of_backups = 1
         self.filter_keys = ''
         self.filter_values = ''
+        self.no_ssl_verify = False
+        self.secure_conn = False
         self.backup_list_name = ''
         self.backup_incr_backup = ''
         self.bucket_backup = ''

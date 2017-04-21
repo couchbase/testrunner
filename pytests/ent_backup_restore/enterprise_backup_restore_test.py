@@ -798,6 +798,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.validate_help_content(output[:5], content)
         shell.disconnect()
 
+    def test_backup_with_optional_flags(self):
+        """
+            1. Create a bucket
+            2. Load docs to bucket
+            3. Backup with optional flags like no-ssl-verify, secure-conn
+            4. Verify backup data in backup file
+        """
+        self.backup_create()
+        self.backup_cluster()
+
     def test_restore_with_filter_regex(self):
         """
             1. Create a bucket
