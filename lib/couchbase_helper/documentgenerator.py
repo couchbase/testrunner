@@ -1,6 +1,10 @@
 import json
 import string
 import random
+from random import choice
+from string import ascii_uppercase
+from string import ascii_lowercase
+from string import digits
 import gzip
 from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
 from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
@@ -147,7 +151,10 @@ class BlobGenerator(KVGenerator):
         if self.itr >= self.end:
             raise StopIteration
 
-        key = self.name + str(self.itr)
+        if self.name == "random_keys":
+            key = ''.join(choice(ascii_uppercase+ascii_lowercase+digits) for i in range(12))
+        else:
+            key = self.name + str(self.itr)
         if self.value_size == 1:
             value = random.choice(string.letters)
         else:

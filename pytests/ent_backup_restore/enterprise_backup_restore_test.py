@@ -798,6 +798,36 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.validate_help_content(output[:5], content)
         shell.disconnect()
 
+    def test_restore_with_filter_regex(self):
+        """
+            1. Create a bucket
+            2. Load docs to bucket with key patterned
+            3. Backup docs
+            4. Delete bucket
+            5. Restore docs with regex
+            6. Verify only key or value in regex restored to bucket
+        """
+        key_name = "ent-backup"
+        self.random_keys = self.input.param("random_keys", False)
+        if self.random_keys:
+            key_name = "random_keys"
+        self.validate_keys = self.input.param("validate_keys", False)
+        gen = BlobGenerator(key_name, "ent-backup-", self.value_size,
+                                                         end=self.num_items)
+
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.log.info("Start backup")
+        self.backup_create()
+        self.backup_cluster()
+        self.backup_restore()
+        self.merged = False
+        self.validate_backup_data(self.backupset.backup_host,
+                                       [self.backupset.restore_cluster_host],
+                                       key_name, False, False, "memory",
+                                       self.num_items, None,
+                                       validate_keys=self.validate_keys,
+                                       regex_pattern=self.backupset.filter_keys)
+
     def test_backup_restore_with_nodes_reshuffle(self):
         """
         1. Creates specified bucket on the cluster and loads it with given number of items

@@ -1,4 +1,4 @@
-import os
+import os, re
 import shutil
 import testconstants
 
@@ -24,6 +24,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cmd_ext = ""
         self.database_path = COUCHBASE_DATA_PATH
         self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+        self.debug_logs = self.input.param("debug_logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
@@ -283,9 +284,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-conf-res-restriction {0}".format(
                 self.backupset.disable_conf_res_restriction)
         if self.backupset.filter_keys:
-            args += " --filter_keys {0}".format(self.backupset.filter_keys)
+            args += " --filter-keys '{0}'".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
-            args += " --filter_values {0}".format(self.backupset.filter_values)
+            args += " --filter-values {0}".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
         if self.no_progress_bar:
@@ -511,16 +512,40 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return True, output, "Merging backup succeeded"
 
     def validate_backup_data(self, server_host, server_bucket, master_key,
-                                   perNode, getReplica, mode, items, key_check):
+                                   perNode, getReplica, mode, items, key_check,
+                                   validate_keys=False,
+                                   regex_pattern=None):
         """
             Compare data in backup file with data in bucket
         """
         data_matched = True
         data_collector = DataCollector()
-        backup_data = data_collector.get_kv_dump_from_backup_file(server_host,
+        bk_file_data = data_collector.get_kv_dump_from_backup_file(server_host,
                                       self.cli_command_location, self.cmd_ext,
                                       self.backupset.directory, master_key,
                                       self.buckets)
+        restore_file_data = bk_file_data
+        regex_backup_data = {}
+        if regex_pattern is not None:
+            pattern = re.compile("%s" % regex_pattern)
+            if validate_keys:
+                for bucket in self.buckets:
+                    regex_backup_data[bucket.name] = {}
+                    self.log.info("Extract keys with regex pattern '%s'"
+                                                      % regex_pattern)
+                    for key in restore_file_data[bucket.name]:
+                        if self.debug_logs: print "key in backup file of bucket %s:  %s" \
+                                                               % (bucket.name, key)
+                        if pattern.search(key):
+                            regex_backup_data[bucket.name][key] = \
+                                         restore_file_data[bucket.name][key]
+                    if self.debug_logs:
+                        print "\nKeys in backup file of bucket %s that matches pattern '%s'" \
+                                                    % (bucket.name, regex_pattern)
+                        for x in regex_backup_data[bucket.name]:
+                            print x
+                restore_file_data = regex_backup_data
+
         buckets_data = {}
         for bucket in self.buckets:
             headerInfo, bucket_data = data_collector.collect_data(server_bucket, [bucket],
@@ -537,30 +562,35 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             count = 0
             key_count = 0
             for key in buckets_data[bucket.name]:
-                if buckets_data[bucket.name][key] != backup_data[bucket.name][key]["Value"]:
+                if buckets_data[bucket.name][key] != restore_file_data[bucket.name][key]["Value"]:
                     if count < 20:
                         self.log.error("Data does not match at key %s. bucket: %s != %s file"
-                                               % (key, buckets_data[bucket.name][key],
-                                                  backup_data[bucket.name][key]["Value"]))
+                                           % (key, buckets_data[bucket.name][key],
+                                              restore_file_data[bucket.name][key]["Value"]))
                         data_matched = False
                         count += 1
                     else:
                         raise Exception ("Data not match in backup bucket %s" % bucket.name)
                 key_count += 1
-            if len(backup_data[bucket.name]) != key_count:
+            if len(restore_file_data[bucket.name]) != key_count:
                 raise Exception ("Total key counts do not match.  Backup %s != %s bucket"
-                                  % (backup_data[bucket.name], key_count))
+                                  % (restore_file_data[bucket.name], key_count))
             self.log.info("******** Data macth in backup file and bucket %s ******** "
                                                                         % bucket.name)
-            print "Total items in backup file:   ", len(backup_data[bucket.name])
+            print "Bucket: ", bucket.name
+            print "Total items in backup file:   ", len(bk_file_data[bucket.name])
+            if regex_pattern is not None:
+                print "Total items to be restored with regex pattern '%s' is %s "\
+                                             % (regex_pattern,len(restore_file_data[bucket.name]))
             print "Total items in bucket:   ", key_count
             if self.merged:
                 if key_check:
-                    print "go to merge check"
-                    for key in backup_data[bucket.name]:
+                    self.log.info("Check if deleted keys still in backup after merged" )
+                    for key in restore_file_data[bucket.name]:
                         if key == key_check:
                             raise Exception ("There is an old key after delete bucket,"
                                          " backup and merged ")
+                    self.log.info("No deleted keys in backup after merged")
         return data_matched
 
     def get_info_in_database(self, server, bucket, text_search):
@@ -596,6 +626,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.error("Output => %s != %s <= Source" % (output[x], source[x]))
                 raise Exception("Content does not match "
                                 "Output => %s != %s <= Source" % (output[x], source[x]))
+
 
 class Backupset:
     def __init__(self):
