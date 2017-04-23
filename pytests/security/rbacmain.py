@@ -64,7 +64,7 @@ class rbacmain:
         if self.auth_type == "ldap" or self.auth_type == "pam":
             url = "settings/rbac/users/" + user_name
         elif self.auth_type == 'builtin':
-            url = "settings/rbac/users/builtin/" + user_name
+            url = "settings/rbac/users/local/" + user_name
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'PUT', params=payload)
         log.info(" Set User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
@@ -75,7 +75,7 @@ class rbacmain:
         if self.auth_type == 'ldap' or self.auth_type == "pam":
             url = "/settings/rbac/users/" + user_name
         else:
-            url = "settings/rbac/users/builtin/" + user_name
+            url = "settings/rbac/users/local/" + user_name
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'DELETE')
         log.info (" Deleting User - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
