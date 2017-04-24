@@ -582,6 +582,51 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         post_recovery_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_recovery_tasks])
 
+    def test_multiple_recovery_with_dgm(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        indexer_node = self.get_nodes_from_services_map(service_type="index")
+        self._start_disk_writes_for_plasma(indexer_node)
+        self._create_replica_indexes()
+        remote = RemoteMachineShellConnection(indexer_node.ip)
+        for i in range(3):
+            try:
+                remote.stop_server()
+                mid_recovery_tasks = self.async_run_operations(phase="in_between")
+                self._run_tasks([mid_recovery_tasks])
+                self._check_all_bucket_items_indexed()
+            except Exception, ex:
+                log.info(str(ex))
+            finally:
+                remote.start_server()
+        post_recovery_tasks = self.async_run_operations(phase="after")
+        self._run_tasks([post_recovery_tasks])
+
+    def test_multiple_recovery_with_nondgm_indexer(self):
+        dgm_node = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=True)[0]
+        self.deploy_node_info = ["{0}:{1}".format(dgm_node.ip, dgm_node.port)]
+        self.multi_create_index(
+            buckets=self.buckets, query_definitions=self.query_definitions,
+            deploy_node_info=self.deploy_node_info)
+        self._start_disk_writes_for_plasma(dgm_node)
+        self._create_replica_indexes()
+        indexer_node = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=True)[1]
+        remote = RemoteMachineShellConnection(indexer_node.ip)
+        for i in range(3):
+            try:
+                remote.stop_server()
+                mid_recovery_tasks = self.async_run_operations(phase="in_between")
+                self._run_tasks([mid_recovery_tasks])
+                self._check_all_bucket_items_indexed()
+            except Exception, ex:
+                log.info(str(ex))
+            finally:
+                remote.start_server()
+        post_recovery_tasks = self.async_run_operations(phase="after")
+        self._run_tasks([post_recovery_tasks])
+
     def _calculate_scan_vector(self):
         self.scan_vectors = None
         if self.scan_vectors != None:
