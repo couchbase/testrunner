@@ -39,6 +39,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.eq_index_node = self.input.param("eq_index_node", None)
         self.recovery_type = self.input.param("recovery_type", None)
         self.dest_node = self.input.param("dest_node",None)
+        self.rand = random.randint(1, 1000000000)
+
 
     def tearDown(self):
         super(GSIReplicaIndexesTests, self).tearDown()
@@ -1900,7 +1902,379 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             else:
                 index_metadata = node_index_metadata
 
+    def test_replica_for_different_index_types(self):
+        self.run_operation(phase="before")
 
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_names = self.n1ql_helper.get_index_names()
+
+        for index_name in index_names:
+            self.n1ql_helper.verify_replica_indexes([index_name], index_map,  self.num_index_replicas)
+
+        self.run_operation(phase="after")
+
+    def test_replica_for_primary_index(self):
+        create_index_query = "CREATE PRIMARY INDEX primary_index on default USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes(["primary_index"],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+    def test_replica_for_dynamic_index(self):
+        create_index_query = "CREATE INDEX dynamic ON default(DISTINCT PAIRS({{name, age}})) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes(["dynamic"],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+    def test_rollback_to_zero_with_replicas(self):
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+        self.cluster.bucket_flush(self.master)
+        self.sleep(60)
+
+        index_stats = self.get_index_stats(perNode=True)
+
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_docs_processed = index_stats[hostname]['default'][index_name][
+                "num_docs_processed"]
+            self.log.info("# Docs processed by %s = %s" % (
+                index_name, num_docs_processed))
+            if num_docs_processed != 0:
+                self.fail("Rollback to zero fails")
+
+    def test_backup_restore_with_replica(self):
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map_before_backup = self.get_index_map()
+        self.log.info(index_map_before_backup)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_before_backup,
+                                                    self.num_index_replicas)
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+        self._create_backup(kv_node)
+        self._create_restore(kv_node)
+
+        index_map_after_restore = self.get_index_map()
+        self.log.info(index_map_after_restore)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_after_restore,
+                                                    self.num_index_replicas)
+
+    def test_backup_restore_with_replica_one_node_less(self):
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map_before_backup = self.get_index_map()
+        self.log.info(index_map_before_backup)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_before_backup,
+                                                    self.num_index_replicas)
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+        self._create_backup(kv_node)
+
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        node_out = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        self._create_restore(kv_node)
+
+        index_map_after_rebalance = self.get_index_map()
+        stats_map_after_rebalance = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance,
+                [],
+                [node_out])
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "Error in index distribution post rebalance : ".format(
+                        str(ex)))
+            else:
+                self.log.info(str(ex))
+
+    def test_backup_restore_add_back_dropped_replica(self):
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map_before_backup = self.get_index_map()
+        self.log.info(index_map_before_backup)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_before_backup,
+                                                    self.num_index_replicas)
+
+        #Rebalance out one node so that one index replica drops
+        node_out = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        #Take a backup of the cluster
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+        self._create_backup(kv_node)
+
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        #Add back the node to the cluster
+        node_out = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [node_out], [])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        #Restore from the backup
+        self._create_restore(kv_node)
+
+        index_map_after_rebalance = self.get_index_map()
+        stats_map_after_rebalance = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance,
+                [node_out],
+                [])
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "Error in index distribution post rebalance : ".format(
+                        str(ex)))
+            else:
+                self.log.info(str(ex))
+
+    def test_backup_restore_with_server_groups(self):
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+
+        self._create_server_groups()
+        self.sleep(5)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Index creation Failed : %s", str(ex))
+
+        self.sleep(30)
+        index_map = self.get_index_map()
+
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                    get_all_nodes=False)
+
+        self._create_backup(kv_node)
+        self._create_restore(kv_node)
+
+        index_map_after_restore = self.get_index_map()
+        self.log.info(index_map_after_restore)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_after_restore,
+                                                    self.num_index_replicas)
+
+    def test_backup_restore_with_server_groups_one_node_less(self):
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+
+        self._create_server_groups()
+
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Index creation Failed : %s", str(ex))
+
+        self.sleep(30)
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+        self._create_backup(kv_node)
+
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        self.log.info(index_map_before_rebalance)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_before_rebalance,
+                                                    len(nodes) - 1, nodes)
+
+        node_out = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        self._create_restore(kv_node)
+
+        index_map_after_rebalance = self.get_index_map()
+        stats_map_after_rebalance = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance,
+                [],
+                [node_out])
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "Error in index distribution post rebalance : ".format(
+                        str(ex)))
+            else:
+                self.log.info(str(ex))
 
     def _get_node_list(self, node_list=None):
         # 1. Parse node string
@@ -1990,3 +2364,38 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         else:
             log.info("cbindex move started successfully : {0}".format(output))
         return output, error
+
+    def _create_backup(self, server, username="Administrator", password="password"):
+        remote_client = RemoteMachineShellConnection(server)
+        command = "rm -rf /tmp/backups"
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+
+        command = self.cli_command_location + "cbbackupmgr config --archive /tmp/backups --repo example{0}".format(
+            self.rand)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error and not filter(lambda x: 'created successfully in archive' in x, output):
+            self.fail("cbbackupmgr config failed")
+        cmd = "cbbackupmgr backup --archive /tmp/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
+            self.rand, username, password)
+        command = "{0}{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error and not filter(lambda x: 'Backup successfully completed' in x, output):
+            self.fail("cbbackupmgr backup failed")
+
+    def _create_restore(self, server, username="Administrator", password="password"):
+        remote_client = RemoteMachineShellConnection(server)
+        cmd = "cbbackupmgr restore --archive /tmp/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
+            self.rand, username, password)
+        command = "{0}{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+
+        command = "rm -rf /tmp/backups"
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+
+        if error and not filter(lambda x: 'Restore completed successfully' in x, output):
+            self.fail("cbbackupmgr restore failed")

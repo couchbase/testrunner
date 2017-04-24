@@ -13,7 +13,7 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
     def setUp(self):
         self.change_indexer_time = False
         super(SecondaryIndexingCompactionTests, self).setUp()
-        self.assertEqual(self.gsi_type.lower(), "forestdb", "GSI type is set to MOI")
+        self.assertNotEqual(self.gsi_type.lower(), "memory_optimized", "GSI type is set to MOI")
         self.initial_index_number = self.input.param("initial_index_number", 2)
         query_template = QUERY_TEMPLATE
         self.query_template = query_template.format("job_title")
