@@ -2,6 +2,7 @@ import copy
 import logging
 
 from couchbase_helper.query_definitions import QueryDefinition
+from couchbase_helper.tuq_generators import TuqGenerators
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from base_2i import BaseSecondaryIndexingTests
@@ -210,6 +211,58 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         post_operation_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_operation_tasks])
 
+    def test_plasma_dgm_with_multiple_resident_ratio(self):
+        self.dgm_rasident_ratio = self.input.param("dgm_resident_ratio", None)
+        self.multi_create_index(
+            buckets=self.buckets, query_definitions=self.query_definitions,
+            deploy_node_info=self.deploy_node_info)
+        self.index_map = self.rest.get_index_status()
+
+        def validate_disk_writes(indexer_nodes=None, resident_ratio=.99):
+            if not indexer_nodes:
+                indexer_nodes = self.get_nodes_from_services_map(service_type="index",
+                                                    get_all_nodes=True)
+            for node in indexer_nodes:
+                indexer_rest = RestConnection(node)
+                content = indexer_rest.get_index_storage_stats()
+                for index in content.values():
+                    for stats in index.values():
+                        if stats["MainStore"]["resident_ratio"] <= (resident_ratio+.05) \
+                            and stats["MainStore"]["resident_ratio"] >= (resident_ratio-.05):
+                            return True
+            return False
+
+        def kv_mutations(self, docs=1):
+            if not docs:
+                docs = self.docs_per_day
+            gens_load = self.generate_docs(docs)
+            self.full_docs_list = self.generate_full_docs_list(gens_load)
+            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+            tasks = self.async_load(generators_load=gens_load, op_type="create",
+                                batch_size=self.batch_size)
+            return tasks
+
+        log.info("Trying to get all indexes in DGM...")
+        log.info("Setting indexer memory quota to 256 MB...")
+        node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(node)
+        rest.set_indexer_memoryQuota(indexMemoryQuota=256)
+        cnt = 0
+        docs = 50
+        validate_dgm = False
+        while cnt < 100:
+            validate_dgm = validate_disk_writes(self.dgmServer)
+            if validate_dgm:
+                log.info("========== DGM is achieved ==========")
+                break
+            for task in kv_mutations(self, docs):
+                task.result()
+            self.sleep(30)
+            cnt += 1
+            docs += 20
+        self.assertTrue(validate_dgm, "DGM is not achieved")
+        self.multi_query_using_index()
+
     def test_lru(self):
         self.multi_create_index(
             buckets=self.buckets, query_definitions=self.query_definitions,
@@ -220,6 +273,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         for i in range(5):
             self.multi_query_using_index()
         query_definitions = []
+
         query_definitions.append(QueryDefinition(
             index_name="lru_job_title", index_fields=["job_title"],
             query_template="SELECT * FROM %s WHERE {0}".format(
@@ -232,7 +286,26 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                 " %s " % "join_yr = 2008  ORDER BY _id"),
             groups = ["employee"],
             index_where_clause=" join_yr IS NOT NULL "))
+        cache_misses = {}
+        for bucket in self.buckets:
+            if bucket.name not in cache_misses.keys():
+                cache_misses[bucket.name] = {}
+            for query_definition in self.query_definitions:
+                content = self.rest.get_index_storage_stats()
+                if query_definition.index_name not in cache_misses[bucket.name].keys():
+                    cache_misses[bucket.name][query_definition.index_name] = \
+                        content[bucket.name][query_definition.index_name]["MainStore"]["cache_misses"]
         self.multi_query_using_index(query_definitions=query_definitions)
+        self.sleep(30)
+        for bucket in self.buckets:
+            for query_definition in self.query_definitions:
+                content = self.rest.get_index_storage_stats()
+                cache_miss_before_query = cache_misses[bucket.name][query_definition.index_name]
+                cache_miss_after_query = content[bucket.name][query_definition.index_name]["MainStore"]["cache_misses"]
+                if (cache_miss_after_query > cache_miss_before_query):
+                    log.info("Reads happen from disk as expected")
+                else:
+                    log.info("Reads happen from memory for index {0} on bucket {1}".format(query_definition.index_name, bucket.name))
 
     def _get_indexer_out_of_dgm(self, indexer_nodes=None):
         body = {"stale": "False"}
