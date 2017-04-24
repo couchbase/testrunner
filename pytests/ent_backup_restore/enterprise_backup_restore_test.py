@@ -564,9 +564,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = self.backup_cluster()
         while "Backup successfully completed" in output[-1]:
             output, error = self.backup_cluster()
-        self.assertTrue("no space left on device" in output[-1],
+        error_msg = "Error backing up cluster: Unable to read data because range.json is corrupt,"
+        self.assertTrue(error_msg in output[0],
                         "Expected error message not thrown by backup when disk is full")
-        self.log.info("Expected no space left on device error thrown by backup command")
+        self.log.info("Expected error thrown by backup command")
         conn.execute_command("rm -rf /cbqe3043/file")
 
     def test_backup_and_restore_with_memcached_buckets(self):
