@@ -1,13 +1,12 @@
 import time
 import logger
-from dcp.constants import *
+from dcp.constants import VBSEQNO_STAT, PRODUCER
 from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
-from remote.remote_util import RemoteMachineShellConnection
-from lib.cluster_run_manager  import CRManager
 
 log = logger.Logger.get_logger()
+
 
 class DCPRebalanceTests(DCPBase):
 
@@ -68,7 +67,7 @@ class DCPRebalanceTests(DCPBase):
         # stop and failover nodeA
         assert self.stop_node(0)
         self.stopped_nodes.append(0)
-
+        self.master = nodeB
 
         assert self.cluster.failover([nodeB], [nodeA])
         try:
@@ -86,7 +85,6 @@ class DCPRebalanceTests(DCPBase):
             vbucket = vb.id
             key = 'vb_{0}:high_seqno'.format(vbucket)
             total_mutations += int(stats[key])
-
 
         assert total_mutations == self.num_items #/ 2   # divide by because the items are split between 2 servers
         task = self.cluster.async_rebalance([nodeB], [], [nodeC])
@@ -149,10 +147,8 @@ class DCPRebalanceTests(DCPBase):
         assert rebalance_t.result()
         self.cluster.rebalance([new_master], [], ready_n[1:])
 
-
     def test_failover_log_table_updated(self):
         """Verifies failover table entries are updated when vbucket ownership changes"""
-
 
         # rebalance in nodeB
         nodeA = self.servers[0]
