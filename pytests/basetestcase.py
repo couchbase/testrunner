@@ -1997,6 +1997,14 @@ class BaseTestCase(unittest.TestCase):
                cbadminbucket
            Default added user is cbadminbucket with admin role
         """
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        for version in versions:
+            if "5" > version:
+                self.log.info("Atleast one of the nodes in the cluster is "
+                              "pre 5.0 version. Hence not creating rbac user "
+                              "for the cluster. RBAC is a 5.0 feature.")
+                return
         if testuser is None:
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
                                                 'password': 'password'}]

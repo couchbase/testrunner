@@ -56,5 +56,16 @@ class InternalUser(UserBase):
             self.host = host
         if payload:
             self.payload = payload
+        rest = RestConnection(self.host)
+        versions = rest.get_nodes_versions()
+        pre_spock = False
+        for version in versions:
+            if "5" > version:
+                pre_spock = True
+        if pre_spock:
+            log.info("At least one of the node in the cluster is on "
+                     "pre-spock version. Not creating user since RBAC is a "
+                     "spock feature.")
+            return
         self.delete_user()
         self.create_user()

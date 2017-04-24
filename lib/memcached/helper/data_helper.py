@@ -306,13 +306,23 @@ class MemcachedClientHelper(object):
         bucket_info = rest.get_bucket(bucket)
         # todo raise exception for not bucket_info
 
-        if isinstance(bucket,Bucket):
-            bucket = bucket.name
-
-        bucket = bucket.encode('ascii')
-
-        client.sasl_auth_plain(admin_user,admin_pass)
-        client.bucket_select(bucket)
+        versions = rest.get_nodes_versions()
+        pre_spock = False
+        for version in versions:
+            if "5" > version:
+                pre_spock = True
+        if pre_spock:
+            log.info("Atleast 1 of the server is on pre-spock "
+                     "version. Using the old ssl auth to connect to "
+                     "bucket.")
+            client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                                    bucket_info.saslPassword.encode('ascii'))
+        else:
+            if isinstance(bucket,Bucket):
+                bucket = bucket.name
+            bucket = bucket.encode('ascii')
+            client.sasl_auth_plain(admin_user,admin_pass)
+            client.bucket_select(bucket)
 
         return client
 
