@@ -2,14 +2,14 @@ import time
 from dcp.constants import *
 from dcp_bin_client import DcpClient
 from basetestcase import BaseTestCase
-from mc_bin_client import MemcachedClient
+from mc_bin_client import MemcachedClient, MemcachedError
 from lib.cluster_run_manager  import CRManager
 from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 
-class DCPBase(BaseTestCase):
 
+class DCPBase(BaseTestCase):
 
     def __init__(self, args):
         super(DCPBase, self).__init__(args)
@@ -60,14 +60,21 @@ class DCPBase(BaseTestCase):
             keeps track of vbucket and keys stored """
 
         mcd_client = self.mcd_client(
-            node, vbucket, auth_user = bucket, auth_password = password)
+            node, vbucket, auth_user=True)
 
         for i in range(num_docs):
-            key = "key%s"%self.doc_num
-            rc = mcd_client.set(key, exp, flags, "val", vbucket)
+            t = 0
+            while False or t < 5:
+                key = "key%s"%self.doc_num
+                try:
+                    mcd_client.set(key, exp, flags, "val", vbucket)
+                    break
+                except MemcachedError:
+                    self.sleep(0.5*t)
+                    t += 1
+                    mcd_client = self.mcd_client(node, vbucket, auth_user=True)
             if not update:
                 self.doc_num += 1
-
 
     def dcp_client(
         self, node, connection_type = PRODUCER, vbucket = None, name = None,

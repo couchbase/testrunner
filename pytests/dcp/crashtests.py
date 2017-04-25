@@ -9,6 +9,7 @@ from lib.cluster_run_manager  import CRManager
 
 log = logger.Logger.get_logger()
 
+
 class DCPCrashTests(DCPBase):
 
     def test_stream_after_n_crashes(self):
@@ -36,7 +37,6 @@ class DCPCrashTests(DCPBase):
 
             assert stream.last_by_seqno == high_seqno
 
-
     def test_crash_while_streaming(self):
 
         vbucket = 0
@@ -60,13 +60,11 @@ class DCPCrashTests(DCPBase):
         stream.run()
         assert stream.last_by_seqno == high_seqno
 
-
     def test_crash_entire_cluster(self):
 
         self.cluster.rebalance(
             [self.master],
             self.servers[1:], [])
-
 
         vbucket = 0
         nodeA = self.servers[0]

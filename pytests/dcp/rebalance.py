@@ -3,6 +3,7 @@ import logger
 from dcp.constants import VBSEQNO_STAT, PRODUCER
 from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
+from mc_bin_client import MemcachedClient, MemcachedError
 from couchbase_helper.documentgenerator import BlobGenerator
 
 log = logger.Logger.get_logger()
@@ -22,11 +23,10 @@ class DCPRebalanceTests(DCPBase):
         self.load_docs(self.master, vbucket, self.num_items)
         vb_uuid, seqno, high_seqno = self.vb_info(self.master,
                                                   vbucket)
-        assert high_seqno == self.num_items
-
         # stream
         log.info("streaming vb {0} to seqno {1}".format(
             vbucket, high_seqno))
+        self.assertEquals(high_seqno, self.num_items)
 
         dcp_client = self.dcp_client(self.master, PRODUCER, vbucket)
         stream = dcp_client.stream_req(
@@ -74,13 +74,14 @@ class DCPRebalanceTests(DCPBase):
             assert self.cluster.rebalance([nodeB], [], [])
         except:
             pass
+        self.add_built_in_server_user(node=nodeB)
         # verify seqnos and stream mutations
         rest = RestConnection(nodeB)
         vbuckets = rest.get_vbuckets()
         total_mutations = 0
 
+        mcd_client = self.mcd_client(nodeB, auth_user=True)
         for vb in vbuckets:
-            mcd_client = self.mcd_client(nodeB)
             stats = mcd_client.stats(VBSEQNO_STAT)
             vbucket = vb.id
             key = 'vb_{0}:high_seqno'.format(vbucket)
@@ -100,7 +101,7 @@ class DCPRebalanceTests(DCPBase):
             pass
 
         vbucket = 0
-        mcd_client = self.mcd_client(self.master, vbucket)
+        mcd_client = self.mcd_client(self.master, vbucket, auth_user=True)
         mcd_client.set('key1', 0, 0, 'value', vbucket)
 
         # failover node where key was set
@@ -119,8 +120,13 @@ class DCPRebalanceTests(DCPBase):
         rest = RestConnection(ready_n[0])
         index = self.vbucket_host_index(rest, vbucket)
         new_master = ready_n[0]
-        mcd_client = self.mcd_client(new_master)
-        mcd_client.set('key2', 0, 0, 'value', vbucket)
+        mcd_client = self.mcd_client(new_master, auth_user=True)
+        try:
+            mcd_client.set('key2', 0, 0, 'value', vbucket)
+        except MemcachedError:
+            self.sleep(5)
+            mcd_client = self.mcd_client(new_master, auth_user=True)
+            mcd_client.set('key2', 0, 0, 'value', vbucket)
 
         # stream mutation
         dcp_client = self.dcp_client(new_master, PRODUCER, vbucket)
@@ -162,7 +168,7 @@ class DCPRebalanceTests(DCPBase):
             self.load_docs(nodeA, vbucket, self.num_items)
 
         # get original failover table
-        mcd_client = self.mcd_client(nodeA)
+        mcd_client = self.mcd_client(nodeA, auth_user=True)
         orig_table = mcd_client.stats('failovers')
 
         # add nodeB
@@ -203,7 +209,7 @@ class DCPRebalanceTests(DCPBase):
             self.load_docs(nodeA, vbucket, self.num_items)
 
         # check failover table entries
-        mcd_client = self.mcd_client(nodeA)
+        mcd_client = self.mcd_client(nodeA, auth_user=True)
         stats = mcd_client.stats('failovers')
         for vb_info in vbuckets[0:4]:
             vb = vb_info.id
