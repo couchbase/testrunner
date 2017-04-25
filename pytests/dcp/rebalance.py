@@ -177,6 +177,7 @@ class DCPRebalanceTests(DCPBase):
         # stop nodeA and failover
         assert self.stop_node(0)
         self.stopped_nodes.append(0)
+        self.master = nodeB
         assert self.cluster.failover([nodeB], [nodeA])
         assert self.cluster.rebalance([nodeB], [], [])
 
@@ -197,6 +198,7 @@ class DCPRebalanceTests(DCPBase):
 
         # stop nodeB and failover
         assert self.stop_node(1)
+        self.master = nodeA
         self.stopped_nodes.append(1)
         assert self.cluster.failover([nodeA], [nodeB])
         assert self.cluster.rebalance([nodeA], [], [])
