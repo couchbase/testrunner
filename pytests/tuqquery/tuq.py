@@ -1455,12 +1455,14 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results']==[{u'default': {u'tasks_points': {u'task1': 1, u'task2': 1}, u'name': u'employee-9', u'mutated': 0, u'skills': [u'skill2010', u'skill2011'], u'join_day': 9, u'email': u'9-mail@couchbase.com', u'test_rate': 10.1, u'join_mo': 10, u'join_yr': 2011, u'_id': u'query-testemployee10153.1877827-0', u'VMs': [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], u'job_title': u'Engineer'}, u'x1': {u'name': 1}}])
+            import pdb;pdb.set_trace()
+            self.assertTrue("query-testemployee10153.1877827-0" in actual_result['results'])
+            import pdb;pdb.set_trace()
+            self.assertTrue( "'x1': {'name': 1}" in actual_result['results'])
 
     def test_let_missing(self):
       created_indexes = []
-      for bucket in self.buckets:
-       try:
+      try:
             self.query = 'CREATE INDEX ix1 on default(x1)'
             self.run_cbq_query()
             created_indexes.append("ix1")
@@ -1477,9 +1479,9 @@ class QueryTests(BaseTestCase):
                     self.fail("There was no errors.")
             self.query = 'delete from default use keys["k01","k02"]'
             self.run_cbq_query()
-       finally:
+      finally:
             for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
                     actual_result = self.run_cbq_query()
 
 
