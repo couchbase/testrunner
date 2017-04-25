@@ -1541,3 +1541,165 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
+
+    def test_create_geo_index(self):
+        """
+        Indexes geo spatial data
+        Normally when we have a nested object, we first "insert child mapping"
+        and then refer to the fields inside it. But, for geopoint, the
+        structure "geo" is the data being indexed. Refer: CBQE-4030
+        :return: the index object
+        """
+        self.log.info("Loading travel sample ...")
+        self.load_sample_buckets(self._master, bucketName="travel-sample")
+        self.log.info("Creating geo-index ...")
+        from fts_base import FTSIndex
+        geo_index = FTSIndex(
+            cluster= self._cb_cluster,
+            name = "geo-index",
+            source_name="travel-sample",
+            )
+        geo_index.index_definition["params"] = {
+          "doc_config": {
+           "mode": "type_field",
+           "type_field": "type"
+          },
+          "mapping": {
+           "default_analyzer": "standard",
+           "default_datetime_parser": "dateTimeOptional",
+           "default_field": "_all",
+           "default_mapping": {
+            "dynamic": True,
+            "enabled": False,
+            "properties": {
+             "geo": {
+              "dynamic": False,
+              "enabled": True
+             }
+            }
+           },
+           "default_type": "_default",
+           "index_dynamic": True,
+           "store_dynamic": False,
+           "type_field": "type",
+           "types": {
+            "airport": {
+             "dynamic": False,
+             "enabled": True,
+             "properties": {
+              "geo": {
+               "enabled": True,
+               "dynamic": False,
+               "fields": [
+                {
+                 "analyzer": "",
+                 "include_in_all": True,
+                 "include_term_vectors": True,
+                 "index": True,
+                 "name": "geo",
+                 "store": True,
+                 "type": "geopoint"
+                }
+               ]
+              }
+             }
+            }
+           }
+          }
+        }
+        geo_index.create()
+        self.is_index_partitioned_balanced(geo_index)
+        self.wait_for_indexing_complete()
+        return geo_index
+
+    def test_geo_location_query(self):
+        """
+        Find all documents with an indexed geo point, which is located within
+        the specified distance of the specified point.
+        The user must provide a single data point and a distance
+        :return: Nothing
+        """
+        lon = float(TestInputSingleton.input.param("lon", 1.954764))
+        lat = float(TestInputSingleton.input.param("lat", 50.962097))
+        distance = TestInputSingleton.input.param("distance", "10mi")
+        expected_hits = TestInputSingleton.input.param("expected_hits", None)
+        dist_unit = TestInputSingleton.input.param("unit", "mi")
+
+        geo_index = self.test_create_geo_index()
+
+        query = {
+            "location": {
+                "lon": lon,
+                "lat": lat
+            },
+            "distance": distance,
+            "field": "geo"
+        }
+
+        sort_fields = [
+            {
+              "by": "geo_distance",
+              "field": "geo",
+              "unit": dist_unit,
+              "location": {
+                "lon": lon,
+                "lat": lat
+              }
+            }
+        ]
+
+        hits, doc_ids, _, _ = geo_index.execute_query(query=query,
+                                            sort_fields=sort_fields,
+                                            zero_results_ok=False,
+                                            expected_hits= expected_hits)
+        self.log.info("Hits: {0}".format(hits))
+        self.log.info("Doc_ids: {0}".format(doc_ids))
+
+    def test_geo_bounding_box_query(self):
+        """
+        Find all documents with an indexed geo point, which is located within
+        the specified bounding box. Sort by the geo_distance
+        The user provides two data points,
+        the upper left and bottom right point of the bounding box.
+        :return: Nothing
+        """
+        lon2 = float(TestInputSingleton.input.param("lon1", 2.387075))
+        lat2 = float(TestInputSingleton.input.param("lat1", 49.873019))
+        lon1 = float(TestInputSingleton.input.param("lon2", 1.954764))
+        lat1 = float(TestInputSingleton.input.param("lat2", 50.962097))
+
+        expected_hits = TestInputSingleton.input.param("expected_hits", None)
+        dist_unit = TestInputSingleton.input.param("unit", "mi")
+
+        geo_index = self.test_create_geo_index()
+
+        query = {
+            "top_left": {
+                "lon": lon1,
+                "lat": lat1
+            },
+            "bottom_right": {
+                "lon": lon2,
+                "lat": lat2
+            },
+            "field": "geo"
+        }
+
+        sort_fields = [
+            {
+                "by": "geo_distance",
+                "field": "geo",
+                "unit": dist_unit,
+                "location": {
+                    "lon": lon1,
+                    "lat": lat1
+                }
+            }
+        ]
+
+        hits, doc_ids, _, _ = geo_index.execute_query(query=query,
+                                                sort_fields=sort_fields,
+                                                zero_results_ok=False,
+                                                expected_hits=expected_hits)
+        self.log.info("Hits: {0}".format(hits))
+        self.log.info("Doc_ids: {0}".format(doc_ids))

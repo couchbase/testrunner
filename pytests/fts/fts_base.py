@@ -1062,8 +1062,11 @@ class FTSIndex:
             for doc in matches:
                 doc_ids.append(doc['id'])
         if int(hits) == 0 and not zero_results_ok:
+            self.__log.info("ERROR: 0 hits returned!")
             raise FTSException("No docs returned for query : %s" % query_dict)
         if expected_hits and expected_hits != hits:
+            self.__log.info("ERROR: Expected hits: %s, fts returned: %s"
+                           % (expected_hits, hits))
             raise FTSException("Expected hits: %s, fts returned: %s"
                                % (expected_hits, hits))
         if expected_hits and expected_hits == hits:
