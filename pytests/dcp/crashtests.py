@@ -52,7 +52,7 @@ class DCPCrashTests(DCPBase):
         assert self.start_node(0)
         rest = RestHelper(RestConnection(nodeA))
         assert rest.is_ns_server_running()
-        time.sleep(2)
+        time.sleep(30)
 
         _, _, high_seqno = self.vb_info(nodeA, vbucket)
         dcp_client = self.dcp_client(nodeA, PRODUCER)

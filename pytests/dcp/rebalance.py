@@ -80,8 +80,8 @@ class DCPRebalanceTests(DCPBase):
         vbuckets = rest.get_vbuckets()
         total_mutations = 0
 
-        mcd_client = self.mcd_client(nodeB, auth_user=True)
         for vb in vbuckets:
+            mcd_client = self.mcd_client(nodeB, auth_user=True)
             stats = mcd_client.stats(VBSEQNO_STAT)
             vbucket = vb.id
             key = 'vb_{0}:high_seqno'.format(vbucket)
