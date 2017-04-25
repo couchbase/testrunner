@@ -14,8 +14,8 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 
 log = logger.Logger.get_logger()
 
-class DCPRollBack(DCPBase):
 
+class DCPRollBack(DCPBase):
 
     """
     # MB-21587 rollback recover is incorrect
@@ -55,7 +55,6 @@ class DCPRollBack(DCPBase):
         rc = self.cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
                                    self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000)
 
-
         # store the KVs which were modified and active on node 1
         modified_kvs_active_on_node1 = {}
         vbucket_client = VBucketAwareMemcached(RestConnection(self.master), 'default')
@@ -82,25 +81,20 @@ class DCPRollBack(DCPBase):
         rc = self.cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
                                    self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000)
 
-
         # kill memcached, when it comes back because persistence is disabled it will have lost the second set of mutations
         shell = RemoteMachineShellConnection(self.servers[0])
         shell.kill_memcached()
         time.sleep(10)
 
-
         # start persistence on the second node
         client = MemcachedClientHelper.direct_client(self.servers[1], 'default')
         client.start_persistence()
 
-
         time.sleep(5)
-
 
         # failover to the second node
         rc = self.cluster.failover(self.servers, self.servers[0:1], graceful=True)
         time.sleep(30)     # give time for the failover to complete
-
 
         # check the values, they should be what they were prior to the second update
         client = MemcachedClientHelper.direct_client(self.servers[1], 'default')
@@ -109,15 +103,8 @@ class DCPRollBack(DCPBase):
             self.assertTrue( v == rc[2], 'Expected {0}, actual {1}'.format(v, rc[2]))
 
         # need to rebalance the node back into the cluster
-        #def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
+        # def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
         rc = self.cluster.rebalance(self.servers, self.servers[0:1],[])
-
-
-
-
-
-
-
 
     """
     # MB-21568 sequence number is incorrect during a race between persistence and failover.
@@ -130,12 +117,7 @@ class DCPRollBack(DCPBase):
     5. Kill memcached on node 1
     6. Verify that the number of items on both nodes is the same
 
-
-
     """
-
-
-
     def test_rollback_and_persistence_race_condition(self):
 
         nodeA = self.servers[0]
@@ -151,22 +133,16 @@ class DCPRollBack(DCPBase):
 
         vb_uuid, seqno, high_seqno = self.vb_info(self.servers[0], 5)
 
-
-
         time.sleep(10)
 
         # more (non-intersecting) load
         gen_create = BlobGenerator('dcp-secondgroup', 'dcpsecondgroup-', 64, start=0, end=self.num_items)
         self._load_all_buckets(nodeA, gen_create, "create", 0)
 
-
         shell = RemoteMachineShellConnection(self.servers[0])
         shell.kill_memcached()
 
-
         time.sleep(10)
-
-
 
         mc1 = MemcachedClientHelper.direct_client(self.servers[0], "default")
         mc2 = MemcachedClientHelper.direct_client(self.servers[1], "default")
@@ -174,6 +150,6 @@ class DCPRollBack(DCPBase):
         node1_items = mc1.stats()["curr_items_tot"]
         node2_items = mc2.stats()["curr_items_tot"]
 
-        self.assertTrue( node1_items == node2_items,
-                         'Node items not equal. Node 1:{0}, node 2:{1}'.format(node1_items, node2_items ))
+        self.assertTrue(node1_items == node2_items,
+                        'Node items not equal. Node 1:{0}, node 2:{1}'.format(node1_items, node2_items))
         

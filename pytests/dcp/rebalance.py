@@ -74,7 +74,7 @@ class DCPRebalanceTests(DCPBase):
             assert self.cluster.rebalance([nodeB], [], [])
         except:
             pass
-        self.add_built_in_server_user(node=nodeB)
+        self.add_built_in_server_user()
         # verify seqnos and stream mutations
         rest = RestConnection(nodeB)
         vbuckets = rest.get_vbuckets()
@@ -124,7 +124,7 @@ class DCPRebalanceTests(DCPBase):
         try:
             mcd_client.set('key2', 0, 0, 'value', vbucket)
         except MemcachedError:
-            self.sleep(5)
+            self.sleep(10)
             mcd_client = self.mcd_client(new_master, auth_user=True)
             mcd_client.set('key2', 0, 0, 'value', vbucket)
 
