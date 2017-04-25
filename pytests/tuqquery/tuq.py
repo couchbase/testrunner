@@ -1455,10 +1455,8 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
             actual_result = self.run_cbq_query()
-            import pdb;pdb.set_trace()
-            self.assertTrue("query-testemployee10153.1877827-0" in actual_result['results'])
-            import pdb;pdb.set_trace()
-            self.assertTrue( "'x1': {'name': 1}" in actual_result['results'])
+            self.assertTrue("query-testemployee10153.1877827-0" in str(actual_result['results']))
+            self.assertTrue( "u'x1': {u'name': 1}" in str(actual_result['results']))
 
     def test_let_missing(self):
       created_indexes = []
