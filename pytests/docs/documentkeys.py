@@ -104,8 +104,9 @@ class DocumentKeysTests(BaseTestCase):
                 self.log.exception("Received exception {0} while performing data op - {1}".format(ex, data_op))
 
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        self._verify_with_views(expected_rows)
-
+        if self.bucket_type != 'ephemeral':
+            # views not supported for ephemeral buckets
+            self._verify_with_views(expected_rows)
 
     def test_dockey_whitespace_data_ops(self):
         self._dockey_data_ops("d o c k e y")
