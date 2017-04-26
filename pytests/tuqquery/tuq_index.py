@@ -178,7 +178,7 @@ class QueriesViewsTests(QueryTests):
         self.query = 'CREATE INDEX %s ON default (ALL ARRAY r.`name` FOR r IN VMs END, email)' % idx
         self.run_cbq_query()
 
-        result_count = 5880
+        result_count = 3024
         self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
                      'WHERE r.`name` IN [ "vm_12", "vm_13" ]'
         result = self.run_cbq_query()
@@ -190,7 +190,7 @@ class QueriesViewsTests(QueryTests):
         self.assertTrue("DistinctScan" not in plan.values()[1][0].values()
                         and query_result['metrics']['resultCount'] == result_count)
 
-        result_count = 3360
+        result_count = 2016
         self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
                      'WHERE r.`name` = "vm_12"'
         result = self.run_cbq_query()
