@@ -1282,18 +1282,23 @@ class QueriesIndexTests(QueryTests):
         idx = "idx_country"
         idx2 = "gix_USMales"
         try:
-            self.query = "CREATE INDEX {0} ON `default`(`address[1][0]`.`country`) WHERE (`_id` = 'query-testemployee10194.855617-0')".format(idx)
+            self.query = "CREATE INDEX {0} ON `default`(`address`[1][0].`country`) WHERE (`_id` = 'query-testemployee10194.855617-0')".format(idx)
             self.run_cbq_query()
             created_indexes.append(idx)
-            self.query = "CREATE INDEX gix_USMales ON `default`(distinct (pairs(self))) WHERE (`_id` = 'query-testemployee10194.855617-0') and (`gender` = 'M') and (`address[1][0]`.`country` = 'United States of America')"
+            self.query = "CREATE INDEX gix_USMales ON `default`(distinct (pairs(self))) WHERE (`_id` = 'query-testemployee10194.855617-0') and (`gender` = 'M') and (`address`[1][0].`country` = 'United States of America')"
             self.run_cbq_query()
             created_indexes.append(idx2)
             self.query = "explain select count(*) from default where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("cover" not in str(plan))
-            self.assertTrue("IntersectScan" not in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='idx_country')
+            self.assertTrue("cover" in str(plan))
+            self.assertTrue("IntersectScan" in str(plan))
+            self.assertTrue(plan['~children'][0]['scans'][0]['index']==idx2)
+            self.query = "select count(*) from default where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
+            actual_result = self.run_cbq_query()
+            self.query = "select count(*) from default use index(`#primary`) where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
+            expected_result = self.run_cbq_query()
+            self.assertTrue(actual_result['results']==expected_result['results'])
         finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
@@ -5942,13 +5947,13 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select count(1) from %s WHERE tokens(_id) like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.assertTrue(
-                    plan['~children'][0]['#operator'] == 'IndexCountScan',
+                    plan['~children'][0]['#operator'] == 'IndexCountScan2',
                     "IndexCountScan is not being used")
                 self.query = "explain select a.cnt from (select count(1) from default where tokens(_id) is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result2)
                 self.assertTrue(
-                    plan['~children'][0]['#operator'] != 'IndexCountScan',
+                    plan['~children'][0]['#operator'] != 'IndexCountScan2',
                     "IndexCountScan should not be used in subquery")
                 self.query = "select a.cnt from (select count(1) from default where tokens(_id) is not null) as a"
                 actual_result2 = self.run_cbq_query()
