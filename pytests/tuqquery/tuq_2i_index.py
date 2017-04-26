@@ -38,7 +38,7 @@ class QueriesIndexTests(QueryTests):
     def test_orderedintersectscan(self):
         rest = RestConnection(self.master)
         rest.load_sample("beer-sample")
-        time.sleep(1)
+        time.sleep(10)
         created_indexes = []
         try:
             idx = "idx_abv"
@@ -63,12 +63,11 @@ class QueriesIndexTests(QueryTests):
             if self.delete_sample:
                 rest.delete_bucket("beer-sample")
 
+    '''MB-22412: equality predicates and constant keys should be removed from order by clause'''
     def test_remove_equality_orderby(self):
         rest = RestConnection(self.master)
-        self.shell.execute_command("""curl -v -u {0}:{1} \
-                     -X POST http://{2}:{3}/sampleBuckets/install \
-                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
-        time.sleep(1)
+        rest.load_sample("beer-sample")
+        time.sleep(10)
         created_indexes = []
         try:
             idx = "idx_abv"
@@ -84,9 +83,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
                 actual_result = self.run_cbq_query()
             if self.delete_sample:
-                self.shell.execute_command(
-                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
-                    % (self.master.ip, self.master.port))
+                rest.delete_bucket("beer-sample")
 
     def test_meta_indexcountscan(self):
         for bucket in self.buckets:
