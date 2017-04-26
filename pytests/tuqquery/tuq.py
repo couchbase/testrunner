@@ -110,7 +110,7 @@ class QueryTests(BaseTestCase):
         if (self.cluster_ops == False):
             self.shell.execute_command("killall -9 cbq-engine")
             self.shell.execute_command("killall -9 indexer")
-        self.sleep(10, 'wait for indexer')
+            self.sleep(20, 'wait for indexer')
         self.log.info('-'*100)
         if (self.analytics):
             self.setup_analytics()
