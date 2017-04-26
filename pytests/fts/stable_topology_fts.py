@@ -29,6 +29,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_default_index(self):
         plan_params = self.construct_plan_params()
         self.load_data()
+        self.sleep(10, "waiting 10s after batch_load...")
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
             self.wait_for_indexing_complete()
