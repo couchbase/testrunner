@@ -449,6 +449,28 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail("merge should failed since bucket-config.json is invalid")
         remote_client.disconnect()
 
+    def test_restore_with_non_exist_bucket(self):
+        """
+            1. Create a bucket A
+            2. Load docs to bucket A
+            3. Do backup bucket A
+            4. Delete bucket A
+            5. Restore to bucket A (non exist bucket)
+            6. Expect errors throw out
+        """
+        gen = BlobGenerator("ent-backup1_", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.log.info("Start doing backup")
+        self.backup_create()
+        self.backup_cluster()
+        self.log.info("Start to delete bucket")
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+        output, _ = self.backup_restore()
+        if output and "Error restoring cluster" not in output[0]:
+            self.fail("Restore to non exist bucket should fail")
+        else:
+            self.fail("Need to check the output of restore command")
+
     def test_merge_backup_from_old_and_new_bucket(self):
         """
             1. Create a bucket A
