@@ -34,11 +34,10 @@ class QueriesIndexTests(QueryTests):
     def suite_tearDown(self):
         super(QueriesIndexTests, self).suite_tearDown()
 
+    '''MB-22321: test that ordered intersectscan is used for pagination use cases'''
     def test_orderedintersectscan(self):
         rest = RestConnection(self.master)
-        self.shell.execute_command("""curl -v -u {0}:{1} \
-                     -X POST http://{2}:{3}/sampleBuckets/install \
-                  -d  '["beer-sample"]'""".format(rest.username, rest.password, self.master.ip, self.master.port))
+        rest.load_sample("beer-sample")
         time.sleep(1)
         created_indexes = []
         try:
@@ -52,22 +51,17 @@ class QueriesIndexTests(QueryTests):
             time.sleep(15)
             created_indexes.append(idx)
             created_indexes.append(idx2)
-            self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 0 order by abv limit 10"
+            self.query = "explain select * from `beer-sample` where name like 'A%' " \
+                         "and abv > 0 order by abv limit 10"
             result = self.run_cbq_query()
             self.assertTrue(result['results'][0]['plan']['~children'][0]['~children'][0]['#operator']
                             == 'OrderedIntersectScan')
-            self.query = "explain select * from `beer-sample` where name = 'abc' and age = 10 and  abv > 0  limit 10"
-            result = self.run_cbq_query()
-            plan = ExplainPlanHelper(result)
-            self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
                 actual_result = self.run_cbq_query()
             if self.delete_sample:
-                self.shell.execute_command(
-                    "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
-                    % (self.master.ip, self.master.port))
+                rest.delete_bucket("beer-sample")
 
     def test_remove_equality_orderby(self):
         rest = RestConnection(self.master)
