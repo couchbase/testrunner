@@ -1,11 +1,11 @@
 import time
 import logger
 from dcp.constants import *
+from mc_bin_client import MemcachedError
 from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
-from lib.cluster_run_manager  import CRManager
 
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from memcacheConstants import *
@@ -70,8 +70,15 @@ class DCPRollBack(DCPBase):
         for bucket in self.buckets:
             for s in self.servers:
                 client = MemcachedClientHelper.direct_client(s, bucket)
-                client.stop_persistence()
-
+                try:
+                    client.stop_persistence()
+                except MemcachedError as e:
+                    if self.bucket_type == 'ephemeral':
+                        self.assertTrue(
+                            "Memcached error #4 'Invalid':  Flusher not running. for vbucket :0 to mc " in e.message)
+                        return
+                    else:
+                        raise
 
         # modify less than 1/2 of the keys
         vals = ['modified-serial-vals-' + str(i) for i in xrange(NUMBER_OF_DOCS/100)]
@@ -129,7 +136,14 @@ class DCPRollBack(DCPBase):
         for bucket in self.buckets:
             for s in self.servers:
                 client = MemcachedClientHelper.direct_client(s, bucket)
-                client.stop_persistence()
+                try:
+                    client.stop_persistence()
+                except MemcachedError as e:
+                    if self.bucket_type == 'ephemeral':
+                        self.assertTrue("Memcached error #4 'Invalid':  Flusher not running. for vbucket :0 to mc " in e.message)
+                        return
+                    else:
+                        raise
 
         vb_uuid, seqno, high_seqno = self.vb_info(self.servers[0], 5)
 
@@ -152,4 +166,3 @@ class DCPRollBack(DCPBase):
 
         self.assertTrue(node1_items == node2_items,
                         'Node items not equal. Node 1:{0}, node 2:{1}'.format(node1_items, node2_items))
-        
