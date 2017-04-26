@@ -2086,6 +2086,8 @@ class RestConnection(object):
         api = '{0}{1}'.format(self.baseUrl, "sampleBuckets/install")
         data = '["{0}"]'.format(sample_name)
         status, content, header = self._http_request(api, 'POST', data)
+        # Sleep to allow the sample bucket to be loaded
+        time.sleep(10)
         return status
 
     # figure out the proxy port

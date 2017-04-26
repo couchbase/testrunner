@@ -38,7 +38,6 @@ class QueriesIndexTests(QueryTests):
     def test_orderedintersectscan(self):
         rest = RestConnection(self.master)
         rest.load_sample("beer-sample")
-        time.sleep(10)
         created_indexes = []
         try:
             idx = "idx_abv"
@@ -67,7 +66,6 @@ class QueriesIndexTests(QueryTests):
     def test_remove_equality_orderby(self):
         rest = RestConnection(self.master)
         rest.load_sample("beer-sample")
-        time.sleep(10)
         created_indexes = []
         try:
             idx = "idx_abv"
@@ -90,7 +88,6 @@ class QueriesIndexTests(QueryTests):
     def test_use_suffixes_and_tokens(self):
         rest = RestConnection(self.master)
         rest.load_sample("beer-sample")
-        time.sleep(10)
         created_indexes = []
         try:
             idx = "idx_name_suffixes"

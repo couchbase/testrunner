@@ -207,10 +207,7 @@ class QueryTests(BaseTestCase):
     '''MB-22273'''
     def test_prepared_encoded_rest(self):
         result_count = 1412
-        self.shell.execute_command("""curl -v -u {0}:{1} \
-                     -X POST http://{2}:{3}/sampleBuckets/install \
-                  -d  '["beer-sample"]'""".format(self.username, self.password, self.master.ip, self.master.port))
-        time.sleep(1)
+        self.rest.load_sample("beer-sample")
         query = 'create index myidx on `beer-sample`(name,country,code) where (type="brewery")'
         self.run_cbq_query(query)
         time.sleep(10)
@@ -235,9 +232,7 @@ class QueryTests(BaseTestCase):
             concat_string = ''.join(new_list)
             json_output = json.loads(concat_string)
             self.assertTrue(json_output['metrics']['resultCount'] == result_count)
-        self.shell.execute_command(
-            "curl -X DELETE -u Administrator:password http://%s:%s/pools/default/buckets/beer-sample"
-            % (self.master.ip, self.master.port))
+        self.rest.delete_bucket("beer-sample")
 
 ##############################################################################################
 #
