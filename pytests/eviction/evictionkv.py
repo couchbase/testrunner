@@ -35,7 +35,11 @@ class EvictionKV(EvictionBase):
         self.run_expiry_pager(60 * 60 * 24)  # effectively disable it by setting it far off in the future
 
         compacted = self.cluster.compact_bucket(self.master, 'default')
-        self.assertTrue(compacted, msg="unable compact_bucket")
+        if self.bucket_type == 'ephemeral':
+            self.assertFalse(compacted, msg="able compact_bucket")
+            return
+        else:
+            self.assertTrue(compacted, msg="unable compact_bucket")
 
         self.cluster.cancel_bucket_compaction(self.master, 'default')
 
@@ -111,8 +115,13 @@ class EvictionKV(EvictionBase):
             self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry_time))
             self.log.info('sleeping {0} seconds'.format(expiry_time - (time.time() - key_set_time)))
 
-            # have the compactor do the expiry
             compacted = self.cluster.compact_bucket(self.master, 'default')
+            # have the compactor do the expiry
+            if self.bucket_type == 'ephemeral':
+                self.assertFalse(compacted, msg="able compact_bucket")
+                return
+            else:
+                self.assertTrue(compacted, msg="unable compact_bucket")
 
             self.cluster.wait_for_stats([self.master], "default", "", "curr_items", "==", key_float, timeout=30)
             time.sleep(expiry_time - (time.time() - key_set_time))
