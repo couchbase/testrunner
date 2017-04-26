@@ -46,9 +46,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                 multiscan_result = \
                     self.rest.multiscan_for_gsi_index_with_rest(
                         id_map["id"], json.dumps(multiscan_content))
+                multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                    id_map["id"], json.dumps(multiscan_content))
                 check = self._verify_items_indexed_for_two_field_index(
                     bucket, id_map["id"],
-                    ["name"], scan_content, multiscan_result)
+                    ["name"], scan_content, multiscan_result, multiscan_count_result)
                 if not check:
                     failed_scans.append(scan_content)
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -101,9 +103,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                 multiscan_result = \
                     self.rest.multiscan_for_gsi_index_with_rest(
                         id_map["id"], json.dumps(multiscan_content))
+                multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                    id_map["id"], json.dumps(multiscan_content))
                 check = self._verify_items_indexed_for_two_field_index(
                     bucket, id_map["id"],
-                    ["name"], scan_content, multiscan_result)
+                    ["name"], scan_content, multiscan_result, multiscan_count_result)
                 if not check:
                     failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -146,9 +150,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                     multiscan_result = \
                         self.rest.multiscan_for_gsi_index_with_rest(
                             id_map["id"], json.dumps(multiscan_content))
+                    multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                        id_map["id"], json.dumps(multiscan_content))
                     check = self._verify_items_indexed_for_two_field_index(
                         bucket, id_map["id"],
-                        ["name"], scan_content, multiscan_result)
+                        ["name"], scan_content, multiscan_result, multiscan_count_result)
                     if not check:
                         failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -193,9 +199,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                         multiscan_result = \
                             self.rest.multiscan_for_gsi_index_with_rest(
                                 id_map["id"], json.dumps(multiscan_content))
+                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                            id_map["id"], json.dumps(multiscan_content))
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
-                            ["name"], scan_content, multiscan_result)
+                            ["name"], scan_content, multiscan_result, multiscan_count_result)
                         if not check:
                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -233,9 +241,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                 multiscan_content["scans"] = json.dumps(scan_content)
                 multiscan_result = self.rest.multiscan_for_gsi_index_with_rest(
                     id_map["id"], json.dumps(multiscan_content))
+                multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                    id_map["id"], json.dumps(multiscan_content))
                 check = self._verify_items_indexed_for_two_field_index(
                     bucket, id_map["id"],
-                    ["name", "age"], scan_content, multiscan_result)
+                    ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                 if not check:
                     failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -286,9 +296,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                         multiscan_result = \
                             self.rest.multiscan_for_gsi_index_with_rest(
                                 id_map["id"], json.dumps(multiscan_content))
+                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                            id_map["id"], json.dumps(multiscan_content))
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
-                            ["name", "age"], scan_content, multiscan_result)
+                            ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                         if not check:
                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -351,9 +363,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                         multiscan_result = \
                             self.rest.multiscan_for_gsi_index_with_rest(
                                 id_map["id"], json.dumps(multiscan_content))
+                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                            id_map["id"], json.dumps(multiscan_content))
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
-                            ["name", "age"], scan_content, multiscan_result)
+                            ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                         if not check:
                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -416,9 +430,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                         multiscan_result = \
                             self.rest.multiscan_for_gsi_index_with_rest(
                                 id_map["id"], json.dumps(multiscan_content))
+                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                            id_map["id"], json.dumps(multiscan_content))
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
-                            ["name", "age"], scan_content, multiscan_result)
+                            ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                         if not check:
                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -469,9 +485,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                         multiscan_result = \
                             self.rest.multiscan_for_gsi_index_with_rest(
                                 id_map["id"], json.dumps(multiscan_content))
+                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                            id_map["id"], json.dumps(multiscan_content))
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
-                            ["name", "age"], scan_content, multiscan_result)
+                            ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                         if not check:
                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -510,9 +528,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                     multiscan_result = \
                         self.rest.multiscan_for_gsi_index_with_rest(
                             id_map["id"], json.dumps(multiscan_content))
+                    multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                        id_map["id"], json.dumps(multiscan_content))
                     check = self._verify_items_indexed_for_two_field_index(
                         bucket, id_map["id"],
-                        ["name"], scan_content, multiscan_result)
+                        ["name"], scan_content, multiscan_result, multiscan_count_result)
                     if not check:
                         failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -543,8 +563,10 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                 multiscan_result = \
                     self.rest.multiscan_for_gsi_index_with_rest(
                         id_map["id"], json.dumps(multiscan_content))
+                multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                    id_map["id"], json.dumps(multiscan_content))
                 check = self._verify_items_indexed_for_two_field_index(
-                    bucket, id_map["id"], ["name"], scan_content, multiscan_result)
+                    bucket, id_map["id"], ["name"], scan_content, multiscan_result, multiscan_count_result)
                 if not check:
                     failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -575,9 +597,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                         multiscan_result = \
                             self.rest.multiscan_for_gsi_index_with_rest(
                                 id_map["id"], json.dumps(multiscan_content))
+                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                            id_map["id"], json.dumps(multiscan_content))
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
-                            ["name"], scan_content, multiscan_result)
+                            ["name"], scan_content, multiscan_result, multiscan_count_result)
                         if not check:
                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -606,9 +630,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                     multiscan_result = \
                         self.rest.multiscan_for_gsi_index_with_rest(
                             id_map["id"], json.dumps(multiscan_content))
+                    multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                        id_map["id"], json.dumps(multiscan_content))
                     check = self._verify_items_indexed_for_two_field_index(
                         bucket, id_map["id"],
-                        ["name"], scan_content, multiscan_result)
+                        ["name"], scan_content, multiscan_result, multiscan_count_result)
                     if not check:
                         failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -641,9 +667,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                         multiscan_result = \
                             self.rest.multiscan_for_gsi_index_with_rest(
                                 id_map["id"], json.dumps(multiscan_content))
+                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                            id_map["id"], json.dumps(multiscan_content))
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
-                            ["name"], scan_content, multiscan_result)
+                            ["name"], scan_content, multiscan_result, multiscan_count_result)
                         if not check:
                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -742,9 +770,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                                 multiscan_result = \
                                     self.rest.multiscan_for_gsi_index_with_rest(
                                         id_map["id"], json.dumps(multiscan_content))
+                                multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                                    id_map["id"], json.dumps(multiscan_content))
                                 check = self._verify_items_indexed_for_two_field_index(
                                     bucket, id_map["id"],
-                                    ["name","age"], scan_content, multiscan_result)
+                                    ["name","age"], scan_content, multiscan_result, multiscan_count_result)
                                 if not check:
                                     failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -840,9 +870,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                                 multiscan_result = \
                                     self.rest.multiscan_for_gsi_index_with_rest(
                                         id_map["id"], json.dumps(multiscan_content))
+                                multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                                    id_map["id"], json.dumps(multiscan_content))
                                 check = self._verify_items_indexed_for_two_field_index(
                                     bucket, id_map["id"],
-                                    ["name", "age"], scan_content, multiscan_result)
+                                    ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                                 if not check:
                                     failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -909,9 +941,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                                         multiscan_result = \
                                             self.rest.multiscan_for_gsi_index_with_rest(
                                                 id_map["id"], json.dumps(multiscan_content))
+                                        multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
+                                            id_map["id"], json.dumps(multiscan_content))
                                         check = self._verify_items_indexed_for_two_field_index(
                                             bucket, id_map["id"],
-                                            ["name", "age"], scan_content, multiscan_result)
+                                            ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                                         if not check:
                                             failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -929,7 +963,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
         return multiscan_content
 
     def _verify_items_indexed_for_two_field_index(self, bucket, index_id, index_fields,
-                                                  scan_content, multiscan_result):
+                                                  scan_content, multiscan_result, multiscan_count_result=None):
         err_message = "There are more ranges than number"
         if isinstance(multiscan_result, dict):
             if err_message in multiscan_result.values():
@@ -980,9 +1014,14 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
             else:
                 expected_results = doc_list
         if len(expected_results) != len(multiscan_result):
-            log.info("No. of items mismatch expected = {0} and actual = {1}".format(
+            log.info("No. of items mismatch :- expected = {0} and actual = {1}".format(
                 len(expected_results), len(multiscan_result)))
             return False
+        if multiscan_count_result is not None:
+            if len(expected_results) != multiscan_count_result:
+                log.info("No. of items mismatch :- expected = {0} and actual = {1}".format(
+                    len(expected_results), multiscan_count_result))
+                return False
         if sorted(expected_results) != sorted(multiscan_result):
             log.info("The number of rows match but the results mismatch, please check")
             return False

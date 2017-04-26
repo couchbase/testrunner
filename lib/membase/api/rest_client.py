@@ -3681,6 +3681,28 @@ class RestConnection(object):
         else:
             return content
 
+    def multiscan_count_for_gsi_index_with_rest(self, id, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = 'api/index/{0}?multiscancount=true'.format(id)
+        api = self.index_baseUrl + url
+        headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
+        params = json.loads("{0}".format(body).replace('\'', '"').replace(
+            'True', 'true').replace('False', 'false'))
+        params = json.dumps(params).encode("ascii", "ignore").replace("\\\\", "\\")
+        log.info(json.dumps(params).encode("ascii", "ignore"))
+        status, content, header = self._http_request(api, 'GET', headers=headers,
+                                                     params=params)
+        if not status:
+            raise Exception(content)
+        #Below line is there because of MB-20758
+        content = content.split("[]")[0]
+        # Following line is added since the content uses chunked encoding
+        chunkless_content = content.replace("][", ", \n")
+        if chunkless_content:
+            return json.loads(chunkless_content)
+        else:
+            return content
+
     'Get list of all roles that exist in the system'
     def retrive_all_user_role(self):
         url = "/settings/rbac/roles"
