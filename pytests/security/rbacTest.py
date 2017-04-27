@@ -346,18 +346,19 @@ class rbacTest(ldaptest):
         user_name = self.input.param("user_name")
         final_roles = rbacmain()._return_roles(self.user_role)
         payload = "name=" + user_name + "&roles=" + final_roles
-        status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=self.user_id,payload=payload)
+        userid = self.user_id.split(":")
+        status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=userid[0],payload=payload)
         expectedResults = {"full_name":"RitamSharma","roles":["admin"],"identity:source":"saslauthd","identity:user":self.user_id,
                            "real_userid:source":"ns_server","real_userid:user":"Administrator",
                             "ip":self.ipAddress, "port":123456}
         if ops == 'edit':
             payload = "name=" + user_name + "&roles=" + 'admin,cluster_admin'
-            status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=self.user_id,payload=payload)
+            status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=userid[0],payload=payload)
             expectedResults = {"full_name":"RitamSharma","roles":["admin","cluster_admin"],"identity:source":"saslauthd","identity:user":self.user_id,
                            "real_userid:source":"ns_server","real_userid:user":"Administrator",
                             "ip":self.ipAddress, "port":123456}
         elif ops == 'remove':
-            status, content, header = rbacmain(self.master,self.auth_type)._delete_user(self.user_id)
+            status, content, header = rbacmain(self.master,self.auth_type)._delete_user(userid[0])
             expectedResults = {"identity:source":"saslauthd","identity:user":self.user_id,
                            "real_userid:source":"ns_server","real_userid:user":"Administrator",
                             "ip":self.ipAddress, "port":123456}
