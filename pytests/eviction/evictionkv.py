@@ -209,17 +209,21 @@ class EvictionKV(EvictionBase):
         generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0,
                                       end=self.num_items)
         self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0,
-                                                              self.num_items, percentage=0.8)
+                                                              self.num_items, percentage=0.85)
 
-        self.log.info('Memory almost full')
+        self.log.info('Memory almost full. Getting stats...')
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default"
                                               " all -u Administrator -p password | grep ephemeral")
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
-                               ' ep_ephemeral_full_policy:                              fail_new_data'], output)
+                               ' ep_ephemeral_full_policy:                              fail_new_data',
+                               ' ep_ephemeral_metadata_purge_age:                       259200',
+                               ' ep_ephemeral_metadata_purge_interval:                  60'], output)
         else:
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
-                              ' ep_ephemeral_full_policy:                              auto_delete'], output)
+                               ' ep_ephemeral_full_policy:                              auto_delete',
+                               ' ep_ephemeral_metadata_purge_age:                       259200',
+                               ' ep_ephemeral_metadata_purge_interval:                  60'], output)
 
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
                                               "vbucket-details -u Administrator -p password "
@@ -231,34 +235,42 @@ class EvictionKV(EvictionBase):
                                               " -u Administrator -p password | grep curr_items")
         self.assertEquals(' curr_items:                                            %s' % item_count, output[0])
 
-        self.log.info('Reached OOM, the number of items is {0}'.format(item_count))
+        self.log.info('The number of items when almost reached OOM is {0}'.format(item_count))
 
-        # keys_that_were_accessed = []
-
-        # load some more, this should trigger some deletes
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
 
         for i in xrange(200):
             key = random.randint(0, 1200)
             mc_client.get(EphemeralBucketsOOM.KEY_ROOT + str(key))
-        # add ~20% of new items
-        for i in range(item_count, int(item_count * 1.2)):
-            mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(i), 0, 0, 'a' * self.value_size)
+
+        # load some more, this should trigger some deletes
+        # add ~50% of new items
+        for i in range(item_count, int(item_count * 1.5)):
+            try:
+                mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(i), 0, 0, 'a' * self.value_size)
+            except:
+                if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
+                    break
+                else:
+                    raise
         self.sleep(10)
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info("items count after we tried to add +50 per : %s" % item_count)
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
                                               " -u Administrator -p password | grep curr_items")
         self.assertEquals(' curr_items:                                            %s' % item_count, output[0])
+
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
                                               "vbucket-details -u Administrator -p password "
                                               "| grep seqlist_deleted_count")
+        self.log.info(output)
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
             self.assertEquals(' vb_0:seqlist_deleted_count:              0', output[0], 'have deleted items!')
         else:
             self.assertTrue(int(output[0].replace(' vb_0:seqlist_deleted_count:              ', '')) > 0,
                             'no deleted items!')
 
-    #https://issues.couchbase.com/browse/MB-23988
+    # https://issues.couchbase.com/browse/MB-23988
     def test_ephemeral_bucket_views(self):
         default_map_func = "function (doc, meta) {emit(meta.id, null);}"
         default_view_name = ("xattr", "default_view")[False]
