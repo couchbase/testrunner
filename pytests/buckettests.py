@@ -135,33 +135,6 @@ class CreateBucketTests(BaseTestCase):
         else:
             raise Exception("No thing to test.  You need to put log_message=something_to_test")
 
-    """ check for if there is a curly bracket { in the first 10 lines in diag log.
-        If there is a {, possibly it is from erlang dump """
-    def test_log_output_on_top(self):
-        self._load_doc_data_all_buckets(data_op="create", batch_size=5000)
-        serverInfo = self.servers[0]
-        shell = RemoteMachineShellConnection(serverInfo)
-        self.log.info("download diag into local server {0}".format(serverInfo.ip))
-        ot = shell.execute_command("curl -v -u Administrator:password \
-                            http://{0}:8091/diag > diag".format(serverInfo.ip))
-        r_path = shell.execute_command("pwd")
-        file_path = r_path[0][0] + "/diag"
-        sftp = shell._ssh_client.open_sftp()
-        f = sftp.open(file_path, 'r')
-        # check first 10 lines in diag file, looking for this '{'
-        self.log.info("check if there is any curly bracket in first 10 lines")
-        count = 0
-        for line in f:
-            print line
-            if "{" in line:
-                raise Exception("Curly bracket '{' is in first 10 lines at %s diag log" % serverInfo.ip)
-            count += 1
-            if count == 10:
-                break
-        """ delete diag file after create """
-        sftp.remove(file_path)
-        sftp.close()
-
     def test_travel_sample_bucket(self):
         sample = "travel-sample"
         """ reset node to set services correctly: index,kv,n1ql """
