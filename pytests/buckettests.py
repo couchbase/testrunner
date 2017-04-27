@@ -83,22 +83,6 @@ class CreateBucketTests(BaseTestCase):
                 self.fail("ns_server is not running after bucket '%s' creation" %(
                                            self.bucket_name))
 
-    def test_create_bucket_used_port(self):
-        ports = [25, 68, 80, 135, 139, 143, 500]
-
-        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                          replicas=self.num_replicas)
-        for port in ports:
-            try:
-                self.cluster.create_standard_bucket(name=self.bucket_name+str(port), port=port,
-                                                    bucket_params=bucket_params)
-            except:
-                self.log.info('Error appears as expected')
-                rest = RestConnection(self.master)
-                self.assertTrue(RestHelper(rest).is_ns_server_running(timeout_in_seconds=60))
-            else:
-                raise Exception('User has to be unable to create a bucket using port %s' % port)
-
     # Bucket creation with names as mentioned in MB-5844(isasl.pw, ns_log)
     def test_valid_bucket_name(self, password='password'):
             tasks = []
