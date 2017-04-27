@@ -102,7 +102,8 @@ class AutoFailoverTests(AutoFailoverBaseTest):
         rebalance_success = False
         if started:
             rebalance_success = self.rest.monitorRebalance()
-        if not rebalance_success or not started:
+        if (not rebalance_success or not started) and not \
+                self.failover_expected:
             self.fail("Rebalance failed. Check logs")
 
     def test_autofailover_and_addback_of_node(self):

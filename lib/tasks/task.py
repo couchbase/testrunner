@@ -4670,7 +4670,8 @@ class AutoFailoverNodesFailureTask(Task):
         self.start_time = 0
         self.timeout_buffer = timeout_buffer
         self.current_failure_node = self.servers_to_fail[0]
-        self.max_time_to_wait_for_failover = self.timeout_buffer + 60
+        self.max_time_to_wait_for_failover = self.timeout + \
+                                             self.timeout_buffer + 60
         if failure_timers is None:
             failure_timers = []
         self.failure_timers = failure_timers
