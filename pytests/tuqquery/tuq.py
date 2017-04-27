@@ -513,8 +513,8 @@ class QueryTests(BaseTestCase):
          new_curl = json.dumps(o)
          string_curl = json.loads(new_curl)
          print string_curl
-         #self.assertTrue([u'', u"curl: (7) couldn't connect to host"]==string_curl[1])
-         #self.assertTrue(len(string_curl)==0)
+         self.assertTrue(["curl: (7) couldn't connect to host"]in string_curl[1])
+         self.assertTrue(len(string_curl)==0)
          cmd = "curl http://%s:8093/query/service -d 'statement=select * from 1+2+3'"%(self.master.ip)
          o =shell.execute_command(cmd)
          new_curl = json.dumps(o)

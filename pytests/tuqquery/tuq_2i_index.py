@@ -4395,12 +4395,8 @@ class QueriesIndexTests(QueryTests):
                     self.query = "explain select  name,skills[0] as skills  from %s where skills[0]='skill2010' and join_yr=2010 and ( VMs[0].os IN ['ubuntu','windows','linux'] OR VMs[0].os IN ['ubuntu','windows','linux'] ) order by _id asc LIMIT 10 OFFSET 0;" % (bucket.name)
                     actual_result=self.run_cbq_query()
                     plan = ExplainPlanHelper(actual_result)
-                    if self.index_type.lower() == 'gsi':
-                        self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan2")
-                    else:
-                        self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan")
-                    self.assertTrue(plan["~children"][0]["~children"][0]["scan"]["index"] == index_name)
-                    #self.test_explain_union(index_name)
+                    self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "IndexScan2")
+                    self.assertTrue(plan["~children"][0]["~children"][0]["index"] == index_name)
                     self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux','linux'] order by name LIMIT 15 OFFSET 0;" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     expected_result = [{"name" : doc["name"],"skills" : doc["skills"][0]}
