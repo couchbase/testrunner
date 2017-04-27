@@ -50,10 +50,7 @@ class QueryCurlTests(QueryTests):
     def suite_setUp(self):
         super(QueryCurlTests, self).suite_setUp()
         if self.load_sample:
-            self.shell.execute_command("""curl -v -u {0}:{1} \
-                         -X POST http://{2}:{3}/sampleBuckets/install \
-                      -d  '["beer-sample"]'""".format(self.username, self.password, self.master.ip, self.master.port))
-            time.sleep(1)
+            self.rest.load_sample("beer-sample")
             index_definition = INDEX_DEFINITION
             index_name = index_definition['name'] = "beers"
             index_definition['sourceName'] = "beer-sample"
@@ -396,6 +393,33 @@ class QueryCurlTests(QueryTests):
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['results'][0] == expected_curl)
 
+    '''Test that redirect links are not followed, queries to links that contain redirects should
+       return null'''
+    def test_redirect(self):
+        url = "'https://httpbin.org/redirect-to?url=" \
+              "https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
+        query="select curl("+ url +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0]['$1'] == None)
+
+        url = "'https://httpbin.org/redirect-to?url=" \
+              "file:///opt/couchbase/var/lib/couchbase/config/ssl-cert-key.pem'"
+        query="select curl("+ url +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0]['$1'] == None)
+
+        # Regular curl only follows redirect if the location option is used, make sure location
+        # option cannot be used by n1ql curl
+        unsupported_error='Errorevaluatingprojection.-cause:CURLoptionlocationisnotsupported.'
+        url = "'https://httpbin.org/redirect-to?url=" \
+              "file:///opt/couchbase/var/lib/couchbase/config/ssl-cert-key.pem'"
+        query="select curl("+ url +",{'location':True})"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == unsupported_error)
+
     '''Test curl being used inside a prepared statement
         -prepare a statement that uses curl
         -use curl to prepare a statement'''
@@ -494,6 +518,84 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['results'][0]['$1']['metrics']['resultCount'] == 5)
+
+    '''Tests the different ways to set the user-agent'''
+    def test_user_agent(self):
+        url = "'httpbin.org/user-agent'"
+        options = "{'headers': 'User-Agent:ikandaswamy','user-agent':'ajay'}"
+        query = "select curl(" + url +", " + options + ")"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'','','','','')
+        json_curl = self.convert_to_json(curl)
+        result = self.run_cbq_query(query)
+        self.assertTrue(result['results'][0]['$1']['user-agent'] == "ikandaswamy"
+                        and json_curl['results'][0]['$1']['user-agent'] == "ikandaswamy")
+
+        options = "{'headers': ['User-Agent:ikandaswamy','User-Agent:ajay']}"
+        query = "select curl(" + url + ", " + options + ")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        result = self.run_cbq_query(query)
+        self.assertTrue(result['results'][0]['$1']['user-agent'] == "ikandaswamy,ajay"
+                        and json_curl['results'][0]['$1']['user-agent'] == "ikandaswamy,ajay")
+
+    '''Tests the different ways to specify which method to use'''
+    def test_conflicting_method_options(self):
+        limit = 5
+        n1ql_query = 'select * from default limit %s' % limit
+        invalid_json_error = 'Errorevaluatingprojection.-cause:InvalidJSONendpointhttp:' \
+                             '//172.23.106.24:8093/query/service'
+
+        options = "{'data' : 'statement=%s', 'user':'%s:%s'}" \
+                  % (n1ql_query, self.username, self.password)
+        select_query = "select curl(" + self.query_service_url + ", " + options +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['metrics']['resultCount'] == limit)
+
+        options = "{'data' : 'statement=%s', 'user':'%s:%s','request':'POST'}" \
+                  % (n1ql_query, self.username, self.password)
+        select_query = "select curl(" + self.query_service_url + ", " + options +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['metrics']['resultCount'] == limit)
+
+        options = "{'data' : 'statement=%s', 'user':'%s:%s','request':'POST','get':True}" \
+                  % (n1ql_query, self.username, self.password)
+        select_query = "select curl(" + self.query_service_url + ", " + options +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue( json_curl['errors'][0]['msg'] == invalid_json_error)
+
+        options = "{'data' : 'statement=%s', 'user':'%s:%s','get':True,'request':'POST'}" \
+                  % (n1ql_query, self.username, self.password)
+        select_query = "select curl(" + self.query_service_url + ", " + options +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == invalid_json_error)
+
+    def test_conflicting_get_options(self):
+        curl_output = self.shell.execute_command(
+            "curl --get https://maps.googleapis.com/maps/api/geocode/json -d "
+            "'address=santa+cruz&components=country:ES&key"
+            "=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'")
+        expected_curl = self.convert_list_to_json(curl_output[0])
+        url = "'https://maps.googleapis.com/maps/api/geocode/json'"
+        options = "{'get':False,'request':'GET','data': " \
+                  "'address=santa+cruz&components=country:ES&key" \
+                  "=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
+        query = "select curl(" + url + ", %s" % options + ")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0]['$1'] == expected_curl)
+
+        options = "{'request':'GET','get':False,'data': " \
+                  "'address=santa+cruz&components=country:ES&key" \
+                  "=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
+        query = "select curl(" + url + ", %s" % options + ")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0]['$1'] == expected_curl)
+
 
     '''MB-23132 - make sure max-redirs isnt recognized as a valid option, and that another option that isn't supported
        throws an error.'''

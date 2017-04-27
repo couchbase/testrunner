@@ -208,31 +208,33 @@ class QueryTests(BaseTestCase):
     def test_prepared_encoded_rest(self):
         result_count = 1412
         self.rest.load_sample("beer-sample")
-        query = 'create index myidx on `beer-sample`(name,country,code) where (type="brewery")'
-        self.run_cbq_query(query)
-        time.sleep(10)
-        result = self.run_cbq_query('prepare s1 from SELECT name, IFMISSINGORNULL(country,999), '
-                                    'IFMISSINGORNULL(code,999) FROM `beer-sample` WHERE type = "brewery" AND name IS NOT MISSING')
-        encoded_plan = '"' + result['results'][0]['encoded_plan'] + '"'
-        for server in self.servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.stop_server()
-        time.sleep(20)
-        for server in self.servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.start_server()
-        time.sleep(20)
-        for server in self.servers:
-            remote = RemoteMachineShellConnection(server)
-            result = remote.execute_command(
-                "curl http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
-                "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'"
-                % (server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
-            new_list = [string.strip() for string in result[0]]
-            concat_string = ''.join(new_list)
-            json_output = json.loads(concat_string)
-            self.assertTrue(json_output['metrics']['resultCount'] == result_count)
-        self.rest.delete_bucket("beer-sample")
+        try:
+            query = 'create index myidx on `beer-sample`(name,country,code) where (type="brewery")'
+            self.run_cbq_query(query)
+            time.sleep(10)
+            result = self.run_cbq_query('prepare s1 from SELECT name, IFMISSINGORNULL(country,999), '
+                                        'IFMISSINGORNULL(code,999) FROM `beer-sample` WHERE type = "brewery" AND name IS NOT MISSING')
+            encoded_plan = '"' + result['results'][0]['encoded_plan'] + '"'
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+            time.sleep(20)
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.start_server()
+            time.sleep(20)
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                result = remote.execute_command(
+                    "curl http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
+                    "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'"
+                    % (server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
+                new_list = [string.strip() for string in result[0]]
+                concat_string = ''.join(new_list)
+                json_output = json.loads(concat_string)
+                self.assertTrue(json_output['metrics']['resultCount'] == result_count)
+        finally:
+            self.rest.delete_bucket("beer-sample")
 
 ##############################################################################################
 #

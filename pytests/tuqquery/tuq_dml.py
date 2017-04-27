@@ -396,11 +396,11 @@ class DMLQueryTests(QueryTests):
         prefix = 'insert%s' % str(uuid.uuid4())[:5]
         for bucket in self.buckets:
             for i in xrange(num_docs):
-                self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s use keys ["%s"]'  % (bucket.name, prefix, str(i),
-                                                                                              bucket.name, keys[i])
+                self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s ' \
+                             'use keys ["%s"]' % (bucket.name, prefix, str(i), bucket.name, keys[i])
                 if self.named_prepare:
                     i = i+1
-                    self.named_prepare="prepare_" + prefix + str(i)
+                    self.named_prepare="prepare_" + prefix + str(i) + bucket.name
                     self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
                 else:
                     self.query = "PREPARE %s" % self.query
