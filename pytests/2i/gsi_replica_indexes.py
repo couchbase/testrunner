@@ -1,7 +1,10 @@
+import json
+
 from base_2i import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 import random
 from lib import testconstants
+from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from threading import Thread
 from pytests.query_tests_helper import QueryHelperTests
@@ -38,9 +41,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.server_grouping = self.input.param("server_grouping", None)
         self.eq_index_node = self.input.param("eq_index_node", None)
         self.recovery_type = self.input.param("recovery_type", None)
-        self.dest_node = self.input.param("dest_node",None)
+        self.dest_node = self.input.param("dest_node", None)
         self.rand = random.randint(1, 1000000000)
-
+        self.expected_nodes = self.input.param("expected_nodes", None)
+        self.failure_in_node = self.input.param("failure_in_node", None)
 
     def tearDown(self):
         super(GSIReplicaIndexesTests, self).tearDown()
@@ -220,7 +224,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas, nodes)
+                                                    self.num_index_replicas,
+                                                    nodes)
 
     def test_create_replica_index_with_server_groups(self):
         nodes = self._get_node_list()
@@ -1525,6 +1530,92 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         self.run_operation(phase="after")
 
+    def test_failure_in_rebalance(self):
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Index creation Failed : %s", str(ex))
+
+        self.sleep(30)
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        self.log.info(index_map_before_rebalance)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_before_rebalance,
+                                                    len(nodes) - 1, nodes)
+
+        node_out = self.servers[self.node_out]
+        try:
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [], [node_out])
+
+            remote = RemoteMachineShellConnection(
+                self.servers[self.failure_in_node])
+            remote.stop_server()
+            self.sleep(30)
+            remote.start_server()
+
+            # reached = RestHelper(self.rest).rebalance_reached()
+            # self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+        except Exception, ex:
+            if "Rebalance failed. See logs for detailed reason. You can try again" not in str(
+                    ex):
+                self.fail(
+                    "rebalance failed with some unexpected error : {0}".format(
+                        str(ex)))
+        else:
+            self.fail("rebalance did not fail")
+
+        self.sleep(60)
+        index_servers = self.get_nodes_from_services_map(service_type="index",
+                                                         get_all_nodes=True)
+        # run a /cleanupRebalance after a rebalance failure
+        for index_server in index_servers:
+            output = self.rest.cleanup_indexer_rebalance(server=index_server)
+            self.log.info(output)
+        self.log.info("Retrying rebalance")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        index_map_after_rebalance = self.get_index_map()
+        stats_map_after_rebalance = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance,
+                [],
+                [node_out])
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "Error in index distribution post rebalance : ".format(
+                        str(ex)))
+            else:
+                self.log.info(str(ex))
+
     def test_failover_with_replica_with_concurrent_querying(self):
         index_server = self.get_nodes_from_services_map(service_type="index",
                                                         get_all_nodes=False)
@@ -1607,7 +1698,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             num_request_served = index_stats[hostname]['default'][index_name][
                 "num_completed_requests"]
             self.log.info("# Requests served by %s = %s" % (
-            index_name, num_request_served))
+                index_name, num_request_served))
             if num_request_served == 0:
                 load_balanced = False
 
@@ -1755,16 +1846,22 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.log.info(dest_nodes)
         expect_failure = False
         if self.expected_err_msg:
-            expect_failure=True
-        output, error = self._cbindex_move(src_node=self.servers[0], node_list=dest_nodes, index_list=index_name_prefix, expect_failure=expect_failure)
+            expect_failure = True
+        output, error = self._cbindex_move(src_node=self.servers[0],
+                                           node_list=dest_nodes,
+                                           index_list=index_name_prefix,
+                                           expect_failure=expect_failure)
         self.sleep(30)
         if self.expected_err_msg:
             if self.expected_err_msg not in error[0]:
                 self.fail("Move index failed with unexpected error")
         else:
-            #self.wait_for_cbindex_move_cmd_to_complete(self.servers[self.dest_node], 1)
+            # self.wait_for_cbindex_move_cmd_to_complete(self.servers[self.dest_node], 1)
             index_map = self.get_index_map()
-            self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, len(dest_nodes) - 1, dest_nodes)
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(dest_nodes) - 1,
+                                                    dest_nodes)
 
     def test_move_index_failed_node(self):
         node_out = self.servers[self.node_out]
@@ -1806,9 +1903,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if self.expected_err_msg:
             expect_failure = True
         output, error = self._cbindex_move(src_node=self.servers[0],
-                                          node_list=dest_nodes,
-                                          index_list=index_name_prefix,
-                                          expect_failure=expect_failure)
+                                           node_list=dest_nodes,
+                                           index_list=index_name_prefix,
+                                           expect_failure=expect_failure)
         self.sleep(30)
         if self.expected_err_msg:
             if self.expected_err_msg not in error[0]:
@@ -1859,7 +1956,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         threads = []
         threads.append(
             Thread(target=self._cbindex_move, name="move_index",
-                   args=(self.servers[0], dest_nodes, index_name_prefix, expect_failure)))
+                   args=(self.servers[0], dest_nodes, index_name_prefix,
+                         expect_failure)))
         threads.append(
             Thread(target=self.cluster.async_failover, name="failover", args=(
                 self.servers[:self.nodes_init], [node_out], self.graceful)))
@@ -1890,12 +1988,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_map = self.get_index_map()
         self.log.info(index_map)
 
-        self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, self.num_index_replicas)
+        self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map,
+                                                self.num_index_replicas)
 
         index_metadata = None
         for i in range(0, len(self.servers)):
-            node_index_metadata = RestConnection(self.servers[i]).get_indexer_metadata()
-            self.log.info("Index metadata for %s : %s" %(self.servers[i].ip, node_index_metadata))
+            node_index_metadata = RestConnection(
+                self.servers[i]).get_indexer_metadata()
+            self.log.info("Index metadata for %s : %s" % (
+            self.servers[i].ip, node_index_metadata))
             if index_metadata:
                 if node_index_metadata != index_metadata:
                     self.fail("Index metadata not replicated properly")
@@ -1912,7 +2013,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_names = self.n1ql_helper.get_index_names()
 
         for index_name in index_names:
-            self.n1ql_helper.verify_replica_indexes([index_name], index_map,  self.num_index_replicas)
+            self.n1ql_helper.verify_replica_indexes([index_name], index_map,
+                                                    self.num_index_replicas)
 
         self.run_operation(phase="after")
 
@@ -1939,7 +2041,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     self.num_index_replicas)
 
     def test_replica_for_dynamic_index(self):
-        create_index_query = "CREATE INDEX dynamic ON default(DISTINCT PAIRS({{name, age}})) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replicas)
+        create_index_query = "CREATE INDEX dynamic ON default(DISTINCT PAIRS({{name, age}})) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2002,6 +2105,117 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 index_name, num_docs_processed))
             if num_docs_processed != 0:
                 self.fail("Rollback to zero fails")
+
+    def test_partial_rollback_with_replicas(self):
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+        # Stop Persistence on Node A & Node B
+        self.log.info("Stopping persistence on NodeA & NodeB")
+        mem_client = MemcachedClientHelper.direct_client(self.servers[0],
+                                                         "default")
+        mem_client.stop_persistence()
+        mem_client = MemcachedClientHelper.direct_client(self.servers[1],
+                                                         "default")
+        mem_client.stop_persistence()
+
+        self.run_doc_ops()
+
+        self.sleep(10)
+
+        # Get count before rollback
+        bucket_count_before_rollback = self.get_item_count(self.servers[0],
+                                                           "default")
+        self.log.info("# Items in bucket before rollback = %s",
+                      bucket_count_before_rollback)
+        index_stats = self.get_index_stats(perNode=True)
+        num_docs_processed_before_rollback = {}
+
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_docs_processed_before_rollback[index_name] = \
+            index_stats[hostname]['default'][index_name][
+                "items_count"]
+            self.log.info("# Before Rollback Docs processed by %s = %s" % (
+                index_name, num_docs_processed_before_rollback[index_name]))
+
+        # Kill memcached on Node A so that Node B becomes master
+        self.log.info("Kill Memcached process on NodeA")
+        shell = RemoteMachineShellConnection(self.master)
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        self.log.info("Starting persistence on NodeB")
+        mem_client = MemcachedClientHelper.direct_client(
+            self.input.servers[1], "default")
+        mem_client.start_persistence()
+
+        # Failover Node B
+        self.log.info("Failing over NodeB")
+        self.sleep(10)
+        failover_task = self.cluster.async_failover(
+            self.servers[:self.nodes_init], [self.servers[1]], self.graceful,
+            wait_for_pending=120)
+
+        failover_task.result()
+
+        # Wait for a couple of mins to allow rollback to complete
+        # self.sleep(120)
+
+        # Get count after rollback
+        bucket_count_after_rollback = self.get_item_count(self.servers[0],
+                                                          "default")
+
+        self.log.info("# Items in bucket after rollback = %s",
+                      bucket_count_after_rollback)
+        index_stats = self.get_index_stats(perNode=True)
+        num_docs_processed_after_rollback = {}
+
+        if bucket_count_before_rollback == bucket_count_after_rollback:
+            self.log.info("Looks like KV rollback did not happen at all.")
+
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_docs_processed_after_rollback[index_name] = \
+                index_stats[hostname]['default'][index_name][
+                    "items_count"]
+            self.log.info("# After rollback Docs processed by %s = %s" % (
+                index_name, num_docs_processed_after_rollback[index_name]))
+            if num_docs_processed_after_rollback[
+                index_name] != bucket_count_after_rollback:
+                self.fail("# items in index do not match # items in bucket")
 
     def test_backup_restore_with_replica(self):
         index_name_prefix = "random_index_" + str(
@@ -2124,7 +2338,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     index_map_before_backup,
                                                     self.num_index_replicas)
 
-        #Rebalance out one node so that one index replica drops
+        # Rebalance out one node so that one index replica drops
         node_out = self.servers[self.node_out]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [node_out])
@@ -2133,7 +2347,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         rebalance.result()
         self.sleep(30)
 
-        #Take a backup of the cluster
+        # Take a backup of the cluster
         kv_node = self.get_nodes_from_services_map(service_type="kv",
                                                    get_all_nodes=False)
         self._create_backup(kv_node)
@@ -2141,7 +2355,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_map_before_rebalance = self.get_index_map()
         stats_map_before_rebalance = self.get_index_stats(perNode=False)
 
-        #Add back the node to the cluster
+        # Add back the node to the cluster
         node_out = self.servers[self.node_out]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [node_out], [])
@@ -2150,7 +2364,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         rebalance.result()
         self.sleep(30)
 
-        #Restore from the backup
+        # Restore from the backup
         self._create_restore(kv_node)
 
         index_map_after_rebalance = self.get_index_map()
@@ -2201,7 +2415,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     self.num_index_replicas)
 
         kv_node = self.get_nodes_from_services_map(service_type="kv",
-                                                    get_all_nodes=False)
+                                                   get_all_nodes=False)
 
         self._create_backup(kv_node)
         self._create_restore(kv_node)
@@ -2276,6 +2490,38 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             else:
                 self.log.info(str(ex))
 
+    def test_cbindexplan(self):
+        if self.server_grouping:
+            self._create_server_groups()
+
+        if self.eq_index_node:
+            eq_index_node = self.servers[int(self.eq_index_node)].ip + ":" + \
+                            self.servers[int(self.eq_index_node)].port
+
+            # Create Equivalent Index
+            equivalent_index_query = "CREATE INDEX eq_index ON default(age) USING GSI  WITH {{'nodes': '{0}'}};".format(
+                eq_index_node)
+            self.log.info(equivalent_index_query)
+            try:
+                self.n1ql_helper.run_cbq_query(query=equivalent_index_query,
+                                               server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+                self.fail("Index creation Failed : %s", str(ex))
+
+        output, error, json = self._cbindexplan_plan(self.servers[0],
+                                                     self.num_index_replicas,
+                                                     "age")
+        if error:
+            self.fail("cbindexplan errored out")
+        else:
+            expected_node_list = None
+            if self.expected_nodes:
+                expected_node_list = self._get_node_list(self.expected_nodes)
+            if json:
+                self._validate_cbindexplan_result(json, "plan",
+                                                  expected_node_list)
+
     def _get_node_list(self, node_list=None):
         # 1. Parse node string
         if node_list:
@@ -2300,22 +2546,35 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         return nodes
 
     def _create_server_groups(self):
-        zones = self.rest.get_zone_names().keys()
-        source_zone = zones[0]
 
         if self.server_grouping:
             server_groups = self.server_grouping.split(":")
             self.log.info("server groups : %s", server_groups)
 
+            zones = self.rest.get_zone_names().keys()
+
+            # Delete Server groups
+            for zone in zones:
+                if zone != "Group 1":
+                    nodes_in_zone = self.rest.get_nodes_in_zone(zone)
+                    if nodes_in_zone:
+                        self.rest.shuffle_nodes_in_zones(nodes_in_zone.keys(),
+                                                         zone, "Group 1")
+                    self.rest.delete_zone(zone)
+
+            zones = self.rest.get_zone_names().keys()
+            source_zone = zones[0]
+
             # Create Server groups
             for i in range(1, len(server_groups) + 1):
-                server_grp_name = "server_group_" + str(i)
-                self.rest.add_zone(server_grp_name)
+                server_grp_name = "ServerGroup_" + str(i)
+                if not self.rest.is_zone_exist(server_grp_name):
+                    self.rest.add_zone(server_grp_name)
 
             # Add nodes to Server groups
             i = 1
             for server_grp in server_groups:
-                server_grp_name = "server_group_" + str(i)
+                server_grp_name = "ServerGroup_" + str(i)
                 i += 1
                 nodes_in_server_group = server_grp.split("-")
                 for node in nodes_in_server_group:
@@ -2338,8 +2597,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         return index_map, stats_map
 
     def _cbindex_move(self, src_node, node_list, index_list,
-                     expect_failure=False, bucket="default",
-                     username="Administrator", password="password"):
+                      expect_failure=False, bucket="default",
+                      username="Administrator", password="password"):
         node_list = str(node_list).replace("\'", "\"")
         src_node_ip = src_node.ip + ":" + src_node.port
         cmd = """cbindex -type move -server '{0}' -auth '{4}:{5}' -index '{1}' -bucket {2} -with '{{"nodes":{3}}}'""".format(
@@ -2349,23 +2608,112 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             str(node_list),
             username,
             password)
-        log.info(cmd)
+        self.log.info(cmd)
         remote_client = RemoteMachineShellConnection(src_node)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error:
             if expect_failure:
-                log.info("cbindex move failed as expected")
+                self.log.info("cbindex move failed as expected")
             else:
-                log.info("Output : %s", output)
-                log.info("Error : %s", error)
+                self.log.info("Output : %s", output)
+                self.log.info("Error : %s", error)
                 self.fail("cbindex move failed")
         else:
-            log.info("cbindex move started successfully : {0}".format(output))
+            self.log.info(
+                "cbindex move started successfully : {0}".format(output))
         return output, error
 
-    def _create_backup(self, server, username="Administrator", password="password"):
+    def _cbindexplan_plan(self, src_node, num_replica, field, bucket="default",
+                          username="Administrator", password="password"):
+        expect_failure = self.input.param("expect_failure", False)
+        return_val = None
+
+        idx_json = self._generate_index_json_for_cbindex_plan(num_replica,
+                                                              bucket, field)
+        src_node_ip = src_node.ip + ":" + src_node.port
+        cmd = """cbindexplan -command=plan -indexes='{0}/index.json' -cluster='{1}' -username='{2}' -password='{3}' -output='plan.json'""".format(
+            self.cli_command_location, src_node_ip, username, password)
+        self.log.info(cmd)
+        remote_client = RemoteMachineShellConnection(src_node)
+        command = """echo -e "{0}" > {1}/index.json""".format(
+            idx_json.replace("\"", "\\x22").replace("\'", "\\x22"),
+            self.cli_command_location)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error:
+            self.fail("failure creating index.json")
+
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error or "Error" in str(output) or "Fatal" in str(output):
+            if expect_failure:
+                self.log.info("cbindexplan failed as expected")
+            else:
+                self.log.info("Output : %s", output)
+                self.log.info("Error : %s", error)
+                self.fail("cbindexplan move failed")
+        else:
+            command = "cat plan.json"
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+            if error:
+                self.fail("failure accessing plan.json")
+            else:
+                return_val = json.loads(''.join(output))
+        return output, error, return_val
+
+    def _validate_cbindexplan_result(self, result, mode="plan",
+                                     expected_node_list=None):
+        if mode == "plan":
+            # Validate if the placement recommendations is for all replicas
+            if "placement" in result.keys():
+                num_recommended_nodes = 0
+                actual_node_list = []
+                for node in result["placement"]:
+                    if node["indexes"] != []:
+                        num_recommended_nodes += 1
+                        actual_node_list.append(node["nodeId"])
+                if not (self.num_index_replicas + 1) == num_recommended_nodes:
+                    self.fail(
+                        "cbindexplan doesnt give recommendations for all replicas")
+                else:
+                    self.log.info("+1 for no. of recommendations")
+
+                    # Validate if there is an expected node list, the placement recommendation matches it
+                if expected_node_list:
+                    if cmp(actual_node_list, expected_node_list):
+                        self.fail(
+                            "Placement recommendation not matching expected node list")
+                    else:
+                        self.log.info("+1 for expected nodes")
+
+            else:
+                self.fail("Result contains no placement recommendations")
+
+    def _generate_index_json_for_cbindex_plan(self, num_replica, bucket, field):
+        idx_json = {}
+        idx_json['name'] = bucket + '_idx'
+        idx_json['bucket'] = bucket
+        idx_json['isPrimary'] = False
+        idx_json['secExprs'] = [field]
+        idx_json['isArrayIndex'] = False
+        idx_json['replica'] = int(num_replica) + 1
+        idx_json['numDoc'] = 1000
+        idx_json['DocKeySize'] = 200
+        idx_json['SecKeySize'] = 200
+        idx_json['ArrKeySize'] = 0
+        idx_json['ArrSize'] = 0
+        idx_json['MutationRate'] = 0
+        idx_json['ScanRate'] = 0
+        idx_json = [idx_json]
+        # return str(idx_json).replace("\'","\x22").replace("False", "false").replace("\"","\x22")
+        return json.dumps(idx_json, ensure_ascii=True).replace("\"", "\x22")
+
+    def _create_backup(self, server, username="Administrator",
+                       password="password"):
         remote_client = RemoteMachineShellConnection(server)
         command = "rm -rf /tmp/backups"
         output, error = remote_client.execute_command(command)
@@ -2375,17 +2723,20 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.rand)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not filter(lambda x: 'created successfully in archive' in x, output):
+        if error and not filter(
+                lambda x: 'created successfully in archive' in x, output):
             self.fail("cbbackupmgr config failed")
         cmd = "cbbackupmgr backup --archive /tmp/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
             self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not filter(lambda x: 'Backup successfully completed' in x, output):
+        if error and not filter(lambda x: 'Backup successfully completed' in x,
+                                output):
             self.fail("cbbackupmgr backup failed")
 
-    def _create_restore(self, server, username="Administrator", password="password"):
+    def _create_restore(self, server, username="Administrator",
+                        password="password"):
         remote_client = RemoteMachineShellConnection(server)
         cmd = "cbbackupmgr restore --archive /tmp/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
             self.rand, username, password)
@@ -2397,5 +2748,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
 
-        if error and not filter(lambda x: 'Restore completed successfully' in x, output):
+        if error and not filter(lambda x: 'Restore completed successfully' in x,
+                                output):
             self.fail("cbbackupmgr restore failed")
