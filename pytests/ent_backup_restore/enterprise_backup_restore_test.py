@@ -844,8 +844,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.random_keys:
             key_name = "random_keys"
         self.validate_keys = self.input.param("validate_keys", False)
-        gen = BlobGenerator(key_name, "ent-backup-", self.value_size,
+        if self.validate_keys:
+            gen = BlobGenerator(key_name, "ent-backup-", self.value_size,
                                                          end=self.num_items)
+        else:
+            gen = DocumentGenerator('random_keys', '{{"age": {0}}}', xrange(100),
+                                     start=0, end=self.num_items)
 
         self._load_all_buckets(self.master, gen, "create", 0)
         self.log.info("Start backup")
@@ -853,12 +857,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster()
         self.backup_restore()
         self.merged = False
+        regex_check = self.backupset.filter_keys
+        if not self.backupset.filter_keys:
+            regex_check = self.backupset.filter_values
         self.validate_backup_data(self.backupset.backup_host,
                                        [self.backupset.restore_cluster_host],
                                        key_name, False, False, "memory",
                                        self.num_items, None,
                                        validate_keys=self.validate_keys,
-                                       regex_pattern=self.backupset.filter_keys)
+                                       regex_pattern=regex_check)
 
     def test_backup_restore_with_nodes_reshuffle(self):
         """
@@ -1037,7 +1044,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Expected error thrown by backup command")
         conn.execute_command("rm -rf /cbqe3043/file")
 
-    def test_backup_and_restore_with_memcached_buckets(self):
+    def test_backup_and_restore_with_map_buckets(self):
         """
         1. Creates specified buckets on the cluster and loads it with given number of items- memcached bucket has to
            be created for this test (memcached_buckets=1)

@@ -50,6 +50,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
         self.compact_backup = self.input.param("compact-backup", False)
+        self.merged = self.input.param("merged", None)
+        self.cluster_new_user = self.input.param("new_user", None)
+        self.cluster_new_role = self.input.param("new_role", None)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
             self.backupset.cluster_host_username = self.servers[1].rest_username
@@ -73,6 +76,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backupset.restore_cluster_host = self.input.clusters[0][0]
             self.backupset.restore_cluster_host_username = self.input.clusters[0][0].rest_username
             self.backupset.restore_cluster_host_password = self.input.clusters[0][0].rest_password
+        """ new user to test RBAC """
+        if self.cluster_new_user:
+            self.backupset.cluster_host_username = self.cluster_new_user
+            self.backupset.restore_cluster_host_username = self.cluster_new_user
         self.backupset.exclude_buckets = self.input.param("exclude-buckets", "")
         self.backupset.include_buckets = self.input.param("include-buckets", "")
         self.backupset.disable_bucket_config = self.input.param("disable-bucket-config", False)
@@ -89,6 +96,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.end = self.input.param("stop", 1)
         self.backupset.number_of_backups = self.input.param("number_of_backups", 1)
         self.backupset.filter_keys = self.input.param("filter-keys", "")
+        self.backupset.random_keys = self.input.param("random_keys", False)
         self.backupset.filter_values = self.input.param("filter-values", "")
         self.backupset.no_ssl_verify = self.input.param("no-ssl-verify", False)
         self.backupset.secure_conn = self.input.param("secure-conn", False)
@@ -295,7 +303,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.filter_keys:
             args += " --filter-keys '{0}'".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
-            args += " --filter-values {0}".format(self.backupset.filter_values)
+            args += " --filter-values '{0}'".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
         if self.no_progress_bar:
@@ -537,22 +545,34 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         regex_backup_data = {}
         if regex_pattern is not None:
             pattern = re.compile("%s" % regex_pattern)
-            if validate_keys:
-                for bucket in self.buckets:
-                    regex_backup_data[bucket.name] = {}
-                    self.log.info("Extract keys with regex pattern '%s'"
-                                                      % regex_pattern)
-                    for key in restore_file_data[bucket.name]:
-                        if self.debug_logs: print "key in backup file of bucket %s:  %s" \
+            for bucket in self.buckets:
+                regex_backup_data[bucket.name] = {}
+                self.log.info("Extract keys with regex pattern '%s' either in key or body"
+                                                                          % regex_pattern)
+                for key in restore_file_data[bucket.name]:
+                    if self.debug_logs: print "key in backup file of bucket %s:  %s" \
                                                                % (bucket.name, key)
+                    if validate_keys:
                         if pattern.search(key):
                             regex_backup_data[bucket.name][key] = \
+                                     restore_file_data[bucket.name][key]
+                        if self.debug_logs:
+                            print "\nKeys in backup file of bucket %s that matches "\
+                                        "pattern '%s'" % (bucket.name, regex_pattern)
+                            for x in regex_backup_data[bucket.name]:
+                                print x
+                    else:
+                        print "value of key in backup file  ", restore_file_data[bucket.name][key]
+                        if pattern.search(restore_file_data[bucket.name][key]["Value"]):
+                            regex_backup_data[bucket.name][key] = \
                                          restore_file_data[bucket.name][key]
-                    if self.debug_logs:
-                        print "\nKeys in backup file of bucket %s that matches pattern '%s'" \
-                                                    % (bucket.name, regex_pattern)
-                        for x in regex_backup_data[bucket.name]:
-                            print x
+                        if self.debug_logs:
+                            print "\nKeys and value in backup file of bucket %s "\
+                                  " that matches pattern '%s'" \
+                                    % (bucket.name, regex_pattern)
+                            for x in regex_backup_data[bucket.name]:
+                                print "key: ", x
+                                print "value: ", regex_backup_data[bucket.name][x]["Value"]
                 restore_file_data = regex_backup_data
 
         buckets_data = {}
@@ -564,7 +584,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             buckets_data[bucket.name] = bucket_data[bucket.name]
             for key in buckets_data[bucket.name]:
                 value = buckets_data[bucket.name][key]
-                value = ",".join(value.split(',')[4:5])
+                if self.random_keys:
+                    value = ",".join(value.split(',')[4:7])
+                    value = value[1:-1]
+                    value = value.replace('""', '"')
+                else:
+                    value = ",".join(value.split(',')[4:5])
                 buckets_data[bucket.name][key] = value
             self.log.info("*** Compare data in bucket and in backup file of bucket %s ***"
                                                                             % bucket.name)
@@ -590,8 +615,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             print "Total items in backup file:   ", len(bk_file_data[bucket.name])
             if regex_pattern is not None:
                 print "Total items to be restored with regex pattern '%s' is %s "\
-                                             % (regex_pattern,len(restore_file_data[bucket.name]))
-            print "Total items in bucket:   ", key_count
+                                         % (regex_pattern,len(restore_file_data[bucket.name]))
+            print "Total items in bucket should be:   ", key_count
+            rest = RestConnection(server_bucket[0])
+            actual_keys = rest.get_active_key_count(bucket.name)
+            print "Total items actual in bucket:      ", actual_keys
+            if actual_keys != key_count:
+                self.fail("Total keys matched: %s != Total keys in bucket %s: %s" \
+                          "at node %s " % (key_count, bucket.name, actual_keys,
+                                           server_bucket[0]))
             if self.merged:
                 if key_check:
                     self.log.info("Check if deleted keys still in backup after merged" )
@@ -645,6 +677,8 @@ class Backupset:
         self.cluster_host = None
         self.cluster_host_username = ''
         self.cluster_host_password = ''
+        self.cluster_new_user = None
+        self.cluster_new_role = None
         self.restore_cluster_host = None
         self.restore_cluster_host_username = ''
         self.restore_cluster_host_password = ''
@@ -666,6 +700,7 @@ class Backupset:
         self.filter_keys = ''
         self.filter_values = ''
         self.no_ssl_verify = False
+        self.random_keys = False
         self.secure_conn = False
         self.backup_list_name = ''
         self.backup_incr_backup = ''
