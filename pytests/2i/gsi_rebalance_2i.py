@@ -597,33 +597,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                                       to_add_nodes1, [], swap_rebalance=True)
         self.run_operation(phase="after")
 
-    # TODO : the behavior of backup/restore during gsi rebalance is still under progress.
-    def test_backup_restore_when_gsi_rebalance_in_progress(self):
-        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
-        self.run_operation(phase="before")
-        self.sleep(30)
-        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
-        services_in = ["index"]
-        # rebalance in a node
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
-                                                 services=services_in)
-        rebalance.result()
-        # rebalance out a node
-        tasks = self.async_run_doc_ops()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-        # try running enterprise backup
-        self._run_backup()
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
-        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
-        # validate the results
-        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [self.servers[self.nodes_init]], [index_server],
-                                                      swap_rebalance=True)
-        self.run_operation(phase="after")
-
     def test_cbindex_move_when_gsi_rebalance_is_in_progress(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.run_operation(phase="before")

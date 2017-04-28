@@ -60,8 +60,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
-    def create_index(self, bucket, query_definition, deploy_node_info=None):
-        create_task = self.async_create_index(bucket, query_definition, deploy_node_info)
+    def create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
+        create_task = self.async_create_index(bucket, query_definition, deploy_node_info, desc=desc)
         create_task.result()
         if self.defer_build:
             build_index_task = self.async_build_index(bucket, [query_definition.index_name])
@@ -70,7 +70,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                             server=self.n1ql_node)
         self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
-    def async_create_index(self, bucket, query_definition, deploy_node_info=None):
+    def async_create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         index_where_clause = None
         if self.use_where_clause_in_index:
             index_where_clause = query_definition.index_where_clause
@@ -78,19 +78,20 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                   use_gsi_for_secondary=self.use_gsi_for_secondary,
                                                                   deploy_node_info=deploy_node_info,
                                                                   defer_build=self.defer_build,
-                                                                  index_where_clause=index_where_clause, num_replica=self.num_index_replicas)
+                                                                  index_where_clause=index_where_clause, num_replica=self.num_index_replicas, desc=desc)
         create_index_task = self.gsi_thread.async_create_index(server=self.n1ql_node, bucket=bucket,
                                                                query=self.query, n1ql_helper=self.n1ql_helper,
                                                                index_name=query_definition.index_name,
                                                                defer_build=self.defer_build)
         return create_index_task
 
-    def create_index_using_rest(self, bucket, query_definition, exprType='N1QL', deploy_node_info=None):
+    def create_index_using_rest(self, bucket, query_definition, exprType='N1QL', deploy_node_info=None, desc=None):
         ind_content = query_definition.generate_gsi_index_create_query_using_rest(bucket=bucket,
                                                                                   deploy_node_info=deploy_node_info,
                                                                                   defer_build=None,
                                                                                   index_where_clause=None,
-                                                                                  gsi_type=self.gsi_type)
+                                                                                  gsi_type=self.gsi_type,
+                                                                                  desc=desc)
 
         log.info("Creating index {0}...".format(query_definition.index_name))
         return self.rest.create_index_with_rest(ind_content)
