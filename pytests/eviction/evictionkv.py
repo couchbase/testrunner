@@ -233,6 +233,7 @@ class EvictionKV(EvictionBase):
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
                                               " -u Administrator -p password | grep curr_items")
+        self.log.info(output)
         self.assertEquals(' curr_items:                                            %s' % item_count, output[0])
 
         self.log.info('The number of items when almost reached OOM is {0}'.format(item_count))
@@ -462,7 +463,7 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
         # figure out how many items were loaded and load a certain percentage more
 
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
-        self.item_count.info('The number of items is {0}'.format(item_count))
+        self.log.info('The number of items is {0}'.format(item_count))
 
         dcp_client = self.dcp_client(self.servers[0], 'producer')
         num = 0
