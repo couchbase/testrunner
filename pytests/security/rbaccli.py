@@ -76,7 +76,7 @@ class rbacclitest(rbacTest):
 
     def test_create_user_without_rbac_pass(self):
         users, roles = self._get_user_role()
-        options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles + " --auth-domain builtin"
+        options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles + " --auth-domain local"
         output, error = self.execute_admin_role_manage(options)
         self.assertTrue("ERROR: --rbac-password is required with the --set option" in output[0], "Issue with command without rbac_pass")
 
@@ -91,7 +91,7 @@ class rbacclitest(rbacTest):
         users, roles = self._get_user_role()
         options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles \
                   + " --auth-domain " + self.auth_type
-        if self.auth_type == "builtin":
+        if self.auth_type == "local":
             options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
         self.assertTrue("SUCCESS: RBAC user set" in output[0],"Issue with command create_user")
@@ -100,7 +100,7 @@ class rbacclitest(rbacTest):
         users, roles = self._get_user_role()
         options = "--set " + "--rbac-username " + users[0][0] + " --rbac-password " + users[0][1] + " --roles " + roles \
                   + " --auth-domain " + self.auth_type + " --rbac-name " + self.user_name
-        if self.auth_type == "builtin":
+        if self.auth_type == "local":
             options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
         self.assertTrue("SUCCESS: RBAC user set" in output[0],"Issue with command create user name")
@@ -189,7 +189,7 @@ class rbacclitest(rbacTest):
         users, roles = self._get_user_role()
         options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles \
                   + " --auth-domain " + self.auth_type
-        if self.auth_type == "builtin":
+        if self.auth_type == "local":
             options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
         self.assertTrue("SUCCESS: RBAC user set" in output[0], "Issue with command create_user")
@@ -197,7 +197,7 @@ class rbacclitest(rbacTest):
             options = ""
             options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles \
                       + " --auth-domain " + self.auth_type
-            if self.auth_type == "builtin":
+            if self.auth_type == "local":
                 options += " --rbac-password " + self.new_password
             output, error = self.execute_admin_role_manage(options)
             self.assertTrue("SUCCESS: RBAC user set" in output[0], "Issue with command create_user")
@@ -244,7 +244,6 @@ class rbacclitest(rbacTest):
         finally:
             options = "--set --min-length 6"
             output, error = self.execute_password_policy(options)
-=======
 
     def test_delete_user(self):
         self.test_create_user()
