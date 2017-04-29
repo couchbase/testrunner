@@ -6,6 +6,8 @@ log = logger.Logger.get_logger()
 class TestMemcachedClient():
 
     def connection(self, client_ip, bucket_name, user,password, port=11210):
+        log.info("Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name,user, \
+                                                                                                         password))
         try:
             mc = MemcachedClient(host=client_ip, port=port)
             mc.sasl_auth_plain(user,password)

@@ -24,41 +24,34 @@ class dataRoles():
     def _datareader_role_master():
         per_set = {
             "name": "Data Reader Role",
-            "permissionSet": "read!True,write!False,statsRead!True,ReadMeta!True,WriteMeta!False"}
+            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _datareaderwrite_role_master():
         per_set = {
             "name": "Data Reader Writer Role",
-            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!True,WriteMeta!True"}
+            "permissionSet": "read!False,write!True,statsRead!False,ReadMeta!False,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _view_admin_role_master():
         per_set = {
             "name": "View Admin Role",
-            "permissionSet": "read!True,write!False,statsRead!True,ReadMeta!True,WriteMeta!False"}
+            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _replication_admin_role_master():
         per_set = {
             "name": "Replication Admin Role",
-            "permissionSet": "read!True,write!False,statsRead!True,ReadMeta!True,WriteMeta!False"}
+            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _bucket_admin_role_master():
         per_set = {
             "name": "Bucket Admin Role",
-            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!True,WriteMeta!True"}
-        return per_set
-
-    @staticmethod
-    def _cluster_admin_role_master():
-        per_set = {
-            "name": "Cluster Admin Role",
             "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!True,WriteMeta!True"}
         return per_set
 
@@ -101,14 +94,14 @@ class dataRoles():
     def _data_backup_master():
         per_set = {
             "name": "Data Backup",
-            "permissionSet": "read!False,write!False,statsRead!False,ReadMeta!True,WriteMeta!True"}
+            "permissionSet": "read!True,write!True,statsRead!False,ReadMeta!False,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _data_monitoring_master():
         per_set = {
             "name": "Data Monitoring",
-            "permissionSet": "read!False,write!False,statsRead!True,ReadMeta!True,WriteMeta!True"}
+            "permissionSet": "read!False,write!False,statsRead!True,ReadMeta!False,WriteMeta!False"}
         return per_set
 
     @staticmethod
@@ -128,10 +121,10 @@ class dataRoles():
         if role == "data_reader":
             return_role_master = dataRoles._datareader_role_master()
 
-        if role == "data_reader_writer":
+        if role == "data_writer":
             return_role_master = dataRoles._datareaderwrite_role_master()
 
-        if role == "view_admin":
+        if role == "views_admin":
             return_role_master = dataRoles._view_admin_role_master()
 
         if role == "replication_admin":
@@ -153,13 +146,16 @@ class dataRoles():
             return_role_master = dataRoles._read_only_role_master()
 
         if role == "data_dcp_reader":
-            return_role_master = dataRoles._read_only_role_master()
+            return_role_master = dataRoles._dcp_data_reader_role_master()
 
         if role == "data_backup":
             return_role_master = dataRoles._data_backup_master()
 
         if role == "data_monitoring":
             return_role_master = dataRoles._data_monitoring_master()
+
+        if role == "no_bucket_access":
+            return_role_master = dataRoles._no_bucket_access()
 
         return return_role_master
 
@@ -206,13 +202,13 @@ class RbacTestMemcached(BaseTestCase):
         final_roles = ''
         user_role_param = user_role.split(":")
         if len(user_role_param) == 1:
-            if user_role_param[0] in ('data_reader', 'data_reader_writer', 'bucket_admin', 'views_admin','data_dcp_reader', 'data_monitoring', 'data_backup') and (bool(self.all_buckets)):
+            if user_role_param[0] in ('data_reader', 'data_writer', 'bucket_admin', 'views_admin','data_dcp_reader', 'data_monitoring', 'data_backup') and (bool(self.all_buckets)):
                 final_roles = user_role_param[0] + "[*]"
             else:
                 final_roles = user_role_param[0]
         else:
             for role in user_role_param:
-                if role in ('data_reader', 'data_reader_writer', 'bucket_admin', 'views_admin', 'data_dcp_reader', 'data_monitoring', 'data_backup') and bool((self.all_bucket)):
+                if role in ('data_reader', 'data_writer', 'bucket_admin', 'views_admin', 'data_dcp_reader', 'data_monitoring', 'data_backup') and bool((self.all_bucket)):
                     role = role + "[*]"
                 final_roles = final_roles + ":" + role
         return final_roles
@@ -233,6 +229,7 @@ class RbacTestMemcached(BaseTestCase):
     def rbac_test_memcached(self):
         self.log.info ("Current role assingment is - {0}".format(self.user_role))
         self._assign_user_role()
+        self.log.info("Current role mapping is - {0}".format(self.role_map))
         action_list = self._return_actions(self.role_map)
         for action in action_list:
             temp_action = action.split("!")
