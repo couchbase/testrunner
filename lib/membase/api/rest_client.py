@@ -2208,8 +2208,8 @@ class RestConnection(object):
             params_dict["saslPassword"] = saslPassword
         if replicaNumber:
             params_dict["replicaNumber"] = replicaNumber
-        if proxyPort:
-            params_dict["proxyPort"] = proxyPort
+        #if proxyPort:
+        #    params_dict["proxyPort"] = proxyPort
         if replicaIndex:
             params_dict["replicaIndex"] = replicaIndex
         if flushEnabled:

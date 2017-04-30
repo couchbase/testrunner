@@ -428,7 +428,7 @@ class auditTest(BaseTestCase):
             self.set_user_role(rest,username)
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
-            expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
+            expectedResults = {'source':'external', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         self.checkConfig(self.eventID, self.master, expectedResults)
 

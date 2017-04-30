@@ -194,7 +194,8 @@ class auditcli(BaseTestCase):
                                'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":self.source, \
-                               "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
+                               "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'', \
+                               'conflict_resolution_type':'seqno','storage_mode':'couchstore'}
         self.checkConfig(8201, self.master, expectedResults)
         remote_client.disconnect()
 
@@ -384,7 +385,7 @@ class auditcli(BaseTestCase):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group created group2"])
+            self.assertEqual(output[1], ["SUCCESS: group created group"])
             expectedResults = {'group_name':'group2', 'source':source, 'user':user, 'ip':'127.0.0.1', 'port':1234}
             tempStr = rest.get_zone_uri()[expectedResults['group_name']]
             tempStr = (tempStr.split("/"))[4]
@@ -396,7 +397,7 @@ class auditcli(BaseTestCase):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group renamed group2"])
+            self.assertEqual(output[1], ["SUCCESS: group renamed group"])
             expectedResults = {}
             expectedResults = {'group_name':'group3', 'source':source, 'user':user, 'ip':'127.0.0.1', 'port':1234, 'nodes':[]}
             expectedResults['uuid'] = tempStr
@@ -407,7 +408,7 @@ class auditcli(BaseTestCase):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             output = self.del_runCmd_value(output)
-            self.assertEqual(output, ["SUCCESS: group deleted group3"])
+            self.assertEqual(output[1], ["SUCCESS: group deleted group"])
             expectedResults = {}
             expectedResults = {'group_name':'group3', 'source':source, 'user':user, 'ip':'127.0.0.1', 'port':1234}
             expectedResults['uuid'] = tempStr
@@ -481,7 +482,7 @@ class XdcrCLITest(CliBaseTest):
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+        content = rest.set_user_roles(user_id=username, payload=payload)
 
     def setupLDAPSettings (self,rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
