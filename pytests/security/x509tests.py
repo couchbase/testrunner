@@ -609,7 +609,7 @@ class x509tests(BaseTestCase):
 
         connection_string = 'couchbase://'+ self.master.ip + '/default'
         try:
-            cb = Bucket(connection_string)
+            cb = Bucket(connection_string, password='password')
             if cb is not None:
                 result = True
         except Exception, ex:
