@@ -197,6 +197,12 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['status'] == 'errors' and 'cause:DuplicateKey' in json_curl['errors'][0]['msg'])
 
+        curl_query = 'select meta().id from default limit 1'
+        result = self.run_cbq_query(curl_query)
+        docid = result['results'][0]['id']
+        delete_query ="delete from default d use keys '" + docid + "'"
+        result = self.run_cbq_query(delete_query)
+
     '''Test that you can insert data from a select curl statement using upsert
         -inserting data pulled from another bucket
         -insertign data using a key that already exists(should work)'''
@@ -543,7 +549,7 @@ class QueryCurlTests(QueryTests):
         limit = 5
         n1ql_query = 'select * from default limit %s' % limit
         invalid_json_error = 'Errorevaluatingprojection.-cause:InvalidJSONendpointhttp:' \
-                             '//172.23.106.24:8093/query/service'
+                             '//%s:%s/query/service'%(self.master.ip,self.n1ql_port)
 
         options = "{'data' : 'statement=%s', 'user':'%s:%s'}" \
                   % (n1ql_query, self.username, self.password)
@@ -716,6 +722,45 @@ class QueryCurlTests(QueryTests):
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['errors'][0]['msg'] ==
                         'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
+
+    def test_invalid_certs(self):
+        url = "'https://self-signed.badssl.com/'"
+        query="select curl("+ url +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['errors'][0]['msg'] ==
+                        'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
+
+        url = "'https://wrong.host.badssl.com/'"
+        query="select curl("+ url +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['errors'][0]['msg'] ==
+                        'Errorevaluatingprojection.-cause:curl:SSLpeercertificateorSSHremotekeywasnotOK')
+
+        url = "'https://superfish.badssl.com/'"
+        query="select curl("+ url +")"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['errors'][0]['msg'] ==
+                        'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
+
+    '''WIP'''
+    def test_insert_no_credentials(self):
+        n1ql_query = 'select * from \`beer-sample\` limit 1'
+        insert_query ="insert into default (key UUID(), value curl_result.results[0].\`beer-sample\`) "
+        query = "select curl("+ self.query_service_url +", "
+        options = "{'data' : 'statement=%s'}) curl_result " % (n1ql_query)
+        returning ="returning meta().id, * "
+        curl = self.shell.execute_commands_inside(self.cbqpath,insert_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        import pdb; pdb.set_trace()
+        docid = json_curl['results'][0]['id']
+        result = self.run_cbq_query('select * from default limit 1')
+        result2= self.run_cbq_query('select * from `beer-sample` limit 1')
+        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
+                        and json_curl['metrics']['mutationCount'] == 1)
+
 
 ##############################################################################################
 #
