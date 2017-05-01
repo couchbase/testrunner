@@ -192,15 +192,15 @@ class EvictionKV(EvictionBase):
         """
 
         self.load_ejected_set(100)
-        self.load_to_dgm(ttl=30)
-        self.ops_on_ejected_set("update", ttl=30)
+        self.load_to_dgm(ttl=60)
+        self.ops_on_ejected_set("update", ttl=60)
 
         # run expiry pager
         self.run_expiry_pager()
 
         self.cluster.wait_for_stats([self.master],
                                     "default", "",
-                                    "curr_items", "==", 0, timeout=30)
+                                    "curr_items", "==", 0, timeout=300)
 
     def test_ephemeral_bucket_stats(self):
         shell = RemoteMachineShellConnection(self.master)
