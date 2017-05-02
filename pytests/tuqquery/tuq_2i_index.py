@@ -1892,7 +1892,7 @@ class QueriesIndexTests(QueryTests):
                     if self.covering_index:
                         self.test_explain_covering_index(index_name2)
                     self.query = " select email from %s where email "  % (bucket.name) +\
-                                 "LIKE '%@%.%' and join_day > 10"
+                                 "LIKE '%@%.%' and join_day > 10 order by meta().id limit 10"
                     actual_result2 = self.run_cbq_query()
                     expected_result = [{"email" : doc["email"]}
                                for doc in self.full_list
@@ -1911,9 +1911,9 @@ class QueriesIndexTests(QueryTests):
                     result = self.run_cbq_query()
                     self.assertEqual(sorted(actual_result1['results']),sorted(result['results']))
                     self.query = " select email from %s use index(`#primary`) where email "  % (bucket.name) +\
-                                 "LIKE '%@%.%' and join_day > 10"
+                                 "LIKE '%@%.%' and join_day > 10 order by meta().id limit 10"
                     result = self.run_cbq_query()
-                    self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
+                    self.assertEqual((actual_result2['results']),(result['results']))
                     self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                     self.run_cbq_query()
 
@@ -3235,7 +3235,7 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
-            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['index']=='rec1-1_record_by_index_map')
+            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']=='rec1-1_record_by_index_map')
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND any i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             self.assertTrue(sorted(actual_result['results'][0]['doc']) == ([u'data', u'indexMap', u'type']))

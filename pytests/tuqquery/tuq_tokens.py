@@ -239,7 +239,7 @@ class TokenTests(QueryTests):
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']== idx1)
-            self.assertTrue(plan['~children'][0]['scans'][1]['index']==idx3)
+            self.assertTrue(plan['~children'][0]['scans'][1]['scan']['index']==idx3)
             self.query = "CREATE INDEX {0} ON `beer-sample`( ALL address )".format(idx4)
             self.run_cbq_query()
             self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
