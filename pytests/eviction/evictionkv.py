@@ -231,6 +231,7 @@ class EvictionKV(EvictionBase):
         self.assertEquals(' vb_0:seqlist_deleted_count:              0', output[0])
 
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info('rest.get_bucket(self.buckets[0]).stats.itemCount: %s' % item_count)
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
                                               " -u Administrator -p password | grep curr_items")
         self.log.info(output)
@@ -365,9 +366,10 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
 
         rest = RestConnection(self.servers[0])
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info("completed base load with %s items" % item_count)
 
         # load more until we are out of memory. Note these are different than the Blob generator - is that good or bad?
-
+        self.log.info("load more until we are out of memory...")
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
 
         # fine grained load until OOM
@@ -381,15 +383,16 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
                 have_available_memory = False
                 self.log.info('Memory is full at {0} items'.format(i))
 
+        self.log.info("as a result added more %s items" % (i-item_count))
+
         stats = rest.get_bucket(self.buckets[0]).stats
         itemCountWhenOOM = stats.itemCount
         memoryWhenOOM = stats.memUsed
         self.log.info('Item count when OOM {0} and memory used {1}'.format(itemCountWhenOOM, memoryWhenOOM))
 
-        # delete some things using the Blob deleter
-        NUMBER_OF_DOCUMENTS_TO_DELETE = 10000
+        NUMBER_OF_DOCUMENTS_TO_DELETE = 5000
 
-        for i in xrange(NUMBER_OF_DOCUMENTS_TO_DELETE):
+        for i in xrange(item_count, item_count + NUMBER_OF_DOCUMENTS_TO_DELETE):
             mc_client.delete(EphemeralBucketsOOM.KEY_ROOT + str(i))
 
         stats = rest.get_bucket(self.buckets[0]).stats
