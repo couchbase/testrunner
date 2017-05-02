@@ -11,7 +11,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
-                          MAC_COUCHBASE_BIN_PATH
+                          MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -29,16 +29,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
+        self.root_path = LINUX_ROOT_PATH
         if info == 'linux':
             if self.nonroot:
                 base_path = "/home/%s" % self.master.ssh_username
                 self.cli_command_location = "%s%s" % (base_path,
                                                       LINUX_COUCHBASE_BIN_PATH)
                 self.database_path = "%s%s" % (base_path, COUCHBASE_DATA_PATH)
+                self.root_path = "/home/%s/" % self.master.ssh_username
         elif info == 'windows':
             self.cmd_ext = ".exe"
             self.database_path = WIN_COUCHBASE_DATA_PATH
             self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
+            self.root_path = WIN_ROOT_PATH
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
             self.cli_command_location = MAC_COUCHBASE_BIN_PATH
@@ -51,6 +54,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.non_master_host = self.input.param("non-master", False)
         self.compact_backup = self.input.param("compact-backup", False)
         self.merged = self.input.param("merged", None)
+        self.do_restore = self.input.param("do-restore", False)
         self.cluster_new_user = self.input.param("new_user", None)
         self.cluster_new_role = self.input.param("new_role", None)
         if self.non_master_host:
@@ -100,6 +104,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.filter_values = self.input.param("filter-values", "")
         self.backupset.no_ssl_verify = self.input.param("no-ssl-verify", False)
         self.backupset.secure_conn = self.input.param("secure-conn", False)
+        self.backupset.bk_no_cert = self.input.param("bk-no-cert", False)
+        self.backupset.rt_no_cert = self.input.param("rt-no-cert", False)
         self.backupset.backup_list_name = self.input.param("list-names", None)
         self.backupset.backup_incr_backup = self.input.param("incr-backup", None)
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
@@ -220,15 +226,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_cluster(self, threads_count=1):
         url_format = ""
+        secure_port = ""
         if self.backupset.secure_conn:
-            self.backupset.cluster_host.port = 18091
+            cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
+                                                       self.backupset.cluster_host)
+            secure_port = "1"
             url_format = "s"
-        args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{3} --username {4} --password {5}". \
-            format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
+        args = "backup -a {0} -r {1} {6} http{7}://{2}:{8}{3} -u {4} -p {5}". \
+            format(self.backupset.directory, self.backupset.name,
+                   self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
-                   self.backupset.cluster_host_password, self.cluster_flag, url_format)
+                   self.backupset.cluster_host_password, self.cluster_flag, url_format,
+                   secure_port)
         if self.backupset.no_ssl_verify:
             args += " --no-ssl-verify"
+        if self.backupset.secure_conn:
+            if not self.backupset.bk_no_cert:
+                args += " --cacert %s" % cacert
         if self.backupset.resume:
             args += " --resume"
         if self.backupset.purge:
@@ -241,6 +255,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+
         if error or (output and "Backup successfully completed" not in output[0]):
             return output, error
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
@@ -275,14 +290,28 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "restore --archive {0} --repo {1} {2} http://{3}:{4} --username {5} "\
+        url_format = ""
+        secure_port = ""
+        if self.backupset.secure_conn:
+            cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
+                                                       self.backupset.restore_cluster_host)
+            url_format = "s"
+            secure_port = "1"
+        args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} -u {5} "\
                "--password {6} --start {7} --end {8}" \
-                               .format(self.backupset.directory, self.backupset.name,
-                                       self.cluster_flag, self.backupset.restore_cluster_host.ip,
+                               .format(self.backupset.directory,
+                                       self.backupset.name,
+                                       self.cluster_flag,
+                                       self.backupset.restore_cluster_host.ip,
                                        self.backupset.restore_cluster_host.port,
                                        self.backupset.restore_cluster_host_username,
                                        self.backupset.restore_cluster_host_password,
-                                       backup_start, backup_end)
+                                       backup_start, backup_end, url_format, secure_port)
+        if self.backupset.no_ssl_verify:
+            args += " --no-ssl-verify"
+        if self.backupset.secure_conn:
+            if not self.backupset.rt_no_cert:
+                args += " --cacert %s" % cacert
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets {0}".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
@@ -584,7 +613,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             buckets_data[bucket.name] = bucket_data[bucket.name]
             for key in buckets_data[bucket.name]:
                 value = buckets_data[bucket.name][key]
-                if self.random_keys:
+                if self.backupset.random_keys:
                     value = ",".join(value.split(',')[4:7])
                     value = value[1:-1]
                     value = value.replace('""', '"')
@@ -668,6 +697,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 raise Exception("Content does not match "
                                 "Output => %s != %s <= Source" % (output[x], source[x]))
 
+    def get_cluster_certificate_info(self, server_host, server_cert):
+        """
+            This will get certificate info from cluster
+        """
+        cert_file_location = self.root_path + "cert.pem"
+        shell = RemoteMachineShellConnection(server_host)
+        cmd = "%s/couchbase-cli ssl-manage -c %s:8091 -u Administrator -p password "\
+              " --cluster-cert-info > %s" % (self.cli_command_location,
+                                                     server_cert.ip,
+                                                     cert_file_location)
+        output, _ = shell.execute_command(cmd)
+        if output and "Error" in output[0]:
+            self.fail("Failed to get CA certificate from cluster.")
+        shell.disconnect()
+        return cert_file_location
 
 class Backupset:
     def __init__(self):
@@ -702,6 +746,8 @@ class Backupset:
         self.no_ssl_verify = False
         self.random_keys = False
         self.secure_conn = False
+        self.bk_no_cert = False
+        self.rt_no_cert = False
         self.backup_list_name = ''
         self.backup_incr_backup = ''
         self.bucket_backup = ''

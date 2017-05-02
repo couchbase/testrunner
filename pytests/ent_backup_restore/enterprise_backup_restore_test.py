@@ -820,15 +820,38 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.validate_help_content(output[:5], content)
         shell.disconnect()
 
-    def test_backup_with_optional_flags(self):
+    def test_backup_restore_with_optional_flags(self):
         """
             1. Create a bucket
             2. Load docs to bucket
             3. Backup with optional flags like no-ssl-verify, secure-conn
             4. Verify backup data in backup file
         """
+        self.log.info("Load 1st batch docs")
+        create_gen1 = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                                    end=self.num_items)
+        self._load_all_buckets(self.master, create_gen1, "create", 0)
         self.backup_create()
-        self.backup_cluster()
+        verify_data = True
+        output, error = self.backup_cluster()
+        if self.backupset.secure_conn:
+            if self.backupset.bk_no_cert:
+                if "Backup successfully completed" in output[0]:
+                    self.fail("Taking cluster backup failed.")
+                elif "Error" in output[0]:
+                    verify_data = False
+            else:
+                if "Backup successfully completed" not in output[0]:
+                    self.fail("Taking cluster backup failed.")
+
+        if verify_data:
+            self.validate_backup_data(self.backupset.backup_host,
+                                  self.servers[:self.nodes_init],
+                                  "ent-backup", False, False, "memory",
+                                  self.num_items, None)
+        if self.do_restore:
+            self.log.info("Restore with secure connection")
+            self.backup_restore()
 
     def test_restore_with_filter_regex(self):
         """
@@ -840,8 +863,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             6. Verify only key or value in regex restored to bucket
         """
         key_name = "ent-backup"
-        self.random_keys = self.input.param("random_keys", False)
-        if self.random_keys:
+        if self.backupset.random_keys:
             key_name = "random_keys"
         self.validate_keys = self.input.param("validate_keys", False)
         if self.validate_keys:
