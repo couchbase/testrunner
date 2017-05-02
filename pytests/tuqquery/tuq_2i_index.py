@@ -1892,7 +1892,7 @@ class QueriesIndexTests(QueryTests):
                     if self.covering_index:
                         self.test_explain_covering_index(index_name2)
                     self.query = " select email from %s where email "  % (bucket.name) +\
-                                 "LIKE '%@%.%' and join_day > 10 order by meta().id limit 10"
+                                 "LIKE '%@%.%' and join_day > 10"
                     actual_result2 = self.run_cbq_query()
                     expected_result = [{"email" : doc["email"]}
                                for doc in self.full_list
@@ -1910,6 +1910,9 @@ class QueriesIndexTests(QueryTests):
                                   "LIKE '%@%.%' and VMs[0].RAM > 5 and join_day > 10"
                     result = self.run_cbq_query()
                     self.assertEqual(sorted(actual_result1['results']),sorted(result['results']))
+                    self.query = " select email from %s where email "  % (bucket.name) +\
+                                 "LIKE '%@%.%' and join_day > 10 order by meta().id limit 10"
+                    actual_result2 = self.run_cbq_query()
                     self.query = " select email from %s use index(`#primary`) where email "  % (bucket.name) +\
                                  "LIKE '%@%.%' and join_day > 10 order by meta().id limit 10"
                     result = self.run_cbq_query()
