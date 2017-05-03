@@ -1119,3 +1119,70 @@ class MovingTopFTS(FTSBaseTest):
                     "Hits after rollback and failover of primary FTS node: %s" % hits3)
                 self.assertEqual(hits2, hits3,
                                  "Mutated items after FTS node failover are not equal to that after rollback")
+
+    def test_cancel_node_removal_rebalance(self):
+        """
+            1. start rebalance out
+            2. stop rebalance
+            3. cancel node removal
+            4. start rebalance
+        """
+        from lib.membase.api.rest_client import RestConnection, RestHelper
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        nodes = rest.node_statuses()
+        ejected_nodes = []
+
+        for node in nodes:
+            if node.ip != self._master.ip:
+                ejected_nodes.append(node.id)
+                break
+
+        self.log.info(
+                "removing node {0} from cluster".format(ejected_nodes))
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                           ejectedNodes=ejected_nodes)
+        self.sleep(3)
+        stopped = rest.stop_rebalance()
+        self.assertTrue(stopped, msg="unable to stop rebalance")
+
+        #for cases if rebalance ran fast
+        if RestHelper(rest).is_cluster_rebalanced():
+            self.log.info("Rebalance is finished already.")
+        else:
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
+                                                     "failed after restarting")
+
+    def test_stop_restart_rebalance_in_loop(self):
+        """
+         Kick off rebalance-out. Stop and stop rebalance in a loop
+         continuously till rebalance finishes.
+        :return:
+        """
+
+        from lib.membase.api.rest_client import RestConnection, RestHelper
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        nodes = rest.node_statuses()
+        ejected_nodes = []
+
+        for node in nodes:
+            if node.ip != self._master.ip:
+                ejected_nodes.append(node.id)
+                break
+        self.log.info(
+            "removing node(s) {0} from cluster".format(ejected_nodes))
+
+        while True:
+            rest.rebalance(otpNodes=[node.id for node in nodes],
+                           ejectedNodes=ejected_nodes)
+            self.sleep(10)
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+
+            if RestHelper(rest).is_cluster_rebalanced():
+                self.log.info("Rebalance is finished already.")
+                break
+
+
+
+
