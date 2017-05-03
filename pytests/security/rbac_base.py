@@ -46,8 +46,8 @@ class RbacBase:
         if source:
             self.source = source
         response_return = []
-        final_roles = ""
         for user_role in user_role_list:
+            final_roles = ""
             userid = user_role['id']
             username = user_role['name']
             user_role_param = user_role['roles'].split(":")
