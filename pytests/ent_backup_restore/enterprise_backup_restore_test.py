@@ -2351,10 +2351,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         rest_src = RestConnection(self.backupset.cluster_host)
         rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                          self.servers[1].ip, services=['fts'])
+                          self.servers[1].ip, services=['kv', 'fts'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
-        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0, end=self.num_items)
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0,
+                                                                 end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         index_definition = INDEX_DEFINITION
@@ -2366,15 +2367,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(ex)
         self.backup_cluster_validate()
         rest_target = RestConnection(self.backupset.restore_cluster_host)
-        rest_target.add_node(self.input.clusters[0][1].rest_username, self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['fts'])
+        rest_target.add_node(self.input.clusters[0][1].rest_username,
+                             self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=['kv', 'fts'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         rest_target_fts = RestConnection(self.input.clusters[0][1])
         try:
             status, content = rest_target_fts.get_fts_index_definition(index_name)
-            self.assertTrue(status and content['status'] == 'ok', "FTS index not found in restore cluster as expected")
+            self.assertTrue(status and content['status'] == 'ok',
+                             "FTS index not found in restore cluster as expected")
             self.log.info("FTS index found in restore cluster as expected")
         finally:
             rest_src_fts.delete_fts_index(index_name)
