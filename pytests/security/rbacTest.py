@@ -124,18 +124,22 @@ class rbacTest(ldaptest):
     def test_role_assign_incorrect_role_name(self):
         msg = self.input.param("msg",None)
         payload = "name=" + self.user_id + "&roles=" + self.user_role
-        status, content, header =  rbacmain(self.master,self.auth_type)._set_user_roles(user_name=self.user_id,payload=payload)
-        self.assertFalse(status,"Incorrect status for incorrect role name")
-        if msg != content:
-            self.assertFalse(True,"Message shown is incorrect")
+        user_list = self.returnUserList(self.user_id)
+        for user in user_list:
+            status, content, header =  rbacmain(self.master,self.auth_type)._set_user_roles(user_name=user[0],payload=payload)
+            self.assertFalse(status,"Incorrect status for incorrect role name")
+            if msg != content:
+                self.assertFalse(True,"Message shown is incorrect")
 
     def test_role_assign_incorrect_bucket_name(self):
         msg = self.input.param("msg",None)
         payload = "name=" + self.user_id + "&roles=" + self.user_role
-        status, content, header =  rbacmain(self.master,self.auth_type)._set_user_roles(user_name=self.user_id,payload=payload)
-        self.assertFalse(status,"Incorrect status for incorrect role name")
-        if msg != content:
-            self.assertFalse(True,"Message shown is incorrect")
+        user_list = self.returnUserList(self.user_id)
+        for user in user_list:
+            status, content, header =  rbacmain(self.master,self.auth_type)._set_user_roles(user_name=user[0],payload=payload)
+            self.assertFalse(status,"Incorrect status for incorrect role name")
+            if msg != content:
+                self.assertFalse(True,"Message shown is incorrect")
 
     '''
     def test_role_assign_retrieve(self):
@@ -290,7 +294,7 @@ class rbacTest(ldaptest):
             self.assertTrue(status,"Users cannot login if one of the user is deleted from couchbase")
 
     def test_ldapDeleteUser(self):
-        rbacmain(self.master)._check_role_permission_validate_multiple(self.user_id,self.user_role,self.bucket_name,self.role_map)
+        rbacmain(self.master,self.auth_type)._check_role_permission_validate_multiple(self.user_id,self.user_role,self.bucket_name,self.role_map)
         user_name = rbacmain().returnUserList(self.user_id)
         self._removeLdapUserRemote(user_name)
         status, content, header = rbacmain(self.master,self.auth_type)._check_user_permission(user_name[0][0],user_name[0][1],self.user_role)
@@ -348,13 +352,17 @@ class rbacTest(ldaptest):
         payload = "name=" + user_name + "&roles=" + final_roles
         userid = self.user_id.split(":")
         status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=userid[0],payload=payload)
-        expectedResults = {"full_name":"RitamSharma","roles":["admin"],"identity:source":"saslauthd","identity:user":self.user_id,
+        if self.auth_type == 'builtin':
+            source = 'local'
+        else:
+            source = 'external'
+        expectedResults = {"full_name":"'RitamSharma'","roles":["admin"],"identity:source":source,"identity:user":userid[0],
                            "real_userid:source":"ns_server","real_userid:user":"Administrator",
                             "ip":self.ipAddress, "port":123456}
         if ops == 'edit':
             payload = "name=" + user_name + "&roles=" + 'admin,cluster_admin'
             status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=userid[0],payload=payload)
-            expectedResults = {"full_name":"RitamSharma","roles":["admin","cluster_admin"],"identity:source":"saslauthd","identity:user":self.user_id,
+            expectedResults = {"full_name":"'RitamSharma'","roles":["admin","cluster_admin"],"identity:source":source,"identity:user":userid[0],
                            "real_userid:source":"ns_server","real_userid:user":"Administrator",
                             "ip":self.ipAddress, "port":123456}
         elif ops == 'remove':

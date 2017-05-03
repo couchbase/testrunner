@@ -13,6 +13,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from security.auditmain import audit
+from security.rbac_base import RbacBase
 import socket
 import random
 import zlib
@@ -311,7 +312,7 @@ class rbacclitests(BaseTestCase):
         setting_emaiL_password = self.input.param("email-password", 'password')
         setting_email_host = self.input.param("email-host", 'localhost')
         setting_email_port = self.input.param("email-port", '25')
-        setting_email_encrypt = self.input.param("enable-email-encrypt", True)
+        #setting_email_encrypt = self.input.param("enable-email-encrypt", 1)
 
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "setting-alert"
@@ -322,7 +323,7 @@ class rbacclitests(BaseTestCase):
         options += (" --email-password={0}".format(setting_emaiL_password))
         options += (" --email-host={0}".format(setting_email_host))
         options += (" --email-port={0}".format(setting_email_port))
-        options += (" --enable-email-encrypt={0}".format(setting_email_encrypt))
+        #options += (" --enable-email-encrypt={0}".format(setting_email_encrypt))
         options += (" --alert-auto-failover-node")
         options += (" --alert-auto-failover-max-reached")
         options += (" --alert-auto-failover-node-down")
@@ -516,6 +517,12 @@ class XdcrCLITest(CliBaseTest):
         self.assertTrue(final_result,"Incorrect Message for the role")
 
     def __xdcr_setup_create(self):
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                     'password': 'password'}]
+        rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                     'roles': 'admin'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
         # xdcr_hostname=the number of server in ini file to add to master as replication
         xdcr_cluster_name = self.input.param("xdcr-cluster-name", None)
         xdcr_hostname = self.input.param("xdcr-hostname", None)
@@ -530,6 +537,8 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
         print ("Value of xdcr_home is {0}".format(xdcr_hostname))
         if xdcr_hostname is not None:
+            RbacBase().create_user_source(testuser, 'builtin', self.servers[xdcr_hostname])
+            RbacBase().add_user_role(rolelist, RestConnection(self.servers[xdcr_hostname]), 'builtin')
             options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
         options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
         options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
