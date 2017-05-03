@@ -1,20 +1,18 @@
-import time
 import random
-from eviction.evictionbase import EvictionBase
-from couchbase_helper.document import View
-from membase.api.exception import DesignDocCreationException
-from membase.helper.bucket_helper import BucketOperationHelper
-
-from memcached.helper.data_helper import MemcachedClientHelper
+import time
 import uuid
+
 import mc_bin_client
-
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, JSONNonDocGenerator
-from remote.remote_util import RemoteMachineShellConnection
-
-from membase.api.rest_client import RestConnection
-from dcp.dcpbase import DCPBase
 import memcacheConstants as constants
+from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import BlobGenerator
+from dcp.dcpbase import DCPBase
+from eviction.evictionbase import EvictionBase
+from membase.api.exception import DesignDocCreationException
+from membase.api.rest_client import RestConnection
+from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class EvictionKV(EvictionBase):
@@ -285,7 +283,8 @@ class EvictionKV(EvictionBase):
                 task.result()
                 self.fail("Views not allowed for ephemeral buckets")
             except DesignDocCreationException as e:
-                self.assertEquals(e._message, 'Error occured design document _design/ddoc1: {"error":"not_found","reason":"no_couchbase_bucket_exists"}\n')
+                self.assertEquals(e._message,
+                                  'Error occured design document _design/ddoc1: {"error":"not_found","reason":"no_couchbase_bucket_exists"}\n')
 
 
 class EphemeralBackupRestoreTest(EvictionBase):
@@ -302,6 +301,7 @@ class EphemeralBackupRestoreTest(EvictionBase):
                                       end=self.num_items)
         self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0,
                                                               self.num_items, percentage=0.80)
+
     # https://issues.couchbase.com/browse/MB-23992
     def test_backup_restore(self):
         self._load_all_buckets()
@@ -328,7 +328,8 @@ class EphemeralBackupRestoreTest(EvictionBase):
         output, error = self.shell.execute_command('ls /tmp/backups/example')
         output, error = self.shell.execute_command("/opt/couchbase/bin/cbbackupmgr restore --archive /tmp/backups"
                                                    " --repo example --cluster couchbase://127.0.0.1 "
-                                                   "--username Administrator --password password --start %s" % output[0])
+                                                   "--username Administrator --password password --start %s" % output[
+                                                       0])
         self.log.info(output)
         self.assertEquals('Restore completed successfully', output[1])
         self._verify_all_buckets(self.master)
@@ -362,11 +363,11 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
         generate_load = BlobGenerator(EphemeralBucketsOOM.KEY_ROOT, 'param2', self.value_size, start=0,
                                       end=self.num_items)
         self._load_all_ephemeral_buckets_until_no_more_memory(self.servers[0], generate_load, "create", 0,
-                                                              self.num_items)
+                                                              self.num_items, percentage=0.85)
 
         rest = RestConnection(self.servers[0])
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
-        self.log.info("completed base load with %s items" % item_count)
+        self.log.info("completed base load with %s items" % item_count)  # we expect 2400 docs
 
         # load more until we are out of memory. Note these are different than the Blob generator - is that good or bad?
         self.log.info("load more until we are out of memory...")
@@ -381,16 +382,16 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
                 i += 1
             except:
                 have_available_memory = False
-                self.log.info('Memory is full at {0} items'.format(i))
+                self.log.info('Memory is full at {0} items'.format(i))  # +4000 expected
 
-        self.log.info("as a result added more %s items" % (i-item_count))
+        self.log.info("as a result added more %s items" % (i - item_count))
 
         stats = rest.get_bucket(self.buckets[0]).stats
         itemCountWhenOOM = stats.itemCount
         memoryWhenOOM = stats.memUsed
         self.log.info('Item count when OOM {0} and memory used {1}'.format(itemCountWhenOOM, memoryWhenOOM))
 
-        NUMBER_OF_DOCUMENTS_TO_DELETE = 5000
+        NUMBER_OF_DOCUMENTS_TO_DELETE = 4000
 
         for i in xrange(item_count, item_count + NUMBER_OF_DOCUMENTS_TO_DELETE):
             mc_client.delete(EphemeralBucketsOOM.KEY_ROOT + str(i))
@@ -458,15 +459,14 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
 
         self.log.info('Reached OOM, the number of items is {0}'.format(item_count))
 
+        # figure out how many items were loaded and load a certain percentage more
+        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.log.info('The number of items is {0}'.format(item_count))
+
         keys_that_were_accessed = []
 
         # load some more, this should trigger some deletes
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
-
-        # figure out how many items were loaded and load a certain percentage more
-
-        item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
-        self.log.info('The number of items is {0}'.format(item_count))
 
         dcp_client = self.dcp_client(self.servers[0], 'producer')
         num = 0
@@ -526,7 +526,7 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
                 keys_that_were_accessed.append(key)
             except mc_bin_client.MemcachedError:
                 self.log.info('key %s already deleted' % key)
-        # add ~10% of new items
+        # add ~15% of new items
         for i in range(int(item_count * 1.2), int(item_count * 1.4)):
             mc_client.set(EphemeralBucketsOOM.KEY_ROOT + str(i), 0, 0, 'a' * self.value_size)
             keys_that_were_accessed.append(i)
@@ -538,7 +538,6 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
             vb_uuid, seqno, high_seqno = self.vb_info(self.master, v)
             pre_delete_sequence_numbers[v] = high_seqno
 
-        # creating a DCP client fails, maybe an auth issue?
         dcp_client = self.dcp_client(self.servers[0], 'producer')
         num = 0
         for vb in vbuckets[0:self.vbuckets]:
