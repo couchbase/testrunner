@@ -412,6 +412,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         self.log.info("Finished restoring backup")
         self.log.info("Get current vseqno on node %s " % self.cluster_to_restore[0].ip )
+
+        """ Add built-in user cbadminbucket to second cluster """
+        self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets,
                                                  self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
