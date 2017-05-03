@@ -1764,14 +1764,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
     def test_backup_restore_with_python_sdk(self):
         """
         1. Note that python sdk has to be installed on all nodes before running this test
-        2. Connects to default bucket on cluster host using Python SDK - loads specifed number of items
+        2. Connects to default bucket on cluster host using Python SDK
+           - loads specifed number of items
         3. Creates a backupset, backsup data and validates
         4. Restores data and validates
         5. Connects to default bucket on restore host using Python SDK
-        6. Retrieves cas and flgas of each doc on both cluster and restore host - validates if they are equal
+        6. Retrieves cas and flgas of each doc on both cluster and restore host
+           - validates if they are equal
         """
         try:
-            cb = Bucket('couchbase://' + self.backupset.cluster_host.ip + '/default')
+            cb = Bucket('couchbase://' + self.backupset.cluster_host.ip + '/default',
+                                         username=self.master.rest_username,
+                                         password=self.master.rest_password)
             if cb is not None:
                 self.log.info("Established connection to bucket on cluster host using python SDK")
             else:
@@ -1792,11 +1796,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         try:
-            cb = Bucket('couchbase://' + self.backupset.restore_cluster_host.ip + '/default')
+            cb = Bucket('couchbase://' + self.backupset.restore_cluster_host.ip + '/default',
+                                         username=self.master.rest_username,
+                                         password=self.master.rest_password)
             if cb is not None:
-                self.log.info("Established connection to bucket on restore host using python SDK")
+                self.log.info("Established connection to bucket on restore host "\
+                              "using python SDK")
             else:
-                self.fail("Failed to establish connection to bucket on restore host using python SDK")
+                self.fail("Failed to establish connection to bucket on restore "\
+                          "host using python SDK")
         except Exception, ex:
             self.fail(str(ex))
         restore_host_data = {}
@@ -1816,7 +1824,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail("CAS mismatch for key: {0}".format(key))
             if cluster_host_data[key]["flags"] != restore_host_data[key]["flags"]:
                 self.fail("Flags mismatch for key: {0}".format(key))
-        self.log.info("Successfully validated cluster host data cas and flags against restore host data")
+        self.log.info("Successfully validated cluster host data cas and flags "\
+                      "against restore host data")
 
     def test_backup_restore_with_flush(self):
         """
