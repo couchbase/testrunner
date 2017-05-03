@@ -169,7 +169,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         failover_task = self.cluster.async_failover(
             self.servers[:self.nodes_init],
             [node_out],
-            self.graceful)
+            self.graceful, wait_for_pending=180)
 
         failover_task.result()
 
@@ -436,7 +436,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         failover_task = self.cluster.async_failover(
             self.servers[:self.nodes_init],
             [node_out],
-            self.graceful)
+            self.graceful, wait_for_pending=180)
 
         failover_task.result()
 
@@ -563,7 +563,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         failover_task = self.cluster.async_failover(
             self.servers[:self.nodes_init],
             [node_out],
-            self.graceful)
+            self.graceful, wait_for_pending=180)
 
         failover_task.result()
 
@@ -899,7 +899,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         failover_task = self.cluster.async_failover(
             self.servers[:self.nodes_init],
             [node_out],
-            self.graceful)
+            self.graceful, wait_for_pending=180)
 
         failover_task.result()
 
@@ -1992,7 +1992,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                 self.num_index_replicas)
 
         index_metadata = None
-        for i in range(0, len(self.servers)):
+        for i in range(0, self.nodes_init-1):
             node_index_metadata = RestConnection(
                 self.servers[i]).get_indexer_metadata()
             self.log.info("Index metadata for %s : %s" % (
@@ -2015,7 +2015,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         for index_name in index_names:
             self.n1ql_helper.verify_replica_indexes([index_name], index_map,
                                                     self.num_index_replicas)
-
         self.run_operation(phase="after")
 
     def test_replica_for_primary_index(self):
@@ -2494,7 +2493,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if self.server_grouping:
             self._create_server_groups()
 
-        if self.eq_index_node:
+        if self.eq_index_node is not None:
             eq_index_node = self.servers[int(self.eq_index_node)].ip + ":" + \
                             self.servers[int(self.eq_index_node)].port
 
@@ -2680,7 +2679,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                     self.fail(
                         "cbindexplan doesnt give recommendations for all replicas")
                 else:
-                    self.log.info("+1 for no. of recommendations")
+                    self.log.info("# of recommendations is correct")
 
                     # Validate if there is an expected node list, the placement recommendation matches it
                 if expected_node_list:
@@ -2688,7 +2687,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                         self.fail(
                             "Placement recommendation not matching expected node list")
                     else:
-                        self.log.info("+1 for expected nodes")
+                        self.log.info("Recommended nodes matches expected nodes")
 
             else:
                 self.fail("Result contains no placement recommendations")
