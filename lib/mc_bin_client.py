@@ -256,6 +256,15 @@ class MemcachedClient(object):
         return self._doMetaCmd(memcacheConstants.CMD_SET_WITH_META,
                                key, value, 0, exp, flags, seqno, remote_cas, options)
 
+    def setWithMetaInvalid(self, key, value, exp, flags, seqno, remote_cas, options=2):
+        """Set a value with meta that can be an invalid number memcached server."""
+        exp = 0
+
+        # 'i' allows for signed integer as remote_cas value
+        extra = struct.pack('>IIQiI', flags, exp, seqno, remote_cas, options)
+        cmd = memcacheConstants.CMD_SET_WITH_META
+        return self._doCmd(cmd, key, value, extra, 0)
+
     # set with meta using the LWW conflict resolution CAS
     def setWithMetaLWW(self, key, value, exp, flags,cas):
         """Set a value and its meta data in the memcached server.

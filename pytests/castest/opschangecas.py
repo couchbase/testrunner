@@ -198,8 +198,8 @@ class OpsChangeCasTests(CasBaseTest):
     def _corrupt_max_cas(self, mcd, key):
 
         # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
-        mcd.setWithMeta(key, json.dumps({'value':'value2'}), 0, 0, 0, -2)
-        #print 'max cas pt1', mcd.getMeta(key)[4]
+        mcd.setWithMetaInvalid(key, json.dumps({'value':'value2'}), 0, 0, 0, -2)
+        # print 'max cas pt1', mcd.getMeta(key)[4]
         mcd.set(key, 0, 0,json.dumps({'value':'value3'}))
         #print 'max cas pt2', mcd.getMeta(key)[4]
         mcd.set(key, 0, 0,json.dumps({'value':'value4'}))
