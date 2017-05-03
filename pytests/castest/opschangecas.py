@@ -285,26 +285,30 @@ class OpsChangeCasTests(CasBaseTest):
     #sometimes returns key exists with different CAS instead of key not exists error, this test
     #only requires one node 
     def key_not_exists_test(self):
-        client = SDKClient(hosts = [self.master.ip], bucket = "default")
+        self.assertTrue(len(self.buckets) > 0, 'at least 1 bucket required')
+        bucket = self.buckets[0].name
+        client = VBucketAwareMemcached(RestConnection(self.master), bucket)
         KEY_NAME = 'key'
 
         for i in range(1500):
-            client.set(KEY_NAME, "x")
-            #For some reason could not get delete to work
-            client.remove(KEY_NAME)
-            rc = client.get(KEY_NAME)
-            #.get is automatically set to quiet for the sdk_client, therefore I look for
-            #none to indicate an error, otherwise the sdk_client spends 10 seconds trying
-            #to retry the commands and is very slow
-            if rc[2] == None:
-                pass
-            else:
-                assert False
+            client.set(KEY_NAME, 0, 0, "x")
+            # delete and verify get fails
+            client.delete(KEY_NAME)
+            err = None
+            try:
+                rc = client.get(KEY_NAME)
+            except MemcachedError as error:
+                 # It is expected to raise MemcachedError because the key is deleted.
+                 err = error.status
+            self.assertTrue(err == ERR_NOT_FOUND, 'expected key to be deleted {0}'.format(KEY_NAME))
+
             #cas errors do not sleep the test for 10 seconds, plus we need to check that the correct
             #error is being thrown
+            err = None
             try:
                 #For some reason replace instead of cas would not reproduce the bug
-                client.cas(KEY_NAME, "value", cas = 10)
-            except NotFoundError:
-                pass
-        assert True
+                mc_active = client.memcached(KEY_NAME)
+                mc_active.replace(KEY_NAME, 0, 10, "value")
+            except MemcachedError as error:
+                err = error.status
+            self.assertTrue(err == ERR_NOT_FOUND, 'was able to replace cas on removed key {0}'.format(KEY_NAME))
