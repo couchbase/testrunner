@@ -1994,7 +1994,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error {0} cluster: Rest client error".format(part_message) in output[0],
+        self.assertTrue("Error {0} cluster: dial tcp:".format(part_message) in output[0],
                         "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} --username abc \
                               --password {4}".format(self.backupset.directory,
