@@ -2254,7 +2254,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         rest_src = RestConnection(self.backupset.cluster_host)
         rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                          self.servers[1].ip, services=['index'])
+                          self.servers[1].ip, services=['index', 'kv'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
@@ -2266,20 +2266,23 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         prefix = "dev_"
         query = {"full_set": "true", "stale": "false", "connection_timeout": 60000}
         view = View(default_view_name, default_map_func)
-        task = self.cluster.async_create_view(self.backupset.cluster_host, default_ddoc_name, view, "default")
+        task = self.cluster.async_create_view(self.backupset.cluster_host,
+                                              default_ddoc_name, view, "default")
         task.result()
         self.backup_cluster_validate()
         rest_target = RestConnection(self.backupset.restore_cluster_host)
-        rest_target.add_node(self.input.clusters[0][1].rest_username, self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['index'])
+        rest_target.add_node(self.input.clusters[0][1].rest_username,
+                             self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=['kv','index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         try:
-            result = self.cluster.query_view(self.backupset.restore_cluster_host, prefix + default_ddoc_name,
+            result = self.cluster.query_view(self.backupset.restore_cluster_host,
+                                             prefix + default_ddoc_name,
                                              default_view_name, query, timeout=30)
             self.assertEqual(len(result['rows']), self.num_items,
-                             "Querying view on restore cluster did not return expected number of items")
+                    "Querying view on restore cluster did not return expected number of items")
             self.log.info("Querying view on restore cluster returned expected number of items")
         except TimeoutError:
             self.fail("View could not be queried in restore cluster within timeout")
