@@ -2051,49 +2051,61 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "cbbackupmgr compact [<args>]", "Expected error message not thrown")
+        self.assertEqual(output[0], "cbbackupmgr compact [<args>]",
+                                    "Expected error message not thrown")
         cmd = "compact --archive"
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: --archive", "Expected error message not thrown")
+        self.assertEqual(output[0], "Expected argument for option: --archive",
+                                    "Expected error message not thrown")
         cmd = "compact --archive {0}".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -r/--repo", "Expected error message not thrown")
+        self.assertEqual(output[0], "Flag required, but not specified: -r/--repo",
+                                    "Expected error message not thrown")
         cmd = "compact --archive {0} --repo".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: --repo", "Expected error message not thrown")
-        cmd = "compact --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
+        self.assertEqual(output[0], "Expected argument for option: --repo",
+                                    "Expected error message not thrown")
+        cmd = "compact --archive {0} --repo {1}".format(self.backupset.directory,
+                                                        self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -/--backup", "Expected error message not thrown")
-        cmd = "compact --archive {0} --repo {1} --backup".format(self.backupset.directory, self.backupset.name)
+        self.assertEqual(output[0], "Flag required, but not specified: -/--backup",
+                                    "Expected error message not thrown")
+        cmd = "compact --archive {0} --repo {1} --backup"\
+                        .format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: --backup", "Expected error message not thrown")
-        cmd = "compact --archive abc --repo {0} --backup {1}".format(self.backupset.name, self.backups[0])
+        self.assertEqual(output[0], "Expected argument for option: --backup",
+                                    "Expected error message not thrown")
+        cmd = "compact --archive abc --repo {0} --backup {1}"\
+                                 .format(self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error opening archive at abc due to `Not an archive directory" in output[-1],
-                        "Expected error message not thrown")
-        cmd = "compact --archive {0} --repo abc --backup {1}".format(self.backupset.directory, self.backups[0])
+        self.assertTrue("Error opening archive at abc due to `Not an archive directory"\
+                                            in output[-1],
+                                            "Expected error message not thrown")
+        cmd = "compact --archive {0} --repo abc --backup {1}"\
+                            .format(self.backupset.directory, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertTrue("Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
-        cmd = "compact --archive {0} --repo {1} --backup abc".format(self.backupset.directory, self.backupset.name)
+        cmd = "compact --archive {0} --repo {1} --backup abc".format(self.backupset.directory,
+                                                                     self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Cluster Backup `abc` not found" in output[-1],
+        self.assertTrue("Compacting incr backup `abc` of backup `backup` failed:" in output[-1],
                         "Expected error message not thrown")
 
     def test_backup_merge_negative_args(self):
