@@ -1233,15 +1233,11 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
-        to_add_nodes = [self.servers[self.nodes_init]]
-        services_in = ["index"]
+        to_add_nodes = self.servers[self.nodes_init:self.nodes_init+2]
+        services_in = ["index","index"]
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        to_add_nodes = [self.servers[self.nodes_init + 1]]
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], to_add_nodes, [],
-                                                 services=services_in)
+        rebalance.result()
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
@@ -1256,10 +1252,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [self.servers[self.nodes_init + 1]], [], swap_rebalance=True)
-        # do a full recovery and rebalance
-        self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
-        self.rest.add_back_node('ns_1@' + index_server.ip)
+                                                      [self.servers[self.nodes_init]], [], swap_rebalance=True)
+        # do a rebalance
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init + 1], [], [])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1353,6 +1347,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
+        self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
         self.run_operation(phase="after")
 
     def test_swap_rebalance_with_different_topologies(self):
@@ -1375,6 +1370,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
+        self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
         self.run_operation(phase="after")
 
     def test_backup_restore_after_gsi_rebalance(self):
