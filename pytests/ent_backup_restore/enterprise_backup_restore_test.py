@@ -2298,33 +2298,44 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         rest_src = RestConnection(self.backupset.cluster_host)
         rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
-                          self.servers[1].ip, services=['index'])
+                          self.servers[1].ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
-        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0, end=self.num_items)
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100),
+                                 start=0, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        cmd = "cbindex -type create -bucket default -using forestdb -index age -fields=age"
-        remote_client = RemoteMachineShellConnection(self.backupset.cluster_host)
+
+        cmd = "cbindex -type create -bucket default -using plasma -index age -fields=age "\
+                                  " -auth %s:%s" % (self.master.rest_username,
+                                                    self.master.rest_password)
+        shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        output, error = shell.execute_command(command)
+        shell.log_command_output(output, error)
+        shell.disconnect()
         if error or "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         self.backup_cluster_validate()
         rest_target = RestConnection(self.backupset.restore_cluster_host)
-        rest_target.add_node(self.input.clusters[0][1].rest_username, self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['index'])
+        rest_target.add_node(self.input.clusters[0][1].rest_username,
+                             self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
-        cmd = "cbindex -type list"
-        remote_client = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+
+        cmd = "cbindex -type list -auth %s:%s" % (self.master.rest_username,
+                                                  self.master.rest_password)
+        shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        output, error = shell.execute_command(command)
+        shell.log_command_output(output, error)
+        shell.disconnect()
+
         if len(output) > 1:
-            self.assertTrue("Index:default/age" in output[1], "GSI index not created in restore cluster as expected")
+            self.assertTrue("Index:default/age" in output[1],
+                            "GSI index not created in restore cluster as expected")
             self.log.info("GSI index created in restore cluster as expected")
         else:
             self.fail("GSI index not created in restore cluster as expected")
