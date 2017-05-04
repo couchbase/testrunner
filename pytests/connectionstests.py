@@ -7,7 +7,7 @@ from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from scripts.memcachetest_runner import MemcachetestRunner
-from testconstants import COUCHBASE_FROM_SPOCK
+from testconstants import COUCHBASE_FROM_SPOCK, IS_CONTAINER
 
 class ConnectionTests(BaseTestCase):
 
@@ -101,6 +101,10 @@ class ConnectionTests(BaseTestCase):
             self.log.info("From spock, server side moxi is removed."
                           " More information could be found in MB-16661 ")
             return
+        if IS_CONTAINER:
+            self.log.info("Memcachetest is not going to be built inside of container")
+            return
+
         shell = RemoteMachineShellConnection(self.master)
         os_type = shell.extract_remote_info()
         if os_type.type != 'Linux':
