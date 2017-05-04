@@ -953,7 +953,11 @@ class RQGTests(BaseTestCase):
             if "simple_table" in item:
                 hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
         try:
-            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
+            if subquery:
+                query_params={'timeout' : '1200s'}
+            else:
+                query_params={}
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server,query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
             #self.log.info(actual_result)
             # Run SQL Query
