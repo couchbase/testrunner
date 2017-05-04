@@ -1566,9 +1566,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             remote.stop_server()
             self.sleep(30)
             remote.start_server()
-
-            # reached = RestHelper(self.rest).rebalance_reached()
-            # self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
 
         except Exception, ex:
@@ -1588,12 +1585,12 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             output = self.rest.cleanup_indexer_rebalance(server=index_server)
             self.log.info(output)
         self.log.info("Retrying rebalance")
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+        rebalance1 = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [node_out])
-
+        self.sleep(30)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
+        rebalance1.result()
         self.sleep(30)
 
         index_map_after_rebalance = self.get_index_map()
