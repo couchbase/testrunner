@@ -4676,9 +4676,13 @@ class AutoFailoverNodesFailureTask(Task):
             failure_timers = []
         self.failure_timers = failure_timers
         self.taskmanager = None
+        self.rebalance_in_progress = False
 
     def execute(self, task_manager):
         self.taskmanager = task_manager
+        rest = RestConnection(self.master)
+        if rest._rebalance_progress_status() == "running":
+            self.rebalance_in_progress = True
         while self.has_next() and not self.done():
             self.next()
             if self.pause > 0 and self.pause > self.timeout:
@@ -4701,6 +4705,30 @@ class AutoFailoverNodesFailureTask(Task):
             self.state = FINISHED
             self.set_result(False)
             self.set_exception(AutoFailoverException(message))
+        if self.rebalance_in_progress:
+            status, stop_time = self._check_if_rebalance_in_progress(120)
+            if not status:
+                if stop_time == -1:
+                    message = "Rebalance already completed before failover " \
+                              "of node"
+                    self.log.error(message)
+                    self.state = FINISHED
+                    self.set_result(False)
+                    self.set_exception(AutoFailoverException(message))
+                elif stop_time == -2:
+                    message = "Rebalance failed but no failed autofailover " \
+                              "message was printed in logs"
+                    self.log.warning(message)
+                else:
+                    message = "Rebalance not failed even after 2 minutes " \
+                              "after node failure."
+                    self.log.error(message)
+                    rest.print_UI_logs(10)
+                    self.state = FINISHED
+                    self.set_result(False)
+                    self.set_exception(AutoFailoverException(message))
+            else:
+                self.start_time = stop_time
         autofailover_initiated, time_taken = \
             self._wait_for_autofailover_initiation(
                 self.max_time_to_wait_for_failover)
@@ -4775,7 +4803,7 @@ class AutoFailoverNodesFailureTask(Task):
             self._start_couchbase_server(self.current_failure_node)
         elif self.failure_type == "restart_network":
             self._stop_restart_network(self.current_failure_node,
-                                       self.timeout + self.timeout_buffer)
+                                       self.timeout + self.timeout_buffer + 30)
         elif self.failure_type == "restart_machine":
             self._restart_machine(self.current_failure_node)
         elif self.failure_type == "stop_memcached":
@@ -4896,12 +4924,9 @@ class AutoFailoverNodesFailureTask(Task):
         return autofailover_initated, -1
 
     def _get_mktime_from_server_time(self, server_time):
-        self.log.info("Server Time : {}".format(server_time))
         time_format = "%Y-%m-%dT%H:%M:%S"
         server_time = server_time.split('.')[0]
         mk_time = time.mktime(time.strptime(server_time, time_format))
-        self.log.info("MK_TIME {}".format(mk_time))
-        self.log.info("Server Time = {}".format(time.ctime(mk_time)))
         return mk_time
 
     def _rebalance(self):
@@ -4913,6 +4938,37 @@ class AutoFailoverNodesFailureTask(Task):
             self.set_result(False)
             self.state = FINISHED
             self.set_exception(Exception("Failed to rebalance after failover"))
+
+    def _check_if_rebalance_in_progress(self, timeout):
+        rest = RestConnection(self.master)
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                rebalance_status, progress = \
+                    rest._rebalance_status_and_progress()
+                if rebalance_status == "running":
+                    continue
+                elif rebalance_status is None and progress == 100:
+                    return False, -1
+            except RebalanceFailedException:
+                ui_logs = rest.get_logs(10)
+                ui_logs_text = [t["text"] for t in ui_logs]
+                ui_logs_time = [t["serverTime"] for t in ui_logs]
+                rebalace_failure_log = "Rebalance exited with reason"
+                for ui_log in ui_logs_text:
+                    if rebalace_failure_log in ui_log:
+                        rebalance_failure_time = ui_logs_time[
+                            ui_logs_text.index(ui_log)]
+                        failover_log = "Could not automatically fail over " \
+                                       "node ('ns_1@{}'). Rebalance is " \
+                                       "running.".format(
+                            self.current_failure_node.ip)
+                        if failover_log in ui_logs_text:
+                            return True, self._get_mktime_from_server_time(
+                                rebalance_failure_time)
+                        else:
+                            return False, -2
+        return False, -3
 
 
 class NodeDownTimerTask(Task):

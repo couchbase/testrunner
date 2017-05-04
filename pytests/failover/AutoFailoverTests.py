@@ -40,7 +40,7 @@ class AutoFailoverTests(AutoFailoverBaseTest):
         rebalance_task = self.cluster.async_rebalance(self.servers,
                                                       self.servers_to_add,
                                                       self.servers_to_remove)
-        self.sleep(10)
+        self.sleep(5)
         self.failover_actions[self.failover_action](self)
         try:
             rebalance_task.result()

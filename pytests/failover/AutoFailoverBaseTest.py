@@ -3,6 +3,7 @@ import time
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
+from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from tasks.task import AutoFailoverNodesFailureTask, \
@@ -61,44 +62,8 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.rest = RestConnection(self.orchestrator)
         self.rest.reset_autofailover()
         self.disable_autofailover()
+        self._cleanup_cluster()
         super(AutoFailoverBaseTest, self).tearDown()
-        """ Delete the new zones created if zone > 1. """
-        if self.input.param("zone", 1) > 1:
-            rest = RestConnection(self.servers[0])
-            for i in range(1, int(self.input.param("zone", 1))):
-                a = "Group "
-                if rest.is_zone_exist(a + str(i + 1)):
-                    rest.delete_zone(a + str(i + 1))
-        for node in self.servers:
-            master = node
-            try:
-                ClusterOperationHelper.cleanup_cluster(self.servers,
-                                                       master=master)
-            except:
-                continue
-        master = self.orchestrator
-        rest = RestConnection(master)
-        cluster_status = rest.cluster_status()
-        if cluster_status and self.failover_orchestrator and \
-                        self.remove_after_failover is not True:
-            cluster_cleanup = False
-            active_servers = []
-            for node in cluster_status['nodes']:
-                if node['clusterMembership'] == "inactiveFailed":
-                    cluster_cleanup = True
-                else:
-                    node_ip = node['hostname']
-                    server = [x for x in self.servers if "{}:{}".format(
-                        x.ip, x.port) == node_ip][0]
-                    active_servers.append(server)
-            if cluster_cleanup:
-                master = active_servers[0]
-                ClusterOperationHelper.cleanup_cluster(active_servers,
-                                                       master=master)
-        if self.failover_orchestrator and self.remove_after_failover:
-            master = self.servers[1]
-            ClusterOperationHelper.cleanup_cluster(self.servers[1:],
-                                                   master=master)
         if hasattr(self, "node_monitor_task"):
             if self.node_monitor_task._exception:
                 self.fail("{}".format(self.node_monitor_task._exception))
@@ -448,6 +413,21 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.orchestrator = self.servers[0] if not \
             self.failover_orchestrator else self.servers[
             self.num_node_failures]
+
+    def _cleanup_cluster(self):
+        """
+        Cleaup the cluster. Delete all the buckets in the nodes and remove
+        the nodes from any cluster that has been formed.
+        :return:
+        """
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        for node in self.servers:
+            master = node
+            try:
+                ClusterOperationHelper.cleanup_cluster(self.servers,
+                                                       master=master)
+            except:
+                continue
 
     failover_actions = {
         "firewall": enable_firewall,
