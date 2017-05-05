@@ -284,7 +284,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         docs = 50
         validate_dgm = False
         while cnt < 100:
-            validate_dgm = validate_disk_writes(self.dgmServer)
+            validate_dgm = validate_disk_writes([self.dgmServer])
             if validate_dgm:
                 log.info("========== DGM is achieved ==========")
                 break
