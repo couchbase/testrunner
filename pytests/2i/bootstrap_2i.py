@@ -136,16 +136,6 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
 
-    def test_plasma_index_with_ephemeral_bucket(self):
-        if self.gsi_type == "plasma":
-            try:
-                self.multi_create_index(query_definitions=self.query_definitions)
-            except Exception, ex:
-                msg = "Error=Ephemeral Buckets Must Use MOI Storage"
-                if msg not in str(ex):
-                    self.log.info(str(ex))
-                    raise
-
     def test_network_partitioning(self):
         try:
             for node in self.nodes_out_list:

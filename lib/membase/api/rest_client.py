@@ -2,6 +2,8 @@ import base64
 import json
 import urllib
 import httplib2
+import logger
+import traceback
 import socket
 import time
 import re
@@ -12,9 +14,6 @@ from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER
 
-import httplib2
-import logger
-import traceback
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -896,7 +895,10 @@ class RestConnection(object):
         params = urllib.urlencode({'indexMemoryQuota': indexMemoryQuota})
         log.info('pools/default params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
-        return status
+        if status:
+            return status
+        else:
+            return content
 
     def set_fts_memoryQuota(self, username='Administrator',
                                  password='password',
@@ -1375,18 +1377,19 @@ class RestConnection(object):
         knownNodes = ','.join(otpNodes)
         ejectedNodesString = ','.join(ejectedNodes)
         if deltaRecoveryBuckets == None:
-            params = urllib.urlencode({'knownNodes': knownNodes,
+            params = {'knownNodes': knownNodes,
                                     'ejectedNodes': ejectedNodesString,
                                     'user': self.username,
-                                    'password': self.password})
+                                    'password': self.password}
         else:
             deltaRecoveryBuckets = ",".join(deltaRecoveryBuckets)
-            params = urllib.urlencode({'knownNodes': knownNodes,
-                                    'ejectedNodes': ejectedNodesString,
-                                    'deltaRecoveryBuckets': deltaRecoveryBuckets,
-                                    'user': self.username,
-                                    'password': self.password})
+            params = {'knownNodes': knownNodes,
+                      'ejectedNodes': ejectedNodesString,
+                      'deltaRecoveryBuckets': deltaRecoveryBuckets,
+                      'user': self.username,
+                      'password': self.password}
         log.info('rebalance params : {0}'.format(params))
+        params = urllib.urlencode(params)
         api = self.baseUrl + "controller/rebalance"
         status, content, header = self._http_request(api, 'POST', params)
         if status:
@@ -1566,6 +1569,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', json.dumps(setting_json))
         if not status:
             raise Exception(content)
+        log.info("{0} set".format(setting_json))
 
     def get_index_settings(self, timeout=120):
         node = None
@@ -3662,13 +3666,36 @@ class RestConnection(object):
         chunkless_content = content.replace("][", ", \n")
         return json.loads(chunkless_content)
 
+    def range_scan_gsi_index_with_rest(self, id, body):
+        if "limit" not in body.keys():
+            body["limit"] = 300000
+        authorization = base64.encodestring('%s:%s' % (self.username,
+                                                       self.password))
+        url = 'api/index/{0}?range=true'.format(id)
+        api = self.index_baseUrl + url
+        headers = {'Content-type': 'application/json',
+                   'Authorization': 'Basic %s' % authorization}
+        params = json.loads("{0}".format(body).replace(
+            '\'', '"').replace('True', 'true').replace('False', 'false'))
+        status, content, header = self._http_request(
+            api, 'GET', headers=headers,
+            params=json.dumps(params).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        #Below line is there because of MB-20758
+        content = content.split("[]")[0]
+        # Following line is added since the content uses chunked encoding
+        chunkless_content = content.replace("][", ", \n")
+        return json.loads(chunkless_content)
+
     def multiscan_for_gsi_index_with_rest(self, id, body):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = 'api/index/{0}?multiscan=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(body).replace('\'', '"').replace(
-            'True', 'true').replace('False', 'false'))
+            'True', 'true').replace('False', 'false').replace(
+            "~[]{}UnboundedtruenilNA~", "~[]{}UnboundedTruenilNA~"))
         params = json.dumps(params).encode("ascii", "ignore").replace("\\\\", "\\")
         log.info(json.dumps(params).encode("ascii", "ignore"))
         status, content, header = self._http_request(api, 'GET', headers=headers,
