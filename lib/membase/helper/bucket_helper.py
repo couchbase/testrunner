@@ -278,7 +278,7 @@ class BucketOperationHelper():
                 client = MemcachedClient(ip, int(port), timeout=30)
                 client.vbucket_count = len(vbuckets)
                 bucket_info = rest.get_bucket(bucket)
-                versions = rest.get_nodes_versions()
+                versions = rest.get_nodes_versions(logging=False)
                 pre_spock = False
                 for version in versions:
                     if "5" > version:

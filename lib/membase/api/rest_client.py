@@ -1920,12 +1920,13 @@ class RestConnection(object):
         return version
 
     # this method returns the versions of nodes in cluster
-    def get_nodes_versions(self):
+    def get_nodes_versions(self, logging=True):
         nodes = self.get_nodes()
         versions = []
         for node in nodes:
             versions.append(node.version)
-        log.info("Node versions in cluster {0}".format(versions))
+        if logging:
+            log.info("Node versions in cluster {0}".format(versions))
         return versions
 
     # this method returns the services of nodes in cluster - implemented for Sherlock

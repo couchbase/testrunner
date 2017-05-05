@@ -306,7 +306,7 @@ class MemcachedClientHelper(object):
         bucket_info = rest.get_bucket(bucket)
         # todo raise exception for not bucket_info
 
-        versions = rest.get_nodes_versions()
+        versions = rest.get_nodes_versions(logging=False)
         pre_spock = False
         for version in versions:
             if "5" > version:
