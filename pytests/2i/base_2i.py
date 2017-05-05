@@ -806,15 +806,15 @@ class BaseSecondaryIndexingTests(QueryTests):
                     is_cluster_healthy = True
         return is_cluster_healthy
 
-    def get_dgm_for_plasma(self, indexer_nodes=None):
+    def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
         """
         Internal Method to create OOM scenario
         :return:
         """
         def validate_disk_writes(indexer_nodes=None):
             if not indexer_nodes:
-                indexer_nodes = self.get_nodes_from_services_map(service_type="index",
-                                                    get_all_nodes=True)
+                indexer_nodes = self.get_nodes_from_services_map(
+                    service_type="index", get_all_nodes=True)
             for node in indexer_nodes:
                 indexer_rest = RestConnection(node)
                 content = indexer_rest.get_index_storage_stats()
@@ -838,10 +838,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         if not self.plasma_dgm:
             return
         log.info("Trying to get all indexes in DGM...")
-        log.info("Setting indexer memory quota to 256 MB...")
+        log.info("Setting indexer memory quota to {0} MB...".format(memory_quota))
         node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(node)
-        rest.set_indexer_memoryQuota(indexMemoryQuota=256)
+        rest.set_indexer_memoryQuota(indexMemoryQuota=memory_quota)
         cnt = 0
         docs = 50
         while cnt < 100:

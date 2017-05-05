@@ -21,6 +21,19 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             self.rest.set_indexer_memoryQuota(indexMemoryQuota=self.indexMemQuota)
             self.sleep(30)
         self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.dgmServer.port)]
+        self.load_query_definitions = []
+        self.initial_index_number = self.input.param("initial_index_number", 5)
+        for x in range(self.initial_index_number):
+            index_name = "index_name_" + str(x)
+            query_definition = QueryDefinition(
+                index_name=index_name, index_fields=["VMs"],
+                query_template="SELECT * FROM %s ", groups=["simple"],
+                index_where_clause = " VMs IS NOT NULL ")
+            self.load_query_definitions.append(query_definition)
+        if self.load_query_definitions:
+            self.multi_create_index(buckets=self.buckets,
+                                    query_definitions=self.load_query_definitions,
+                                    deploy_node_info=self.deploy_node_info)
 
     def tearDown(self):
         super(SecondaryIndexDGMTests, self).tearDown()
@@ -171,6 +184,26 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([post_operation_tasks])
 
     def test_decrease_indexer_memory_quota(self):
+        pre_operation_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_operation_tasks])
+        kvOps_tasks = self.async_run_doc_ops()
+        mid_operation_tasks = self.async_run_operations(phase="in_between")
+        indexer_memQuota = self.get_indexer_mem_quota()
+        log.info("Current Indexer Memory Quota is {0}".format(indexer_memQuota))
+        for cnt in range(3):
+            indexer_memQuota -= 50
+            log.info("Decreasing Indexer Memory Quota to {0}".format(indexer_memQuota))
+            rest = RestConnection(self.dgmServer)
+            rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+            self.sleep(30)
+        self._run_tasks([kvOps_tasks, mid_operation_tasks])
+        post_operation_tasks = self.async_run_operations(phase="after")
+        self._run_tasks([post_operation_tasks])
+
+    def test_decrease_indexer_memory_quota_in_dgm(self):
+        self.index_map = self.rest.get_index_status()
+        self.sleep(30)
+        self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer], memory_quota=400)
         pre_operation_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_operation_tasks])
         kvOps_tasks = self.async_run_doc_ops()

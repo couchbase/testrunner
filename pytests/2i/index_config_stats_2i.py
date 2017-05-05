@@ -2,6 +2,7 @@ from base_2i import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 
+
 class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
 
     def setUp(self):
@@ -31,6 +32,24 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
                  'num_docs_pending','delete_bytes' ]
                 map = self._create_stats_map(items_count=2016)
                 self._verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
+
+    def test_index_storage_stats(self):
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index",
+                                                         get_all_nodes=True)
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = True, drop_index = False)
+        for node in indexer_nodes:
+            indexer_rest = RestConnection(node)
+            content = indexer_rest.get_index_storage_stats()
+            for index in content.values():
+                for stats in index.values():
+                    self.log.info("MainStore Stats - {0}: {1}".format(
+                        index, stats["MainStore"]))
+                    self.log.info("BackStore Stats - {0}: {1}".format(
+                        index, stats["BackStore"]))
+                    self.assertEqual(stats["MainStore"]["resident_ratio"], 1.00,
+                                     "Resident ratio not 1")
 
     def test_indexer_logs_for_leaked_password(self):
         expected_msg = "http://%40index-cbauth@127.0.0.1:8091"
