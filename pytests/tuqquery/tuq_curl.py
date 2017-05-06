@@ -8,6 +8,7 @@ from tuq import QueryTests
 from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
+from security.rbac_base import RbacBase
 
 SOURCE_CB_PARAMS = {
                       "authUser": "default",
@@ -45,6 +46,7 @@ class QueryCurlTests(QueryTests):
         self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip,self.n1ql_port)
         self.api_port = self.input.param("api_port", 8094)
         self.load_sample = self.input.param("load_sample", False)
+        self.create_users = self.input.param("create_users", False)
         self.run_cbq_query('delete from system:prepareds')
 
     def suite_setUp(self):
@@ -63,6 +65,27 @@ class QueryCurlTests(QueryTests):
                 rest_src_fts.create_fts_index(index_name, index_definition)
             except Exception, ex:
                 self.fail(ex)
+        # Create the users necessary for the RBAC tests in curl
+        if self.create_users:
+            testuser = [{'id': 'no_curl', 'name': 'no_curl', 'password': 'password'},
+                        {'id': 'curl', 'name': 'curl', 'password': 'password'},
+                        {'id': 'curl_no_insert', 'name': 'curl_no_insert', 'password': 'password'}]
+            RbacBase().create_user_source(testuser, 'builtin', self.master)
+
+            noncurl_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
+                                  'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
+                                  'query_system_catalog'
+            curl_permissions = 'bucket_full_access[*]:query_select[*]:query_update[*]:' \
+                               'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
+                               'query_system_catalog:query_external_access'
+            curl_noinsert_permissions = 'query_select[*]:query_manage_index[*]' \
+                                        ':query_system_catalog:query_external_access'
+            # Assign user to role
+            role_list = [{'id': 'no_curl', 'name': 'no_curl','roles': '%s' % noncurl_permissions},
+                         {'id': 'curl', 'name': 'curl', 'roles': '%s' % curl_permissions},
+                          {'id': 'curl_no_insert', 'name': 'curl_no_insert',
+                           'roles': '%s' % curl_noinsert_permissions}]
+            temp = RbacBase().add_user_role(role_list, self.rest, 'builtin')
 
     def tearDown(self):
         super(QueryCurlTests, self).tearDown()
@@ -453,6 +476,19 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(result['results'][0]['prepareds']['name'] == 'prepared_with_curl' and result['metrics']['resultCount'] == 1
                         and result['results'][0]['prepareds']['statement'] == n1ql_query )
 
+    '''Check if the cipher_list returned by pinging the website is consistent with the expected list
+       of ciphers'''
+    def test_cipher_list(self):
+        cipher_list = ['TLS_RSA_WITH_AES_128_CBC_SHA', 'TLS_RSA_WITH_AES_256_CBC_SHA',
+                       'TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA', 'TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA',
+                       'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256', 'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+                       'TLS_EMPTY_RENEGOTIATION_INFO_SCSV']
+        url = "'https://www.howsmyssl.com/a/check'"
+        query = "select curl(" + url + ")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['results'][0]['$1']['given_cipher_suites'] == cipher_list)
+
 ##############################################################################################
 #
 #   Options Tests
@@ -714,7 +750,7 @@ class QueryCurlTests(QueryTests):
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['results'][0]['$1']['error_message'] == "TheprovidedAPIkeyisinvalid.")
 
-    '''Test what happens when you try to acces a site with bad certs'''
+    '''Test what happens when you try to access a site with bad certs'''
     def test_expired_cert(self):
         url = "'https://expired.badssl.com/'"
         query="select curl("+ url +")"
@@ -723,6 +759,7 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(actual_curl['errors'][0]['msg'] ==
                         'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
 
+    '''Tests what happens when you try to access a site with different types of invalid certs'''
     def test_invalid_certs(self):
         url = "'https://self-signed.badssl.com/'"
         query="select curl("+ url +")"
@@ -745,22 +782,151 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(actual_curl['errors'][0]['msg'] ==
                         'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
 
-    '''WIP'''
-    def test_insert_no_credentials(self):
+    '''Secret endpoints should not be accsible without the localtoken'''
+    def test_secret_endpoints(self):
+        error_msg = "Errorevaluatingprojection.-cause:curl:Couldn'tconnecttoserver"
+        url = "'http://127.0.0.1:9000/diag/password'"
+        query = "select curl(" + url + ")"
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+
+        url = "'http://127.0.0.1:9000/controller/resetAdminPassword'"
+        query = "select curl(" + url + ",{'data':'password=asdasdadss','request':'POST'})"
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+
+    '''MB-22110: Tokenizer should throw a syntax error if invalid tokens are passed in'''
+    def test_invalid_paramerterized_query(self):
+        error_msg = "syntaxerror-at#"
+        query = "select curl(" + self.query_service_url +", "
+        options = "{'data':'statement=select ##3 from `beer-sample` limit 1'})"
+        curl = self.shell.execute_commands_inside(self.cbqpath, query + options, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
+
+##############################################################################################
+#
+#   RBAC Tests
+#
+##############################################################################################
+    '''Test if a user without curl privileges can use curl and test if a user with curl privileges
+       can use curl'''
+    def test_curl_access(self):
+        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.n1ql.curl!execute.Addrole" \
+                    "QueryExternalAccesstoallowthequerytorun."
+        cbqpath = '%scbq' % self.path + " -u 'no_curl' -p 'password'"
+        # The query that curl will send to couchbase
+        n1ql_query = 'select * from default limit 5'
+        # This is the query that the cbq-engine will execute
+        query = "select curl("+ self.query_service_url +\
+                ", {'data' : 'statement=%s','user':'no_curl:password'})" % (n1ql_query)
+        curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+        cbqpath = '%scbq' % self.path + " -u 'curl' -p 'password'"
+        query = "select curl("+ self.query_service_url +\
+                ", {'data' : 'statement=%s','user':'curl:password'})" % (n1ql_query)
+        curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        # Compare the curl statement to the expected result of the n1ql query done normally
+        expected_result = self.run_cbq_query('select * from default limit 5')
+        self.assertTrue(json_curl['results'][0]['$1']['results'] == expected_result['results'])
+
+    '''Test if curl can be used to grant roles without the correct permissions'''
+    def test_curl_grant_role(self):
+        error_msg = "Errorevaluatingprojection.-cause:InvalidJSONendpointhttp://172.23.106.24:8091/" \
+                    "settings/rbac/users/local/intuser"
+        cbqpath = '%scbq' % self.path + " -u 'curl' -p 'password'"
+        query = "select curl('http://%s:%s/settings/rbac/users/local/intuser' " \
+                % (self.master.ip,self.master.port) +\
+                ", {'data' : 'name=TestInternalUser&roles=data_reader[default]&password=pwintuser'" \
+                ",'user':'curl:password','request':'POST'})"
+        curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+        error_msg = "Errorevaluatingprojection.-cause:CURLonlysupportsGETandPOSTrequests."
+        query = "select curl('http://%s:%s/settings/rbac/users/local/intuser' " \
+                % (self.master.ip,self.master.port) +\
+                ", {'data' : 'name=Test Internal User&roles=data_reader[default]&password=pwintuser'" \
+                ",'user':'curl:password','request':'PUT'})"
+        curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+    '''Test if you can insert curl with a role that does not have curl, with a role that has curl but
+       no insert privileges, and a combination of the two roles.'''
+    def test_insert_no_role(self):
+        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.n1ql.curl!execute." \
+                    "AddroleQueryExternalAccesstoallowthequerytorun."
+        cbqpath = '%scbq' % self.path + " -u 'no_curl' -p 'password'"
         n1ql_query = 'select * from \`beer-sample\` limit 1'
         insert_query ="insert into default (key UUID(), value curl_result.results[0].\`beer-sample\`) "
         query = "select curl("+ self.query_service_url +", "
-        options = "{'data' : 'statement=%s'}) curl_result " % (n1ql_query)
+        options = "{'data' : 'statement=%s','user':'no_curl:password'}) curl_result " % (n1ql_query)
         returning ="returning meta().id, * "
-        curl = self.shell.execute_commands_inside(self.cbqpath,insert_query+query+options+returning,'', '', '','', '')
+        curl = self.shell.execute_commands_inside(cbqpath,insert_query+query+options+returning,'', '', '','', '')
         json_curl = self.convert_to_json(curl)
-        import pdb; pdb.set_trace()
-        docid = json_curl['results'][0]['id']
-        result = self.run_cbq_query('select * from default limit 1')
-        result2= self.run_cbq_query('select * from `beer-sample` limit 1')
-        self.assertTrue(result['results'][0]['default'] == result2['results'][0]['beer-sample']
-                        and json_curl['metrics']['mutationCount'] == 1)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
 
+        error_msg= "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.insert!" \
+                   "execute.AddroleQueryInsert[default]toallowthequerytorun."
+        cbqpath = '%scbq' % self.path + " -u 'curl_no_insert' -p 'password'"
+        options = "{'data' : 'statement=%s','user':'curl_no_insert:password'}) curl_result " \
+                  % (n1ql_query)
+        returning ="returning meta().id, * "
+        curl = self.shell.execute_commands_inside(cbqpath,insert_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.n1ql.curl!execute.Addrole" \
+                    "QueryExternalAccesstoallowthequerytorun."
+        cbqpath = '%scbq' % self.path + " -u 'no_curl' -p 'password'"
+        n1ql_query = 'select * from \`beer-sample\` limit 1'
+        insert_query ="insert into default (key UUID(), value curl_result.results[0].\`beer-sample\`) "
+        query = "select curl("+ self.query_service_url +", "
+        options = "{'data' : 'statement=%s','user':'curl_no_insert:password'}) curl_result " \
+                  % (n1ql_query)
+        returning ="returning meta().id, * "
+        curl = self.shell.execute_commands_inside(cbqpath,insert_query+query+options+returning,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+    '''Test if curl privileges can be used to circumvent other privileges, (insert,update,delete)'''
+    def test_circumvent_roles(self):
+        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.insert!" \
+                    "execute.AddroleQueryInsert[default]toallowthequerytorun."
+        cbqpath = '%scbq' % self.path + " -u 'curl_no_insert' -p 'password'"
+        curl_query = "select curl("+ self.query_service_url+ ", "
+        options = "{'data':'statement=insert into default (key UUID(), value result) select result " \
+                  "from curl(\\\"https://jira.atlassian.com/rest/api/latest/issue/JRA-9\\\") result " \
+                  "returning meta().id, * '})"
+        curl = self.shell.execute_commands_inside(cbqpath,curl_query+options,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
+
+        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.update!" \
+                    "execute.AddroleQueryUpdate[default]toallowthequerytorun."
+        query = 'select meta().id from default limit 1'
+        result = self.run_cbq_query(query)
+        docid = result['results'][0]['id']
+        options = "{'data':'statement=update default use keys \\\"" + docid +"\\\" set name = (select result " \
+                  "from curl(\\\"https://jira.atlassian.com/rest/api/latest/issue/JRA-9\\\") result) " \
+                  "returning meta().id, * '})"
+        curl = self.shell.execute_commands_inside(cbqpath,curl_query+options,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
+
+        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.delete!" \
+                    "execute.AddroleQueryDelete[default]toallowthequerytorun."
+        options = "{'data':'statement=delete from default use keys \\\"" + docid +"\\\"" \
+                  "returning meta().id, * '})"
+        curl = self.shell.execute_commands_inside(cbqpath,curl_query+options,'', '', '','', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
 
 ##############################################################################################
 #
