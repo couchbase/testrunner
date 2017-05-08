@@ -189,12 +189,26 @@ class EvictionKV(EvictionBase):
             eject all items set to expire
         """
 
-        self.load_ejected_set(100)
-        self.load_to_dgm(ttl=60)
+        num_ejected_items = 100
+        key_prefix='dgmkv'
+
+        # load initial set of keys, then to dgm with expectation
+        # that initial keys will be ejected
+        self.load_ejected_set(num_ejected_items)
+        total_items = self.load_to_dgm(ttl=60, prefix=key_prefix)
         self.ops_on_ejected_set("update", ttl=60)
 
         # run expiry pager
         self.run_expiry_pager()
+
+        # make sure all items have expired
+        time.sleep(65)
+
+        # attempt to get expired keys.
+        # this also helps drop item count down to 0
+        self.verify_missing_keys(key_prefix, total_items)
+        self.verify_missing_keys("ejected", num_ejected_items)
+
 
         self.cluster.wait_for_stats([self.master],
                                     "default", "",

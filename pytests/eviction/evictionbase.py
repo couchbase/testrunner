@@ -2,6 +2,10 @@ from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
+from mc_bin_client import MemcachedError
+from memcached.helper.data_helper import VBucketAwareMemcached
+from membase.api.rest_client import RestConnection
+import memcacheConstants as constants
 
 class EvictionBase(BaseTestCase):
 
@@ -30,23 +34,29 @@ class EvictionBase(BaseTestCase):
             val = int(val)
         return val
 
-    def load_to_dgm(self, active = 75, ttl = 0):
+    def load_to_dgm(self, active = 75, ttl = 0, prefix='dgmkv'):
         """
             decides how many items to load to enter active% dgm state
             where active is an integer value between 0 and 100
         """
         doc_size = 1024
         curr_active = self.stat('vb_active_perc_mem_resident')
+        total_items = curr_active
+        batch_items = 50000
 
         # go into heavy dgm
         while curr_active > active:
             curr_items = self.stat('curr_items')
             gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size , start=curr_items + 1, end=curr_items+50000)
+            gen_create = BlobGenerator(prefix, prefix+'-', doc_size , start=curr_items + 1, end=curr_items+batch_items)
+            total_items += batch_items
             try:
                 self._load_all_buckets(self.master, gen_create, "create", ttl)
             except:
                 pass
             curr_active = self.stat('vb_active_perc_mem_resident')
+
+        return total_items
 
 
     def get_kv_store(self, index = 1):
@@ -64,5 +74,21 @@ class EvictionBase(BaseTestCase):
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", ts)
         self.log.info("wait for expiry pager to run on all these nodes")
 
-
-
+    def verify_missing_keys(self, prefix, count):
+        """
+           verify that none of the keys exist with specified prefix.
+        """
+        client = VBucketAwareMemcached(
+                    RestConnection(self.servers[0]),
+                    self.buckets[0])
+        for i in xrange(count):
+            key = "{0}{1}".format(prefix, i)
+            try:
+                client.get(key)
+            except MemcachedError as error:
+                self.assertEquals(
+                    error.status,
+                    constants.ERR_NOT_FOUND,
+                    "expected error NOT_FOUND, got {0}".format(error.status))
+            else:
+                self.fail("Able to retrieve expired document")
