@@ -1,9 +1,11 @@
 import logging
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
-from couchbase_helper.query_definitions import QueryDefinition
-from membase.helper.cluster_helper import ClusterOperationHelper
+
 from base_2i import BaseSecondaryIndexingTests
+from couchbase_helper.query_definitions import QueryDefinition
+from lib.memcached.helper.data_helper import MemcachedClientHelper
+from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 log = logging.getLogger(__name__)
 
@@ -578,6 +580,93 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self._check_all_bucket_items_indexed()
         post_recovery_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_recovery_tasks])
+
+    def test_partial_rollback(self):
+        self.multi_create_index()
+        self.sleep(30)
+        self.log.info("Stopping persistence on NodeA & NodeB")
+        data_nodes = self.get_nodes_from_services_map(service_type="kv",
+                                                  get_all_nodes=True)
+        for data_node in data_nodes:
+            for bucket in self.buckets:
+                mem_client = MemcachedClientHelper.direct_client(data_node, bucket.name)
+                mem_client.stop_persistence()
+        self.run_doc_ops()
+        self.sleep(10)
+        # Get count before rollback
+        bucket_before_item_counts = {}
+        for bucket in self.buckets:
+            bucket_count_before_rollback = self.get_item_count(self.master, bucket.name)
+            bucket_before_item_counts[bucket.name] = bucket_count_before_rollback
+            log.info("Items in bucket {0} before rollback = {1}".format(
+                bucket.name, bucket_count_before_rollback))
+
+        # Index rollback count before rollback
+        index_rollback_count = {}
+        index_stats = self.get_index_stats(perNode=True)
+        num_docs_processed_before_rollback = {}
+
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index",
+
+                                                         get_all_nodes=True)
+        for indexer_node in indexer_nodes:
+            server = "{0}:{1}".format(indexer_node.ip, indexer_node.port)
+            for bucket in self.buckets:
+                num_docs_processed_before_rollback[bucket.name] = {}
+                per_index_stat = index_stats[server][bucket.name]
+                for index_name in per_index_stat.keys():
+                    num_docs_processed_before_rollback[bucket.name][index_name] = per_index_stat[index_name]["items_count"]
+                    log.info("Before Rollback Docs processed by {0} = {1}".format(
+                        index_name, num_docs_processed_before_rollback[bucket.name][index_name]))
+
+        # Kill memcached on Node A so that Node B becomes master
+        self.log.info("Kill Memcached process on NodeA")
+        shell = RemoteMachineShellConnection(data_nodes[0])
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        self.log.info("Starting persistence on NodeB")
+        for bucket in self.buckets:
+            mem_client = MemcachedClientHelper.direct_client(data_nodes[1], bucket.name)
+            mem_client.start_persistence()
+
+        # Failover Node B
+        self.log.info("Failing over NodeB")
+        self.sleep(10)
+        failover_task = self.cluster.async_failover(
+            self.servers[:self.nodes_init], [data_nodes[1]], self.graceful,
+            wait_for_pending=120)
+
+        failover_task.result()
+
+        # Wait for a couple of mins to allow rollback to complete
+        # self.sleep(120)
+
+        bucket_after_item_counts = {}
+        for bucket in self.buckets:
+            bucket_count_after_rollback = self.get_item_count(self.master, bucket.name)
+            bucket_after_item_counts[bucket.name] = bucket_count_after_rollback
+            log.info("Items in bucket {0} after rollback = {1}".format(
+                bucket.name, bucket_count_after_rollback))
+
+        for bucket in self.buckets:
+            if bucket_after_item_counts[bucket.name] == bucket_before_item_counts[bucket.name]:
+                log.info("Looks like KV rollback did not happen at all.")
+
+        index_stats = self.get_index_stats(perNode=True)
+        num_docs_processed_after_rollback = {}
+        for indexer_node in indexer_nodes:
+            server = "{0}:{1}".format(indexer_node.ip, indexer_node.port)
+            for bucket in self.buckets:
+                num_docs_processed_after_rollback[bucket.name] = {}
+                per_index_stat = index_stats[server][bucket.name]
+                for index_name in per_index_stat.keys():
+                    num_docs_processed_after_rollback[bucket.name][index_name] = per_index_stat[index_name]["items_count"]
+                    log.info("Before Rollback Docs processed by {0} = {1}".format(
+                        index_name, num_docs_processed_after_rollback[bucket.name][index_name]))
+                    self.assertEqual(num_docs_processed_after_rollback[bucket.name][index_name],
+                                     bucket_after_item_counts[bucket.name],
+                                     "Items in index {0} do not match items in bucket {1}".format(index_name, bucket.name))
 
     def _calculate_scan_vector(self):
         self.scan_vectors = None
