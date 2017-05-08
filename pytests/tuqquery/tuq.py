@@ -1482,25 +1482,20 @@ class QueryTests(BaseTestCase):
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
         res =self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertTrue(plan == {u'#operator': u'Sequence', u'~children': [{u'index': u'#primary', u'#operator':
-            u'PrimaryScan', u'namespace': u'default', u'using': u'gsi', u'keyspace': u'default'},
-            {u'keyspace': u'default', u'#operator': u'Fetch', u'namespace': u'default'},
-            {u'#operator': u'Parallel', u'~child': {u'#operator': u'Sequence',
-            u'~children': [{u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr': u'substr((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
-            {u'#operator': u'Filter', u'condition': u'(`name1` = "employeefi")'}, {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]},
-            {u'#operator': u'FinalProject'}]}}]})
+        self.assertTrue(plan['~children'][2]['~child']['~children']==[{u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr':
+            u'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]}, {u'#operator': u'Filter', u'condition': u'(`name1` = "employeefi")'},
+            {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}])
+
         self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi" limit 2'
         res =self.run_cbq_query()
         self.assertTrue(res['results'] == [{u'name1': u'employeefi'}, {u'name1': u'employeefi'}])
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4"'
         res =self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertTrue(plan == {u'#operator': u'Sequence', u'~children': [{u'index': u'#primary', u'#operator':
-            u'PrimaryScan', u'namespace': u'default', u'using': u'gsi', u'keyspace': u'default'}, {u'keyspace': u'default'
-            , u'#operator': u'Fetch', u'namespace': u'default'}, {u'#operator': u'Parallel', u'~child': {u'#operator': u'Sequence',
-            u'~children': [{u'#operator': u'Filter', u'condition': u'((((`default`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
-            {u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr': u'substr((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
-            {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}]}}]})
+        self.assertTrue(plan['~children'][2]['~child']['~children']==
+                    [{u'#operator': u'Filter', u'condition': u'((((`default`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
+                     {u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr': u'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
+                     {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}])
         self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4" limit 10'
         res =self.run_cbq_query()
         self.assertTrue(res['results']==[])
