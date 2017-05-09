@@ -2021,8 +2021,9 @@ class BaseTestCase(unittest.TestCase):
 
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
-        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
+        status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
         self.sleep(10)
+        return status
 
     def get_nodes(self, server):
         """ Get Nodes from list of server """

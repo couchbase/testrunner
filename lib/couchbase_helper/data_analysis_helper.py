@@ -760,6 +760,7 @@ class DataCollector(object):
         """
         conn = RemoteMachineShellConnection(server)
         backup_data = {}
+        status = False
         for bucket in buckets:
             backup_data[bucket.name] = {}
             output, error = conn.execute_command("ls %s/backup/201*/%s*/data "\
@@ -792,8 +793,32 @@ class DataCollector(object):
                                {"KV store name":key_partition[idx], "Status":key_status[idx],
                                 "Value":key_value[idx]}
                     print "Done get data from backup file"
+                    status = True
                 else:
-                    raise Exception("Database file is empty")
+                    print "Data base is empty"
+                    return  backup_data, status
             else:
-                raise Exception("Coud not find file shard_0.fdb at %s" % server.ip)
-        return backup_data
+                raise Exception("Could not find file shard_0.fdb at %s" % server.ip)
+        return backup_data, status
+
+    def get_views_definition_from_backup_file(self, server, backup_dir, buckets):
+        """
+            Extract key value from database file shard_0.fdb
+            Return: key, kv store name, status and value
+            /tmp/entbackup/backup/20*/default-*/views.json
+        """
+        conn = RemoteMachineShellConnection(server)
+        backup_data = {}
+        for bucket in buckets:
+            backup_data[bucket.name] = {}
+            output, error = conn.execute_command("ls %s/backup/20*/%s* "\
+                                                        % (backup_dir, bucket.name))
+            if "views.json" in output:
+                cmd = "cat %s/backup/20*/%s*/views.json" % (backup_dir, bucket.name)
+                views_output, error = conn.execute_command(cmd)
+                views_output = [x.strip(' ') for x in views_output]
+                if views_output:
+                    views_output = " ".join(views_output)
+                    return views_output
+                else:
+                    return False
