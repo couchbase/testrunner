@@ -41,6 +41,10 @@ class QueryCurlTests(QueryTests):
         super(QueryCurlTests, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
         self.info = self.shell.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            self.curl_path = "%scurl" % self.path
+        else:
+            self.curl_path = "curl"
         self.rest = RestConnection(self.master)
         self.cbqpath = '%scbq' % self.path + " -u %s -p %s" % (self.rest.username,self.rest.password)
         self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip,self.n1ql_port)
@@ -312,7 +316,8 @@ class QueryCurlTests(QueryTests):
         -http://data.colorado.gov/resource/4ykn-tg5h.json/ (is a website with real data)'''
     def test_simple_external_json(self):
         # Get the output from the actual curl and test it against the n1ql curl query
-        curl_output = self.shell.execute_command("curl https://jsonplaceholder.typicode.com/todos")
+        curl_output = self.shell.execute_command("%s https://jsonplaceholder.typicode.com/todos"
+                                                 % self.curl_path)
         # The above command returns a tuple, we want the first element of that tuple
         expected_curl = self.convert_list_to_json(curl_output[0])
 
@@ -324,7 +329,8 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(actual_curl['results'][0]['$1'] == expected_curl)
 
         # Test for more complex data
-        curl_output = self.shell.execute_command("curl https://jsonplaceholder.typicode.com/users")
+        curl_output = self.shell.execute_command("%s https://jsonplaceholder.typicode.com/users"
+                                                 % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jsonplaceholder.typicode.com/users'"
         query = "select curl("+ url + ")"
@@ -333,7 +339,8 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(actual_curl['results'][0]['$1'] == expected_curl)
 
         # Test for a website in production (the website above is only used to provide json endpoints with fake data)
-        curl_output = self.shell.execute_command("curl http://data.colorado.gov/resource/4ykn-tg5h.json/")
+        curl_output = self.shell.execute_command("%s http://data.colorado.gov/resource/4ykn-tg5h.json/"
+                                                 %self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'http://data.colorado.gov/resource/4ykn-tg5h.json/'"
         query = "select curl("+ url + ")"
@@ -372,7 +379,9 @@ class QueryCurlTests(QueryTests):
     '''Test request to the google maps api with an api key'''
     def test_external_json_google_api_key(self):
         # Test the google maps json endpoint with a valid api key and make sure it works
-        curl_output = self.shell.execute_command("curl --get https://maps.googleapis.com/maps/api/geocode/json -d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'")
+        curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
+                                                 "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
+                                                 % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
@@ -383,7 +392,8 @@ class QueryCurlTests(QueryTests):
 
     '''Test request to a JIRA json endpoint'''
     def test_external_json_jira(self):
-        curl_output = self.shell.execute_command("curl https://jira.atlassian.com/rest/api/latest/issue/JRA-9")
+        curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
+                                                 %self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
@@ -393,10 +403,11 @@ class QueryCurlTests(QueryTests):
 
     '''MB-22128 giving a header without giving data would cause an empty result set'''
     def test_external_json_jira_with_header(self):
-        curl_output = self.shell.execute_command("curl https://jira.atlassian.com/rest/api/latest/issue/JRA-9")
+        curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
+                                                 %self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
-        url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
 
+        url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select * from curl("+ url +") result"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
@@ -409,7 +420,8 @@ class QueryCurlTests(QueryTests):
 
     '''MB-22291 Test to make sure that endpoints returning an array of JSON docs work, also tests the user-agent option'''
     def test_array_of_json(self):
-        curl_output = self.shell.execute_command("curl https://api.github.com/users/ikandaswamy/repos")
+        curl_output = self.shell.execute_command("%s https://api.github.com/users/ikandaswamy/repos"
+                                                 %self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://api.github.com/users/ikandaswamy/repos'"
         query="select raw curl("+ url +",{'header':'User-Agent: ikandaswamy'}) list"
@@ -453,7 +465,8 @@ class QueryCurlTests(QueryTests):
         -prepare a statement that uses curl
         -use curl to prepare a statement'''
     def test_curl_prepared(self):
-        curl_output = self.shell.execute_command("curl --get https://maps.googleapis.com/maps/api/geocode/json -d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'")
+        curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json -d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
+                                                 % self.curl_path)
         expected_curl = self.convert_list_to_json_with_spacing(curl_output[0])
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
@@ -617,9 +630,9 @@ class QueryCurlTests(QueryTests):
 
     def test_conflicting_get_options(self):
         curl_output = self.shell.execute_command(
-            "curl --get https://maps.googleapis.com/maps/api/geocode/json -d "
+            "%s --get https://maps.googleapis.com/maps/api/geocode/json -d "
             "'address=santa+cruz&components=country:ES&key"
-            "=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'")
+            "=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'" % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options = "{'get':False,'request':'GET','data': " \
@@ -750,37 +763,40 @@ class QueryCurlTests(QueryTests):
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['results'][0]['$1']['error_message'] == "TheprovidedAPIkeyisinvalid.")
 
-    '''Test what happens when you try to access a site with bad certs'''
-    def test_expired_cert(self):
+    '''Tests what happens when you try to access a site with different types of invalid certs'''
+    def test_invalid_certs(self):
+        #Error message is different for linux vs windows
+        if self.info.type.lower() == 'windows':
+            error_msg = "Errorevaluatingprojection.-cause:curl:SSLconnecterror"
+            wrong_host_msg = str(error_msg)
+        else:
+            error_msg = "Errorevaluatingprojection.-cause:curl:Peercertificatecannotbeauthenticated" \
+                        "withgivenCAcertificates"
+            wrong_host_msg = "Errorevaluatingprojection.-cause:curl:SSLpeercertificateorSSHremotekey" \
+                             "wasnotOK"
         url = "'https://expired.badssl.com/'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] ==
-                        'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
 
-    '''Tests what happens when you try to access a site with different types of invalid certs'''
-    def test_invalid_certs(self):
         url = "'https://self-signed.badssl.com/'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] ==
-                        'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
 
         url = "'https://wrong.host.badssl.com/'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] ==
-                        'Errorevaluatingprojection.-cause:curl:SSLpeercertificateorSSHremotekeywasnotOK')
+        self.assertTrue(actual_curl['errors'][0]['msg'] == wrong_host_msg)
 
         url = "'https://superfish.badssl.com/'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] ==
-                        'Errorevaluatingprojection.-cause:curl:PeercertificatecannotbeauthenticatedwithgivenCAcertificates')
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
 
     '''Secret endpoints should not be accsible without the localtoken'''
     def test_secret_endpoints(self):
@@ -832,13 +848,13 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(cbqpath,query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         # Compare the curl statement to the expected result of the n1ql query done normally
-        expected_result = self.run_cbq_query('select * from default limit 5')
+        expected_result = self.run_cbq_query(n1ql_query)
         self.assertTrue(json_curl['results'][0]['$1']['results'] == expected_result['results'])
 
     '''Test if curl can be used to grant roles without the correct permissions'''
     def test_curl_grant_role(self):
-        error_msg = "Errorevaluatingprojection.-cause:InvalidJSONendpointhttp://172.23.106.24:8091/" \
-                    "settings/rbac/users/local/intuser"
+        error_msg = "Errorevaluatingprojection.-cause:InvalidJSONendpointhttp://%s:%s/" \
+                    "settings/rbac/users/local/intuser" % (self.master.ip,self.master.port)
         cbqpath = '%scbq' % self.path + " -u 'curl' -p 'password'"
         query = "select curl('http://%s:%s/settings/rbac/users/local/intuser' " \
                 % (self.master.ip,self.master.port) +\
