@@ -107,11 +107,15 @@ class CBASBaseTest(BaseTestCase):
                 return True
 
     def connect_to_bucket(self, cbas_bucket_name, cb_bucket_password="",
-                          validate_error_msg=False):
+                          validate_error_msg=False, cb_bucket_username=""):
         """
         Connects to a CBAS bucket
         """
-        cmd_connect_bucket = "connect bucket " + cbas_bucket_name + " with {\"password\":\"" + cb_bucket_password + "\"};"
+        if cb_bucket_username=="":
+            cb_bucket_username="cbadminbucket"
+        if cb_bucket_password=="":
+            cb_bucket_password="password"
+        cmd_connect_bucket = "connect bucket " + cbas_bucket_name + " with {\"username\":\"" + cb_bucket_username + "\",\"password\":\"" + cb_bucket_password + "\"};"
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
             cmd_connect_bucket)
         if validate_error_msg:
