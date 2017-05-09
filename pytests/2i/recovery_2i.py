@@ -28,7 +28,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                     query_definitions=self.load_query_definitions)
 
     def tearDown(self):
-        if hasattr(self, 'query_definitions'):
+        if hasattr(self, 'query_definitions') and not self.skip_cleanup:
             try:
                 self.log.info("<<<<<< WILL DROP THE INDEXES >>>>>")
                 tasks = self.async_multi_drop_index(
@@ -364,7 +364,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         Indexer add back scenarios
         :return:
         """
-        self._calculate_scan_vector()
         rest = RestConnection(self.master)
         recoveryType = self.input.param("recoveryType", "full")
         indexer_out = int(self.input.param("nodes_out", 0))
@@ -602,22 +601,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 bucket.name, bucket_count_before_rollback))
 
         # Index rollback count before rollback
-        index_rollback_count = {}
-        index_stats = self.get_index_stats(perNode=True)
-        num_docs_processed_before_rollback = {}
-
-        indexer_nodes = self.get_nodes_from_services_map(service_type="index",
-
-                                                         get_all_nodes=True)
-        for indexer_node in indexer_nodes:
-            server = "{0}:{1}".format(indexer_node.ip, indexer_node.port)
-            for bucket in self.buckets:
-                num_docs_processed_before_rollback[bucket.name] = {}
-                per_index_stat = index_stats[server][bucket.name]
-                for index_name in per_index_stat.keys():
-                    num_docs_processed_before_rollback[bucket.name][index_name] = per_index_stat[index_name]["items_count"]
-                    log.info("Before Rollback Docs processed by {0} = {1}".format(
-                        index_name, num_docs_processed_before_rollback[bucket.name][index_name]))
+        self._verify_bucket_count_with_index_count()
+        self.multi_query_using_index()
 
         # Kill memcached on Node A so that Node B becomes master
         self.log.info("Kill Memcached process on NodeA")
@@ -652,28 +637,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             if bucket_after_item_counts[bucket.name] == bucket_before_item_counts[bucket.name]:
                 log.info("Looks like KV rollback did not happen at all.")
-
-        index_stats = self.get_index_stats(perNode=True)
-        num_docs_processed_after_rollback = {}
-        for indexer_node in indexer_nodes:
-            server = "{0}:{1}".format(indexer_node.ip, indexer_node.port)
-            for bucket in self.buckets:
-                num_docs_processed_after_rollback[bucket.name] = {}
-                per_index_stat = index_stats[server][bucket.name]
-                for index_name in per_index_stat.keys():
-                    num_docs_processed_after_rollback[bucket.name][index_name] = per_index_stat[index_name]["items_count"]
-                    log.info("Before Rollback Docs processed by {0} = {1}".format(
-                        index_name, num_docs_processed_after_rollback[bucket.name][index_name]))
-                    self.assertEqual(num_docs_processed_after_rollback[bucket.name][index_name],
-                                     bucket_after_item_counts[bucket.name],
-                                     "Items in index {0} do not match items in bucket {1}".format(index_name, bucket.name))
-
-    def _calculate_scan_vector(self):
-        self.scan_vectors = None
-        if self.scan_vectors != None:
-            self.scan_vectors = self.gen_scan_vector(
-                use_percentage=self.scan_vector_per_values,
-             use_random = self.random_scan_vector)
+        self._verify_bucket_count_with_index_count()
+        self.multi_query_using_index()
 
     def _create_replica_indexes(self):
         query_definitions = []
