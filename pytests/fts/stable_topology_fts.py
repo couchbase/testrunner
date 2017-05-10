@@ -1664,6 +1664,7 @@ class StableTopFTS(FTSBaseTest):
         the upper left and bottom right point of the bounding box.
         :return: Nothing
         """
+
         lon1 = float(TestInputSingleton.input.param("lon1", 2.387075))
         lat1 = float(TestInputSingleton.input.param("lat1", 49.873019))
         lon2 = float(TestInputSingleton.input.param("lon2", 1.954764))
@@ -1704,3 +1705,72 @@ class StableTopFTS(FTSBaseTest):
                                                 expected_hits=expected_hits)
         self.log.info("Hits: {0}".format(hits))
         self.log.info("Doc_ids: {0}".format(doc_ids))
+
+    def test_xattr_support(self):
+        """
+        Tests if setting includeXAttrs in index definition
+        breaks anything
+        :return: Nothing
+        """
+        self.load_data()
+        index = self._cb_cluster.create_fts_index(
+            name='default_index',
+            source_name='default',
+            source_params={"authUser": 'default',
+                           "authPassword": '',
+                           "includeXAttrs": True})
+        self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        if self._update or self._delete:
+            self.async_perform_update_delete(self.upd_del_fields)
+            if self._update:
+                self.sleep(60, "Waiting for updates to get indexed...")
+            self.wait_for_indexing_complete()
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        self.run_query_and_compare(index)
+
+    def test_ssl(self):
+        """
+        Tests if we are able to create an index and query over ssl port
+        :return: Nothing
+        """
+        fts_ssl_port=18094
+        import json, os, subprocess
+        idx = {"sourceName": "default",
+               "sourceType": "couchbase",
+               "type": "fulltext-index",
+               "sourceParams": {"authUser": "default"}}
+
+        qry = {"indexName": "default_index_1",
+                 "query": {"field": "type", "match": "emp"},
+                 "size": 10000000}
+
+        self.load_data()
+        cert = RestConnection(self._master).get_cluster_ceritificate()
+        f = open('cert.pem', 'w')
+        f.write(cert)
+        f.close()
+
+        cmd = "curl -k -E cert.pem "+\
+              "-XPUT -H \"Content-Type: application/json\" "+\
+              "-u Administrator:password "+\
+              "https://{0}:{1}/api/index/default_idx -d ".\
+                  format(self._master.ip, fts_ssl_port) +\
+              "\'{0}\'".format(json.dumps(idx))
+
+        self.log.info("Running command : {0}".format(cmd))
+        output = subprocess.check_output(cmd, shell=True)
+        if json.loads(output) == {"status":"ok"}:
+            query = "curl -k -E cert.pem " + \
+                    "-XPOST -H \"Content-Type: application/json\" " + \
+                    "-u Administrator:password " + \
+                    "https://{0}:18094/api/index/default_idx/query -d ". \
+                        format(self._master.ip, fts_ssl_port) + \
+                    "\'{0}\'".format(json.dumps(qry))
+            self.sleep(20, "wait for indexing to complete")
+            output = subprocess.check_output(query, shell=True)
+            self.log.info("Hits: {0}".format(json.loads(output)["total_hits"]))
+            if int(json.loads(output)["total_hits"]) != 1000:
+                self.fail("Query over ssl failed!")
+        else:
+            self.fail("Index could not be created over ssl")
