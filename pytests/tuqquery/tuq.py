@@ -236,6 +236,35 @@ class QueryTests(BaseTestCase):
         finally:
             self.rest.delete_bucket("beer-sample")
 
+    '''MB-19887 and MB-24303: These queries were returning incorrect results with views.'''
+    def test_views(self):
+        created_indexes = []
+        try:
+            idx = "ix1"
+            self.query = "CREATE INDEX %s ON default(x,y) USING VIEW" % idx
+            self.run_cbq_query()
+            time.sleep(15)
+            self.run_cbq_query("insert into default values ('k01',{'x':10})")
+            result = self.run_cbq_query("select x,y from default where x > 3")
+            self.assertTrue(result['results'][0] == {"x":10})
+            created_indexes.append(idx)
+
+            self.run_cbq_query('insert into default values("k02", {"x": 20, "y": 20})')
+            self.run_cbq_query('insert into default values("k03", {"x": 30, "z": 30})')
+            self.run_cbq_query('insert into default values("k04", {"x": 40, "y": 40, "z": 40})')
+            idx2 = "iv1"
+            self.query = "CREATE INDEX %s ON default(x,y,z) USING VIEW" % idx2
+            self.run_cbq_query()
+            expected_result = [{'x':10},{'x':20,'y':20},{'x':30,'z':30},{'x':40,'y':40,'z':40}]
+            result = self.run_cbq_query('select x,y,z from default use index (iv1 using view) '
+                                        'where x is not missing')
+            self.assertTrue(result['results'] == expected_result)
+            created_indexes.append(idx2)
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX %s.%s USING VIEW" % ("default", idx)
+                self.run_cbq_query()
+
 ##############################################################################################
 #
 #   ALL
