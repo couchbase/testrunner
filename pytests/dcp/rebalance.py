@@ -1,13 +1,13 @@
 import time
 import logger
-from dcp.constants import *
+from dcp.constants import VBSEQNO_STAT, PRODUCER
 from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
+from mc_bin_client import MemcachedClient, MemcachedError
 from couchbase_helper.documentgenerator import BlobGenerator
-from remote.remote_util import RemoteMachineShellConnection
-from lib.cluster_run_manager  import CRManager
 
 log = logger.Logger.get_logger()
+
 
 class DCPRebalanceTests(DCPBase):
 
@@ -23,11 +23,10 @@ class DCPRebalanceTests(DCPBase):
         self.load_docs(self.master, vbucket, self.num_items)
         vb_uuid, seqno, high_seqno = self.vb_info(self.master,
                                                   vbucket)
-        assert high_seqno == self.num_items
-
         # stream
         log.info("streaming vb {0} to seqno {1}".format(
             vbucket, high_seqno))
+        self.assertEquals(high_seqno, self.num_items)
 
         dcp_client = self.dcp_client(self.master, PRODUCER, vbucket)
         stream = dcp_client.stream_req(
@@ -68,25 +67,25 @@ class DCPRebalanceTests(DCPBase):
         # stop and failover nodeA
         assert self.stop_node(0)
         self.stopped_nodes.append(0)
-
+        self.master = nodeB
 
         assert self.cluster.failover([nodeB], [nodeA])
         try:
             assert self.cluster.rebalance([nodeB], [], [])
         except:
             pass
+        self.add_built_in_server_user()
         # verify seqnos and stream mutations
         rest = RestConnection(nodeB)
         vbuckets = rest.get_vbuckets()
         total_mutations = 0
 
         for vb in vbuckets:
-            mcd_client = self.mcd_client(nodeB)
+            mcd_client = self.mcd_client(nodeB, auth_user=True)
             stats = mcd_client.stats(VBSEQNO_STAT)
             vbucket = vb.id
             key = 'vb_{0}:high_seqno'.format(vbucket)
             total_mutations += int(stats[key])
-
 
         assert total_mutations == self.num_items #/ 2   # divide by because the items are split between 2 servers
         task = self.cluster.async_rebalance([nodeB], [], [nodeC])
@@ -102,7 +101,7 @@ class DCPRebalanceTests(DCPBase):
             pass
 
         vbucket = 0
-        mcd_client = self.mcd_client(self.master, vbucket)
+        mcd_client = self.mcd_client(self.master, vbucket, auth_user=True)
         mcd_client.set('key1', 0, 0, 'value', vbucket)
 
         # failover node where key was set
@@ -121,8 +120,13 @@ class DCPRebalanceTests(DCPBase):
         rest = RestConnection(ready_n[0])
         index = self.vbucket_host_index(rest, vbucket)
         new_master = ready_n[0]
-        mcd_client = self.mcd_client(new_master)
-        mcd_client.set('key2', 0, 0, 'value', vbucket)
+        mcd_client = self.mcd_client(new_master, auth_user=True)
+        try:
+            mcd_client.set('key2', 0, 0, 'value', vbucket)
+        except MemcachedError:
+            self.sleep(10)
+            mcd_client = self.mcd_client(new_master, auth_user=True)
+            mcd_client.set('key2', 0, 0, 'value', vbucket)
 
         # stream mutation
         dcp_client = self.dcp_client(new_master, PRODUCER, vbucket)
@@ -149,10 +153,8 @@ class DCPRebalanceTests(DCPBase):
         assert rebalance_t.result()
         self.cluster.rebalance([new_master], [], ready_n[1:])
 
-
     def test_failover_log_table_updated(self):
         """Verifies failover table entries are updated when vbucket ownership changes"""
-
 
         # rebalance in nodeB
         nodeA = self.servers[0]
@@ -166,7 +168,7 @@ class DCPRebalanceTests(DCPBase):
             self.load_docs(nodeA, vbucket, self.num_items)
 
         # get original failover table
-        mcd_client = self.mcd_client(nodeA)
+        mcd_client = self.mcd_client(nodeA, auth_user=True)
         orig_table = mcd_client.stats('failovers')
 
         # add nodeB
@@ -175,6 +177,7 @@ class DCPRebalanceTests(DCPBase):
         # stop nodeA and failover
         assert self.stop_node(0)
         self.stopped_nodes.append(0)
+        self.master = nodeB
         assert self.cluster.failover([nodeB], [nodeA])
         assert self.cluster.rebalance([nodeB], [], [])
 
@@ -195,6 +198,7 @@ class DCPRebalanceTests(DCPBase):
 
         # stop nodeB and failover
         assert self.stop_node(1)
+        self.master = nodeA
         self.stopped_nodes.append(1)
         assert self.cluster.failover([nodeA], [nodeB])
         assert self.cluster.rebalance([nodeA], [], [])
@@ -207,7 +211,7 @@ class DCPRebalanceTests(DCPBase):
             self.load_docs(nodeA, vbucket, self.num_items)
 
         # check failover table entries
-        mcd_client = self.mcd_client(nodeA)
+        mcd_client = self.mcd_client(nodeA, auth_user=True)
         stats = mcd_client.stats('failovers')
         for vb_info in vbuckets[0:4]:
             vb = vb_info.id

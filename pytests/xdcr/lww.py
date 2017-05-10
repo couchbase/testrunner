@@ -13,6 +13,7 @@ from couchbase_helper.cluster import Cluster
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.api.exception import XDCRCheckpointException
 from memcached.helper.data_helper import VBucketAwareMemcached
+from security.rbac_base import RbacBase
 
 
 class Lww(XDCRNewBaseTest):
@@ -127,9 +128,24 @@ class Lww(XDCRNewBaseTest):
                                        saslPassword=saslPassword, replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=bucketType, evictionPolicy=evictionPolicy)
 
-    def _get_python_sdk_client(self, ip, bucket):
+    def _get_python_sdk_client(self, ip, bucket, cluster):
         try:
-            cb = Bucket('couchbase://' + ip + '/' + bucket)
+            role_del = [bucket]
+            RbacBase().remove_user_role(role_del, RestConnection(cluster.get_master_node()))
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.assertTrue(str(ex) == '"User was not found."', str(ex))
+
+        testuser = [{'id': bucket, 'name': bucket, 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', cluster.get_master_node())
+        self.sleep(10)
+
+        role_list = [{'id': bucket, 'name': bucket, 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(cluster.get_master_node()), 'builtin')
+        self.sleep(10)
+
+        try:
+            cb = Bucket('couchbase://' + ip + '/' + bucket, password='password')
             if cb is not None:
                 self.log.info("Established connection to bucket " + bucket + " on " + ip + " using python SDK")
             else:
@@ -310,13 +326,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         self.setup_xdcr()
@@ -376,13 +392,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
@@ -437,13 +453,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
@@ -499,13 +515,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
@@ -559,9 +575,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         dest_lww.remove(key='lww-0')
@@ -602,9 +618,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
@@ -684,9 +700,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
+        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default', self.c1_cluster)
         self.sleep(10)
-        dst_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dst_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
@@ -739,9 +755,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         self.c1_cluster.failover_and_rebalance_master(graceful=True, rebalance=True)
@@ -755,8 +771,8 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
 
         obj = src_lww.get(key='lww-0')
         self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
@@ -799,9 +815,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         self.c1_cluster.rebalance_out_master()
@@ -817,9 +833,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
 
         obj = src_lww.get(key='lww-0')
@@ -858,9 +874,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         dest_lww.remove(key='lww-0')
@@ -874,9 +890,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         obj = src_lww.get(key='lww-0')
@@ -909,9 +925,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         dest_lww.remove(key='lww-0')
@@ -925,9 +941,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         obj = src_lww.get(key='lww-0')
@@ -962,13 +978,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         tasks = []
@@ -1178,13 +1194,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
@@ -1246,13 +1262,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww')
+        src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
-        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww')
+        dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
         gen = DocumentGenerator('lww', '{{"key":"value"}}', xrange(100), start=0, end=1)
@@ -1312,9 +1328,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         dest_lww.remove(key='lww-0')
@@ -1373,9 +1389,9 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww')
+        src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
@@ -2181,11 +2197,11 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
+        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default', self.c1_cluster)
         self.sleep(10)
-        dest_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dest_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
-        c3_def = self._get_python_sdk_client(self.c3_cluster.get_master_node().ip, 'default')
+        c3_def = self._get_python_sdk_client(self.c3_cluster.get_master_node().ip, 'default', self.c3_cluster)
         self.sleep(10)
 
         self._upsert(conn=dest_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
@@ -2289,11 +2305,11 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(30)
 
-        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default')
+        src_def = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'default',self.c1_cluster)
         self.sleep(10)
-        dest_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dest_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
-        c3_def = self._get_python_sdk_client(self.c3_cluster.get_master_node().ip, 'default')
+        c3_def = self._get_python_sdk_client(self.c3_cluster.get_master_node().ip, 'default', self.c3_cluster)
         self.sleep(10)
 
         self._upsert(conn=c3_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
@@ -2402,7 +2418,7 @@ class Lww(XDCRNewBaseTest):
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
         obj = dest_lww.get(key='lww-0')
@@ -2452,7 +2468,7 @@ class Lww(XDCRNewBaseTest):
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
         obj = dest_lww.get(key='lww-0')
@@ -2504,7 +2520,7 @@ class Lww(XDCRNewBaseTest):
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
         obj = dest_lww.get(key='lww-0')
@@ -2560,7 +2576,7 @@ class Lww(XDCRNewBaseTest):
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
         obj = dest_lww.get(key='lww-0')
@@ -2619,7 +2635,7 @@ class Lww(XDCRNewBaseTest):
 
         self.c1_cluster.resume_all_replications_by_id()
 
-        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default')
+        dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default'. self.c2_cluster)
         self.sleep(10)
 
         obj = dest_lww.get(key='lww-0')

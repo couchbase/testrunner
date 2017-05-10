@@ -3,39 +3,27 @@ import time
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
-from tasks.task import AutoFailoverNodesFailureTask
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
+from tasks.task import AutoFailoverNodesFailureTask, \
+    NodeMonitorsAnalyserTask, NodeDownTimerTask
 from tasks.taskmanager import TaskManager
 
 
 class AutoFailoverBaseTest(BaseTestCase):
     MAX_FAIL_DETECT_TIME = 120
+    ORCHESTRATOR_TIMEOUT_BUFFER = 60
 
     def setUp(self):
         super(AutoFailoverBaseTest, self).setUp()
-        self.timeout = self.input.param("timeout", 60)
-        self.failover_action = self.input.param("failover_action",
-                                                "stop_server")
-        self.failover_orchestrator = self.input.param("failover_orchestrator",
-                                                      False)
-        self.multiple_node_failure = self.input.param("multiple_nodes_failure",
-                                                      False)
-        self.update_items = self.input.param("update_items", 1000)
-        self.delete_items = self.input.param("delete_items", 1000)
-        self.add_back_node = self.input.param("add_back_node", True)
-        self.buckets
-        self.recovery_strategy = self.input.param("recovery_strategy",
-                                                  "graceful")
-        self.multi_node_failures = self.input.param("multi_node_failures",
-                                                    False)
-        self.num_node_failures = self.input.param("num_node_failures", 1)
-        self.services = self.input.param("services", None)
-        self.zone = self.input.param("zone", 1)
-        self.multi_services_node = self.input.param("multi_services_node",
-                                                    False)
-        self.pause_between_failover_action = self.input.param(
-            "pause_between_failover_action", 0)
-        self.rest = RestConnection(self.master)
+        self._get_params()
+        self.rest = RestConnection(self.orchestrator)
         self.task_manager = TaskManager("Autofailover_thread")
+        self.task_manager.start()
+        self.node_failure_task_manager = TaskManager(
+            "Nodes_failure_detector_thread")
+        self.node_failure_task_manager.start()
         self.initial_load_gen = BlobGenerator('auto-failover',
                                               'auto-failover-',
                                               self.value_size,
@@ -47,40 +35,69 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.delete_load_gen = BlobGenerator('auto-failover',
                                              'auto-failover-',
                                              self.value_size,
+                                             start=self.update_items,
                                              end=self.delete_items)
         self._load_all_buckets(self.servers[0], self.initial_load_gen,
-                               "create", self.expiry)
+                               "create", 0)
+        self._async_load_all_buckets(self.orchestrator,
+                                     self.update_load_gen, "update", 0)
+        self._async_load_all_buckets(self.orchestrator,
+                                     self.delete_load_gen, "delete", 0)
         self.server_to_fail = self._servers_to_fail()
         self.servers_to_add = self.servers[self.nodes_init:self.nodes_init +
                                                            self.nodes_in]
         self.servers_to_remove = self.servers[self.nodes_init -
                                               self.nodes_out:self.nodes_init]
+        # self.node_monitor_task = self.start_node_monitors_task()
 
     def tearDown(self):
+        self.log.info("============AutoFailoverBaseTest teardown============")
+        self._get_params()
+        self.task_manager = TaskManager("Autofailover_thread")
+        self.task_manager.start()
+        self.server_to_fail = self._servers_to_fail()
+        self.start_couchbase_server()
+        self.sleep(10)
+        self.disable_firewall()
+        self.rest = RestConnection(self.orchestrator)
+        self.rest.reset_autofailover()
+        self.disable_autofailover()
+        self._cleanup_cluster()
         super(AutoFailoverBaseTest, self).tearDown()
-        """ Delete the new zones created if zone > 1. """
-        if self.input.param("zone", 1) > 1:
-            rest = RestConnection(self.servers[0])
-            for i in range(1, int(self.input.param("zone", 1))):
-                a = "Group "
-                if rest.is_zone_exist(a + str(i + 1)):
-                    rest.delete_zone(a + str(i + 1))
-
-    def post_failover_steps(self):
-        self.log.info("Post Failover Steps")
+        if hasattr(self, "node_monitor_task"):
+            if self.node_monitor_task._exception:
+                self.fail("{}".format(self.node_monitor_task._exception))
+            self.node_monitor_task.stop = True
+        self.task_manager.shutdown(force=True)
 
     def enable_autofailover(self):
+        """
+        Enable the autofailover setting with the given timeout.
+        :return: True If the setting was set with the timeout, else return
+        False
+        """
         status = self.rest.update_autofailover_settings(True,
                                                         self.timeout)
         return status
 
     def disable_autofailover(self):
+        """
+        Disable the autofailover setting.
+        :return: True If the setting was disabled, else return
+        False
+        """
         status = self.rest.update_autofailover_settings(False, 120)
         return status
 
     def enable_autofailover_and_validate(self):
+        """
+        Enable autofailover with given timeout and then validate if the
+        settings.
+        :return: Nothing
+        """
         status = self.enable_autofailover()
         self.assertTrue(status, "Failed to enable autofailover_settings!")
+        self.sleep(5)
         settings = self.rest.get_autofailover_settings()
         self.assertTrue(settings.enabled, "Failed to enable "
                                           "autofailover_settings!")
@@ -90,216 +107,334 @@ class AutoFailoverBaseTest(BaseTestCase):
                                                            settings.timeout))
 
     def disable_autofailover_and_validate(self):
+        """
+        Disable autofailover setting and then validate if the setting was
+        disabled.
+        :return: Nothing
+        """
         status = self.disable_autofailover()
         self.assertTrue(status, "Failed to change autofailover_settings!")
         settings = self.rest.get_autofailover_settings()
         self.assertFalse(settings.enabled, "Failed to disable "
                                            "autofailover_settings!")
 
-    def wait_for_failover_or_assert(self, master, autofailover_count):
-        time_start = time.time()
-        time_max_end = time_start + self.timeout
-        failover_count = 0
-        while time.time() < time_max_end:
-            failover_count = self.get_failover_count(master)
-            if failover_count == autofailover_count:
-                self.log.info(
-                    "{0} nodes failed over as expected".format(failover_count))
-                self.log.info(
-                    "expected failover in {0} seconds, actual time {1} "
-                    "seconds".format
-                    (self.timeout - AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME,
-                     time.time() - time_start))
-                return
-            time.sleep(2)
-        if self.num_node_failures > 1:
-            self.log.info("No nodes were failed over since number of node "
-                          "failures was greater than 1.")
-            return
-        rest = RestConnection(master)
-        rest.print_UI_logs()
-        self.log.warn("pools/default from {0} : {1}".format
-                      (master.ip, rest.cluster_status()))
-        self.fail("{0} nodes failed over, expected {1} in {2} seconds".
-                  format(failover_count, autofailover_count,
-                         time.time() - time_start))
-
-    def wait_for_no_failover_or_assert(self, master, autofailover_count):
-        time_start = time.time()
-        time_max_end = time_start + self.timeout
-        failover_count = 0
-
-        while time.time() < time_max_end:
-            failover_count = self.get_failover_count(master)
-            if failover_count == autofailover_count:
-                break
-            time.sleep(2)
-
-        time_end = time.time()
-
-        self.assertFalse(failover_count == autofailover_count,
-                         "{0} nodes failed over, didn't expect {1} in {"
-                         "2} seconds".
-                         format(failover_count, autofailover_count,
-                                time.time() - time_start))
-        self.log.info(
-            "{0} nodes failed over as expected in {1} seconds".format(
-                failover_count, time_end - time_start))
-
-    def get_failover_count(self, master):
-        rest = RestConnection(master)
-        cluster_status = rest.cluster_status()
-
-        failover_count = 0
-        # check for inactiveFailed
-        for node in cluster_status['nodes']:
-            self.log.info("'clusterMembership' for node {0} is {1}".format(
-                node["otpNode"], node['clusterMembership']))
-            if node['clusterMembership'] == "inactiveFailed":
-                failover_count += 1
-        return failover_count
+    def start_node_monitors_task(self):
+        """
+        Start the node monitors task to analyze the node status monitors.
+        :return: The NodeMonitorAnalyserTask.
+        """
+        node_monitor_task = NodeMonitorsAnalyserTask(self.orchestrator)
+        self.task_manager.schedule(node_monitor_task, sleep_time=5)
+        return node_monitor_task
 
     def enable_firewall(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
+        """
+        Enable firewall on the nodes to fail in the tests.
+        :return: Nothing
+        """
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
                                             "enable_firewall", self.timeout,
-                                            self.pause_between_failover_action)
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
 
     def disable_firewall(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
+        """
+        Disable firewall on the nodes to fail in the tests
+        :return: Nothing
+        """
+        self.time_start = time.time()
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
                                             "disable_firewall",
                                             self.timeout,
-                                            self.pause_between_failover_action)
+                                            self.pause_between_failover_action,
+                                            False,
+                                            self.timeout_buffer, False)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
 
     def restart_couchbase_server(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
+        """
+        Restart couchbase server on the nodes to fail in the tests
+        :return: Nothing
+        """
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip, node.port)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
                                             "restart_couchbase",
                                             self.timeout,
-                                            self.pause_between_failover_action)
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
 
     def stop_couchbase_server(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
-                                            "stop_couchbase", self.timeout,
-                                            self.pause_between_failover_action)
+        """
+        Stop couchbase server on the nodes to fail in the tests
+        :return: Nothing
+        """
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip, node.port)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "stop_couchbase",
+                                            self.timeout,
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception as e:
+            self.fail("Exception: {}".format(e))
 
     def start_couchbase_server(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
+        """
+        Start the couchbase server on the nodes to fail in the tests
+        :return: Nothing
+        """
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
                                             "start_couchbase", self.timeout,
-                                            self.pause_between_failover_action)
+                                            0, False, self.timeout_buffer,
+                                            False)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
 
     def stop_restart_network(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
-                                            "restart_network", self.timeout,
-                                            self.pause_between_failover_action)
+        """
+        Stop and restart network for said timeout period on the nodes to
+        fail in the tests
+        :return: Nothing
+        """
 
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "restart_network", self.timeout,
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
 
     def restart_machine(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
-                                            "restart_machine", self.timeout,
-                                            self.pause_between_failover_action)
+        """
+        Restart the nodes to fail in the tests
+        :return: Nothing
+        """
 
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "restart_machine", self.timeout,
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception, e:
+
+            self.fail("Exception: {}".format(e))
+        finally:
+            self.sleep(120, "Sleeping for 2 min for the machines to restart")
+            for node in self.server_to_fail:
+                for i in range(0, 2):
+                    try:
+                        shell = RemoteMachineShellConnection(node)
+                        break
+                    except:
+                        self.log.info("Unable to connect to the host. "
+                                      "Machine has not restarted")
+                        self.sleep(60, "Sleep for another minute and try "
+                                       "again")
 
     def stop_memcached(self):
-        task = AutoFailoverNodesFailureTask(self.server_to_fail,
+        """
+        Stop the memcached on the nodes to fail in the tests
+        :return: Nothing
+        """
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip, 11211)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
                                             "stop_memcached", self.timeout,
-                                            self.pause_between_failover_action)
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
         self.task_manager.schedule(task)
-        task.result()
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
+        finally:
+            task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                                self.server_to_fail,
+                                                "start_memcached",
+                                                self.timeout, 0, False, 0,
+                                                check_for_failover=False)
+            self.task_manager.schedule(task)
+            task.result()
+
+    def split_network(self):
+        """
+        Split the network in the cluster. Stop network traffic from few
+        nodes while allowing the traffic from rest of the cluster.
+        :return: Nothing
+        """
+        self.time_start = time.time()
+        if self.server_to_fail.__len__() < 2:
+            self.fail("Need atleast 2 servers to fail")
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "network_split", self.timeout,
+                                            self.pause_between_failover_action,
+                                            False,
+                                            self.timeout_buffer)
+        self.task_manager.schedule(task)
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
+
+    def bring_back_failed_nodes_up(self):
+        """
+        Bring back the failed nodes.
+        :return: Nothing
+        """
+        if self.failover_action == "firewall":
+            self.disable_firewall()
+        elif self.failover_action == "stop_server":
+            self.start_couchbase_server()
 
     def _servers_to_fail(self):
+        """
+        Select the nodes to be failed in the tests.
+        :return: Nothing
+        """
         if self.failover_orchestrator:
             servers_to_fail = self.servers[0:self.num_node_failures]
         else:
-            servers_to_fail = self.servers[1:self.num_node_failures]
+            servers_to_fail = self.servers[1:self.num_node_failures + 1]
         return servers_to_fail
 
-    def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
+    def _get_params(self):
         """
-        Shuffle the nodes present in the cluster if zone > 1. Rebalance the
-        nodes in the end.
-        Nodes are divided into groups iteratively i.e. 1st node in Group 1,
-        2nd in Group 2, 3rd in Group 1 and so on, when
-        zone=2.
-        :param to_remove: List of nodes to be removed.
+        Initialize the test parameters.
+        :return:  Nothing
         """
-        if not to_remove:
-            to_remove = []
-        serverinfo = self.servers[0]
-        rest = RestConnection(serverinfo)
-        zones = ["Group 1"]
-        nodes_in_zone = {"Group 1": [serverinfo.ip]}
-        # Create zones, if not existing, based on params zone in test.
-        # Shuffle the nodes between zones.
-        if int(self.zone) > 1:
-            for i in range(1, int(self.zone)):
-                a = "Group "
-                zones.append(a + str(i + 1))
-                if not rest.is_zone_exist(zones[i]):
-                    rest.add_zone(zones[i])
-                nodes_in_zone[zones[i]] = []
-            # Divide the nodes between zones.
-            nodes_in_cluster = [node.ip for node in
-                                self.get_nodes_in_cluster()]
-            nodes_to_remove = [node.ip for node in to_remove]
-            for i in range(1, len(self.servers)):
-                if self.servers[i].ip in nodes_in_cluster and \
-                                self.servers[i].ip not in nodes_to_remove:
-                    server_group = i % int(self.zone)
-                    nodes_in_zone[zones[server_group]].append(
-                        self.servers[i].ip)
-            # Shuffle the nodesS
-            for i in range(1, self.zone):
-                node_in_zone = list(set(nodes_in_zone[zones[i]]) -
-                                    set([node for node in
-                                         rest.get_nodes_in_zone(zones[i])]))
-                rest.shuffle_nodes_in_zones(node_in_zone, zones[0], zones[i])
-        otpnodes = [node.id for node in rest.node_statuses()]
-        nodes_to_remove = [node.id for node in rest.node_statuses() if
-                           node.ip in [t.ip for t in to_remove]]
-        # Start rebalance and monitor it.
-        started = rest.rebalance(otpNodes=otpnodes,
-                                 ejectedNodes=nodes_to_remove)
-        if started:
-            result = rest.monitorRebalance()
-            msg = "successfully rebalanced cluster {0}"
-            self.log.info(msg.format(result))
-        # Verify replicas of one node should not be in the same zone as
-        # active vbuckets of the node.
-        if self.zone > 1:
-            self._verify_replica_distribution_in_zones(nodes_in_zone)
+        self.timeout = self.input.param("timeout", 60)
+        self.failover_action = self.input.param("failover_action",
+                                                "stop_server")
+        self.failover_orchestrator = self.input.param("failover_orchestrator",
+                                                      False)
+        self.multiple_node_failure = self.input.param("multiple_nodes_failure",
+                                                      False)
+        self.num_items = self.input.param("num_items", 1000000)
+        self.update_items = self.input.param("update_items", 100000)
+        self.delete_items = self.input.param("delete_items", 100000)
+        self.add_back_node = self.input.param("add_back_node", True)
+        self.recovery_strategy = self.input.param("recovery_strategy",
+                                                  "delta")
+        self.multi_node_failures = self.input.param("multi_node_failures",
+                                                    False)
+        self.num_node_failures = self.input.param("num_node_failures", 1)
+        self.services = self.input.param("services", None)
+        self.zone = self.input.param("zone", 1)
+        self.multi_services_node = self.input.param("multi_services_node",
+                                                    False)
+        self.pause_between_failover_action = self.input.param(
+            "pause_between_failover_action", 0)
+        self.remove_after_failover = self.input.param(
+            "remove_after_failover", False)
+        self.timeout_buffer = 120 if self.failover_orchestrator else 3
+        failover_not_expected = self.num_node_failures > 1 and \
+                                self.pause_between_failover_action < \
+                                self.timeout or self.num_replicas < 1
+        self.failover_expected = not failover_not_expected
+        if self.failover_action is "restart_server":
+            self.num_items *= 100
+        self.orchestrator = self.servers[0] if not \
+            self.failover_orchestrator else self.servers[
+            self.num_node_failures]
 
-    def add_remove_servers_and_rebalance(self, to_add, to_remove):
+    def _cleanup_cluster(self):
         """
-        Add and/or remove servers and rebalance.
-        :param to_add: List of nodes to be added.
-        :param to_remove: List of nodes to be removed.
+        Cleaup the cluster. Delete all the buckets in the nodes and remove
+        the nodes from any cluster that has been formed.
+        :return:
         """
-        serverinfo = self.servers[0]
-        rest = RestConnection(serverinfo)
-        for node in to_add:
-            rest.add_node(user=serverinfo.rest_username,
-                          password=serverinfo.rest_password,
-                          remoteIp=node.ip)
-        self.shuffle_nodes_between_zones_and_rebalance(to_remove)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        for node in self.servers:
+            master = node
+            try:
+                ClusterOperationHelper.cleanup_cluster(self.servers,
+                                                       master=master)
+            except:
+                continue
 
     failover_actions = {
         "firewall": enable_firewall,
-        "stop_server": disable_firewall,
+        "stop_server": stop_couchbase_server,
         "restart_server": restart_couchbase_server,
         "restart_machine": restart_machine,
         "restart_network": stop_restart_network,
-        "stop_memcached": stop_memcached
+        "stop_memcached": stop_memcached,
+        "network_split": split_network
     }

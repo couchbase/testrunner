@@ -1,35 +1,36 @@
-import copy
-import json
-import math
 import os
+import time
+import logger
 import random
-import re
 import socket
 import string
-import time
+import copy
+import json
+import re
+import math
+import crc32
 import traceback
+import testconstants
 from httplib import IncompleteRead
 from threading import Thread
-
-import crc32
-import logger
-import testconstants
-from TestInput import TestInputServer
-from couchbase_helper.document import DesignDocument
-from couchbase_helper.documentgenerator import BatchedDocumentGenerator
-from couchbase_helper.stats_tools import StatsCommon
-from mc_bin_client import MemcachedError
+from memcacheConstants import ERR_NOT_FOUND,NotFoundError
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
+from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
+from memcached.helper.kvstore import KVStore
+from couchbase_helper.document import DesignDocument, View
+from mc_bin_client import MemcachedError
+from tasks.future import Future
+from couchbase_helper.stats_tools import StatsCommon
 from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
-                                    ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
-from membase.helper.bucket_helper import BucketOperationHelper
-from memcacheConstants import ERR_NOT_FOUND,NotFoundError
-from memcached.helper.data_helper import MemcachedClientHelper
+                                    ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException, AutoFailoverException
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from tasks.future import Future
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6
+from couchbase_helper.documentgenerator import BatchedDocumentGenerator
+from TestInput import TestInputServer
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP
+from multiprocessing import Process, Manager, Semaphore
 
 try:
     CHECK_FLAG = False
@@ -49,6 +50,7 @@ except Exception as e:
 # stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
 
+CONCURRENCY_LOCK = Semaphore(THROUGHPUT_CONCURRENCY)
 PENDING = 'PENDING'
 EXECUTING = 'EXECUTING'
 CHECKING = 'CHECKING'
@@ -82,6 +84,11 @@ class Task(Future):
     def check(self, task_manager):
         raise NotImplementedError
 
+    def set_unexpected_exception(self, e, suffix = ""):
+        self.log.error("Unexpected exception [{0}] caught".format(e) + suffix)
+        self.log.error(''.join(traceback.format_stack()))
+        self.set_exception(e)
+
 class NodeInitializeTask(Task):
     def __init__(self, server, disabled_consistent_view=None,
                  rebalanceIndexWaitingDisabled=None,
@@ -106,7 +113,6 @@ class NodeInitializeTask(Task):
         self.services = services
         self.gsi_type = gsi_type
 
-
     def execute(self, task_manager):
         try:
             rest = RestConnection(self.server)
@@ -114,7 +120,10 @@ class NodeInitializeTask(Task):
                 self.state = FINISHED
                 self.set_exception(error)
                 return
-        info = rest.get_nodes_self()
+        info = Future.wait_until(lambda: rest.get_nodes_self(),
+                                 lambda x: x.memoryTotal > 0, 10)
+        self.log.info("server: %s, nodes/self: %s", self.server, info.__dict__)
+
         username = self.server.rest_username
         password = self.server.rest_password
 
@@ -156,7 +165,7 @@ class NodeInitializeTask(Task):
                         self.quota = kv_quota
                 else:
                     self.set_exception(Exception("KV RAM need to be larger than %s MB "
-                                      "at node  %s"  % (MIN_KV_QUOTA, self.server.ip)))
+                                      "at node %s"  % (MIN_KV_QUOTA, self.server.ip)))
         rest.init_cluster_memoryQuota(username, password, self.quota)
         rest.set_indexer_storage_mode(username, password, self.gsi_type)
 
@@ -203,21 +212,22 @@ class NodeInitializeTask(Task):
 
 
 class BucketCreateTask(Task):
-    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211, password=None, bucket_type='membase',
-                 enable_replica_index=1, eviction_policy='valueOnly', bucket_priority=None,lww=False):
+    def __init__(self, bucket_params):
         Task.__init__(self, "bucket_create_task")
-        self.server = server
-        self.bucket = bucket
-        self.replicas = replicas
-        self.port = port
-        self.size = size
-        self.password = password
-        self.bucket_type = bucket_type
-        self.enable_replica_index = enable_replica_index
-        self.eviction_policy = eviction_policy
-        self.bucket_priority = None
-        self.lww = lww
-        if bucket_priority is not None:
+        self.server = bucket_params['server']
+        self.bucket = bucket_params['bucket_name']
+        self.replicas = bucket_params['replicas']
+        self.port = bucket_params['port']
+        self.size = bucket_params['size']
+        self.password = bucket_params['password']
+        self.bucket_type = bucket_params['bucket_type']
+        self.enable_replica_index = bucket_params['enable_replica_index']
+        self.eviction_policy = bucket_params['eviction_policy']
+        self.lww = bucket_params['lww']
+        self.flush_enabled = bucket_params['flush_enabled']
+        if bucket_params['bucket_priority'] is None or bucket_params['bucket_priority'].lower() is 'low':
+            self.bucket_priority = 3
+        else:
             self.bucket_priority = 8
 
     def execute(self, task_manager):
@@ -257,6 +267,7 @@ class BucketCreateTask(Task):
                                saslPassword=self.password,
                                bucketType=self.bucket_type,
                                replica_index=self.enable_replica_index,
+                               flushEnabled=self.flush_enabled,
                                evictionPolicy=self.eviction_policy,
                                threadsNumber=self.bucket_priority,
                                lww=self.lww
@@ -270,6 +281,7 @@ class BucketCreateTask(Task):
                                saslPassword=self.password,
                                bucketType=self.bucket_type,
                                replica_index=self.enable_replica_index,
+                               flushEnabled=self.flush_enabled,
                                evictionPolicy=self.eviction_policy,
                                lww=self.lww)
             self.state = CHECKING
@@ -281,8 +293,7 @@ class BucketCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -331,10 +342,8 @@ class BucketDeleteTask(Task):
 
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
             self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
-            self.set_exception(e)
-
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -347,9 +356,8 @@ class BucketDeleteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
             self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30,
@@ -454,6 +462,7 @@ class RebalanceTask(Task):
         self.start_time = time.time()
 
     def check(self, task_manager):
+        status = None
         progress = -100
         try:
             if self.monitor_vbuckets_shuffling:
@@ -471,7 +480,8 @@ class RebalanceTask(Task):
                             self.log.error(msg)
                             self.log.error("Old vbuckets: %s, new vbuckets %s" % (self.old_vbuckets, new_vbuckets))
                             raise Exception(msg)
-            progress = self.rest._rebalance_progress()
+            (status, progress) = self.rest._rebalance_status_and_progress()
+            self.log.info("Rebalance - status: %s, progress: %s", status, progress)
             # if ServerUnavailableException
             if progress == -100:
                 self.retry_get_progress += 1
@@ -487,15 +497,15 @@ class RebalanceTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught in {0} sec".
-                          format(time.time() - self.start_time))
-            self.set_exception(e)
+            self.set_unexpected_exception(e, " in {0} sec".format(time.time() - self.start_time))
         retry_get_process_num = 25
         if self.rest.is_cluster_mixed():
             """ for mix cluster, rebalance takes longer """
             self.log.info("rebalance in mix cluster")
             retry_get_process_num = 40
-        if progress != -1 and progress != 100:
+        # we need to wait for status to be 'none' (i.e. rebalance actually finished and
+        # not just 'running' and at 100%) before we declare ourselves done
+        if progress != -1 and status != 'none':
             if self.retry_get_progress < retry_get_process_num:
                 task_manager.schedule(self, 10)
             else:
@@ -592,16 +602,18 @@ class StatsWaitTask(Task):
     def _stringify_servers(self):
         return ''.join([`server.ip + ":" + str(server.port)` for server in self.servers])
 
-    def _get_connection(self, server):
+    def _get_connection(self, server, admin_user='cbadminbucket',admin_pass='password'):
         if not self.conns.has_key(server):
             for i in xrange(3):
                 try:
-                    self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+                    self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
+                                                                             admin_pass=admin_pass)
                     return self.conns[server]
                 except (EOFError, socket.error):
                     self.log.error("failed to create direct client, retry in 1 sec")
                     time.sleep(1)
-            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
+                                                                     admin_pass=admin_pass)
         return self.conns[server]
 
     def _compare(self, cmp_type, a, b):
@@ -657,7 +669,14 @@ class GenericLoadingTask(Thread, Task):
         self.batch_size = batch_size
         self.pause = pause_secs
         self.timeout = timeout_secs
+        self.server = server
+        self.bucket = bucket
         self.client = VBucketAwareMemcached(RestConnection(server), bucket)
+        self.process_concurrency = THROUGHPUT_CONCURRENCY
+        # task queue's for synchronization
+        process_manager = Manager()
+        self.wait_queue = process_manager.Queue()
+        self.shared_kvstore_queue = process_manager.Queue()
 
     def execute(self, task_manager):
         self.start()
@@ -699,6 +718,7 @@ class GenericLoadingTask(Thread, Task):
         except Exception as error:
             self.state = FINISHED
             self.set_exception(error)
+
 
     def _unlocked_read(self, partition, key):
         try:
@@ -805,16 +825,27 @@ class GenericLoadingTask(Thread, Task):
             self.state = FINISHED
             self.set_exception(error)
 
+
     # start of batch methods
-    def _create_batch(self, partition_keys_dic, key_val):
+    def _create_batch_client(self, key_val, shared_client = None):
+        """
+        standalone method for creating key/values in batch (sans kvstore)
+
+        arguments:
+            key_val -- array of key/value dicts to load size = self.batch_size
+            shared_client -- optional client to use for data loading
+        """
         try:
             self._process_values_for_create(key_val)
-            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
-            self._populate_kvstore(partition_keys_dic, key_val)
+            client = shared_client or self.client
+            client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
         except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
             self.state = FINISHED
             self.set_exception(error)
 
+    def _create_batch(self, partition_keys_dic, key_val):
+            self._create_batch_client(key_val)
+            self._populate_kvstore(partition_keys_dic, key_val)
 
     def _update_batch(self, partition_keys_dic, key_val):
         try:
@@ -860,6 +891,8 @@ class GenericLoadingTask(Thread, Task):
             except ValueError:
                 index = random.choice(range(len(value)))
                 value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            except TypeError:
+                 value = json.dumps(value)
             finally:
                 key_val[key] = value
 
@@ -909,6 +942,7 @@ class LoadDocumentsTask(GenericLoadingTask):
         self.exp = exp
         self.flag = flag
         self.only_store_hash = only_store_hash
+
         if proxy_client:
             self.log.info("Changing client to proxy %s:%s..." % (proxy_client.host,
                                                               proxy_client.port))
@@ -917,7 +951,7 @@ class LoadDocumentsTask(GenericLoadingTask):
     def has_next(self):
         return self.generator.has_next()
 
-    def next(self):
+    def next(self, override_generator = None):
         if self.batch_size == 1:
             key, value = self.generator.next()
             partition = self.kv_store.acquire_partition(key)
@@ -940,8 +974,8 @@ class LoadDocumentsTask(GenericLoadingTask):
             self.kv_store.release_partition(key)
 
         else:
-            # do batch things
-            key_value = self.generator.next_batch()
+            doc_gen = override_generator or self.generator
+            key_value = doc_gen.next_batch()
             partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
             if self.op_type == 'create':
                 self._create_batch(partition_keys_dic, key_value)
@@ -971,6 +1005,17 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             for i in generators:
                 self.generators.append(BatchedDocumentGenerator(i, batch_size))
 
+        # only run high throughput for batch-create workloads
+        # also check number of input generators isn't greater than
+        # process_concurrency as too many generators become inefficient
+        self.is_high_throughput_mode = False
+        if ALLOW_HTP:
+            self.is_high_throughput_mode = self.op_type == "create" and \
+                self.batch_size > 1 and \
+                len(self.generators) < self.process_concurrency
+
+        self.input_generators = generators
+
         self.op_types = None
         self.buckets = None
         if isinstance(op_type, list):
@@ -987,6 +1032,17 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             if len(self.op_types) != len(self.buckets):
                 self.state = FINISHED
                 self.set_exception(Exception("not all generators have bucket specified!"))
+
+        # check if running in high throughput mode or normal
+        if self.is_high_throughput_mode:
+            self.run_high_throughput_mode()
+        else:
+            self.run_normal_throughput_mode()
+
+        self.state = FINISHED
+        self.set_result(True)
+
+    def run_normal_throughput_mode(self):
         iterator = 0
         for generator in self.generators:
             self.generator = generator
@@ -997,9 +1053,113 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             while self.has_next() and not self.done():
                 self.next()
             iterator += 1
-        self.state = FINISHED
-        self.set_result(True)
 
+    def run_high_throughput_mode(self):
+
+        # high throughput mode requires partitioning the doc generators
+        self.generators = []
+        for gen in self.input_generators:
+            gen_start = int(gen.start)
+            gen_end = max(int(gen.end), 1)
+            gen_range = max(int(gen.end/self.process_concurrency), 1)
+            for pos in range(gen_start, gen_end, gen_range):
+                partition_gen = copy.deepcopy(gen)
+                partition_gen.start = pos
+                partition_gen.itr = pos
+                partition_gen.end = pos+gen_range
+                if partition_gen.end > gen.end:
+                    partition_gen.end = gen.end
+                batch_gen = BatchedDocumentGenerator(
+                        partition_gen,
+                        self.batch_size)
+                self.generators.append(batch_gen)
+
+        iterator = 0
+        all_processes = []
+        for generator in self.generators:
+
+            # only start processing when there resources available
+            CONCURRENCY_LOCK.acquire()
+
+            generator_process = Process(
+                target=self.run_generator,
+                args=(generator, iterator))
+            generator_process.start()
+            iterator += 1
+            all_processes.append(generator_process)
+
+            # add child process to wait queue
+            self.wait_queue.put(iterator)
+
+        # wait for all child processes to finish
+        self.wait_queue.join()
+
+        # merge kvstore partitions
+        while self.shared_kvstore_queue.empty() is False:
+
+            # get partitions created by child process
+            rv =  self.shared_kvstore_queue.get()
+            if rv["err"] is not None:
+                raise Exception(rv["err"])
+
+            # merge child partitions with parent
+            generator_partitions = rv["partitions"]
+            self.kv_store.merge_partitions(generator_partitions)
+
+            # terminate child process
+            iterator-=1
+            all_processes[iterator].terminate()
+
+    def run_generator(self, generator, iterator):
+
+        # create a tmp kvstore to track work
+        tmp_kv_store = KVStore()
+        rv = {"err": None, "partitions": None}
+
+        try:
+            client = VBucketAwareMemcached(
+                    RestConnection(self.server),
+                    self.bucket)
+            if self.op_types:
+                self.op_type = self.op_types[iterator]
+            if self.buckets:
+                self.bucket = self.buckets[iterator]
+
+            while generator.has_next() and not self.done():
+
+                # generate
+                key_value = generator.next_batch()
+
+                # create
+                self._create_batch_client(key_value, client)
+
+                # cache
+                self.cache_items(tmp_kv_store, key_value)
+
+        except Exception as ex:
+            rv["err"] = ex
+        else:
+            rv["partitions"] = tmp_kv_store.get_partitions()
+        finally:
+            # share the kvstore from this generator
+            self.shared_kvstore_queue.put(rv)
+            self.wait_queue.task_done()
+            # release concurrency lock
+            CONCURRENCY_LOCK.release()
+
+
+    def cache_items(self, store, key_value):
+        """
+            unpacks keys,values and adds them to provided store
+        """
+        for key, value in key_value.iteritems():
+            if self.only_store_hash:
+                value = str(crc32.crc32_hash(value))
+            store.partition(key)["partition"].set(
+                key,
+                value,
+                self.exp,
+                self.flag)
 
 class ESLoadGeneratorTask(Task):
     """
@@ -1229,7 +1389,6 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             self.state = FINISHED
             self.set_exception(Exception("Bad operation type: %s" % self.op_type))
         self.kv_store.release_partitions(partition_keys_dic.keys())
-
 
     def _create_batch(self, partition_keys_dic, key_val):
         try:
@@ -1761,8 +1920,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught: {0}".format(e))
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _check_key_revId(self, key, ignore_meta_data=[]):
         src_meta_data = self.__get_meta_data(self.client_src, key)
@@ -1972,8 +2130,7 @@ class ViewCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
         try:
             self.rest.create_design_document(self.bucket, ddoc)
@@ -1987,8 +2144,7 @@ class ViewCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2034,13 +2190,11 @@ class ViewCreateTask(Task):
                 task_manager.schedule(self, 2)
             else:
                 self.state = FINISHED
-                self.log.error("Unexpected Exception Caught")
-                self.set_exception(e)
+                self.set_unexpected_exception(e)
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _check_ddoc_revision(self):
         valid = False
@@ -2056,8 +2210,7 @@ class ViewCreateTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
         return valid
 
@@ -2103,8 +2256,7 @@ class ViewCreateTask(Task):
                         self.log.info("Unexpected Exception Caught. Retrying.")
                         time.sleep(2)
                     else:
-                        self.log.error("Unexpected Exception Caught")
-                        self.set_exception(e)
+                        self.set_unexpected_exception(e)
                         self.state = FINISHED
                         break
             else:
@@ -2155,8 +2307,7 @@ class ViewDeleteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2175,8 +2326,7 @@ class ViewDeleteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class ViewQueryTask(Task):
     def __init__(self, server, design_doc_name, view_name,
@@ -2214,8 +2364,7 @@ class ViewQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2255,8 +2404,7 @@ class ViewQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class N1QLQueryTask(Task):
     def __init__(self,
@@ -2307,8 +2455,7 @@ class N1QLQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2335,8 +2482,7 @@ class N1QLQueryTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class CreateIndexTask(Task):
     def __init__(self,
@@ -2417,8 +2563,7 @@ class BuildIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2433,8 +2578,7 @@ class BuildIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class MonitorIndexTask(Task):
     def __init__(self,
@@ -2466,8 +2610,7 @@ class MonitorIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2481,8 +2624,7 @@ class MonitorIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class DropIndexTask(Task):
     def __init__(self,
@@ -2514,8 +2656,7 @@ class DropIndexTask(Task):
         # catch and set all unexpected exceptions
         except DropIndexException as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -2532,8 +2673,7 @@ class DropIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class MonitorViewQueryResultsTask(Task):
     def __init__(self, servers, design_doc_name, view,
@@ -2802,8 +2942,7 @@ class ModifyFragmentationConfigTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 
 class MonitorActiveTask(Task):
@@ -2970,8 +3109,7 @@ class MonitorViewFragmentationTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 
     def _get_current_auto_compaction_percentage(self):
@@ -3093,8 +3231,7 @@ class ViewCompactionTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     # verify compaction history incremented and some defraging occurred
     def check(self, task_manager):
@@ -3171,8 +3308,7 @@ class ViewCompactionTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _get_compaction_details(self):
         status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
@@ -3210,8 +3346,7 @@ class FailoverTask(Task):
 
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _failover_nodes(self, task_manager):
         rest = RestConnection(self.servers[0])
@@ -3257,8 +3392,7 @@ class GenerateExpectedViewResultsTask(Task):
             task_manager.schedule(self)
         except Exception, ex:
             self.state = FINISHED
-            self.log.error("Unexpected Exception: %s" % str(ex))
-            self.set_exception(ex)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -3719,8 +3853,7 @@ class BucketFlushTask(Task):
 
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
         try:
@@ -3733,8 +3866,7 @@ class BucketFlushTask(Task):
             self.state = FINISHED
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
 class MonitorDBFragmentationTask(Task):
 
@@ -4030,8 +4162,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     # verify compaction history incremented and some defraging occurred
     def check(self, task_manager):
@@ -4105,8 +4236,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
-            self.set_exception(e)
+            self.set_unexpected_exception(e)
 
     def _get_disk_size(self):
         nodes_ddoc_info = MonitorViewFragmentationTask.aggregate_ddoc_info(self.rest, self.design_doc_name,
@@ -4452,50 +4582,197 @@ class EnterpriseCompactTask(Task):
         else:
             task_manager.schedule(self, 10)
 
-class GenericAutoFailoverFailureTask(Task, Thread):
-    def __init__(self, timeout_secs=60):
-        Thread.__init__(self)
-        Task.__init__(self, "autofailover_failure_task")
-        self.timeout = timeout_secs
+class CBASQueryExecuteTask(Task):
+    def __init__(self, server, cbas_endpoint, statement, mode=None, pretty=True):
+        Task.__init__(self, "cbas_query_execute_task")
+        self.server = server
+        self.cbas_endpoint = cbas_endpoint
+        self.statement = statement
+        self.mode = mode
+        self.pretty = pretty
+        self.response = {}
+        self.passed = True
 
     def execute(self, task_manager):
-        self.start()
-        self.state = EXECUTING
+        try:
+            rest = RestConnection(self.server)
+            self.response = json.loads(rest.execute_statement_on_cbas(self.statement,
+                                           self.mode, self.pretty, 70))
+            if self.response:
+                self.state = CHECKING
+                task_manager.schedule(self)
+            else:
+                self.log.info("Some error")
+                self.state = FINISHED
+                self.passed = False
+                self.set_result(False)
+        # catch and set all unexpected exceptions
+
+        except Exception as e:
+            self.state = FINISHED
+            self.passed = False
+            self.set_unexpected_exception(e)
 
     def check(self, task_manager):
-        pass
+        try:
+            if "errors" in self.response:
+                errors = self.response["errors"]
+            else:
+                errors = None
 
-    def run(self):
-        while self.has_next() and not self.done():
-            self.next()
-        self.state = FINISHED
-        self.set_result(True)
+            if "results" in self.response:
+                results = self.response["results"]
+            else:
+                results = None
 
-    def has_next(self):
-        raise NotImplementedError
+            if "handle" in self.response:
+                handle = self.response["handle"]
+            else:
+                handle = None
 
-    def next(self):
-        raise NotImplementedError
+            if self.mode != "async":
+                if self.response["status"] == "success":
+                    self.set_result(True)
+                    self.passed = True
+                else:
+                    self.log.info(errors)
+                    self.passed = False
+                    self.set_result(False)
+            else:
+                if self.response["status"] == "started":
+                    self.set_result(True)
+                    self.passed = True
+                else:
+                    self.log.info(errors)
+                    self.passed = False
+                    self.set_result(False)
+            self.state = FINISHED
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.set_unexpected_exception(e)
 
 
-class AutoFailoverNodesFailureTask(GenericAutoFailoverFailureTask):
-    def __init__(self, servers_to_fail, failure_type, timeout, pause=0):
-        GenericAutoFailoverFailureTask.__init__(timeout)
+class AutoFailoverNodesFailureTask(Task):
+    def __init__(self, master, servers_to_fail, failure_type, timeout,
+                 pause=0, expect_auto_failover=True, timeout_buffer=3,
+                 check_for_failover=True, failure_timers=None):
+        Task.__init__(self, "AutoFailoverNodesFailureTask")
+        self.master = master
         self.servers_to_fail = servers_to_fail
         self.num_servers_to_fail = self.servers_to_fail.__len__()
         self.itr = 0
         self.failure_type = failure_type
+        self.timeout = timeout
         self.pause = pause
-        self.log.info("")
+        self.expect_auto_failover = expect_auto_failover
+        self.check_for_autofailover = check_for_failover
+        self.start_time = 0
+        self.timeout_buffer = timeout_buffer
+        self.current_failure_node = self.servers_to_fail[0]
+        self.max_time_to_wait_for_failover = self.timeout + \
+                                             self.timeout_buffer + 60
+        if failure_timers is None:
+            failure_timers = []
+        self.failure_timers = failure_timers
+        self.taskmanager = None
+        self.rebalance_in_progress = False
 
     def execute(self, task_manager):
-        try:
-            self.log.info("")
-        except:
-            self.log.info("")
+        self.taskmanager = task_manager
+        rest = RestConnection(self.master)
+        if rest._rebalance_progress_status() == "running":
+            self.rebalance_in_progress = True
+        while self.has_next() and not self.done():
+            self.next()
+            if self.pause > 0 and self.pause > self.timeout:
+                self.check(task_manager)
+        if self.pause == 0 or 0 < self.pause < self.timeout:
+            self.check(task_manager)
+        self.state = FINISHED
+        self.set_result(True)
 
     def check(self, task_manager):
-        self.log.info("")
+        if not self.check_for_autofailover:
+            self.state = EXECUTING
+            return
+        rest = RestConnection(self.master)
+        max_timeout = self.timeout + self.timeout_buffer
+        if self.start_time == 0:
+            message = "Did not inject failure in the system."
+            rest.print_UI_logs(10)
+            self.log.error(message)
+            self.state = FINISHED
+            self.set_result(False)
+            self.set_exception(AutoFailoverException(message))
+        if self.rebalance_in_progress:
+            status, stop_time = self._check_if_rebalance_in_progress(120)
+            if not status:
+                if stop_time == -1:
+                    message = "Rebalance already completed before failover " \
+                              "of node"
+                    self.log.error(message)
+                    self.state = FINISHED
+                    self.set_result(False)
+                    self.set_exception(AutoFailoverException(message))
+                elif stop_time == -2:
+                    message = "Rebalance failed but no failed autofailover " \
+                              "message was printed in logs"
+                    self.log.warning(message)
+                else:
+                    message = "Rebalance not failed even after 2 minutes " \
+                              "after node failure."
+                    self.log.error(message)
+                    rest.print_UI_logs(10)
+                    self.state = FINISHED
+                    self.set_result(False)
+                    self.set_exception(AutoFailoverException(message))
+            else:
+                self.start_time = stop_time
+        autofailover_initiated, time_taken = \
+            self._wait_for_autofailover_initiation(
+                self.max_time_to_wait_for_failover)
+        if self.expect_auto_failover:
+            if autofailover_initiated:
+                if time_taken < max_timeout + 1:
+                    self.log.info("Autofailover of node {0} successfully "
+                                  "initiated in {1} sec".format(
+                        self.current_failure_node.ip, time_taken))
+                    rest.print_UI_logs(10)
+                    self.state = EXECUTING
+                else:
+                    message = "Autofailover of node {0} was initiated after " \
+                              "the timeout period. Expected  timeout: {1} " \
+                              "Actual time taken: {2}".format(
+                        self.current_failure_node.ip, self.timeout, time_taken)
+                    self.log.error(message)
+                    rest.print_UI_logs(10)
+                    self.state = FINISHED
+                    self.set_result(False)
+                    self.set_exception(AutoFailoverException(message))
+            else:
+                message = "Autofailover of node {0} was not initiated after " \
+                          "the expected timeout period of {1}".format(
+                    self.current_failure_node.ip, self.timeout)
+                rest.print_UI_logs(10)
+                self.log.error(message)
+                self.state = FINISHED
+                self.set_result(False)
+                self.set_exception(AutoFailoverException(message))
+        else:
+            if autofailover_initiated:
+                message = "Node {0} was autofailed over but no autofailover " \
+                          "of the node was expected".format(
+                    self.current_failure_node.ip)
+                rest.print_UI_logs(10)
+                self.log.error(message)
+                self.state = FINISHED
+                self.set_result(False)
+                self.set_exception(AutoFailoverException(message))
+            else:
+                self.log.info("Node not autofailed over as expected")
+                rest.print_UI_logs(10)
+                self.state = EXECUTING
 
     def has_next(self):
         return self.itr < self.num_servers_to_fail
@@ -4503,41 +4780,75 @@ class AutoFailoverNodesFailureTask(GenericAutoFailoverFailureTask):
     def next(self):
         if self.pause != 0:
             time.sleep(self.pause)
-        server_to_fail = self.servers_to_fail[self.itr]
+            if self.pause > self.timeout and self.itr != 0:
+                rest = RestConnection(self.master)
+                status = rest.reset_autofailover()
+                self._rebalance()
+                if not status:
+                    self.state = FINISHED
+                    self.set_result(False)
+                    self.set_exception(Exception("Reset of autofailover "
+                                                 "count failed"))
+        self.current_failure_node = self.servers_to_fail[self.itr]
+        self.log.info("before failure time: {}".format(time.ctime(time.time())))
         if self.failure_type == "enable_firewall":
-            self._enable_firewall(server_to_fail)
+            self._enable_firewall(self.current_failure_node)
         elif self.failure_type == "disable_firewall":
-            self._disable_firewall(server_to_fail)
+            self._disable_firewall(self.current_failure_node)
         elif self.failure_type == "restart_couchbase":
-            self._restart_couchbase_server(server_to_fail)
+            self._restart_couchbase_server(self.current_failure_node)
         elif self.failure_type == "stop_couchbase":
-            self._stop_couchbase_server(server_to_fail)
+            self._stop_couchbase_server(self.current_failure_node)
         elif self.failure_type == "start_couchbase":
-            self._start_couchbase_server(server_to_fail)
+            self._start_couchbase_server(self.current_failure_node)
         elif self.failure_type == "restart_network":
-            self._stop_restart_network(server_to_fail, self.timeout)
+            self._stop_restart_network(self.current_failure_node,
+                                       self.timeout + self.timeout_buffer + 30)
         elif self.failure_type == "restart_machine":
-            self._restart_machine(server_to_fail, self.timeout)
+            self._restart_machine(self.current_failure_node)
+        elif self.failure_type == "stop_memcached":
+            self._stop_memcached(self.current_failure_node)
+        elif self.failure_type == "start_memcached":
+            self._start_memcached(self.current_failure_node)
+        elif self.failure_type == "network_split":
+            self._block_incoming_network_from_node(self.servers_to_fail[0],
+                                                   self.servers_to_fail[
+                                                       self.itr + 1])
+            self.itr += 1
+        self.log.info("Start time = {}".format(time.ctime(self.start_time)))
         self.itr += 1
 
     def _enable_firewall(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
         RemoteUtilHelper.enable_firewall(node)
+        self.log.info("Enabled firewall on {}".format(node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
 
     def _disable_firewall(self, node):
         shell = RemoteMachineShellConnection(node)
         shell.disable_firewall()
 
     def _restart_couchbase_server(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         shell.restart_couchbase()
         shell.disconnect()
         self.log.info("Restarted the couchbase server on {}".format(node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
 
     def _stop_couchbase_server(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         shell.stop_couchbase()
         shell.disconnect()
         self.log.info("Stopped the couchbase server on {}".format(node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
 
     def _start_couchbase_server(self, node):
         shell = RemoteMachineShellConnection(node)
@@ -4546,20 +4857,209 @@ class AutoFailoverNodesFailureTask(GenericAutoFailoverFailureTask):
         self.log.info("Started the couchbase server on {}".format(node))
 
     def _stop_restart_network(self, node, stop_time):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         shell.stop_network(stop_time)
         shell.disconnect()
         self.log.info("Stopped the network for {0} sec and restarted the "
                       "network on {1}".format(stop_time, node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
 
-    def _restart_machine(self, node, timeout=120):
+    def _restart_machine(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         command = "/sbin/reboot"
         shell.execute_command(command=command)
-        self.log.info("Waiting for the rebooted machine to be back up")
-        time.sleep(timeout)
-        try:
-            shell = RemoteMachineShellConnection(node)
-        except:
-            self.log.info("Unable to connect to the host. Machine has not "
-                          "restarted")
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _stop_memcached(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.stop_memcached()
+        self.log.info("Killed memcached. {0} {1}".format(o, r))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _start_memcached(self, node):
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.start_memcached()
+        self.log.info("Started back memcached. {0} {1}".format(o, r))
+        shell.disconnect()
+
+    def _block_incoming_network_from_node(self, node1, node2):
+        shell = RemoteMachineShellConnection(node1)
+        self.log.info("Adding {0} into iptables rules on {1}".format(
+            node1.ip, node2.ip))
+        command = "iptables -A INPUT -s {0} -j DROP".format(node2.ip)
+        shell.execute_command(command)
+        self.start_time = time.time()
+
+    def _check_for_autofailover_initiation(self, failed_over_node):
+        rest = RestConnection(self.master)
+        ui_logs = rest.get_logs(10)
+        ui_logs_text = [t["text"] for t in ui_logs]
+        ui_logs_time = [t["serverTime"] for t in ui_logs]
+        expected_log = "Starting failing over 'ns_1@{}'".format(
+            failed_over_node.ip)
+        if expected_log in ui_logs_text:
+            failed_over_time = ui_logs_time[ui_logs_text.index(expected_log)]
+            return True, failed_over_time
+        return False, None
+
+    def _wait_for_autofailover_initiation(self, timeout):
+        autofailover_initated = False
+        while time.time() < timeout + self.start_time:
+            autofailover_initated, failed_over_time = \
+                self._check_for_autofailover_initiation(
+                    self.current_failure_node)
+            if autofailover_initated:
+                end_time = self._get_mktime_from_server_time(failed_over_time)
+                time_taken = end_time - self.start_time
+                return autofailover_initated, time_taken
+        return autofailover_initated, -1
+
+    def _get_mktime_from_server_time(self, server_time):
+        time_format = "%Y-%m-%dT%H:%M:%S"
+        server_time = server_time.split('.')[0]
+        mk_time = time.mktime(time.strptime(server_time, time_format))
+        return mk_time
+
+    def _rebalance(self):
+        rest = RestConnection(self.master)
+        nodes = rest.node_statuses()
+        rest.rebalance(otpNodes=[node.id for node in nodes])
+        rebalance_progress = rest.monitorRebalance()
+        if not rebalance_progress:
+            self.set_result(False)
+            self.state = FINISHED
+            self.set_exception(Exception("Failed to rebalance after failover"))
+
+    def _check_if_rebalance_in_progress(self, timeout):
+        rest = RestConnection(self.master)
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                rebalance_status, progress = \
+                    rest._rebalance_status_and_progress()
+                if rebalance_status == "running":
+                    continue
+                elif rebalance_status is None and progress == 100:
+                    return False, -1
+            except RebalanceFailedException:
+                ui_logs = rest.get_logs(10)
+                ui_logs_text = [t["text"] for t in ui_logs]
+                ui_logs_time = [t["serverTime"] for t in ui_logs]
+                rebalace_failure_log = "Rebalance exited with reason"
+                for ui_log in ui_logs_text:
+                    if rebalace_failure_log in ui_log:
+                        rebalance_failure_time = ui_logs_time[
+                            ui_logs_text.index(ui_log)]
+                        failover_log = "Could not automatically fail over " \
+                                       "node ('ns_1@{}'). Rebalance is " \
+                                       "running.".format(
+                            self.current_failure_node.ip)
+                        if failover_log in ui_logs_text:
+                            return True, self._get_mktime_from_server_time(
+                                rebalance_failure_time)
+                        else:
+                            return False, -2
+        return False, -3
+
+
+class NodeDownTimerTask(Task):
+    def __init__(self, node, port=None, timeout=300):
+        Task.__init__(self, "NodeDownTimerTask")
+        self.log.info("Initializing NodeDownTimerTask")
+        self.node = node
+        self.port = port
+        self.timeout = timeout
+        self.start_time = 0
+
+    def execute(self, task_manager):
+        self.log.info("Starting execution of NodeDownTimerTask")
+        end_task = time.time() + self.timeout
+        while not self.done() and time.time() < end_task:
+            if not self.port:
+                try:
+                    self.start_time = time.time()
+                    response = os.system("ping -c 1 {} > /dev/null".format(
+                        self.node))
+                    if response != 0:
+                        self.log.info("Injected failure in {}. Caught "
+                                      "due to ping".format(self.node))
+                        self.state = FINISHED
+                        self.set_result(True)
+                        break
+                except Exception as e:
+                    self.log.warning("Unexpected exception caught {"
+                                     "}".format(e))
+                    self.state = FINISHED
+                    self.set_result(True)
+                    break
+                try:
+                    self.start_time = time.time()
+                    socket.socket().connect(("{}".format(self.node), 8091))
+                    socket.socket().close()
+                    socket.socket().connect(("{}".format(self.node), 11210))
+                    socket.socket().close()
+                except socket.error:
+                    self.log.info("Injected failure in {}. Caught due "
+                                  "to ports".format(self.node))
+                    self.state = FINISHED
+                    self.set_result(True)
+                    break
+            else:
+                try:
+                    self.start_time = time.time()
+                    socket.socket().connect(("{}".format(self.node),
+                                             int(self.port)))
+                    socket.socket().close()
+                    socket.socket().connect(("{}".format(self.node), 11210))
+                    socket.socket().close()
+                except socket.error:
+                    self.log.info("Injected failure in {}".format(self.node))
+                    self.state = FINISHED
+                    self.set_result(True)
+                    break
+        if time.time() >= end_task:
+            self.state = FINISHED
+            self.set_result(False)
+            self.log.info("Could not inject failure in {}".format(self.node))
+
+    def check(self, task_manager):
+        pass
+
+
+class NodeMonitorsAnalyserTask(Task):
+
+    def __init__(self, node, stop=False):
+        Task.__init__(self, "NodeMonitorAnalyzerTask")
+        self.command = "dict:to_list(node_status_analyzer:get_nodes())"
+        self.master = node
+        self.rest = RestConnection(self.master)
+        self.stop = stop
+
+    def execute(self, task_manager):
+        while not self.done() and not self.stop:
+            self.status, self.content = self.rest.diag_eval(self.command,
+                                                            print_log=False)
+            self.state = CHECKING
+
+    def check(self, task_manager):
+        if self.status and self.content:
+            self.log.info("NodeStatus: {}".format(self.content))
+            if not self.master.ip in self.content:
+                self.set_result(False)
+                self.state = FINISHED
+                self.set_exception(Exception("Node status monitors does not "
+                                             "contain the node status"))
+                return
+            time.sleep(1)
+            self.state = EXECUTING
+        else:
+            raise Exception("Monitors not working correctly")

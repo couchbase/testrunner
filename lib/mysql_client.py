@@ -69,6 +69,18 @@ class MySQLClient(object):
             columns.append({"column_name":row[0], "type":FieldType.get_info(row[1]).lower()})
         return columns, rows
 
+    def _execute_sub_query(self, query = ""):
+        row_subquery =[]
+        cur = self.mysql_connector_client.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
+        for row in rows:
+            if len(rows)==1:
+                return row[0]
+            row_subquery.append(row[0])
+        return row_subquery
+
+
     def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key = ""):
         primary_key_index = 0
         count = 0
@@ -358,7 +370,10 @@ class MySQLClient(object):
         for n1ql_query in n1ql_queries:
             check = True
             if not helper._check_deeper_query_condition(n1ql_query):
-                if "SUBQUERY" in n1ql_query:
+                if "SUBTABLE" in n1ql_query:
+                     map = helper._convert_sql_template_to_value_with_subqueryenhancements(
+                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+                elif "SUBQUERY" in n1ql_query :
                     map = helper._convert_sql_template_to_value_with_subqueries(
                     n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
                 else:

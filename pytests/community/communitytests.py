@@ -440,3 +440,18 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
             self.fail("XDCR Filter feature should not available in "
                       "Community Edition")
         self.remote.disconnect()
+
+    def test_lww(self):
+        server = self._servers[0]
+        conn = RemoteMachineShellConnection(server)
+        output, error = conn.execute_command('curl -X POST -u Administrator:password '
+                                                    'http://{0}:8091/pools/default/buckets '
+                                                    '-d name=default '
+                                                    '-d conflictResolutionType=lww '
+                                                    '-d authType=sasl '
+                                                    '-d ramQuotaMB=100 '.format(server.ip))
+        conn.log_command_output(output, error)
+        if output and "Conflict resolution type 'lww' is supported only in enterprise edition" not in str(output[0]):
+            self.fail("XDCR LWW feature should not be available in Community Edition")
+        self.log.info("XDCR LWW feature not available in Community Edition as expected")
+        conn.disconnect()

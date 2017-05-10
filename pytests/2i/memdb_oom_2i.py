@@ -1,4 +1,5 @@
 import logging
+import random
 
 from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.query_definitions import QueryDefinition
@@ -31,10 +32,12 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
             index_name = "index_name_"+str(x)
-            query_definition = QueryDefinition(index_name=index_name, index_fields = ["job_title"],
-                        query_template = self.query_template, groups = ["simple"])
+            query_definition = QueryDefinition(
+                index_name=index_name, index_fields=["VMs"],
+                query_template=self.query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
-        self.multi_create_index(buckets=self.buckets, query_definitions=self.load_query_definitions,
+        self.multi_create_index(buckets=self.buckets,
+                                query_definitions=self.load_query_definitions,
                                 deploy_node_info=self.deploy_node_info)
         log.info("Setting indexer memory quota to 256 MB...")
         rest.set_indexer_memoryQuota(indexMemoryQuota=256)
@@ -50,6 +53,21 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         3. Validate if the indexer state is Paused from index Stats
         :return:
         """
+        self._push_indexer_off_the_cliff()
+        self.assertTrue(self._validate_index_status_oom(), "Indexes ain't in Paused State")
+        self.assertTrue(self._validate_indexer_status_oom(), "Indexer Status isn't Paused")
+
+    def test_plasma_oom_for_disable_persistence(self):
+        self.multi_drop_index(query_definitions=self.load_query_definitions)
+        doc = {"indexer.plasma.disablePersistence": True}
+        self.rest.set_index_settings(doc)
+        self.sleep(15)
+        self.multi_create_index(buckets=self.buckets,
+                                query_definitions=self.load_query_definitions,
+                                deploy_node_info=self.deploy_node_info)
+        self.multi_create_index(buckets=self.buckets,
+                                query_definitions=self.query_definitions,
+                                deploy_node_info=self.deploy_node_info)
         self._push_indexer_off_the_cliff()
         self.assertTrue(self._validate_index_status_oom(), "Indexes ain't in Paused State")
         self.assertTrue(self._validate_indexer_status_oom(), "Indexer Status isn't Paused")

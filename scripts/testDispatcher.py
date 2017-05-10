@@ -37,17 +37,21 @@ def main():
     usage = '%prog -s suitefile -v version -o OS'
     parser = OptionParser(usage)
     parser.add_option('-v','--version', dest='version')
-    parser.add_option('-r','--run', dest='run')
+    parser.add_option('-r','--run', dest='run')   # run is ambiguous but it means 12 hour or weekly
     parser.add_option('-o','--os', dest='os')
     parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
     parser.add_option('-c','--component', dest='component', default=None)
     parser.add_option('-p','--poolId', dest='poolId', default='12hour')
-    parser.add_option('-t','--test', dest='test', default=False, action='store_true')
+    parser.add_option('-t','--test', dest='test', default=False, action='store_true') # use the test Jenkins
     parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y','--serverType', dest='serverType', default='VM')
+    parser.add_option('-y','--serverType', dest='serverType', default='VM')   # or could be Docker
     parser.add_option('-u','--url', dest='url', default=None)
     parser.add_option('-j','--jenkins', dest='jenkins', default=None)
+    parser.add_option('-b','--branch', dest='branch', default='master')
+
+    # dashboardReportedParameters is of the form param1=abc,param2=def
+    parser.add_option('-d','--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
 
     options, args = parser.parse_args()
 
@@ -65,7 +69,23 @@ def main():
 
     print 'url is', options.url
 
+    print 'the reportedParameters are', options.dashboardReportedParameters
 
+
+    # What do we do with any reported parameters?
+    # 1. Append them to the extra (testrunner) parameters
+    # 2. Append the right hand of the equals sign to the subcomponent to make a report descriptor
+
+
+    if options.extraParameters is None:
+        if options.dashboardReportedParameters is None:
+            runTimeTestRunnerParameters = None
+        else:
+            runTimeTestRunnerParameters = options.dashboardReportedParameters
+    else:
+        runTimeTestRunnerParameters = options.extraParameters
+        if options.dashboardReportedParameters is not None:
+            runTimeTestRunnerParameters = options.extraParameters + ',' + options.dashboardReportedParameters
 
 
 
@@ -167,7 +187,6 @@ def main():
 
 
 
-    # Docker goes somewhere else
     launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
 
     # optional add [-docker] [-Jenkins extension]
@@ -183,7 +202,7 @@ def main():
     # this are VM/Docker dependent - or maybe not
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}'
+                         'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}&branch={10}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
 
@@ -222,8 +241,17 @@ def main():
 
 
                 if haveTestToLaunch:
+                    # build the dashboard descriptor
+                    dashboardDescriptor = urllib.quote(testsToLaunch[i]['subcomponent'])
+                    if options.dashboardReportedParameters is not None:
+                        for o in options.dashboardReportedParameters.split(','):
+                            dashboardDescriptor += '_' + o.split('=')[1]
+
+                    # and this is the Jenkins descriptor
                     descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
                                         '-' + time.strftime('%b-%d-%X') + '-' + options.version )
+
+
                     # grab the server resources
                     # this bit is Docker/VM dependent
                     if options.serverType.lower() == 'docker':
@@ -252,21 +280,21 @@ def main():
 
 
                         # figure out the parameters, there are test suite specific, and added at dispatch time
-                        if options.extraParameters is None or options.extraParameters == 'None':
+                        if  runTimeTestRunnerParameters is None:
                             parameters = testsToLaunch[i]['parameters']
                         else:
                             if testsToLaunch[i]['parameters'] == 'None':
-                                parameters = options.extraParameters
+                                parameters = runTimeTestRunnerParameters
                             else:
-                                parameters = testsToLaunch[i]['parameters'] + ',' + options.extraParameters
+                                parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
 
 
                         url = launchString.format(options.version, testsToLaunch[i]['confFile'],
-                                    descriptor, testsToLaunch[i]['component'], testsToLaunch[i]['subcomponent'],
+                                    descriptor, testsToLaunch[i]['component'], dashboardDescriptor,
                                     testsToLaunch[i]['iniFile'],
                                     urllib.quote( parameters ), options.os, testsToLaunch[i]['initNodes'],
-                                    testsToLaunch[i]['installParameters'])
+                                    testsToLaunch[i]['installParameters'], options.branch)
 
 
                         if options.serverType.lower() != 'docker':
@@ -274,11 +302,10 @@ def main():
                             url = url + '&servers=' + urllib.quote(json.dumps(r2).replace(' ',''))
 
 
-                        print time.asctime( time.localtime(time.time()) ), '\n\nlaunching ', url
+                        print '\n', time.asctime( time.localtime(time.time()) ), 'launching ', url
 
 
                         if options.noLaunch:
-                            print 'would launch', url
                             # free the VMs
                             time.sleep(3)
                             if options.serverType.lower() == 'docker':
@@ -292,12 +319,14 @@ def main():
 
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-                        if options.serverType.lower() == 'docker':
+                        if options.noLaunch:
+                            pass # no sleeping necessary
+                        elif options.serverType.lower() == 'docker':
                             time.sleep(240)     # this is due to the docker port allocation race
                         else:
                             time.sleep(30)
                 else:
-                    print 'not enough VMs at this time'
+                    print 'not enough servers at this time'
                     time.sleep(POLL_INTERVAL)
             #endif checking for servers
 

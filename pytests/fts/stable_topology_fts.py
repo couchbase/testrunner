@@ -1,9 +1,15 @@
-import json
-from fts_base import FTSBaseTest
-from lib.membase.api.rest_client import RestConnection
-from lib.membase.api.exception import FTSException, ServerUnavailableException
-from TestInput import TestInputSingleton
 import copy
+import json
+from threading import Thread
+
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
+
+from TestInput import TestInputSingleton
+from fts_base import FTSBaseTest
+from lib.membase.api.exception import FTSException, ServerUnavailableException
+from lib.membase.api.rest_client import RestConnection
+
 
 class StableTopFTS(FTSBaseTest):
 
@@ -23,6 +29,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_default_index(self):
         plan_params = self.construct_plan_params()
         self.load_data()
+        self.sleep(10, "waiting 10s after batch_load...")
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
             self.wait_for_indexing_complete()
@@ -100,6 +107,105 @@ class StableTopFTS(FTSBaseTest):
     def test_match_none(self):
         self.run_default_index_query(query={"match_none": {}},
                                      expected_hits=0)
+
+    def test_match_consistency(self):
+        query = {"match_all": {}}
+        self.create_simple_default_index()
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                             zero_results_ok=zero_results_ok,
+                                             expected_hits=0,
+                                             consistency_level=self.consistency_level,
+                                             consistency_vectors=self.consistency_vectors
+                                            )
+            self.log.info("Hits: %s" % hits)
+            for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+                self.async_perform_update_delete(self.upd_del_fields)
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=self._num_items,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+
+    def test_match_consistency_error(self):
+        query = {"match_all": {}}
+        fts_node = self._cb_cluster.get_random_fts_node()
+        service_map = RestConnection(self._cb_cluster.get_master_node()).get_nodes_services()
+        # select FTS node to shutdown
+        for node_ip, services in service_map.iteritems():
+            ip = node_ip.split(':')[0]
+            node = self._cb_cluster.get_node(ip, node_ip.split(':')[1])
+            if node and 'fts' in services and 'kv' not in services:
+                fts_node = node
+                break
+        self.create_simple_default_index()
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=0,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+            try:
+                shell = RemoteMachineShellConnection(fts_node)
+                shell.stop_server()
+                for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+                    self.async_perform_update_delete(self.upd_del_fields)
+            finally:
+                shell = RemoteMachineShellConnection(fts_node)
+                shell.start_server()
+            # "status":"remote consistency error" => expected_hits=-1
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=-1,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert([fts_node], self, wait_if_warmup=True)
+            self.wait_for_indexing_complete()
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=self._num_items,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+
+    def test_match_consistency_long_timeout(self):
+        timeout = self._input.param("timeout", None)
+        query = {"match_all": {}}
+        self.create_simple_default_index()
+        zero_results_ok = True
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query,
+                                                zero_results_ok=zero_results_ok,
+                                                expected_hits=0,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
+            self.log.info("Hits: %s" % hits)
+            tasks = []
+            for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+                tasks.append(Thread(target=self.async_perform_update_delete, args=(self.upd_del_fields,)))
+            for task in tasks:
+                task.start()
+            num_items = self._num_items
+            if timeout is None or timeout <= 60000:
+                # Here we assume that the update takes more than 60 seconds
+                # when we use timeout <= 60 sec we get timeout error
+                # with None we have 60s by default
+                num_items = 0
+            try:
+                hits, _, _, _ = index.execute_query(query,
+                                                    zero_results_ok=zero_results_ok,
+                                                    expected_hits=num_items,
+                                                    consistency_level=self.consistency_level,
+                                                    consistency_vectors=self.consistency_vectors,
+                                                    timeout=timeout)
+            finally:
+                for task in tasks:
+                    task.join()
+            self.log.info("Hits: %s" % hits)
 
     def index_utf16_dataset(self):
         self.load_utf16_data()
@@ -215,28 +321,48 @@ class StableTopFTS(FTSBaseTest):
             hits2, _, _, _ = index.execute_query(self.sample_query)
         except Exception as e:
             # expected, pass test
-            self.log.error(" Expected exception: {0}".format(e))
+            self.log.info("Expected exception: {0}".format(e))
 
     def drop_bucket_check_index(self):
+        count = 0
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
         index = self.create_index(bucket, "default_index")
         self._cb_cluster.delete_bucket("default")
-        self.sleep(60, "waiting for bucket deletion to be known by fts")
-        status, _ = index.get_index_defn()
-        if status:
+        self.sleep(20, "waiting for bucket deletion to be known by fts")
+        try:
+            count = index.get_indexed_doc_count()
+        except Exception as e:
+            self.log.info("Expected exception: {0}".format(e))
+            # at this point, index has been deleted,
+            # remove index from list of indexes
+            self._cb_cluster.get_indexes().remove(index)
+        if count:
             self.fail("Able to retrieve index json from index "
                       "built on bucket that was deleted")
 
     def delete_index_having_alias(self):
         index, alias = self.create_simple_alias()
         self._cb_cluster.delete_fts_index(index.name)
-        try:
-            hits, _, _, _ = index.execute_query(self.sample_query)
-            if hits != 0:
-                self.fail("Query alias with deleted target returns query results!")
-        except Exception as e:
-            self.log.info("Expected exception :{0}".format(e))
+        hits, _, _, _ = alias.execute_query(self.sample_query)
+        self.log.info("Hits: {0}".format(hits))
+        if hits >= 0:
+            self.fail("Query alias with deleted target returns query results!")
+
+    def delete_index_having_alias_recreate_index_query(self):
+        index, alias = self.create_simple_alias()
+        hits1, _, _, _ = alias.execute_query(self.sample_query)
+        self.log.info("Hits: {0}".format(hits1))
+        new_index = copy.copy(index)
+        index.delete()
+        self.log.info("Recreating deleted index ...")
+        new_index.create()
+        self.wait_for_indexing_complete()
+        hits2, _, _, _ = alias.execute_query(self.sample_query)
+        self.log.info("Hits: {0}".format(hits2))
+        if hits1 != hits2:
+            self.fail("Hits from alias before index recreation: %s,"
+                      " after recreation: %s" %(hits1, hits2))
 
     def create_alias_on_deleted_index(self):
         self.load_employee_dataset()
@@ -279,6 +405,58 @@ class StableTopFTS(FTSBaseTest):
         index.update()
         _, defn = index.get_index_defn()
         self.log.info(defn['indexDef'])
+
+    def update_index_during_large_indexing(self):
+        """
+            MB-22410 - Updating index with a large dirty write queue
+            items = some millions defined at run_time using items param
+        """
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        self.load_employee_dataset()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_index(bucket, 'sample_index')
+        # wait till half the keys are indexed
+        self.wait_for_indexing_complete(self._num_items/2)
+        status, stat_value = rest.get_fts_stats(index_name=index.name,
+                                                bucket_name=bucket.name,
+                                                stat_name='num_recs_to_persist')
+        self.log.info("Data(metadata + docs) in write queue is {0}".
+                      format(stat_value))
+        self.partitions_per_pindex = 2
+        new_plan_param = self.construct_plan_params()
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(5, "Wait for index to get updated...")
+        self.is_index_partitioned_balanced(index=index)
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
+        # see if the index is still query-able with all data
+        self.wait_for_indexing_complete()
+        hits, _, _, _ = index.execute_query(self.sample_query,
+                                         zero_results_ok=False)
+        self.log.info("Hits: %s" % hits)
+
+    def delete_index_during_large_indexing(self):
+        """
+            MB-22410 - Deleting index with a large dirty write queue is slow
+            items = 5M
+        """
+        self.load_employee_dataset()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_index(bucket, 'sample_index')
+        # wait till half the keys are indexed
+        self.wait_for_indexing_complete(self._num_items/2)
+        index.delete()
+        self.sleep(5)
+        try:
+            _, defn = index.get_index_defn()
+            self.log.info(defn)
+            self.fail("ERROR: Index definition still exists after deletion! "
+                      "%s" %defn['indexDef'])
+        except Exception as e:
+            self.log.info("Expected exception caught: %s" % e)
 
     def edit_index_negative(self):
         self.load_employee_dataset()
@@ -332,6 +510,78 @@ class StableTopFTS(FTSBaseTest):
             self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
         self.run_query_and_compare(index)
+
+    def test_query_string_combinations(self):
+        """
+        uses RQG framework minus randomness for testing query-string combinations of '', '+', '-'
+        {
+
+            mterms := [
+                [],                         // none
+                ["+Wikipedia"],             // one term
+                ["+Wikipedia", "+English"], // two terms
+                ["+the"],                   // one term (stop word)
+                ["+the", "+English"],       // two terms (one stop)
+                ["+the", "+and"],           // two terms (both stop)
+            ]
+
+            sterms = [
+                [],                         // none
+                ["Category"],               // one term
+                ["Category", "United"],     // two terms
+                ["of"],                     // one term (stop word)
+                ["of", "United"],           // two terms (one stop)
+                ["of", "at"],               // two terms (both stop)
+            ]
+
+            nterms = [
+                [],                         // none
+                ["-language"],              // one term
+                ["-language", "-States"],   // two terms
+                ["-for"],                   // one term (stop word)
+                ["-for", "-States"],        // two terms (one stop)
+                ["-for", "-with"],          // two terms (both stop)
+            ]
+        }
+
+        """
+        self.load_data()
+
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        index.fts_queries = []
+        mterms = [[],
+                  ["+revision.text.#text:\"Wikipedia\""],
+                  ["+revision.text.#text:\"Wikipedia\"", "+revision.text.#text:\"English\""],
+                  ["+revision.text.#text:\"the\""],
+                  ["+revision.text.#text:\"the\"", "+revision.text.#text:\"English\""],
+                  ["+revision.text.#text:\"the\"", "+revision.text.#text:\"and\""]]
+        sterms = [[],
+                  ["revision.text.#text:\"Category\""],
+                  ["revision.text.#text:\"Category\"", "revision.text.#text:\"United\""],
+                  ["revision.text.#text:\"of\""],
+                  ["revision.text.#text:\"of\"", "revision.text.#text:\"United\""],
+                  ["revision.text.#text:\"of\"", "revision.text.#text:\"at\""]]
+        nterms = [[],
+                  ["-revision.text.#text:\"language\""],
+                  ["-revision.text.#text:\"language\"", "-revision.text.#text:\"States\""],
+                  ["-revision.text.#text:\"for\""],
+                  ["-revision.text.#text:\"for\"", "-revision.text.#text:\"States\""],
+                  ["-revision.text.#text:\"for\"", "-revision.text.#text:\"with\""]]
+        for mterm in mterms:
+            for sterm in sterms:
+                for nterm in nterms:
+                    clause  = (' '.join(mterm) + ' ' + ' '.join(sterm) + ' ' + ' '.join(nterm)).strip()
+                    query = {"query": clause}
+                    index.fts_queries.append(json.loads(json.dumps(query,ensure_ascii=False)))
+                    if self.compare_es:
+                        self.es.es_queries.append(json.loads(json.dumps({"query": {"query_string": query}},
+                                                                     ensure_ascii=False)))
+        self.run_query_and_compare(index)
+
 
     def index_edit_and_query_custom_mapping(self):
         """
@@ -485,9 +735,11 @@ class StableTopFTS(FTSBaseTest):
             query = json.loads(query)
         zero_results_ok = True
         for index in self._cb_cluster.get_indexes():
-            hits, _, _, _ = index.execute_query(query,
+            hits, matches, time_taken, status = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
-                                                expected_hits=expected_hits)
+                                                expected_hits=expected_hits,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
 
     def test_one_field_multiple_analyzer(self):
@@ -632,7 +884,9 @@ class StableTopFTS(FTSBaseTest):
             for index in self._cb_cluster.get_indexes():
                 hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
-                                                expected_hits=expected_hits)
+                                                expected_hits=expected_hits,
+                                                consistency_level=self.consistency_level,
+                                                consistency_vectors=self.consistency_vectors)
                 self.log.info("Hits: %s" % hits)
         except Exception as err:
             self.log.error(err)
@@ -859,14 +1113,14 @@ class StableTopFTS(FTSBaseTest):
                 hits, raw_hits, _, _ = index.execute_query(query=query,
                                                            zero_results_ok=zero_results_ok,
                                                            expected_hits=expected_hits,
-                                                           sort_fields=self.sort_fields,
+                                                           sort_fields=self.sort_fields_list,
                                                            return_raw_hits=True)
 
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Doc IDs: %s" % raw_hits)
                 if hits:
                     result = index.validate_sorted_results(raw_hits,
-                                                       self.sort_fields)
+                                                       self.sort_fields_list)
                     if not result:
                         self.fail(
                             "Testcase failed. Actual results do not match expected.")
@@ -1238,3 +1492,215 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
+
+    def test_snippets_highlighting_of_search_term_in_results(self):
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        index.add_child_field_to_default_mapping("name", "text")
+        index.add_child_field_to_default_mapping("manages.reports", "text")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.sleep(10)
+        self.wait_for_indexing_complete()
+
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"match": "Safiya", "field": "name"}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True,
+                                                           highlight=True,
+                                                           highlight_style=self.highlight_style,
+                                                           highlight_fields=self.highlight_fields_list)
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Content: %s" % contents)
+                result = True
+                self.expected_results = json.loads(self.expected_results)
+                if hits:
+                    for expected_doc in self.expected_results:
+                        result &= index.validate_snippet_highlighting_in_result_content(
+                            contents, expected_doc['doc_id'],
+                            expected_doc['field_name'], expected_doc['term'],
+                            highlight_style=self.highlight_style)
+                    if not result:
+                        self.fail(
+                            "Testcase failed. Actual results do not match expected.")
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    def test_create_geo_index(self):
+        """
+        Indexes geo spatial data
+        Normally when we have a nested object, we first "insert child mapping"
+        and then refer to the fields inside it. But, for geopoint, the
+        structure "geo" is the data being indexed. Refer: CBQE-4030
+        :return: the index object
+        """
+        self.log.info("Loading travel sample ...")
+        self.load_sample_buckets(self._master, bucketName="travel-sample")
+        self.log.info("Creating geo-index ...")
+        from fts_base import FTSIndex
+        geo_index = FTSIndex(
+            cluster= self._cb_cluster,
+            name = "geo-index",
+            source_name="travel-sample",
+            )
+        geo_index.index_definition["params"] = {
+          "doc_config": {
+           "mode": "type_field",
+           "type_field": "type"
+          },
+          "mapping": {
+           "default_analyzer": "standard",
+           "default_datetime_parser": "dateTimeOptional",
+           "default_field": "_all",
+           "default_mapping": {
+            "dynamic": True,
+            "enabled": False,
+            "properties": {
+             "geo": {
+              "dynamic": False,
+              "enabled": True
+             }
+            }
+           },
+           "default_type": "_default",
+           "index_dynamic": True,
+           "store_dynamic": False,
+           "type_field": "type",
+           "types": {
+            "airport": {
+             "dynamic": False,
+             "enabled": True,
+             "properties": {
+              "geo": {
+               "enabled": True,
+               "dynamic": False,
+               "fields": [
+                {
+                 "analyzer": "",
+                 "include_in_all": True,
+                 "include_term_vectors": True,
+                 "index": True,
+                 "name": "geo",
+                 "store": True,
+                 "type": "geopoint"
+                }
+               ]
+              }
+             }
+            }
+           }
+          }
+        }
+        geo_index.create()
+        self.is_index_partitioned_balanced(geo_index)
+        self.wait_for_indexing_complete()
+        return geo_index
+
+    def test_geo_location_query(self):
+        """
+        Find all documents with an indexed geo point, which is located within
+        the specified distance of the specified point.
+        The user must provide a single data point and a distance
+        :return: Nothing
+        """
+        lon = float(TestInputSingleton.input.param("lon", 1.954764))
+        lat = float(TestInputSingleton.input.param("lat", 50.962097))
+        distance = TestInputSingleton.input.param("distance", "10mi")
+        expected_hits = TestInputSingleton.input.param("expected_hits", None)
+        dist_unit = TestInputSingleton.input.param("unit", "mi")
+
+        geo_index = self.test_create_geo_index()
+
+        query = {
+            "location": {
+                "lon": lon,
+                "lat": lat
+            },
+            "distance": distance,
+            "field": "geo"
+        }
+
+        sort_fields = [
+            {
+              "by": "geo_distance",
+              "field": "geo",
+              "unit": dist_unit,
+              "location": {
+                "lon": lon,
+                "lat": lat
+              }
+            }
+        ]
+
+        hits, doc_ids, _, _ = geo_index.execute_query(query=query,
+                                            sort_fields=sort_fields,
+                                            zero_results_ok=False,
+                                            expected_hits= expected_hits)
+        self.log.info("Hits: {0}".format(hits))
+        self.log.info("Doc_ids: {0}".format(doc_ids))
+
+    def test_geo_bounding_box_query(self):
+        """
+        Find all documents with an indexed geo point, which is located within
+        the specified bounding box. Sort by the geo_distance
+        The user provides two data points,
+        the upper left and bottom right point of the bounding box.
+        :return: Nothing
+        """
+        lon1 = float(TestInputSingleton.input.param("lon1", 2.387075))
+        lat1 = float(TestInputSingleton.input.param("lat1", 49.873019))
+        lon2 = float(TestInputSingleton.input.param("lon2", 1.954764))
+        lat2 = float(TestInputSingleton.input.param("lat2", 50.962097))
+
+        expected_hits = TestInputSingleton.input.param("expected_hits", None)
+        dist_unit = TestInputSingleton.input.param("unit", "mi")
+
+        geo_index = self.test_create_geo_index()
+
+        query = {
+            "top_left": {
+                "lon": lon1,
+                "lat": lat1
+            },
+            "bottom_right": {
+                "lon": lon2,
+                "lat": lat2
+            },
+            "field": "geo"
+        }
+
+        sort_fields = [
+            {
+                "by": "geo_distance",
+                "field": "geo",
+                "unit": dist_unit,
+                "location": {
+                    "lon": lon1,
+                    "lat": lat1
+                }
+            }
+        ]
+
+        hits, doc_ids, _, _ = geo_index.execute_query(query=query,
+                                                sort_fields=sort_fields,
+                                                zero_results_ok=False,
+                                                expected_hits=expected_hits)
+        self.log.info("Hits: {0}".format(hits))
+        self.log.info("Doc_ids: {0}".format(doc_ids))

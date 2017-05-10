@@ -10,7 +10,8 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH
-from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6
+from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6,\
+                          COUCHBASE_FROM_SPOCK
 from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
@@ -26,7 +27,7 @@ class CreateBucketTests(BaseTestCase):
         self.server = self.master
         self.rest = RestConnection(self.server)
         self.node_version = self.rest.get_nodes_version()
-        self.total_items_travel_sample =  31569
+        self.total_items_travel_sample = 31569
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
             self.total_items_travel_sample = 31591
         shell = RemoteMachineShellConnection(self.master)
@@ -34,6 +35,11 @@ class CreateBucketTests(BaseTestCase):
         shell.disconnect()
         self.sample_path = LINUX_COUCHBASE_SAMPLE_PATH
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        if self.nonroot:
+            self.sample_path = "/home/%s%s" % (self.master.ssh_username,
+                                               LINUX_COUCHBASE_SAMPLE_PATH)
+            self.bin_path = "/home/%s%s" % (self.master.ssh_username,
+                                            LINUX_COUCHBASE_BIN_PATH)
         if type.lower() == 'windows':
             self.sample_path = WIN_COUCHBASE_SAMPLE_PATH
             self.bin_path = WIN_COUCHBASE_BIN_PATH
@@ -77,34 +83,28 @@ class CreateBucketTests(BaseTestCase):
                 self.fail("ns_server is not running after bucket '%s' creation" %(
                                            self.bucket_name))
 
-    def test_create_bucket_used_port(self):
-        ports = [25, 68, 80, 135, 139, 143, 500]
-        for port in ports:
-            try:
-                self.cluster.create_standard_bucket(self.server, self.bucket_name + str(port), port, self.bucket_size, self.num_replicas)
-            except:
-                self.log.info('Error appears as expected')
-                rest = RestConnection(self.master)
-                self.assertTrue(RestHelper(rest).is_ns_server_running(timeout_in_seconds=60))
-            else:
-                raise Exception('User has to be unable to create a bucket using port %s' % port)
-
     # Bucket creation with names as mentioned in MB-5844(isasl.pw, ns_log)
     def test_valid_bucket_name(self, password='password'):
             tasks = []
+            shared_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                              replicas=self.num_replicas)
             if self.bucket_type == 'sasl':
-                self.cluster.create_sasl_bucket(self.server, self.bucket_name, password, self.num_replicas, self.bucket_size)
+                self.cluster.create_sasl_bucket(name=self.bucket_name, password=password,bucket_params=shared_params)
                 self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=password, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, master_id=self.server))
             elif self.bucket_type == 'standard':
-                self.cluster.create_standard_bucket(self.server, self.bucket_name, STANDARD_BUCKET_PORT + 1, self.bucket_size, self.num_replicas)
+                self.cluster.create_standard_bucket(name=self.bucket_name, port=STANDARD_BUCKET_PORT+1,
+                                                    bucket_params=shared_params)
                 self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, port=STANDARD_BUCKET_PORT + 1, master_id=self.server))
             elif self.bucket_type == "memcached":
-                tasks.append(self.cluster.async_create_memcached_bucket(self.server, self.bucket_name, STANDARD_BUCKET_PORT + 1,
-                                                                        self.bucket_size, self.num_replicas))
-                self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
-                                           bucket_size=self.bucket_size, port=STANDARD_BUCKET_PORT + 1 , master_id=self.server, type='memcached'))
+                tasks.append(self.cluster.async_create_memcached_bucket(name=self.bucket_name,
+                                                                        port=STANDARD_BUCKET_PORT+1,
+                                                                        bucket_params=shared_params))
+
+                self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None,
+                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size,
+                                           port=STANDARD_BUCKET_PORT + 1 , master_id=self.server, type='memcached'))
                 for task in tasks:
                     task.result()
             else:
@@ -134,33 +134,6 @@ class CreateBucketTests(BaseTestCase):
                 raise Exception("The message %s is in log." % self.log_message)
         else:
             raise Exception("No thing to test.  You need to put log_message=something_to_test")
-
-    """ check for if there is a curly bracket { in the first 10 lines in diag log.
-        If there is a {, possibly it is from erlang dump """
-    def test_log_output_on_top(self):
-        self._load_doc_data_all_buckets(data_op="create", batch_size=5000)
-        serverInfo = self.servers[0]
-        shell = RemoteMachineShellConnection(serverInfo)
-        self.log.info("download diag into local server {0}".format(serverInfo.ip))
-        ot = shell.execute_command("curl -v -u Administrator:password \
-                            http://{0}:8091/diag > diag".format(serverInfo.ip))
-        r_path = shell.execute_command("pwd")
-        file_path = r_path[0][0] + "/diag"
-        sftp = shell._ssh_client.open_sftp()
-        f = sftp.open(file_path, 'r')
-        # check first 10 lines in diag file, looking for this '{'
-        self.log.info("check if there is any curly bracket in first 10 lines")
-        count = 0
-        for line in f:
-            print line
-            if "{" in line:
-                raise Exception("Curly bracket '{' is in first 10 lines at %s diag log" % serverInfo.ip)
-            count += 1
-            if count == 10:
-                break
-        """ delete diag file after create """
-        sftp.remove(file_path)
-        sftp.close()
 
     def test_travel_sample_bucket(self):
         sample = "travel-sample"
@@ -230,10 +203,12 @@ class CreateBucketTests(BaseTestCase):
         if time.time() >= end_time_i and len(index_name) < index_count:
             self.log.info("index list {0}".format(index_name))
             self.fail("some indexing may not complete")
-        elif len(index_name) == 8:
+        elif len(index_name) == index_count:
             self.log.info("travel-sample bucket is created and complete indexing")
             self.log.info("index list in travel-sample bucket: {0}"
                                        .format(index_name))
+        else:
+            self.log.info("There is extra index %s" % index_name)
 
     def test_cli_travel_sample_bucket(self):
         sample = "travel-sample"
@@ -245,19 +220,32 @@ class CreateBucketTests(BaseTestCase):
         set_index_storage_type = ""
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
             set_index_storage_type = " --index-storage-setting=memopt "
-        options = '--cluster-init-username="Administrator" \
-                        --cluster-init-password="password" \
-                        --cluster-init-port=8091 \
-                        --cluster-ramsize=300 \
-                        --cluster-index-ramsize=300 \
-                        --services=data,index,query %s ' % set_index_storage_type
+        options = ' --cluster-port=8091 \
+                    --cluster-ramsize=300 \
+                    --cluster-index-ramsize=300 \
+                    --services=data,index,query %s ' % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
-        self.assertEqual(o[0], "SUCCESS: init/edit localhost")
+        if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
+            self.assertEqual(o[0], 'SUCCESS: Cluster initialized')
+        else:
+            self.assertEqual(o[0], "SUCCESS: init/edit localhost")
 
         shell = RemoteMachineShellConnection(self.master)
+        cluster_flag = "-n"
+        bucket_quota_flag = "-s"
+        data_set_location_flag = " "
+        if self.node_version[:5] in COUCHBASE_FROM_SPOCK:
+            cluster_flag = "-c"
+            bucket_quota_flag = "-m"
+            data_set_location_flag = "-d"
         shell.execute_command("{0}cbdocloader -u Administrator -p password \
-                      -n {1} -b travel-sample -s 100 {2}travel-sample.zip" \
-                   .format(self.bin_path, self.master.ip, self.sample_path))
+                      {3} {1} -b travel-sample {4} 100 {5} {2}travel-sample.zip" \
+                                                      .format(self.bin_path,
+                                                       self.master.ip,
+                                                       self.sample_path,
+                                                       cluster_flag,
+                                                       bucket_quota_flag,
+                                                       data_set_location_flag))
         shell.disconnect()
 
         buckets = RestConnection(self.master).get_buckets()
@@ -306,6 +294,29 @@ class CreateBucketTests(BaseTestCase):
             self.log.info("travel-sample bucket is created and complete indexing")
             self.log.info("index list in travel-sample bucket: {0}"
                                        .format(index_name))
+        else:
+            self.log.info("There is extra index %s" % index_name)
+
+    # Start of tests for ephemeral buckets
+    #
+    def test_ephemeral_buckets(self):
+        eviction_policy = self.input.param("eviction_policy", 'noEviction')
+        shared_params = self._create_bucket_params(server=self.server, size=100,
+                                                   replicas=self.num_replicas, bucket_type='ephemeral',
+                                                   eviction_policy=eviction_policy)
+        # just do sasl for now, pending decision on support of non-sasl buckets in 5.0
+        self.cluster.create_sasl_bucket(name=self.bucket_name, password=self.sasl_password, bucket_params=shared_params)
+        self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=self.sasl_password,
+                                           num_replicas=self.num_replicas,
+                                           bucket_size=self.bucket_size, master_id=self.server))
+
+        self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self.bucket_name, self.rest),
+                            msg='failed to start up bucket with name "{0}'.format(self.bucket_name))
+        gen_load = BlobGenerator('buckettest', 'buckettest-', self.value_size, start=0, end=self.num_items)
+        self._load_all_buckets(self.server, gen_load, "create", 0)
+        self.cluster.bucket_delete(self.server, self.bucket_name)
+        self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(self.bucket_name, self.rest, timeout_in_seconds=60),
+                            msg='bucket "{0}" was not deleted even after waiting for 30 seconds'.format(self.bucket_name))
 
     def _get_cb_version(self):
         rest = RestConnection(self.master)

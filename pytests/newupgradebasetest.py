@@ -14,6 +14,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
+from query_tests_helper import QueryHelperTests
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
@@ -28,8 +29,7 @@ from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
 
-
-class NewUpgradeBaseTest(BaseTestCase):
+class NewUpgradeBaseTest(QueryHelperTests):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
@@ -59,6 +59,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.upgrade_versions = [self.input.param('released_upgrade_version', None)]
 
         self.initial_build_type = self.input.param('initial_build_type', None)
+        self.upgrade_build_type = self.input.param('upgrade_build_type', self.initial_build_type)
         self.stop_persistence = self.input.param('stop_persistence', False)
         self.rest_settings = self.input.membase_settings
         self.rest = None
@@ -93,6 +94,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_ubuntu = True
         self.queue = Queue.Queue()
         self.upgrade_servers = []
+        if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+            if self.initial_version != self.upgrade_versions:
+                self.log.warn(
+                    "we can't upgrade from couchbase CE to EE with a different version,defaulting to initial_version")
+                self.log.warn("http://developer.couchbase.com/documentation/server/4.0/install/upgrading.html")
+                self.upgrade_versions = self.input.param('initial_version', '4.1.0-4963')
+                self.upgrade_versions = self.upgrade_versions.split(";")
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -133,7 +141,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self._install(self.upgrade_servers,version=self.initial_version)
         self.sleep(20, "sleep 20 seconds before run next test")
 
-    def _install(self, servers, version=None):
+    def _install(self, servers, version=None, community_to_enterprise=False):
         params = {}
         params['num_nodes'] = len(servers)
         params['product'] = self.product
@@ -144,7 +152,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             params['version'] = version
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
-        self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
+        if community_to_enterprise:
+            params['type'] = self.upgrade_build_type
+        self.log.info("will install {0} on {1}".format(params['version'], [s.ip for s in servers]))
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
             success = True
@@ -160,7 +170,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
                 server.hostname = hostname
 
-    def operations(self, servers):
+    def operations(self, servers, services=None):
         self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port)
@@ -169,9 +179,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.rest_helper = RestHelper(self.rest)
         self.sleep(7, "wait to make sure node is ready")
         if len(servers) > 1:
-            self.cluster.rebalance([servers[0]], servers[1:], [],
-                                   use_hostnames=self.use_hostnames)
-
+            if services is None:
+                self.cluster.rebalance([servers[0]], servers[1:], [],
+                                       use_hostnames=self.use_hostnames)
+            else:
+                set_services = services.split(",")
+                for i in range(1, len(set_services)):
+                    self.cluster.rebalance([servers[0]], [servers[i]], [], use_hostnames=self.use_hostnames, services=[set_services[i]])
         self.buckets = []
         gc.collect()
         if self.input.param('extra_verification', False):
@@ -211,7 +225,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             elif version[:5] in COUCHBASE_MP_VERSION:
                 build_repo = MV_LATESTBUILD_REPO
 
-        if self.initial_build_type == "community":
+        if self.upgrade_build_type == "community":
             edition_type = "couchbase-server-community"
         else:
             edition_type = "couchbase-server-enterprise"
@@ -244,13 +258,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None):
+    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None, save_upgrade_config=False):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
             self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
-            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=False, forcefully=self.is_downgrade)
+            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=save_upgrade_config, forcefully=self.is_downgrade)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             """ remove this line when bug MB-11807 fixed """
             if self.is_ubuntu:
@@ -284,7 +298,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
-    def _async_update(self, upgrade_version, servers, queue=None, skip_init=False):
+    def _async_update(self, upgrade_version, servers, queue=None, skip_init=False, info=None, save_upgrade_config=False):
         self.log.info("servers {0} will be upgraded to {1} version".
                       format([server.ip for server in servers], upgrade_version))
         q = queue or self.queue
@@ -292,7 +306,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         for server in servers:
             upgrade_thread = Thread(target=self._upgrade,
                                     name="upgrade_thread" + server.ip,
-                                    args=(upgrade_version, server, q, skip_init))
+                                    args=(upgrade_version, server, q, skip_init, info, save_upgrade_config))
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads
@@ -559,3 +573,42 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.monitor_dcp_rebalance()
         else:
             self.log.info("No need to do DCP rebalance upgrade")
+
+    def pre_upgrade(self, servers):
+        if self.rest is None:
+            self._new_master(self.master)
+        self.ddocs_num = 0
+        self.create_ddocs_and_views()
+        verify_data = False
+        if self.scan_consistency != "request_plus":
+            verify_data = True
+        self.load(self.gens_load, flag=self.item_flag,
+                  verify_data=verify_data, batch_size=self.batch_size)
+        rest = RestConnection(servers[0])
+        output, rq_content, header = rest.set_auto_compaction(dbFragmentThresholdPercentage=20, viewFragmntThresholdPercentage=20)
+        self.assertTrue(output, "Error in set_auto_compaction... {0}".format(rq_content))
+        status, content, header = rest.set_indexer_compaction(mode="full", fragmentation=20)
+        self.assertTrue(status, "Error in setting Append Only Compaction... {0}".format(content))
+        operation_type = self.input.param("pre_upgrade", "")
+        self.run_async_index_operations(operation_type)
+
+    def during_upgrade(self, servers):
+        print("before create_ddocs_and_views")
+        self.ddocs_num = 0
+        self.create_ddocs_and_views()
+        kv_tasks = self.async_run_doc_ops()
+        operation_type = self.input.param("during_upgrade", "")
+        self.run_async_index_operations(operation_type)
+        for task in kv_tasks:
+            task.result()
+
+    def post_upgrade(self, servers):
+        print("before post_upgrade")
+        self.ddocs_num = 0
+        self.create_ddocs_and_views()
+        kv_tasks = self.async_run_doc_ops()
+        operation_type = self.input.param("post_upgrade", "")
+        self.run_async_index_operations(operation_type)
+        for task in kv_tasks:
+            task.result()
+        self.verification(servers,check_items=False)

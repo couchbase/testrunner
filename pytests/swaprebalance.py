@@ -14,6 +14,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.exception import RebalanceFailedException
 from basetestcase import BaseTestCase
+from security.rbac_base import RbacBase
 
 class SwapRebalanceBase(unittest.TestCase):
 
@@ -64,6 +65,17 @@ class SwapRebalanceBase(unittest.TestCase):
             info = rest.get_nodes_self()
             rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+
+            # Add built-in user
+            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+            RbacBase().create_user_source(testuser, 'builtin', self.servers[0])
+            time.sleep(10)
+
+            # Assign user to role
+            role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+            RbacBase().add_user_role(role_list, RestConnection(self.servers[0]), 'builtin')
+            time.sleep(10)
+
             if self.num_buckets > 10:
                 BaseTestCase.change_max_buckets(self, self.num_buckets)
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
@@ -76,6 +88,7 @@ class SwapRebalanceBase(unittest.TestCase):
     @staticmethod
     def common_tearDown(self):
         self.cluster_helper.shutdown()
+
         test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
         if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\
@@ -84,6 +97,14 @@ class SwapRebalanceBase(unittest.TestCase):
         else:
             SwapRebalanceBase.reset(self)
             SwapRebalanceBase._log_finish(self)
+
+        # Remove rbac user in teardown
+        try:
+            role_del = ['cbadminbucket']
+            RbacBase().remove_user_role(role_del, RestConnection(
+                self.servers[0]))
+        except:
+            pass
 
     @staticmethod
     def reset(self):

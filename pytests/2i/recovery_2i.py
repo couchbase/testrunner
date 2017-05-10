@@ -1,95 +1,117 @@
-import copy
 import logging
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
-from couchbase_helper.query_definitions import QueryDefinition
-from membase.helper.cluster_helper import ClusterOperationHelper
+
 from base_2i import BaseSecondaryIndexingTests
+from couchbase_helper.query_definitions import QueryDefinition
+from lib.memcached.helper.data_helper import MemcachedClientHelper
+from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 log = logging.getLogger(__name__)
-QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def setUp(self):
-        self.use_replica =True
-        self.all_index_nodes_lost = False
+        self.use_replica = True
         super(SecondaryIndexingRecoveryTests, self).setUp()
         self.load_query_definitions = []
-        query_template = QUERY_TEMPLATE
-        self.query_template = query_template.format("job_title")
         self.initial_index_number = self.input.param("initial_index_number", 10)
-        for x in range(1,self.initial_index_number):
-            index_name = "index_name_"+str(x)
-            query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_mo"], \
-                        query_template = self.query_template, groups = ["simple"])
+        for x in range(self.initial_index_number):
+            index_name = "index_name_" + str(x)
+            query_definition = QueryDefinition(
+                index_name=index_name, index_fields=["VMs"],
+                query_template="SELECT * FROM %s ", groups=["simple"],
+                index_where_clause = " VMs IS NOT NULL ")
             self.load_query_definitions.append(query_definition)
-        find_index_lost_list = self._find_list_of_indexes_lost()
-        self._create_replica_index_when_indexer_is_down(find_index_lost_list)
-        self.multi_create_index(buckets = self.buckets,
-                    query_definitions = self.load_query_definitions)
-        self.drop_indexes_in_between = self.input.param("drop_indexes_in_between", False)
-        if len(self.index_nodes_out) == len(self.services_map["index"]):
-            self.all_index_nodes_lost = True
+        if self.load_query_definitions:
+            self.multi_create_index(buckets=self.buckets,
+                                    query_definitions=self.load_query_definitions)
 
     def tearDown(self):
-        if hasattr(self, 'query_definitions'):
-            check = True
+        if hasattr(self, 'query_definitions') and not self.skip_cleanup:
             try:
                 self.log.info("<<<<<< WILL DROP THE INDEXES >>>>>")
-                tasks = self.async_run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions)
+                tasks = self.async_multi_drop_index(
+                    buckets=self.buckets, query_definitions=self.query_definitions)
                 for task in tasks:
                     task.result()
-                self.run_multi_operations(buckets = self.buckets, query_definitions = self.load_query_definitions)
+                self.async_multi_drop_index(
+                    buckets=self.buckets, query_definitions=self.load_query_definitions)
             except Exception, ex:
-                self.log.info(ex)
+                log.info(ex)
         super(SecondaryIndexingRecoveryTests, self).tearDown()
 
     def test_rebalance_in(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            self._run_initial_index_tasks()
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
-            self.sleep(1)
-            in_between_index_ops = self._run_in_between_tasks()
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                self.nodes_in_list,
+                [], services=self.services_in)
+            mid_recovery_tasks = self.async_run_operations(
+                phase="in_between")
             rebalance.result()
-            self.sleep(100)
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
 
     def test_rebalance_out(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            self._run_initial_index_tasks()
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
-            self.sleep(1)
-            in_between_index_ops = self._run_in_between_tasks()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            #self._create_replica_indexes()
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [],self.nodes_out_list)
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance.result()
-            self.sleep(100)
-            self._run_after_index_tasks()
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
 
     def test_rebalance_in_out(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            self._run_initial_index_tasks()
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                    self.nodes_in_list,
-                                   self.nodes_out_list, services = self.services_in)
-            self.sleep(10)
-            in_between_index_ops = self._run_in_between_tasks()
+            #self._create_replica_indexes()
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init], self.nodes_in_list,
+                self.nodes_out_list, services=self.services_in)
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance.result()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self.sleep(100)
-            self._run_after_index_tasks()
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
 
     def test_rebalance_in_out_multi_nodes(self):
@@ -102,95 +124,130 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         """
         try:
             extra_nodes = self.servers[self.nodes_init:]
-            self.assertGreaterEqual(len(extra_nodes), 2, "Sufficient nodes not available for rebalance")
+            self.assertGreaterEqual(
+                len(extra_nodes), 2,
+                "Sufficient nodes not available for rebalance")
             self.nodes_out = 1
             self.nodes_in_list = [extra_nodes[0]]
             self.nodes_out_dist = "kv:1"
             self.services_in = ["kv"]
             self.targetMaster = False
             self.generate_map_nodes_out_dist()
-            self._run_initial_index_tasks()
+            pre_recovery_tasks = self.async_run_operations(phase="before")
+            self._run_tasks([pre_recovery_tasks])
+            self.get_dgm_for_plasma()
             kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            self._run_tasks([before_index_ops])
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                    self.nodes_in_list,
-                                   self.nodes_out_list, services=self.services_in)
-            in_between_index_ops = self._run_in_between_tasks()
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                self.nodes_in_list,
+                self.nodes_out_list,
+                services=self.services_in)
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance.result()
-            self.sleep(100)
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
             self.nodes_out_dist = "index:1"
             self.services_in = ["index"]
             self.nodes_in_list = [extra_nodes[1]]
             self.generate_map_nodes_out_dist()
-            self._run_initial_index_tasks()
+            #self._create_replica_indexes()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
             rebalance.result()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self.sleep(100)
-            self._run_after_index_tasks()
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
-            self.log.info(str(ex))
+            log.info(str(ex))
             raise
 
     def test_rebalance_with_stop_start(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            self._run_initial_index_tasks()
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                    self.nodes_in_list,
-                                   self.nodes_out_list, services = self.services_in)
-            stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout / 3)
-            self.assertTrue(stopped, msg="unable to stop rebalance")
+            #self._create_replica_indexes()
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                self.nodes_in_list,
+                self.nodes_out_list, services=self.services_in)
+            stopped = RestConnection(self.master).stop_rebalance(
+                wait_timeout=self.wait_timeout / 3)
+            self.assertTrue(stopped, msg="Unable to stop rebalance")
             rebalance.result()
             self.sleep(100)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                    self.nodes_in_list,
-                                   self.nodes_out_list, services = self.services_in)
-            in_between_index_ops = self._run_in_between_tasks()
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],self.nodes_in_list,
+                self.nodes_out_list, services=self.services_in)
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance.result()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self.sleep(100)
-            self._run_after_index_tasks()
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
 
     def test_server_crash(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
             self.use_replica=False
+            self._create_replica_indexes()
             self.targetProcess= self.input.param("targetProcess",'memcached')
-            self._run_initial_index_tasks()
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 if self.targetProcess == "memcached":
                     remote.kill_memcached()
                 else:
                     remote.terminate_process(process_name=self.targetProcess)
-            self.sleep(20)
-            in_between_index_ops = self._run_in_between_tasks()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self.sleep(60)
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
 
     def test_server_stop(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            self._run_initial_index_tasks()
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
+            self._create_replica_indexes()
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.stop_server()
-            self.sleep(1)
-            in_between_index_ops = self._run_in_between_tasks()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
         finally:
             for node in self.nodes_out_list:
@@ -198,10 +255,11 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 remote.start_server()
 
     def test_server_restart(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            self._run_initial_index_tasks()
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.stop_server()
@@ -210,44 +268,52 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 remote = RemoteMachineShellConnection(node)
                 remote.start_server()
             self.sleep(30)
-            in_between_index_ops = self._run_in_between_tasks()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
 
     def test_failover(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
-            servr_out = self.nodes_out_list
-            kvOps_tasks = self._run_kvops_tasks()
-            self._run_tasks([before_tasks])
             self._create_replica_indexes()
-            failover_task = self.cluster.async_failover([self.master], failover_nodes=servr_out, graceful=self.graceful)
-            query_definitions = self._redefine_index_usage()
-            in_between_tasks = self.async_run_operations(buckets=self.buckets, query_definitions=query_definitions,
-                                                             phase="in_between")
+            servr_out = self.nodes_out_list
+            failover_task = self.cluster.async_failover(
+                [self.master],
+                failover_nodes=servr_out,
+                graceful=self.graceful)
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
             failover_task.result()
             if self.graceful:
                 # Check if rebalance is still running
                 msg = "graceful failover failed for nodes"
-                self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], servr_out)
+                check_rblnc = RestConnection(self.master).monitorRebalance(
+                    stop_if_loop=True)
+                self.assertTrue(check_rblnc, msg=msg)
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()
-            self.sleep(60)
-            self._run_tasks([kvOps_tasks, in_between_tasks])
-            nodes_out = []
-            for service in self.nodes_out_dist.split("-"):
-                nodes_out.append(service.split(":")[0])
-            if not "n1ql" in nodes_out and not "index" in nodes_out:
-                if self.index_nodes_out:
-                    self._verify_bucket_count_with_index_count(query_definitions=self.load_query_definitions)
-                else:
-                    self._verify_bucket_count_with_index_count()
-                after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
-                self._run_tasks([after_tasks])
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
-            self.log.info(str(ex))
+            log.info(str(ex))
             raise
 
     def test_failover_add_back(self):
@@ -255,12 +321,13 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rest = RestConnection(self.master)
             recoveryType = self.input.param("recoveryType", "full")
             servr_out = self.nodes_out_list
-            self._run_initial_index_tasks()
             failover_task =self.cluster.async_failover([self.master],
-                    failover_nodes = servr_out, graceful=self.graceful)
+                    failover_nodes=servr_out, graceful=self.graceful)
             failover_task.result()
+            pre_recovery_tasks = self.async_run_operations(phase="before")
+            self._run_tasks([pre_recovery_tasks])
+            self.get_dgm_for_plasma()
             kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
             nodes_all = rest.node_statuses()
             nodes = []
             if servr_out[0].ip == "127.0.0.1":
@@ -272,16 +339,24 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     nodes.extend([node for node in nodes_all
                         if node.ip == failover_node.ip])
             for node in nodes:
-                self.log.info(node)
+                log.info("Adding Back: {0}".format(node))
                 rest.add_back_node(node.id)
-                rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-            in_between_index_ops = self._run_in_between_tasks()
+                rest.set_recovery_type(otpNode=node.id,
+                                       recoveryType=recoveryType)
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init], [], [])
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance.result()
-            self.sleep(120)
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
+            log.info(str(ex))
             raise
 
     def test_failover_indexer_add_back(self):
@@ -289,43 +364,57 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         Indexer add back scenarios
         :return:
         """
-        self._calculate_scan_vector()
         rest = RestConnection(self.master)
         recoveryType = self.input.param("recoveryType", "full")
         indexer_out = int(self.input.param("nodes_out", 0))
-        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        nodes = self.get_nodes_from_services_map(service_type="index",
+                                                 get_all_nodes=True)
         self.assertGreaterEqual(len(nodes), indexer_out,
                                 "Existing Indexer Nodes less than Indexer out nodes")
-        log.info("Running kv Mutations...")
-        kvOps_tasks = self.kv_mutations()
-        servr_out = nodes[:indexer_out]
-        failover_task =self.cluster.async_failover([self.master],
-                    failover_nodes = servr_out, graceful=self.graceful)
-        self._run_tasks([[failover_task], kvOps_tasks])
-        before_index_ops = self._run_before_index_tasks()
-        nodes_all = rest.node_statuses()
-        nodes = []
-        if servr_out[0].ip == "127.0.0.1":
-            for failover_node in servr_out:
-                nodes.extend([node for node in nodes_all
-                    if (str(node.port) == failover_node.port)])
-        else:
-            for failover_node in servr_out:
-                nodes.extend([node for node in nodes_all
-                    if node.ip == failover_node.ip])
-            for node in nodes:
-                log.info("Adding back {0} with recovery type {1}...".format(node.ip, recoveryType))
-                rest.add_back_node(node.id)
-                rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-        log.info("Rebalancing nodes in...")
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-        log.info("Running KV mutations...")
-        kvOps_tasks = self.kv_mutations()
-        self._run_tasks([[rebalance], kvOps_tasks])
-        self.sleep(100)
-        self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        self.multi_query_using_index(buckets=self.buckets,
-                query_definitions=self.load_query_definitions)
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
+        try:
+            self.use_replica = False
+            self._create_replica_indexes()
+            servr_out = nodes[:indexer_out]
+            failover_task =self.cluster.async_failover(
+                [self.master], failover_nodes=servr_out,
+                graceful=self.graceful)
+            failover_task.result()
+            nodes_all = rest.node_statuses()
+            nodes = []
+            if servr_out[0].ip == "127.0.0.1":
+                for failover_node in servr_out:
+                    nodes.extend([node for node in nodes_all
+                        if (str(node.port) == failover_node.port)])
+            else:
+                for failover_node in servr_out:
+                    nodes.extend([node for node in nodes_all
+                        if node.ip == failover_node.ip])
+                for node in nodes:
+                    log.info("Adding back {0} with recovery type {1}...".format(
+                        node.ip, recoveryType))
+                    rest.add_back_node(node.id)
+                    rest.set_recovery_type(otpNode=node.id,
+                                           recoveryType=recoveryType)
+            log.info("Rebalancing nodes in...")
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init], [], [])
+            rebalance.result()
+            self._run_tasks([mid_recovery_tasks, kvOps_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
+        except Exception, ex:
+            log.info(str(ex))
+            raise
 
     def test_failover_indexer_restart(self):
         """
@@ -333,28 +422,10 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         Indexer add back scenarios
         :return:
         """
-        index_dist_factor = 1
-        #Create Indexes
         index_servers = self.get_nodes_from_services_map(service_type="index",
             get_all_nodes=True)
-        num_indexes=len(index_servers)*index_dist_factor
-        self.query_definitions = []
-        for ctr in range(num_indexes):
-            index_name = "test_restart_index_{0}".format(ctr)
-            query_definition = QueryDefinition(index_name=index_name, index_fields=["join_yr"],
-                    query_template="SELECT * from %s USE INDEX ({0}) WHERE join_yr == 2010 ".format(index_name), groups=[])
-            self.query_definitions.append(query_definition)
-        node_count = 0
-        for query_definition in self.query_definitions:
-            for bucket in self.buckets:
-                deploy_node_info = ["{0}:{1}".format(index_servers[node_count].ip,
-                    index_servers[node_count].port)]
-                self.log.info("Creating {0} index on bucket {1} on node {2}...".format(
-                    query_definition.index_name, bucket.name, deploy_node_info[0]
-                ))
-                self.create_index(bucket.name, query_definition,
-                    deploy_node_info=deploy_node_info)
-                node_count += 1
+        self.multi_create_index(self.buckets, self.query_definitions)
+        self.get_dgm_for_plasma()
         self.sleep(30)
         kvOps_tasks = self._run_kvops_tasks()
         remote = RemoteMachineShellConnection(index_servers[0])
@@ -363,150 +434,211 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             for query in self.query_definitions:
                 try:
-                    self.query_using_index(bucket=bucket, query_definition=query,
-                                       expected_result=None, scan_consistency=None,
-                                       scan_vector=None, verify_results=True)
+                    self.query_using_index(bucket=bucket,
+                                           query_definition=query)
                 except Exception, ex:
                     msg = "queryport.indexNotFound"
                     if msg in str(ex):
                         continue
                     else:
-                        self.log.info(str(ex))
+                        log.info(str(ex))
                         break
         remote.start_server()
         self.sleep(20)
         self._run_tasks([kvOps_tasks])
 
     def test_autofailover(self):
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         autofailover_timeout = 30
-        status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
+        conn = RestConnection(self.master)
+        status = conn.update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
-        before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
-        self._run_tasks([before_tasks])
-        self._create_replica_indexes()
-        servr_out = self.nodes_out_list
-        remote = RemoteMachineShellConnection(servr_out[0])
         try:
+            self._create_replica_indexes()
+            servr_out = self.nodes_out_list
+            remote = RemoteMachineShellConnection(servr_out[0])
             remote.stop_server()
             self.sleep(10)
-            kvOps_tasks = self._run_kvops_tasks()
-            query_definitions = self._redefine_index_usage()
-            in_between_tasks = self.async_run_operations(buckets=self.buckets, query_definitions=query_definitions,
-                                                         phase="in_between")
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
-            active_nodes = self.get_nodes_in_cluster()
-            rebalance = self.cluster.async_rebalance(active_nodes, [], servr_out)
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()
-            self.sleep(30)
-            self._run_tasks([kvOps_tasks, in_between_tasks])
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
-            msg = "unable to reach the host @ {0}".format(servr_out[0].ip)
-            if msg not in str(ex):
-                self.log.info(str(ex))
-                raise
+            log.info(str(ex))
+            raise
         finally:
-            self._verify_bucket_count_with_index_count()
-            after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
-            self._run_tasks([after_tasks])
             remote.start_server()
             self.sleep(30)
 
     def test_network_partitioning(self):
-        self._run_initial_index_tasks()
-        self.sleep(10)
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         try:
-            kvOps_tasks = self._run_kvops_tasks()
-            before_index_ops = self._run_before_index_tasks()
-            self._run_tasks([before_index_ops])
+            self._create_replica_indexes()
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
                 self.sleep(20)
-            in_between_index_ops = self._run_in_between_tasks()
-            self._run_tasks([kvOps_tasks, in_between_index_ops])
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
         except Exception, ex:
-            self.log.info(str(ex))
+            log.info(str(ex))
             raise
         finally:
             for node in self.nodes_out_list:
                 self.stop_firewall_on_node(node)
                 self.sleep(30)
-            self._run_after_index_tasks()
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
 
     def test_couchbase_bucket_compaction(self):
-        self._run_initial_index_tasks()
-        # Run Compaction Here
-        # Run auto-compaction to remove the tomb stones
-        compact_tasks = []
+        """
+        Run Compaction Here
+        Run auto-compaction to remove the tomb stones
+        """
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
         kvOps_tasks = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
+        compact_tasks = []
         for bucket in self.buckets:
-            compact_tasks.append(self.cluster.async_compact_bucket(self.master, bucket))
-        in_between_index_ops = self._run_in_between_tasks()
-        self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            compact_tasks.append(self.cluster.async_compact_bucket(
+                self.master, bucket))
+        mid_recovery_tasks = self.async_run_operations(phase="in_between")
+        self._run_tasks([kvOps_tasks, mid_recovery_tasks])
         for task in compact_tasks:
             task.result()
-        self._run_after_index_tasks()
+        self._check_all_bucket_items_indexed()
+        post_recovery_tasks = self.async_run_operations(phase="after")
+        self._run_tasks([post_recovery_tasks])
 
     def test_warmup(self):
-        self._run_initial_index_tasks()
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
         kvOps_tasks = self._run_kvops_tasks()
-        before_index_ops = self._run_before_index_tasks()
         for server in self.nodes_out_list:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
             remote.start_server()
             remote.disconnect()
-        in_between_index_ops = self._run_in_between_tasks()
+        mid_recovery_tasks = self.async_run_operations(phase="in_between")
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-        self._run_after_index_tasks()
+        self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+        #check if the nodes in cluster are healthy
+        msg = "Cluster not in Healthy state"
+        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+        log.info("==== Cluster in healthy state ====")
+        self._check_all_bucket_items_indexed()
+        post_recovery_tasks = self.async_run_operations(phase="after")
+        self._run_tasks([post_recovery_tasks])
 
     def test_couchbase_bucket_flush(self):
-        self._run_initial_index_tasks()
-        kvOps_tasks = self.kv_mutations()
-        before_index_ops = self._run_before_index_tasks()
-        self._run_tasks([before_index_ops])
+        pre_recovery_tasks = self.async_run_operations(phase="before")
+        self._run_tasks([pre_recovery_tasks])
+        self.get_dgm_for_plasma()
+        kvOps_tasks = self._run_kvops_tasks()
         #Flush the bucket
         for bucket in self.buckets:
             log.info("Flushing bucket {0}...".format(bucket.name))
             rest = RestConnection(self.master)
             rest.flush_bucket(bucket.name)
             count = 0
-            while rest.get_bucket_status(bucket.name) != "healthy" and count < 10:
-                log.info("Bucket Status is {0}. Sleeping...".format(rest.get_bucket_status(bucket.name)))
+            while rest.get_bucket_status(bucket.name) != "healthy" and \
+                            count < 10:
+                log.info("Bucket {0} Status is {1}. Sleeping...".format(
+                    bucket.name, rest.get_bucket_status(bucket.name)))
                 count += 1
                 self.sleep(10)
-            log.info("Bucket {0} is {0}".format(rest.get_bucket_status(bucket.name)))
-        in_between_index_ops = self._run_in_between_tasks()
-        self._run_tasks([kvOps_tasks, in_between_index_ops])
-        self._run_after_index_tasks()
+            log.info("Bucket {0} is {1}".format(
+                bucket.name, rest.get_bucket_status(bucket.name)))
+        mid_recovery_tasks = self.async_run_operations(phase="in_between")
+        self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+        #check if the nodes in cluster are healthy
+        msg = "Cluster not in Healthy state"
+        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+        log.info("==== Cluster in healthy state ====")
+        self._check_all_bucket_items_indexed()
+        post_recovery_tasks = self.async_run_operations(phase="after")
+        self._run_tasks([post_recovery_tasks])
 
-    def _calculate_scan_vector(self):
-        self.scan_vectors = None
-        if self.scan_vectors != None:
-            self.scan_vectors = self.gen_scan_vector(use_percentage = self.scan_vector_per_values,
-             use_random = self.random_scan_vector)
+    def test_partial_rollback(self):
+        self.multi_create_index()
+        self.sleep(30)
+        self.log.info("Stopping persistence on NodeA & NodeB")
+        data_nodes = self.get_nodes_from_services_map(service_type="kv",
+                                                  get_all_nodes=True)
+        for data_node in data_nodes:
+            for bucket in self.buckets:
+                mem_client = MemcachedClientHelper.direct_client(data_node, bucket.name)
+                mem_client.stop_persistence()
+        self.run_doc_ops()
+        self.sleep(10)
+        # Get count before rollback
+        bucket_before_item_counts = {}
+        for bucket in self.buckets:
+            bucket_count_before_rollback = self.get_item_count(self.master, bucket.name)
+            bucket_before_item_counts[bucket.name] = bucket_count_before_rollback
+            log.info("Items in bucket {0} before rollback = {1}".format(
+                bucket.name, bucket_count_before_rollback))
 
-    def _redefine_index_usage(self):
-        qdfs = []
-        if not self.use_replica :
-            return
-        if self.use_replica_when_active_down and \
-            (self.ops_map["before"]["query_ops"] or self.ops_map["in_between"]["query_ops"])\
-            and not self.all_index_nodes_lost:
-            for query_definition in self.query_definitions:
-                if query_definition.index_name in self.index_lost_during_move_out:
-                    query_definition.index_name = query_definition.index_name+"_replica"
-                qdfs.append(query_definition)
-            self.query_definitions = qdfs
-        elif self.ops_map["before"]["query_ops"] \
-         or self.ops_map["in_between"]["query_ops"] \
-         or self.all_index_nodes_lost:
-            for query_definition in self.query_definitions:
-                if query_definition.index_name in self.index_lost_during_move_out:
-                    query_definition.index_name = "#primary"
-                qdfs.append(query_definition)
-            self.query_definitions = qdfs
+        # Index rollback count before rollback
+        self._verify_bucket_count_with_index_count()
+        self.multi_query_using_index()
+
+        # Kill memcached on Node A so that Node B becomes master
+        self.log.info("Kill Memcached process on NodeA")
+        shell = RemoteMachineShellConnection(data_nodes[0])
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        self.log.info("Starting persistence on NodeB")
+        for bucket in self.buckets:
+            mem_client = MemcachedClientHelper.direct_client(data_nodes[1], bucket.name)
+            mem_client.start_persistence()
+
+        # Failover Node B
+        self.log.info("Failing over NodeB")
+        self.sleep(10)
+        failover_task = self.cluster.async_failover(
+            self.servers[:self.nodes_init], [data_nodes[1]], self.graceful,
+            wait_for_pending=120)
+
+        failover_task.result()
+
+        # Wait for a couple of mins to allow rollback to complete
+        # self.sleep(120)
+
+        bucket_after_item_counts = {}
+        for bucket in self.buckets:
+            bucket_count_after_rollback = self.get_item_count(self.master, bucket.name)
+            bucket_after_item_counts[bucket.name] = bucket_count_after_rollback
+            log.info("Items in bucket {0} after rollback = {1}".format(
+                bucket.name, bucket_count_after_rollback))
+
+        for bucket in self.buckets:
+            if bucket_after_item_counts[bucket.name] == bucket_before_item_counts[bucket.name]:
+                log.info("Looks like KV rollback did not happen at all.")
+        self._verify_bucket_count_with_index_count()
+        self.multi_query_using_index()
 
     def _create_replica_indexes(self):
         query_definitions = []
@@ -514,122 +646,48 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             return []
         if not self.index_nodes_out:
             return []
-        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        index_nodes = self.get_nodes_from_services_map(service_type="index",
+                                                       get_all_nodes=True)
         for node in self.index_nodes_out:
             if node in index_nodes:
                 index_nodes.remove(node)
         if index_nodes:
-            deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip, index_nodes[0].port)]
             ops_map = self.generate_operation_map("in_between")
-            if ("query" in ops_map or "query_with_explain" in ops_map) and not self.all_index_nodes_lost:
+            if ("create_index" not in ops_map):
+                indexes_lost = self._find_index_lost_when_indexer_down()
+                deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip,
+                                                     index_nodes[0].port)]
                 for query_definition in self.query_definitions:
-                    if query_definition.index_name in self.index_lost_during_move_out:
+                    if query_definition.index_name in indexes_lost:
                         query_definition.index_name = query_definition.index_name + "_replica"
                         query_definitions.append(query_definition)
                         for bucket in self.buckets:
-                            self.create_index(bucket=bucket, query_definition=query_definition,
+                            self.create_index(bucket=bucket,
+                                              query_definition=query_definition,
                                               deploy_node_info=deploy_node_info)
+                    else:
+                        query_definitions.append(query_definition)
+            self.query_definitions = query_definitions
 
-    def _create_replica_index_when_indexer_is_down(self, index_lost_during_move_out):
-        memory = []
-        static_node_list = self._find_nodes_not_moved_out()
-        if self.use_replica_when_active_down and self.ops_map["before"]["query_ops"] or \
-        self.use_replica_when_active_down and self.ops_map["in_between"]["query_ops"] or \
-        self.use_replica_when_active_down and self.ops_map["after"]["query_ops"]:
-            for query_definition in self.query_definitions:
-                if query_definition.index_name in index_lost_during_move_out:
-                    copy_of_query_definition = copy.deepcopy(query_definition)
-                    copy_of_query_definition.index_name = query_definition.index_name+"_replica"
-                    for node in static_node_list:
-                        if copy_of_query_definition.index_name not in memory:
-                            deploy_node_info = ["{0}:{1}".format(node.ip,node.port)]
-                            for bucket in self.buckets:
-                                self.create_index(
-                                    bucket.name,
-                                    copy_of_query_definition,
-                                    deploy_node_info = deploy_node_info)
-                            memory.append(copy_of_query_definition.index_name)
-
-    def _find_nodes_not_moved_out(self):
-        index_nodes = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
-        index_nodes = copy.deepcopy(index_nodes)
-        out_list = []
-        list = []
-        index_nodes_out = []
-        for index_node in self.nodes_out_list:
-            out_list.append("{0}:{1}".format(index_node.ip,index_node.port))
-        for server in index_nodes:
-            key = "{0}:{1}".format(server.ip,server.port)
-            if key not in out_list:
-                list.append(server)
-            else:
-                index_nodes_out.append(server)
-        if len(index_nodes_out) == len(self.nodes_out_list) and len(index_nodes_out) == len(index_nodes):
-            self.all_index_nodes_lost=True
-        return list
-
-    def _find_list_of_indexes_lost(self):
-        index_node_count = 0
-        memory =[]
-        index_lost_during_move_out = []
-        for query_definition in self.query_definitions:
-            if index_node_count < len(self.index_nodes_out):
-                if query_definition.index_name not in memory:
-                    index_lost_during_move_out.append(query_definition.index_name)
-                    memory.append(query_definition.index_name)
-                    index_node_count+=1
-        return index_lost_during_move_out
-
-    def _run_initial_index_tasks(self):
-        self.log.info("<<<<< START INITIALIZATION PHASE >>>>>>")
-        self._calculate_scan_vector()
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, initial = True,
-            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
-        self._run_tasks([tasks])
-        self.log.info("<<<<< END INITIALIZATION PHASE >>>>>>")
-
-    def _run_before_index_tasks(self):
-        if self.ops_map["before"]["create_index"]:
-            self.index_nodes_out = []
-        self._redefine_index_usage()
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True,
-            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
-        return tasks
-
-    def _run_in_between_tasks(self):
-        tasks_ops = []
-        if self.ops_map["in_between"]["create_index"]:
-            self.index_nodes_out = []
-        self._redefine_index_usage()
-        if not self.all_index_nodes_lost:
-            tasks_ops = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
-                scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
-            tasks_ops += self._drop_indexes_in_between()
-        return tasks_ops
-
-    def _drop_indexes_in_between(self):
-        drop_tasks =[]
-        if self.drop_indexes_in_between:
-            drop_tasks = self.async_multi_drop_index(buckets = self.buckets,
-             query_definitions = self.load_query_definitions)
-        return drop_tasks
+    def _find_index_lost_when_indexer_down(self):
+        lost_indexes = []
+        rest = RestConnection(self.master)
+        index_map = rest.get_index_status()
+        log.info("index_map: {0}".format(index_map))
+        for index_node in self.index_nodes_out:
+            host = "{0}:8091".format(index_node.ip)
+            for index in index_map.itervalues():
+                for keys, vals in index.iteritems():
+                    if vals["hosts"] == host:
+                        lost_indexes.append(keys)
+        log.info("Lost Indexes: {0}".format(lost_indexes))
+        return lost_indexes
 
     def _run_kvops_tasks(self):
         tasks_ops =[]
         if self.doc_ops:
             tasks_ops = self.async_run_doc_ops()
         return tasks_ops
-
-    def kv_mutations(self, docs=0):
-        gens_load = self.generate_docs(self.docs_per_day)
-        tasks = self.async_load(generators_load=gens_load,
-                                batch_size=self.batch_size)
-        return tasks
-
-    def _run_after_index_tasks(self):
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True,
-            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
-        self._run_tasks([tasks])
 
     def _run_tasks(self, tasks_list):
         for tasks in tasks_list:

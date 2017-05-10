@@ -288,7 +288,10 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
-    def wait_for_persistence(master, bucket, timeout=120):
+    def wait_for_persistence(master, bucket, bucket_type='memcache', timeout=120):
+
+        if bucket_type == 'ephemeral':
+            return True
         verified = True
         verified &= RebalanceHelper.wait_for_mc_stats_all_nodes(
             master, bucket, "ep_queue_size", 0,

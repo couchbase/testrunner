@@ -200,7 +200,7 @@ SET_PKT_FMT = ">II"
 META_CMD_FMT = '>IIQQ'  # flags (4 bytes), expiration (4), seqno (8), CAS (8), metalen (2)
 
 META_CMD_FMT = '>IIQQ'
-EXTENDED_META_CMD_FMT = '>IIQQI'
+EXTENDED_META_CMD_FMT = '>IIQQIH'
 SKIP_META_CMD_FMT = '>IIQQI'
 
 CR = 0x01
@@ -255,10 +255,13 @@ VB_SET_PKT_FMT = ">I"
 
 MAGIC_BYTE = 0x80
 REQ_MAGIC_BYTE = 0x80
+MEMCACHED_REQUEST_MAGIC = '\x80'
 RES_MAGIC_BYTE = 0x81
 
 # magic, opcode, keylen, extralen, datatype, vbucket, bodylen, opaque, cas
 REQ_PKT_FMT = ">BBHBBHIIQ"
+DATA_TYPE = '\x00'
+VBUCKET = '\x00\x00'
 
 
 # subdoc extras format - path len

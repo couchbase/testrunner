@@ -35,7 +35,7 @@ class MovingTopFTS(FTSBaseTest):
     def rebalance_out_during_index_building(self):
         self.load_data()
         self.create_fts_indexes_all_buckets()
-        self.sleep(10)
+        self.sleep(30)
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
@@ -865,6 +865,169 @@ class MovingTopFTS(FTSBaseTest):
         self._cb_cluster.set_bypass_fts_node(node)
         self.run_query_and_compare(index)
 
+    def update_index_during_rebalance(self):
+        """
+         Perform indexing + rebalance + index defn change in parallel
+        """
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._num_items/2)
+        reb_thread = Thread(target=self._cb_cluster.rebalance_out_master,
+                                   name="rebalance",
+                                   args=())
+        reb_thread.start()
+        self.sleep(15)
+        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
+        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        update_index_thread = Thread(target=index.update(),
+                                   name="update_index",
+                                   args=())
+        update_index_thread.start()
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
+        reb_thread.join()
+        update_index_thread.join()
+        hits, _, _, _ = index.execute_query(self.query,
+                                            zero_results_ok=True)
+        self.log.info("Hits: %s" % hits)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _, _, _ = index.execute_query(self.query,
+                                            zero_results_ok=False)
+        self.log.info("Hits: %s" % hits)
+
+    def delete_index_during_rebalance(self):
+        """
+         Perform indexing + rebalance + index delete in parallel
+        """
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._num_items/2)
+        reb_thread = Thread(target=self._cb_cluster.rebalance_out_master,
+                                   name="rebalance",
+                                   args=())
+        reb_thread.start()
+        self.sleep(15)
+        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
+        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        del_index_thread = Thread(target=index.delete(),
+                                   name="delete_index",
+                                   args=())
+        del_index_thread.start()
+        self.sleep(5)
+        try:
+            _, defn = index.get_index_defn()
+            self.log.info(defn)
+            self.fail("ERROR: Index definition still exists after deletion! "
+                      "%s" %defn['indexDef'])
+        except Exception as e:
+            self.log.info("Expected exception caught: %s" % e)
+
+    def update_index_during_failover(self):
+        """
+         Perform indexing + failover + index defn change in parallel
+         for D,D+F,F cluster
+        """
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._num_items/2)
+        fail_thread = Thread(target=self._cb_cluster.failover(),
+                                   name="failover",
+                                   args=())
+        fail_thread.start()
+        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
+        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        update_index_thread = Thread(target=index.update(),
+                                   name="update_index",
+                                   args=())
+        update_index_thread.start()
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
+        fail_thread.join()
+        update_index_thread.join()
+        hits, _, _, _ = index.execute_query(self.query)
+        self.log.info("Hits: %s" % hits)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _, _, _ = index.execute_query(
+            self.query,
+            expected_hits=index.get_src_bucket_doc_count())
+        self.log.info("Hits: %s" % hits)
+
+    def update_index_during_failover_and_rebalance(self):
+        """
+         Perform indexing + failover + index defn change in parallel
+        """
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._num_items/2)
+        fail_thread = Thread(
+            target=self._cb_cluster.failover_and_rebalance_nodes(),
+            name="failover",
+            args=())
+        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
+        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        update_index_thread = Thread(target=index.update(),
+                                   name="update_index",
+                                   args=())
+        fail_thread.start()
+        update_index_thread.start()
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
+        fail_thread.join()
+        update_index_thread.join()
+        hits, _, _, _ = index.execute_query(self.query)
+        self.log.info("Hits: %s" % hits)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _, _, _ = index.execute_query(
+            self.query,
+            expected_hits=index.get_src_bucket_doc_count())
+        self.log.info("Hits: %s" % hits)
+
+
     def partial_rollback(self):
         bucket = self._cb_cluster.get_bucket_by_name("default")
 
@@ -956,3 +1119,70 @@ class MovingTopFTS(FTSBaseTest):
                     "Hits after rollback and failover of primary FTS node: %s" % hits3)
                 self.assertEqual(hits2, hits3,
                                  "Mutated items after FTS node failover are not equal to that after rollback")
+
+    def test_cancel_node_removal_rebalance(self):
+        """
+            1. start rebalance out
+            2. stop rebalance
+            3. cancel node removal
+            4. start rebalance
+        """
+        from lib.membase.api.rest_client import RestConnection, RestHelper
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        nodes = rest.node_statuses()
+        ejected_nodes = []
+
+        for node in nodes:
+            if node.ip != self._master.ip:
+                ejected_nodes.append(node.id)
+                break
+
+        self.log.info(
+                "removing node {0} from cluster".format(ejected_nodes))
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                           ejectedNodes=ejected_nodes)
+        self.sleep(3)
+        stopped = rest.stop_rebalance()
+        self.assertTrue(stopped, msg="unable to stop rebalance")
+
+        #for cases if rebalance ran fast
+        if RestHelper(rest).is_cluster_rebalanced():
+            self.log.info("Rebalance is finished already.")
+        else:
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
+                                                     "failed after restarting")
+
+    def test_stop_restart_rebalance_in_loop(self):
+        """
+         Kick off rebalance-out. Stop and stop rebalance in a loop
+         continuously till rebalance finishes.
+        :return:
+        """
+
+        from lib.membase.api.rest_client import RestConnection, RestHelper
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        nodes = rest.node_statuses()
+        ejected_nodes = []
+
+        for node in nodes:
+            if node.ip != self._master.ip:
+                ejected_nodes.append(node.id)
+                break
+        self.log.info(
+            "removing node(s) {0} from cluster".format(ejected_nodes))
+
+        while True:
+            rest.rebalance(otpNodes=[node.id for node in nodes],
+                           ejectedNodes=ejected_nodes)
+            self.sleep(10)
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+
+            if RestHelper(rest).is_cluster_rebalanced():
+                self.log.info("Rebalance is finished already.")
+                break
+
+
+
+

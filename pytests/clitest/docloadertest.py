@@ -2,7 +2,10 @@ from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
 import testconstants
 import json
-from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK
+from testconstants import COUCHBASE_FROM_WATSON,\
+                          COUCHBASE_FROM_SPOCK,\
+                          LINUX_CB_PATH,\
+                          MAC_CB_PATH
 from membase.helper.bucket_helper import BucketOperationHelper
 
 class docloaderTests(CliBaseTest):
@@ -41,6 +44,7 @@ class docloaderTests(CliBaseTest):
             self.log.info("cluster version: %s " % self.short_v)
             self.log.info("delete all buckets to create new bucket")
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            self.sleep(15)
             output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
                                                               self.couchbase_password,
                                                                    self.load_filename,
@@ -53,11 +57,11 @@ class docloaderTests(CliBaseTest):
         self.shell.delete_files(self.load_filename)
 
         if self.os != "windows":
-            command = "unzip %ssamples/%s.zip" % (testconstants.LINUX_CB_PATH,
-                                                           self.load_filename)
+            command = "unzip %ssamples/%s.zip" % (self.base_cb_path,
+                                                  self.load_filename)
             if self.os == 'mac':
-                command = "unzip %ssamples/%s.zip" % (testconstants.MAC_CB_PATH,
-                                                             self.load_filename)
+                command = "unzip %ssamples/%s.zip" % (MAC_CB_PATH,
+                                                      self.load_filename)
             output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
 
@@ -68,7 +72,6 @@ class docloaderTests(CliBaseTest):
     def test_docloader_from_file(self):
         """ copy doc zip file to /tmp, unzip it and use docloader to load doc
            from this directory """
-        print "here  ", self.short_v
         if self.short_v in COUCHBASE_FROM_SPOCK:
             self.shell.execute_command("cp %stravel-sample.zip %s" \
                                     % (self.sample_files_path, self.tmp_path))

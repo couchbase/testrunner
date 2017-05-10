@@ -1,26 +1,55 @@
-from basetestcase import BaseTestCase
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
-from testconstants import LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH
-from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
-from testconstants import MAC_COUCHBASE_BIN_PATH
-from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH,\
-                          WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
-                          WIN_COUCHBASE_LOGS_PATH, COUCHBASE_FROM_4DOT6
-import logger
 import random
 import time
-import zlib
+
+import logger
+from basetestcase import BaseTestCase
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
+from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
+    WIN_COUCHBASE_SAMPLE_PATH, \
+    WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
+    WIN_COUCHBASE_LOGS_PATH, WIN_TMP_PATH, WIN_TMP_PATH_RAW, \
+    WIN_BACKUP_PATH, LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, LINUX_CB_PATH,\
+    MAC_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
+
+from couchbase_helper.cluster import Cluster
+from security.rbac_base import RbacBase
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+
 
 log = logger.Logger.get_logger()
 
+
 class CliBaseTest(BaseTestCase):
     vbucketId = 0
+
     def setUp(self):
         self.times_teardown_called = 1
         super(CliBaseTest, self).setUp()
         self.r = random.Random()
         self.vbucket_count = 1024
+        self.cluster = Cluster()
+
+        """ Add built-in user cbadminbucket to second cluster """
+        self.log.info("add built-in user cbadminbucket to master cluster.")
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        self.sleep(10)
+        """ Assign user to role """
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
+        self.sleep(10)
+
+        self.clusters_dic = self.input.clusters
+        if self.clusters_dic:
+            if len(self.clusters_dic) > 1:
+                self.dest_nodes = self.clusters_dic[1]
+                self.dest_master = self.dest_nodes[0]
+            elif len(self.clusters_dic) == 1:
+                self.log.error("=== need 2 cluster to setup xdcr in ini file ===")
+        else:
+            self.log.error("**** Cluster config is setup in ini file. ****")
         self.shell = RemoteMachineShellConnection(self.master)
         self.rest = RestConnection(self.master)
         self.import_back = self.input.param("import_back", False)
@@ -40,7 +69,8 @@ class CliBaseTest(BaseTestCase):
         """ cli output message """
         self.cli_bucket_create_msg = "SUCCESS: Bucket created"
         self.cli_rebalance_msg = "SUCCESS: Rebalance complete"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        self.cb_version = self.rest.get_nodes_version()
+        if self.cb_version[:3] == "4.6":
             self.cli_bucket_create_msg = "SUCCESS: bucket-create"
             self.cli_rebalance_msg = "SUCCESS: rebalanced cluster"
         self.os = 'linux'
@@ -57,11 +87,24 @@ class CliBaseTest(BaseTestCase):
         self.des_file = ""
         self.sample_files_path = LINUX_COUCHBASE_SAMPLE_PATH
         self.log_path = LINUX_COUCHBASE_LOGS_PATH
+        self.base_cb_path = LINUX_CB_PATH
+        """ non root path """
+        if self.nonroot:
+            self.cli_command_path = "/home/%s%s" % (self.master.ssh_username,
+                                                    LINUX_COUCHBASE_BIN_PATH)
+            self.sample_files_path = "/home/%s%s" % (self.master.ssh_username,
+                                                     LINUX_COUCHBASE_SAMPLE_PATH)
+            self.log_path = "/home/%s%s" % (self.master.ssh_username,
+                                            LINUX_COUCHBASE_LOGS_PATH)
+            self.base_cb_path = "/home/%s%s" % (self.master.ssh_username,
+                                                LINUX_CB_PATH)
+            self.root_path = "/home/%s/" % self.master.ssh_username
         if type == 'windows':
             self.os = 'windows'
             self.cmd_ext = ".exe"
             self.root_path = WIN_ROOT_PATH
             self.tmp_path = WIN_TMP_PATH
+            self.tmp_path_raw = WIN_TMP_PATH_RAW
             self.cmd_backup_path = WIN_BACKUP_C_PATH
             self.backup_path = WIN_BACKUP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
@@ -104,7 +147,24 @@ class CliBaseTest(BaseTestCase):
         for zone in zones:
             if zone != "Group 1":
                 rest.delete_zone(zone)
+        self.clusters_dic = self.input.clusters
+        if self.clusters_dic:
+            if len(self.clusters_dic) > 1:
+                self.dest_nodes = self.clusters_dic[1]
+                self.dest_master = self.dest_nodes[0]
+                if self.dest_nodes and len(self.dest_nodes) > 1:
+                    self.log.info("======== clean up destination cluster =======")
+                    rest = RestConnection(self.dest_nodes[0])
+                    rest.remove_all_remote_clusters()
+                    rest.remove_all_replications()
+                    BucketOperationHelper.delete_all_buckets_or_assert(self.dest_nodes, self)
+                    ClusterOperationHelper.cleanup_cluster(self.dest_nodes)
+            elif len(self.clusters_dic) == 1:
+                self.log.error("=== need 2 cluster to setup xdcr in ini file ===")
+        else:
+            self.log.info("**** If run xdcr test, need cluster config is setup in ini file. ****")
         super(CliBaseTest, self).tearDown()
+
 
     """ in sherlock, there is an extra value called runCmd in the 1st element """
     def del_runCmd_value(self, output):
@@ -201,8 +261,9 @@ class CliBaseTest(BaseTestCase):
                 log.info("Unable to get index service ram quota")
                 return False
             if int(settings["indexMemoryQuota"]) != int(index):
-                log.info("Index service memory quota does not match (%d vs %d)",
-                         int(settings["indexMemoryQuota"]), int(index))
+                log.info(
+                    "Index service memory quota does not match (%d vs %d)",
+                    int(settings["indexMemoryQuota"]), int(index))
                 return False
 
         if fts:
@@ -216,32 +277,36 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
-    def verifyBucketSettings(self, server, bucket_name, bucket_password, bucket_type, memory_quota, eviction_policy,
-                             replica_count, enable_index_replica, priority, enable_flush):
+    def verifyBucketSettings(self, server, bucket_name, bucket_type, memory_quota,
+                             eviction_policy, replica_count, enable_index_replica,
+                             priority, enable_flush):
         rest = RestConnection(server)
         result = rest.get_bucket_json(bucket_name)
-        if bucket_password is not None and bucket_password != result["saslPassword"]:
-            log.info("Bucket password does not match (%s vs %s)", bucket_password, result["saslPassword"])
-            return False
 
         if bucket_type == "couchbase":
             bucket_type = "membase"
 
         if bucket_type is not None and bucket_type != result["bucketType"]:
-            log.info("Memory quota does not match (%s vs %s)", bucket_type, result["bucketType"])
+            log.info("Memory quota does not match (%s vs %s)", bucket_type,
+                     result["bucketType"])
             return False
 
         quota = result["quota"]["rawRAM"] / 1024 / 1024
         if memory_quota is not None and memory_quota != quota:
-            log.info("Bucket quota does not match (%s vs %s)", memory_quota, quota)
+            log.info("Bucket quota does not match (%s vs %s)", memory_quota,
+                     quota)
             return False
 
-        if eviction_policy is not None and eviction_policy != result["evictionPolicy"]:
-            log.info("Eviction policy does not match (%s vs %s)", eviction_policy, result["evictionPolicy"])
+        if eviction_policy is not None and eviction_policy != result[
+            "evictionPolicy"]:
+            log.info("Eviction policy does not match (%s vs %s)",
+                     eviction_policy, result["evictionPolicy"])
             return False
 
-        if replica_count is not None and replica_count != result["replicaNumber"]:
-            log.info("Replica count does not match (%s vs %s)", replica_count, result["replicaNumber"])
+        if replica_count is not None and replica_count != result[
+            "replicaNumber"]:
+            log.info("Replica count does not match (%s vs %s)", replica_count,
+                     result["replicaNumber"])
             return False
 
         if enable_index_replica == 1:
@@ -249,8 +314,10 @@ class CliBaseTest(BaseTestCase):
         elif enable_index_replica == 0:
             enable_index_replica = False
 
-        if enable_index_replica is not None and enable_index_replica != result["replicaIndex"]:
-            log.info("Replica index enabled does not match (%s vs %s)", enable_index_replica, result["replicaIndex"])
+        if enable_index_replica is not None and enable_index_replica != result[
+            "replicaIndex"]:
+            log.info("Replica index enabled does not match (%s vs %s)",
+                     enable_index_replica, result["replicaIndex"])
             return False
 
         if priority == "high":
@@ -259,7 +326,8 @@ class CliBaseTest(BaseTestCase):
             priority = 3
 
         if priority is not None and priority != result["threadsNumber"]:
-            log.info("Bucket priority does not match (%s vs %s)", priority, result["threadsNumber"])
+            log.info("Bucket priority does not match (%s vs %s)", priority,
+                     result["threadsNumber"])
             return False
 
         if enable_flush is not None:
@@ -292,7 +360,8 @@ class CliBaseTest(BaseTestCase):
             log.info("Unable to get cluster name from server")
             return False
         if settings["clusterName"] != name:
-            log.info("Cluster name does not match (%s vs %s)", settings["clusterName"], name)
+            log.info("Cluster name does not match (%s vs %s)",
+                     settings["clusterName"], name)
             return False
 
         return True
@@ -320,8 +389,9 @@ class CliBaseTest(BaseTestCase):
             return True
         return False
 
-    def verifyIndexSettings(self, server, max_rollbacks, stable_snap_interval, mem_snap_interval,
-                                                     storage_mode, threads, log_level):
+    def verifyIndexSettings(self, server, max_rollbacks, stable_snap_interval,
+                            mem_snap_interval,
+                            storage_mode, threads, log_level):
         rest = RestConnection(server)
         settings = rest.get_global_index_settings()
 
@@ -330,25 +400,35 @@ class CliBaseTest(BaseTestCase):
         elif storage_mode == "memopt":
             storage_mode = "memory_optimized"
 
-        if max_rollbacks and str(settings["maxRollbackPoints"]) != str(max_rollbacks):
-            log.info("Max rollbacks does not match (%s vs. %s)", str(settings["maxRollbackPoints"]), str(max_rollbacks))
+        if max_rollbacks and str(settings["maxRollbackPoints"]) != str(
+                max_rollbacks):
+            log.info("Max rollbacks does not match (%s vs. %s)",
+                     str(settings["maxRollbackPoints"]), str(max_rollbacks))
             return False
-        if stable_snap_interval and str(settings["stableSnapshotInterval"]) != str(stable_snap_interval):
-            log.info("Stable snapshot interval does not match (%s vs. %s)", str(settings["stableSnapshotInterval"]),
+        if stable_snap_interval and str(
+                settings["stableSnapshotInterval"]) != str(
+                stable_snap_interval):
+            log.info("Stable snapshot interval does not match (%s vs. %s)",
+                     str(settings["stableSnapshotInterval"]),
                      str(stable_snap_interval))
             return False
-        if mem_snap_interval and str(settings["memorySnapshotInterval"]) != str(mem_snap_interval):
-            log.info("Memory snapshot interval does not match (%s vs. %s)", str(settings["memorySnapshotInterval"]),
+        if mem_snap_interval and str(
+                settings["memorySnapshotInterval"]) != str(mem_snap_interval):
+            log.info("Memory snapshot interval does not match (%s vs. %s)",
+                     str(settings["memorySnapshotInterval"]),
                      str(mem_snap_interval))
             return False
         if storage_mode and str(settings["storageMode"]) != str(storage_mode):
-            log.info("Storage mode does not match (%s vs. %s)", str(settings["storageMode"]), str(storage_mode))
+            log.info("Storage mode does not match (%s vs. %s)",
+                     str(settings["storageMode"]), str(storage_mode))
             return False
         if threads and str(settings["indexerThreads"]) != str(threads):
-            log.info("Threads does not match (%s vs. %s)", str(settings["indexerThreads"]), str(threads))
+            log.info("Threads does not match (%s vs. %s)",
+                     str(settings["indexerThreads"]), str(threads))
             return False
         if log_level and str(settings["logLevel"]) != str(log_level):
-            log.info("Log level does not match (%s vs. %s)", str(settings["logLevel"]), str(log_level))
+            log.info("Log level does not match (%s vs. %s)",
+                     str(settings["logLevel"]), str(log_level))
             return False
 
         return True
@@ -357,11 +437,14 @@ class CliBaseTest(BaseTestCase):
         rest = RestConnection(server)
         settings = rest.get_autofailover_settings()
 
-        if enabled and not ((str(enabled) == "1" and settings.enabled) or (str(enabled) == "0" and not settings.enabled)):
-            log.info("Enabled does not match (%s vs. %s)", str(enabled), str(settings.enabled))
+        if enabled and not ((str(enabled) == "1" and settings.enabled) or (
+                str(enabled) == "0" and not settings.enabled)):
+            log.info("Enabled does not match (%s vs. %s)", str(enabled),
+                     str(settings.enabled))
             return False
         if timeout and str(settings.timeout) != str(timeout):
-            log.info("Timeout does not match (%s vs. %s)", str(timeout), str(settings.timeout))
+            log.info("Timeout does not match (%s vs. %s)", str(timeout),
+                     str(settings.timeout))
             return False
 
         return True
@@ -370,15 +453,21 @@ class CliBaseTest(BaseTestCase):
         rest = RestConnection(server)
         settings = rest.getAuditSettings()
 
-        if enabled and not ((str(enabled) == "1" and settings["auditdEnabled"]) or (str(enabled) == "0" and not settings["auditdEnabled"])):
-            log.info("Enabled does not match (%s vs. %s)", str(enabled), str(settings["auditdEnabled"]))
+        if enabled and not (
+            (str(enabled) == "1" and settings["auditdEnabled"]) or (
+                str(enabled) == "0" and not settings["auditdEnabled"])):
+            log.info("Enabled does not match (%s vs. %s)", str(enabled),
+                     str(settings["auditdEnabled"]))
             return False
         if log_path and str(str(settings["logPath"])) != str(log_path):
-            log.info("Log path does not match (%s vs. %s)", str(log_path), str(settings["logPath"]))
+            log.info("Log path does not match (%s vs. %s)", str(log_path),
+                     str(settings["logPath"]))
             return False
 
-        if rotate_interval and str(str(settings["rotateInterval"])) != str(rotate_interval):
-            log.info("Rotate interval does not match (%s vs. %s)", str(rotate_interval), str(settings["rotateInterval"]))
+        if rotate_interval and str(str(settings["rotateInterval"])) != str(
+                rotate_interval):
+            log.info("Rotate interval does not match (%s vs. %s)",
+                     str(rotate_interval), str(settings["rotateInterval"]))
             return False
 
         return True
@@ -398,22 +487,26 @@ class CliBaseTest(BaseTestCase):
             for node in group["nodes"]:
                 if node["hostname"] == server_to_add:
                     if node["clusterMembership"] != "inactiveAdded":
-                        log.info("Node `%s` not in pending status", server_to_add)
+                        log.info("Node `%s` not in pending status",
+                                 server_to_add)
                         return False
 
                     if group["name"] != group_name:
-                        log.info("Node `%s` not in correct group (%s vs %s)", node["hostname"], group_name,
+                        log.info("Node `%s` not in correct group (%s vs %s)",
+                                 node["hostname"], group_name,
                                  group["name"])
                         return False
 
                     if len(node["services"]) != len(expected_services):
-                        log.info("Services do not match on %s (%s vs %s) ", node["hostname"], services,
+                        log.info("Services do not match on %s (%s vs %s) ",
+                                 node["hostname"], services,
                                  ",".join(node["services"]))
                         return False
 
                     for service in node["services"]:
                         if service not in expected_services:
-                            log.info("Services do not match on %s (%s vs %s) ", node["hostname"], services,
+                            log.info("Services do not match on %s (%s vs %s) ",
+                                     node["hostname"], services,
                                      ",".join(node["services"]))
                             return False
                     return True
@@ -437,10 +530,12 @@ class CliBaseTest(BaseTestCase):
         return True
 
     def verifyActiveServers(self, server, expected_num_servers):
-        return self._verifyServersByStatus(server, expected_num_servers, "active")
+        return self._verifyServersByStatus(server, expected_num_servers,
+                                           "active")
 
     def verifyFailedServers(self, server, expected_num_servers):
-        return self._verifyServersByStatus(server, expected_num_servers, "inactiveFailed")
+        return self._verifyServersByStatus(server, expected_num_servers,
+                                           "inactiveFailed")
 
     def _verifyServersByStatus(self, server, expected_num_servers, status):
         rest = RestConnection(server)
@@ -470,7 +565,9 @@ class CliBaseTest(BaseTestCase):
                 for rs in recovery_servers:
                     if node["hostname"] == rs:
                         if node["recoveryType"] != recovery_type:
-                            log.info("Node %s doesn't contain recovery type %s ", rs, recovery_type)
+                            log.info(
+                                "Node %s doesn't contain recovery type %s ",
+                                rs, recovery_type)
                             return False
                         else:
                             num_found = num_found + 1
@@ -478,7 +575,8 @@ class CliBaseTest(BaseTestCase):
         if num_found == len(recovery_servers):
             return True
 
-        log.info("Node `%s` not found in nodes list", ",".join(recovery_servers))
+        log.info("Node `%s` not found in nodes list",
+                 ",".join(recovery_servers))
         return False
 
     def verifyReadOnlyUser(self, server, username):
@@ -492,7 +590,8 @@ class CliBaseTest(BaseTestCase):
             ro_user = ro_user[1:-1]
 
         if ro_user != username:
-            log.info("Read only user name does not match (%s vs %s)", ro_user, username)
+            log.info("Read only user name does not match (%s vs %s)", ro_user,
+                     username)
             return False
         return True
 
@@ -516,25 +615,35 @@ class CliBaseTest(BaseTestCase):
 
         if default == "admins" and str(enabled) == "1":
             if settings["admins"] != "asterisk":
-                log.info("Admins don't match (%s vs asterisk)", settings["admins"])
+                log.info("Admins don't match (%s vs asterisk)",
+                         settings["admins"])
                 return False
         elif not self._list_compare(settings["admins"], admins):
-            log.info("Admins don't match (%s vs %s)", settings["admins"], admins)
+            log.info("Admins don't match (%s vs %s)", settings["admins"],
+                     admins)
             return False
 
         if default == "roadmins" and str(enabled) == "1":
             if settings["roAdmins"] != "asterisk":
-                log.info("Read only admins don't match (%s vs asterisk)", settings["roAdmins"])
+                log.info("Read only admins don't match (%s vs asterisk)",
+                         settings["roAdmins"])
                 return False
         elif not self._list_compare(settings["roAdmins"], ro_admins):
-            log.info("Read only admins don't match (%s vs %s)", settings["roAdmins"], ro_admins)
+            log.info("Read only admins don't match (%s vs %s)",
+                     settings["roAdmins"], ro_admins)
             return False
 
         return True
 
-    def verifyAlertSettings(self, server, enabled, email_recipients, email_sender, email_username, email_password, email_host,
-                            email_port, encrypted, alert_af_node, alert_af_max_reached, alert_af_node_down, alert_af_small,
-                            alert_af_disable, alert_ip_changed, alert_disk_space, alert_meta_overhead, alert_meta_oom,
+    def verifyAlertSettings(self, server, enabled, email_recipients,
+                            email_sender, email_username, email_password,
+                            email_host,
+                            email_port, encrypted, alert_af_node,
+                            alert_af_max_reached, alert_af_node_down,
+                            alert_af_small,
+                            alert_af_disable, alert_ip_changed,
+                            alert_disk_space, alert_meta_overhead,
+                            alert_meta_oom,
                             alert_write_failed, alert_audit_dropped):
         rest = RestConnection(server)
         settings = rest.get_alerts_settings()
@@ -552,28 +661,39 @@ class CliBaseTest(BaseTestCase):
         else:
             encrypted = True
 
-        if email_recipients is not None and not self._list_compare(email_recipients.split(","), settings["recipients"]):
-            log.info("Email recipients don't match (%s vs %s)", email_recipients.split(","), settings["recipients"])
+        if email_recipients is not None and not self._list_compare(
+                email_recipients.split(","), settings["recipients"]):
+            log.info("Email recipients don't match (%s vs %s)",
+                     email_recipients.split(","), settings["recipients"])
             return False
 
         if email_sender is not None and email_sender != settings["sender"]:
-            log.info("Email sender does not match (%s vs %s)", email_sender, settings["sender"])
+            log.info("Email sender does not match (%s vs %s)", email_sender,
+                     settings["sender"])
             return False
 
-        if email_username is not None and email_username != settings["emailServer"]["user"]:
-            log.info("Email username does not match (%s vs %s)", email_username, settings["emailServer"]["user"])
+        if email_username is not None and email_username != \
+                settings["emailServer"]["user"]:
+            log.info("Email username does not match (%s vs %s)",
+                     email_username, settings["emailServer"]["user"])
             return False
 
-        if email_host is not None and email_host != settings["emailServer"]["host"]:
-            log.info("Email host does not match (%s vs %s)", email_host, settings["emailServer"]["host"])
+        if email_host is not None and email_host != settings["emailServer"][
+            "host"]:
+            log.info("Email host does not match (%s vs %s)", email_host,
+                     settings["emailServer"]["host"])
             return False
 
-        if email_port is not None and email_port != settings["emailServer"]["port"]:
-            log.info("Email port does not match (%s vs %s)", email_port, settings["emailServer"]["port"])
+        if email_port is not None and email_port != settings["emailServer"][
+            "port"]:
+            log.info("Email port does not match (%s vs %s)", email_port,
+                     settings["emailServer"]["port"])
             return False
 
-        if encrypted is not None and encrypted != settings["emailServer"]["encrypt"]:
-            log.info("Email encryption does not match (%s vs %s)", encrypted, settings["emailServer"]["encrypt"])
+        if encrypted is not None and encrypted != settings["emailServer"][
+            "encrypt"]:
+            log.info("Email encryption does not match (%s vs %s)", encrypted,
+                     settings["emailServer"]["encrypt"])
             return False
 
         alerts = list()
@@ -584,7 +704,7 @@ class CliBaseTest(BaseTestCase):
         if alert_af_node_down:
             alerts.append('auto_failover_other_nodes_down')
         if alert_af_small:
-           alerts.append('auto_failover_cluster_too_small')
+            alerts.append('auto_failover_cluster_too_small')
         if alert_af_disable:
             alerts.append('auto_failover_disabled')
         if alert_ip_changed:
@@ -601,7 +721,8 @@ class CliBaseTest(BaseTestCase):
             alerts.append('audit_dropped_events')
 
         if not self._list_compare(alerts, settings["alerts"]):
-            log.info("Alerts don't match (%s vs %s)", alerts, settings["alerts"])
+            log.info("Alerts don't match (%s vs %s)", alerts,
+                     settings["alerts"])
             return False
 
         return True
@@ -611,40 +732,54 @@ class CliBaseTest(BaseTestCase):
         node_settings = rest.get_nodes_self()
 
         if data_path != node_settings.storage[0].path:
-            log.info("Data path does not match (%s vs %s)", data_path, node_settings.storage[0].path)
+            log.info("Data path does not match (%s vs %s)", data_path,
+                     node_settings.storage[0].path)
             return False
         if index_path != node_settings.storage[0].index_path:
-            log.info("Index path does not match (%s vs %s)", index_path, node_settings.storage[0].index_path)
+            log.info("Index path does not match (%s vs %s)", index_path,
+                     node_settings.storage[0].index_path)
             return False
         if hostname is not None:
             if hostname != node_settings.hostname:
-                log.info("Hostname does not match (%s vs %s)", hostname, node_settings.hostname)
+                log.info("Hostname does not match (%s vs %s)", hostname,
+                         node_settings.hostname)
                 return True
         return True
 
-    def verifyCompactionSettings(self, server, db_frag_perc, db_frag_size, view_frag_perc, view_frag_size, from_period,
-                                 to_period, abort_outside, parallel_compact, purgeInt):
+    def verifyCompactionSettings(self, server, db_frag_perc, db_frag_size,
+                                 view_frag_perc, view_frag_size, from_period,
+                                 to_period, abort_outside, parallel_compact,
+                                 purgeInt):
         rest = RestConnection(server)
         settings = rest.get_auto_compaction_settings()
         ac = settings["autoCompactionSettings"]
 
-        if db_frag_perc is not None and str(db_frag_perc) != str(ac["databaseFragmentationThreshold"]["percentage"]):
-            log.info("DB frag perc does not match (%s vs %s)", str(db_frag_perc),
+        if db_frag_perc is not None and str(db_frag_perc) != str(
+                ac["databaseFragmentationThreshold"]["percentage"]):
+            log.info("DB frag perc does not match (%s vs %s)",
+                     str(db_frag_perc),
                      str(ac["databaseFragmentationThreshold"]["percentage"]))
             return False
 
-        if db_frag_size is not None and str(db_frag_size*1024**2) != str(ac["databaseFragmentationThreshold"]["size"]):
-            log.info("DB frag size does not match (%s vs %s)", str(db_frag_size*1024**2),
+        if db_frag_size is not None and str(db_frag_size * 1024 ** 2) != str(
+                ac["databaseFragmentationThreshold"]["size"]):
+            log.info("DB frag size does not match (%s vs %s)",
+                     str(db_frag_size * 1024 ** 2),
                      str(ac["databaseFragmentationThreshold"]["size"]))
             return False
 
-        if view_frag_perc is not None and str(view_frag_perc) != str(ac["viewFragmentationThreshold"]["percentage"]):
-            log.info("View frag perc does not match (%s vs %s)", str(view_frag_perc),
+        if view_frag_perc is not None and str(view_frag_perc) != str(
+                ac["viewFragmentationThreshold"]["percentage"]):
+            log.info("View frag perc does not match (%s vs %s)",
+                     str(view_frag_perc),
                      str(ac["viewFragmentationThreshold"]["percentage"]))
             return False
 
-        if view_frag_size is not None and str(view_frag_size*1024**2) != str(ac["viewFragmentationThreshold"]["size"]):
-            log.info("View frag size does not match (%s vs %s)", str(view_frag_size*1024**2),
+        if view_frag_size is not None and str(
+                        view_frag_size * 1024 ** 2) != str(
+                ac["viewFragmentationThreshold"]["size"]):
+            log.info("View frag size does not match (%s vs %s)",
+                     str(view_frag_size * 1024 ** 2),
                      str(ac["viewFragmentationThreshold"]["size"]))
             return False
 
@@ -676,8 +811,10 @@ class CliBaseTest(BaseTestCase):
         elif str(abort_outside) == "0":
             abort_outside = False
 
-        if abort_outside is not None and abort_outside != ac["allowedTimePeriod"]["abortOutside"]:
-            log.info("Abort outside does not match (%s vs %s)", abort_outside, ac["allowedTimePeriod"]["abortOutside"])
+        if abort_outside is not None and abort_outside != \
+                ac["allowedTimePeriod"]["abortOutside"]:
+            log.info("Abort outside does not match (%s vs %s)", abort_outside,
+                     ac["allowedTimePeriod"]["abortOutside"])
             return False
 
         if str(parallel_compact) == "1":
@@ -685,19 +822,24 @@ class CliBaseTest(BaseTestCase):
         elif str(parallel_compact) == "0":
             parallel_compact = False
 
-        if parallel_compact is not None and parallel_compact != ac["parallelDBAndViewCompaction"]:
-            log.info("Parallel compact does not match (%s vs %s)", str(parallel_compact),
+        if parallel_compact is not None and parallel_compact != ac[
+            "parallelDBAndViewCompaction"]:
+            log.info("Parallel compact does not match (%s vs %s)",
+                     str(parallel_compact),
                      str(ac["parallelDBAndViewCompaction"]))
             return False
 
-        if purgeInt is not None and str(purgeInt) != str(settings["purgeInterval"]):
-            log.info("Purge interval does not match (%s vs %s)", str(purgeInt), str(settings["purgeInterval"]))
+        if purgeInt is not None and str(purgeInt) != str(
+                settings["purgeInterval"]):
+            log.info("Purge interval does not match (%s vs %s)", str(purgeInt),
+                     str(settings["purgeInterval"]))
             return False
 
         return True
 
-    def verify_gsi_compact_settings(self, compact_mode, compact_percent, compact_interval,
-                                                   from_period, to_period, enable_abort):
+    def verify_gsi_compact_settings(self, compact_mode, compact_percent,
+                                    compact_interval,
+                                    from_period, to_period, enable_abort):
         settings = self.rest.get_auto_compaction_settings()
         ac = settings["autoCompactionSettings"]["indexFragmentationThreshold"]
         cc = settings["autoCompactionSettings"]["indexCircularCompaction"]
@@ -705,24 +847,32 @@ class CliBaseTest(BaseTestCase):
             if compact_mode == "append":
                 self.log.info("append compactino settings %s " % ac)
                 if compact_percent is not None and \
-                                         compact_percent != ac["percentage"]:
-                    raise Exception("setting percent does not match.  Set: %s vs %s :Actual"
-                                     % (compact_percent, ac["percentage"]))
+                                compact_percent != ac["percentage"]:
+                    raise Exception(
+                        "setting percent does not match.  Set: %s vs %s :Actual"
+                        % (compact_percent, ac["percentage"]))
             if compact_mode == "circular":
                 self.log.info("circular compaction settings %s " % cc)
                 if enable_abort and not cc["interval"]["abortOutside"]:
                     raise Exception("setting enable abort failed")
                 if compact_interval is not None:
                     if compact_interval != cc["daysOfWeek"]:
-                        raise Exception("Failed to set compaction on %s " % compact_interval)
-                    elif from_period is None and int(cc["interval"]["fromHour"]) != 0 and \
-                                           int(cc["interval"]["fromMinute"]) != 0:
-                        raise Exception("fromHour and fromMinute should be zero")
+                        raise Exception(
+                            "Failed to set compaction on %s " % compact_interval)
+                    elif from_period is None and int(
+                            cc["interval"]["fromHour"]) != 0 and \
+                                    int(cc["interval"]["fromMinute"]) != 0:
+                        raise Exception(
+                            "fromHour and fromMinute should be zero")
                 if compact_interval is None:
                     if from_period != \
-                        str(cc["interval"]["fromHour"]) + ":" + str(cc["interval"]["fromMinute"])\
-                        and str(cc["interval"]["toHour"]) + ":" + str(cc["interval"]["toMinute"]):
-                        raise Exception("fromHour and fromMinute do not set correctly")
+                                            str(cc["interval"][
+                                                    "fromHour"]) + ":" + str(
+                                cc["interval"]["fromMinute"]) \
+                            and str(cc["interval"]["toHour"]) + ":" + str(
+                                cc["interval"]["toMinute"]):
+                        raise Exception(
+                            "fromHour and fromMinute do not set correctly")
         return True
 
     def verifyGroupExists(self, server, name):
@@ -752,7 +902,8 @@ class CliBaseTest(BaseTestCase):
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)
         for sec in range(timeout):
-            items = int(rest.get_bucket_json(bucket_name)["basicStats"]["itemCount"])
+            items = int(
+                rest.get_bucket_json(bucket_name)["basicStats"]["itemCount"])
             if items != count:
                 time.sleep(1)
             else:

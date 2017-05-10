@@ -3,7 +3,7 @@
 # TODO: add installer support for membasez
 
 import getopt
-import copy
+import copy, re
 import logging
 import os
 import sys
@@ -28,7 +28,7 @@ from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
-                          CB_RELEASE_BUILDS
+                          CB_RELEASE_BUILDS, COUCHBASE_VERSIONS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
 from testconstants import WIN_COUCHBASE_PORT_CONFIG_PATH, WIN_COUCHBASE_OLD_CONFIG_PATH
@@ -73,6 +73,9 @@ Examples:
 
  # to install latest release of couchbase server via repo (apt-get and yum)
   install.py -i /tmp/ubuntu.ini -p product=cb,linux_repo=true
+
+ # to install non-root non default path, add nr_install_dir params
+   install.py -i /tmp/ubuntu.ini -p product=cb,version=5.0.0-1900,nr_install_dir=testnow1
 
 """
     sys.exit(err)
@@ -127,8 +130,8 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(params["server"])
         #remote_client.membase_uninstall()
 
-        self.nsis = 'nsis' in params and params['nsis'].lower() == 'true'
-        remote_client.couchbase_uninstall(windows_nsis=self.nsis)
+        self.msi = 'msi' in params and params['msi'].lower() == 'true'
+        remote_client.couchbase_uninstall(windows_msi=self.msi)
         remote_client.disconnect()
 
 
@@ -191,6 +194,11 @@ class Installer(object):
             else:
                 linux_repo = False
         if ok:
+            if "msi" in params and params["msi"].lower() == "true":
+                msi = True
+            else:
+                msi = False
+        if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
@@ -220,6 +228,8 @@ class Installer(object):
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
+        if msi:
+            info.deliverable_type = "msi"
         remote_client.disconnect()
         if ok and not linux_repo:
             timeout = 300
@@ -233,6 +243,13 @@ class Installer(object):
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = CB_REPO
+            elif "moxi-server" in names and version[:5] != "2.5.2":
+                print "version   ", version
+                """
+                moxi repo:
+                   http://172.23.120.24/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
+                """
+                build_repo = CB_REPO.replace("couchbase-server", "moxi") + version[:5] + "/"
             elif version[:5] not in COUCHBASE_VERSION_2 and \
                  version[:5] not in COUCHBASE_VERSION_3:
                 if version[:3] in CB_VERSION_NAME:
@@ -253,7 +270,8 @@ class Installer(object):
                                             os_architecture=info.architecture_type,
                                             build_version=version,
                                             product=name,
-                                            os_version = info.distribution_version)
+                                            os_version = info.distribution_version,
+                                            direct_build_url=direct_build_url)
                 else:
                     builds, changes = BuildQuery().get_all_builds(version=version,
                                       timeout=timeout,
@@ -557,7 +575,7 @@ class CouchbaseServerInstaller(Installer):
 
         log.info('********CouchbaseServerInstaller:install')
 
-        self.nsis = 'nsis' in params and params['nsis'].lower() == 'true'
+        self.msi = 'msi' in params and params['msi'].lower() == 'true'
         start_server = True
         try:
             if "linux_repo" not in params:
@@ -570,6 +588,10 @@ class CouchbaseServerInstaller(Installer):
         info = remote_client.extract_remote_info()
         type = info.type.lower()
         server = params["server"]
+        self.nonroot = False
+        if info.deliverable_type in ["rpm", "deb"]:
+            if server.ssh_username != "root":
+                self.nonroot = True
         if "swappiness" in params:
             swappiness = int(params["swappiness"])
         else:
@@ -608,16 +630,15 @@ class CouchbaseServerInstaller(Installer):
         if not linux_repo:
             if type == "windows":
                 log.info('***** Download Windows binary*****')
-                remote_client.download_binary_in_win(build.url, params["version"],nsis_install=self.nsis)
+                remote_client.download_binary_in_win(build.url, params["version"],msi_install=self.msi)
                 success = remote_client.install_server_win(build, \
                         params["version"].replace("-rel", ""), vbuckets=vbuckets,
-                        fts_query_limit=fts_query_limit,windows_nsis=self.nsis )
+                        fts_query_limit=fts_query_limit,windows_msi=self.msi )
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:
-                    log.error('server {1} unable to download binaries : {0}' \
-                          .format(build.url, params["server"].ip))
-                    return False
+                    sys.exit('server {1} unable to download binaries : {0}' \
+                                     .format(build.url, params["server"].ip))
                 # TODO: need separate methods in remote_util for couchbase and membase install
                 path = server.data_path or '/tmp'
                 try:
@@ -1068,6 +1089,36 @@ def main():
             usage()
 
         input = TestInput.TestInputParser.get_test_input(sys.argv)
+        """
+           Terminate the installation process instantly if user put in
+           incorrect build pattern.  Correct pattern should be
+           x.x.x-xxx
+           x.x.x-xxxx
+           xx.x.x-xxx
+           xx.x.x-xxxx
+           where x is a number from 0 to 9
+        """
+        correct_build_format = False
+        if "version" in input.test_params:
+            build_version = input.test_params["version"]
+            build_pattern = re.compile("\d\d?\.\d\.\d-\d{3,4}$")
+            if input.test_params["version"][:5] in COUCHBASE_VERSIONS and \
+                bool(build_pattern.match(build_version)):
+                correct_build_format = True
+        if not correct_build_format:
+            log.info("\n========\n"
+                     "         Incorrect build pattern.\n"
+                     "         It should be 0.0.0-111 or 0.0.0-1111 format\n"
+                     "         Or \n"
+                     "         Build version %s does not support yet\n"
+                     "         Or \n"
+                     "         There is No build %s in build repo\n"
+                     "========"
+                     % (build_version[:5],
+                        build_version.split("-")[1] if "-" in build_version else "Need build number"))
+            os.system("ps aux | grep python | grep %d " % os.getpid())
+            os.system('kill %d' % os.getpid())
+
         if not input.servers:
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:

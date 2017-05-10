@@ -10,7 +10,9 @@ from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
 from couchbase_cli import CouchbaseCLI
+from security.rbac_base import RbacBase
 from pprint import pprint
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
@@ -22,11 +24,17 @@ class ImportExportTests(CliBaseTest):
         super(ImportExportTests, self).setUp()
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
+        self.localhost = self.input.param("localhost", False)
         self.field_separator = self.input.param("field_separator", "comma")
+        self.json_create_gen = JsonDocGenerator("imex", op_type="create",
+                                       encoding="utf-8", start=0, end=self.num_items)
+        self.json_delete_gen = JsonDocGenerator("imex", op_type="delete",
+                                       encoding="utf-8", start=0, end=self.num_items)
 
     def tearDown(self):
         super(ImportExportTests, self).tearDown()
         self.import_back = self.input.param("import_back", False)
+        ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
         if self.import_back:
             self.log.info("clean up server in import back tests")
             imp_servers = copy.deepcopy(self.servers[2:])
@@ -77,8 +85,153 @@ class ImportExportTests(CliBaseTest):
         return self._common_imex_test("export", options)
 
     def test_export_and_import_back(self):
-        options = {"load_doc": True, "docs":"10"}
+        options = {"load_doc": True, "docs":"1000"}
         return self._common_imex_test("export", options)
+
+    def test_export_with_localhost(self):
+        """
+           Set localhost param = True
+           IP address will be replaced with localhost
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        return self._common_imex_test("export", options)
+
+    def test_export_delete_expired_updated_data(self):
+        """
+           @delete_percent = percent keys deleted
+           @udpated = update doc
+           @update_field = [fields need to update] like update_field=['dept']
+             When do update_field, "mutated" should not = 0
+
+        """
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        delete_percent = self.input.param("delete_percent", None)
+        updated = self.input.param("updated", False)
+        update_field = self.input.param("update_field", None)
+        path = self.input.param("path", None)
+        self.ex_path = self.tmp_path + "export/"
+        master = self.servers[0]
+        server = copy.deepcopy(master)
+
+        if username is None:
+            username = server.rest_username
+        if password is None:
+            password = server.rest_password
+        self.cli_command_path = "cd %s; ./" % self.cli_command_path
+        self.buckets = RestConnection(server).get_buckets()
+        total_items = self.num_items
+        for bucket in self.buckets:
+            doc_create_gen = copy.deepcopy(self.json_create_gen)
+            self.cluster.load_gen_docs(self.master, bucket.name,
+                                               doc_create_gen, bucket.kvs[1], "create")
+            self.verify_cluster_stats(self.servers[:self.nodes_init], max_verify=total_items)
+            if delete_percent is not None:
+                self.log.info("Start to delete %s %% total keys" % delete_percent)
+                doc_delete_gen = copy.deepcopy(self.json_delete_gen)
+                doc_delete_gen.end = int(self.num_items) * int(delete_percent) / 100
+                total_items -= doc_delete_gen.end
+                self.cluster.load_gen_docs(self.master, bucket.name, doc_delete_gen,
+                                                            bucket.kvs[1], "delete")
+            if updated and update_field is not None:
+                self.log.info("Start update data")
+                doc_updated_gen = copy.deepcopy(self.json_create_gen)
+                doc_updated_gen.update(fields_to_update=update_field)
+                self.cluster.load_gen_docs(self.master, bucket.name, doc_updated_gen,
+                                                             bucket.kvs[1], "update")
+            self.verify_cluster_stats(self.servers[:self.nodes_init], max_verify=total_items)
+            """ remove previous export directory at tmp dir and re-create it
+                in linux:   /tmp/export
+                in windows: /cygdrive/c/tmp/export """
+            self.log.info("remove old export dir in %s" % self.tmp_path)
+            self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
+            self.log.info("create export dir in %s" % self.tmp_path)
+            self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+            """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
+                              -p password -b default -f list -o /tmp/test4.zip """
+            export_file = self.ex_path + bucket.name
+            if self.cmd_ext:
+                export_file = export_file.replace("/cygdrive/c", "c:")
+            exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
+                         % (self.cli_command_path, "cbexport", self.cmd_ext, self.imex_type,
+                                     server.ip, username, password, bucket.name,
+                                                    self.format_type, export_file)
+            output, error = self.shell.execute_command(exe_cmd_str)
+            self._check_output("successfully", output)
+            if self.format_type == "list":
+                self.log.info("remove [] in file")
+                self.shell.execute_command("sed%s -i '/^\[\]/d' %s"
+                                                 % (self.cmd_ext,export_file))
+            output, _ = self.shell.execute_command("awk%s 'END {print NR}' %s"
+                                                     % (self.cmd_ext, export_file))
+            self.assertTrue(int(total_items) == int(output[0]),
+                                     "doc in bucket: %s != doc in export file: %s"
+                                      % (total_items, output[0]))
+
+    def test_export_from_dgm_bucket(self):
+        """
+           Need to add params below to test:
+            format_type=list (or lines)
+            dgm_run=True
+            active_resident_threshold=xx
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        return self._common_imex_test("export", options)
+
+    def test_import_to_dgm_bucket(self):
+        """
+           Need to add params below to test:
+            format_type=list (or lines)
+            imex_type=json (tab or csv)
+            import_file=json_list_1000_lines (depend on above formats)
+            dgm_run=True
+            active_resident_threshold=xx
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        return self._common_imex_test("import", options)
+
+    def test_imex_with_special_chars_in_password(self):
+        """
+           Import and export must accept special characters in password
+           like: #, $
+           This test needs to reset password back to original one.
+           Need param:
+             @param password
+             @param test_type
+             @format_type lines/list
+             @param import_file
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        new_password = self.input.param("password", None)
+        rest_password = self.master.rest_password
+        command = "setting-cluster"
+        password_changed = False
+        try:
+            self.log.info("Change password to new one")
+            if self.input.param("password", None) is None:
+                self.fail("Need to pass param 'password' to run this test")
+            options_cli = "-u Administrator -p %s --cluster-password %s "\
+                                        % (rest_password, new_password)
+            output, _ = self.shell.couchbase_cli(command, self.master.ip, options_cli)
+            if self._check_output("SUCCESS", output):
+                self.log.info("Password was changed to %s " % new_password)
+                password_changed = True
+                self.master.rest_password = new_password
+            else:
+                self.fail("Fail to change password cluster to %s" % new_password)
+
+            self._common_imex_test(self.test_type, options)
+        finally:
+            if password_changed:
+                self.log.info("change password back to default in ini file")
+                options = "-u Administrator -p %s --cluster-password %s "\
+                                           % (new_password, rest_password)
+                output, _ = self.shell.couchbase_cli(command, self.master.ip, options)
+                if self._check_output("SUCCESS", output):
+                    self.log.info("Password was changed back to %s " % rest_password)
+                    self.master.rest_password = rest_password
+                else:
+                    self.fail("Fail to change password back to %s" % rest_password)
 
     def test_imex_during_rebalance(self):
         """ During rebalance, the test will execute the import/export command.
@@ -95,7 +248,9 @@ class ImportExportTests(CliBaseTest):
                         format_flag = "-f"
                         field_separator_flag = ""
                         if self.imex_type == "csv":
-                            format_flag = ""
+                            format_flag = self.format_type = ""
+                            if self.format_type is None:
+                                self.format_type = ""
                             if self.field_separator != "comma":
                                 if self.field_separator == "tab":
                                     """ we test tab separator in this case """
@@ -103,7 +258,7 @@ class ImportExportTests(CliBaseTest):
                                 else:
                                     field_separator_flag = "--field-separator %s "\
                                                               % self.field_separator
-                        key_gen = "%index%"
+                        key_gen = "key::%index%"
                         imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                     " -b %s -d %s%s %s %s -g %s %s "\
                               % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -121,6 +276,8 @@ class ImportExportTests(CliBaseTest):
                         self.shell.execute_command("mkdir %sexport " % self.tmp_path)
                         export_file = self.ex_path + bucket.name
                         if self.imex_type == "json":
+                            if self.cmd_ext:
+                                export_file = export_file.replace("/cygdrive/c", "c:")
                             exp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                             " -b %s -f %s -o %s"\
                                   % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -144,7 +301,7 @@ class ImportExportTests(CliBaseTest):
             """ change default port from 8091 to 9000 """
             port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
                                     % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
-                                          "cluster-edit", server.ip, default_port, new_port)
+                                          "setting-cluster", server.ip, default_port, new_port)
             output, error = self.shell.execute_command(port_cmd)
             if self._check_output("SUCCESS", output):
                 self.log.info("Port was changed from 8091 to 9000")
@@ -157,9 +314,9 @@ class ImportExportTests(CliBaseTest):
                 if len(self.buckets) >= 1:
                     if self.imex_type == "json":
                         for bucket in self.buckets:
-                            key_gen = "%index%"
+                            key_gen = "key::%index%"
                             """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                        -b default -d file:///tmp/export/default -f list -g %index%  """
+                        -b default -d file:///tmp/export/default -f list -g key::%index%  """
                             imp_cmd_str = "%s%s%s %s -c %s:%s -u Administrator -p password "\
                                                                  "-b %s -d %s%s -f %s -g %s"\
                                      % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -184,6 +341,8 @@ class ImportExportTests(CliBaseTest):
                 if len(self.buckets) >= 1:
                     for bucket in self.buckets:
                         export_file = self.ex_path + bucket.name
+                        if self.cmd_ext:
+                            export_file = export_file.replace("/cygdrive/c", "c:")
                         exe_cmd_str = "%s%s%s %s -c %s:%s -u Administrator "\
                                              "-p password -b %s -f %s -o %s"\
                                     % (self.cli_command_path, self.test_type,
@@ -201,7 +360,7 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("change port back to default port 8091")
                 port_cmd = "%s%s%s %s -c %s:%s -u Administrator -p password --cluster-port=%s "\
                         % (self.cli_command_path, "couchbase-cli", self.cmd_ext,
-                           "cluster-edit", server.ip, new_port, default_port)
+                           "setting-cluster", server.ip, new_port, default_port)
                 output, error = self.shell.execute_command(port_cmd)
             if test_failed:
                 self.fail("Test failed.  Check exception throw above.")
@@ -220,7 +379,7 @@ class ImportExportTests(CliBaseTest):
             import_file = json_list_1000_lines
                                   =lines,....
             ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                        -b default -d file:///tmp/export/default -f list -g %index% """
+                -b default -d file:///tmp/export/default -f list -g key::%index% """
         server = copy.deepcopy(self.servers[0])
         self.sample_file = self.input.param("sample_file", None)
         self.cluster_flag = self.input.param("cluster_flag", "-c")
@@ -231,14 +390,17 @@ class ImportExportTests(CliBaseTest):
         self.format_flag = self.input.param("format_flag", "-f")
         self.generate_flag = self.input.param("generate_flag", "-g")
         self.output_flag = self.input.param("output_flag", "-o")
+        data_path = self.tmp_path
+        if self.cmd_ext:
+            data_path = self.tmp_path_raw
         if self.test_type == "import":
             cmd = "cbimport"
             cmd_str = "%s%s%s %s %s %s %s Administrator %s password %s default %s "\
-                                      "file://%sdefault  %s lines %s %%index%%"\
+                                     "file://%sdefault  %s lines %s key::%%index%%"\
                             % (self.cli_command_path, cmd, self.cmd_ext,
                            self.imex_type, self.cluster_flag, server.ip,
                            self.user_flag, self.password_flag, self.bucket_flag,
-                           self.dataset_flag, self.tmp_path, self.format_flag,
+                           self.dataset_flag, data_path, self.format_flag,
                            self.generate_flag)
         elif self.test_type == "export":
             cmd = "cbexport"
@@ -291,7 +453,7 @@ class ImportExportTests(CliBaseTest):
                 self.fail("%s could not detect missing '-b or --bucket' flag"
                                                           % self.test_type)
         if self.dataset_flag == "" and self.test_type == "import":
-            if "Expected flag: file://%sdefault" % self.tmp_path in output \
+            if "Expected flag: file://%sdefault" % data_path in output \
                              and "Required Flags:" in output:
                 self.log.info("%s detected missing '-d or --dataset' flag"
                                                           % self.test_type)
@@ -386,16 +548,18 @@ class ImportExportTests(CliBaseTest):
                 self.shell.execute_command("rm -rf ~/log")
             elif self.logs_flag == "absolute_path":
                 logs_path = self.tmp_path + "logs/" + self.logs_flag
+        if self.cmd_ext:
+            if logs_path and logs_path.startswith("/cygdrive/"):
+                logs_path = logs_path.replace("/cygdrive/c", "c:")
         if self.test_type == "import":
             cmd = "cbimport"
             self._remote_copy_import_file(self.import_file)
             if self.imex_type == "json":
                 for bucket in self.buckets:
-                    key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
                         -b default -d file:///tmp/export/default -f list -g %index%  """
                     imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
-                                  "-d %s%s -f %s -g %%index%% %s %s %s %s %s %s"\
+                                  "-d %s%s -f %s -g key::%%index%% %s %s %s %s %s %s"\
                              % (self.cli_command_path, cmd, self.cmd_ext,
                                             self.imex_type, server.ip, bucket.name,
                                     import_method, self.des_file, self.format_type,
@@ -515,6 +679,11 @@ class ImportExportTests(CliBaseTest):
             self.log.info("test with local bin path ")
             self.cli_command_path = "cd %s; ./" % self.cli_command_path
         self.buckets = RestConnection(server).get_buckets()
+        random_key = self.key_generator()
+        kv_gen = BlobGenerator(random_key, "%s-" % random_key,
+                                                   self.value_size,
+                                                   start=0,
+                                                   end=50000)
         if "export" in cmd:
             cmd = "cbexport"
             if options["load_doc"]:
@@ -525,17 +694,32 @@ class ImportExportTests(CliBaseTest):
                             % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
                                server.ip, username, password, options["docs"],
                                bucket.name)
+                        if self.dgm_run and self.active_resident_threshold:
+                            """ disable auto compaction so that bucket could
+                                go into dgm faster.
+                            """
+                            self.rest.disable_auto_compaction()
+                            self.log.info("**** Load bucket to %s of active resident"\
+                                          % self.active_resident_threshold)
+                            self._load_all_buckets(self.master, kv_gen, "create", 0)
+                        self.log.info("load sample data to bucket")
                         self.shell.execute_command(load_cmd)
             """ remove previous export directory at tmp dir and re-create it
                 in linux:   /tmp/export
                 in windows: /cygdrive/c/tmp/export """
+            self.log.info("remove old export dir in %s" % self.tmp_path)
             self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
+            self.log.info("create export dir in %s" % self.tmp_path)
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
             """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
             if len(self.buckets) >= 1:
                 for bucket in self.buckets:
                     export_file = self.ex_path + bucket.name
+                    if self.cmd_ext:
+                        export_file = export_file.replace("/cygdrive/c", "c:")
+                    if self.localhost:
+                        server.ip = "localhost"
                     exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                      server.ip, username, password, bucket.name,
@@ -550,6 +734,17 @@ class ImportExportTests(CliBaseTest):
                 import_shell = RemoteMachineShellConnection(import_servers[2])
                 imp_rest.force_eject_node()
                 self.sleep(2)
+
+                """ Add built-in user cbadminbucket to second cluster """
+                self.log.info("add built-in user cbadminbucket to second cluster.")
+                testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+                RbacBase().create_user_source(testuser, 'builtin', import_servers[2])
+                self.sleep(10)
+                """ Assign user to role """
+                role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+                RbacBase().add_user_role(role_list, RestConnection(import_servers[2]), 'builtin')
+                self.sleep(10)
+
                 imp_rest = RestConnection(import_servers[2])
                 status = False
                 info = imp_rest.get_nodes_self()
@@ -557,10 +752,11 @@ class ImportExportTests(CliBaseTest):
                     self.quota = info.memoryQuota
                 imp_rest.init_node()
                 self.cluster.rebalance(import_servers[2:], [import_servers[3]], [])
-                self.cluster.create_default_bucket(import_servers[2], "250", self.num_replicas,
-                                               enable_replica_index=self.enable_replica_index,
-                                               eviction_policy=self.eviction_policy)
-                imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d file://%s -f %s -g %s"\
+                bucket_params=self._create_bucket_params(server=import_servers[2],size=250,replicas=self.num_replicas,
+                                                         enable_replica_index=self.enable_replica_index,
+                                                         eviction_policy=self.eviction_policy)
+                self.cluster.create_default_bucket(bucket_params)
+                imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d file://%s -f %s -g key::%%%s%%"\
                               % (self.cli_command_path, "cbimport", self.cmd_ext, self.imex_type,
                                  import_servers[2].ip, username, password, "default",
                                  import_file, self.format_type, "index")
@@ -602,15 +798,26 @@ class ImportExportTests(CliBaseTest):
                         else:
                             field_separator_flag = "--field-separator %s " % self.field_separator
                 for bucket in self.buckets:
-                    key_gen = "%index%"
+                    key_gen = "key::%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                    -b default -d file:///tmp/export/default -f list -g %index%  """
+                    -b default -d file:///tmp/export/default -f list -g key::%index%  """
+                    if self.cmd_ext:
+                        des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                           server.ip, username, password, bucket.name,
                                                              import_method, des_file,
                                               format_flag, self.format_type, key_gen,
                                                                 field_separator_flag)
+                    if self.dgm_run and self.active_resident_threshold:
+                        """ disable auto compaction so that bucket could
+                            go into dgm faster.
+                        """
+                        self.rest.disable_auto_compaction()
+                        self.log.info("**** Load bucket to %s of active resident"\
+                                          % self.active_resident_threshold)
+                        self._load_all_buckets(self.master, kv_gen, "create", 0)
+                    self.log.info("Import data to bucket")
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
                     """ Json `file:///root/json_list` imported to `http://host:8091` successfully """
@@ -648,9 +855,9 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("compare 2 json files")
                 if self.format_type == "lines":
                     sample_file = open("resources/imex/json_%s_lines" % options["docs"])
-                    samples = sample_file.readlines()
+                    samples = sample_file.read().splitlines()
                     export_file = open("/tmp/export/"+ export_file_name)
-                    exports = export_file.readlines()
+                    exports = export_file.read().splitlines()
                     if sorted(samples) == sorted(exports):
                         self.log.info("export and sample json mathch")
                     else:
@@ -674,8 +881,8 @@ class ImportExportTests(CliBaseTest):
                     sample_file.close()
                     export_file.close()
             else:
-                self.fail("There is not export file in %s%s"\
-                                  % (self.ex_path, export_file_name))
+                self.fail("There is not export file '%s' in %s%s"\
+                                  % (export_file_name, self.ex_path, export_file_name))
 
     def _check_output(self, word_check, output):
         found = False
@@ -746,7 +953,7 @@ class ImportExportTests(CliBaseTest):
                 self.fail("%s failed to create error file in log flag"
                                                         % self.test_type)
         elif self.errors_flag == "absolute_path":
-            output, error = self.shell.execute_command("ls %s " % self.cli_command_path)
+            output, error = self.shell.execute_command("ls %s " % errors_path)
             if self._check_output("error", output):
                 error_check = False
                 self.log.info("%s error file created" % self.test_type)

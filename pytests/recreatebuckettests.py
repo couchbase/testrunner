@@ -3,8 +3,11 @@ import uuid
 import TestInput
 import logger
 import datetime
+import time
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
+from security.rbac_base import RbacBase
+
 
 
 class RecreateMembaseBuckets(unittest.TestCase):
@@ -20,10 +23,25 @@ class RecreateMembaseBuckets(unittest.TestCase):
         self.assertTrue(self.input, msg="input parameters missing...")
         self.servers = self.input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
+        # Add built-in user
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.servers[0])
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.servers[0]), 'builtin')
+        time.sleep(10)
+
         self._log_start()
 
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
+        rest = RestConnection(self.servers[0])
+        # Remove rbac user in teardown
+        role_del = ['cbadminbucket']
+        temp = RbacBase().remove_user_role(role_del, rest)
+
         self._log_finish()
 
     def _log_start(self):

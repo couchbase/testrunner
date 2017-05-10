@@ -4,10 +4,12 @@ from newupgradebasetest import NewUpgradeBaseTest
 from membase.api.rest_client import RestConnection
 import commands
 import json
+import socket
 from couchbase.bucket import Bucket
 from threading import Thread, Event
 from remote.remote_util import RemoteMachineShellConnection
 from security.auditmain import audit
+from security.rbac_base import RbacBase
 
 class x509tests(BaseTestCase):
 
@@ -56,7 +58,6 @@ class x509tests(BaseTestCase):
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -65,6 +66,7 @@ class x509tests(BaseTestCase):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
+        '''
 
 
     def createBulkDocuments(self,client):
@@ -106,10 +108,12 @@ class x509tests(BaseTestCase):
     def _sdk_connection(self,root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE,bucket='default',host_ip=None):
         self.sleep(30)
         result = False
+        self.add_built_in_server_user([{'id': bucket, 'name': bucket,'password': 'password'}], \
+                                      [{'id': bucket, 'name': bucket,'roles': 'admin'}], self.master)
         connection_string = 'couchbases://'+ host_ip + '/' + bucket + '?certpath='+root_ca_path
         print connection_string
         try:
-            cb = Bucket(connection_string)
+            cb = Bucket(connection_string, password='password')
             if cb is not None:
                 result = True
                 return result, cb
@@ -597,11 +601,15 @@ class x509tests(BaseTestCase):
     def test_root_existing_connection_rotate_cert(self):
         rest = RestConnection(self.master)
         rest.create_bucket(bucket='default', ramQuotaMB=100)
+        bucket='default'
+        self.add_built_in_server_user([{'id': bucket, 'name': bucket, 'password': 'password'}], \
+                                      [{'id': bucket, 'name': bucket, 'roles': 'admin'}], self.master)
         self.sleep(30)
         result = False
+
         connection_string = 'couchbase://'+ self.master.ip + '/default'
         try:
-            cb = Bucket(connection_string)
+            cb = Bucket(connection_string, password='password')
             if cb is not None:
                 result = True
         except Exception, ex:
@@ -664,10 +672,12 @@ class x509_upgrade(NewUpgradeBaseTest):
     def _sdk_connection(self,root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE,bucket='default',host_ip=None):
         self.sleep(30)
         result = False
+        self.add_built_in_server_user([{'id': bucket, 'name': bucket, 'password': 'password'}], \
+                                      [{'id': bucket, 'name': bucket, 'roles': 'admin'}], self.master)
         connection_string = 'couchbases://'+ host_ip + '/' + bucket + '?certpath='+root_ca_path
         print connection_string
         try:
-            cb = Bucket(connection_string)
+            cb = Bucket(connection_string, passsword='password')
             if cb is not None:
                 result = True
                 return result, cb

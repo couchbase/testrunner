@@ -13,6 +13,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from security.auditmain import audit
+from security.rbac_base import RbacBase
 import socket
 import random
 import zlib
@@ -89,7 +90,7 @@ class rbacclitests(BaseTestCase):
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+        content =  rest.set_user_roles(user_id=username,payload=payload)
 
     def _validate_roles(self,output,result):
         print output
@@ -109,16 +110,14 @@ class rbacclitests(BaseTestCase):
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
-
-    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211, bucket_password=None, \
+    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211,
                         bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None, \
                        user=None,password=None):
-        options = "--bucket={0} --bucket-type={1} --bucket-port={2} --bucket-ramsize={3} --bucket-replica={4}".\
-            format(bucket, bucket_type, bucket_port, bucket_ramsize, bucket_replica)
+        options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}".\
+            format(bucket, bucket_type, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica), "")[enable_index_replica is None]
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
-        options += (" --bucket-password={0}".format(bucket_password), "")[bucket_password is None]
         options += (" --wait", "")[wait]
         cli_command = "bucket-create"
         if user is None:
@@ -132,6 +131,7 @@ class rbacclitests(BaseTestCase):
 
     def testClusterEdit(self):
         options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
+        remote_client = RemoteMachineShellConnection(self.master)
         output, error = remote_client.execute_couchbase_cli(cli_command='cluster-edit', options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
 
     def testAddRemoveNodes(self):
@@ -180,7 +180,7 @@ class rbacclitests(BaseTestCase):
                 self._validate_roles(output,result)
                 self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
                 cli_command = "server-readd"
-                options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num ].ip)
+                options = "--server-add={0}:8091".format(self.servers[nodes_add - nodes_rem - num ].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             self._validate_roles(output,result)
         remote_client.disconnect()
@@ -202,7 +202,7 @@ class rbacclitests(BaseTestCase):
         enable_index_replica = self.input.param("enable_index_replica", None)
 
         remote_client = RemoteMachineShellConnection(self.master)
-        output = self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
+        output = self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, \
                         bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
         self._validate_roles(output,result)
         remote_client.disconnect()
@@ -215,8 +215,6 @@ class rbacclitests(BaseTestCase):
             result = 'SUCCESS'
         cli_command = "bucket-edit"
         bucket_type = self.input.param("bucket_type", "couchbase")
-        bucket_password = self.input.param("bucket_password", None)
-        bucket_port = self.input.param("bucket_port", 11211)
         enable_flush = self.input.param("enable_flush", None)
         bucket_port_new = self.input.param("bucket_port_new", None)
         bucket_password_new = self.input.param("bucket_password_new", None)
@@ -233,16 +231,15 @@ class rbacclitests(BaseTestCase):
 
         remote_client = RemoteMachineShellConnection(self.master)
 
-        self._create_bucket(remote_client, bucket, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
-                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, \
+        self._create_bucket(remote_client, bucket, bucket_type=bucket_type, bucket_ramsize=bucket_ramsize,
+                            bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush,
                             enable_index_replica=enable_index_replica,user="Administrator",password='password')
 
         cli_command = "bucket-edit"
         options = "--bucket={0}".format(bucket)
         options += (" --enable-flush={0}".format(enable_flush_new), "")[enable_flush_new is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica_new), "")[enable_index_replica_new is None]
-        options += (" --bucket-port={0}".format(bucket_port_new), "")[bucket_port_new is None]
-        options += (" --bucket-password={0}".format(bucket_password_new), "")[bucket_password_new is None]
+        #options += (" --bucket-port={0}".format(bucket_port_new), "")[bucket_port_new is None]
         options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), "")[bucket_ramsize_new is None]
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
@@ -315,7 +312,7 @@ class rbacclitests(BaseTestCase):
         setting_emaiL_password = self.input.param("email-password", 'password')
         setting_email_host = self.input.param("email-host", 'localhost')
         setting_email_port = self.input.param("email-port", '25')
-        setting_email_encrypt = self.input.param("enable-email-encrypt", 0)
+        #setting_email_encrypt = self.input.param("enable-email-encrypt", 1)
 
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "setting-alert"
@@ -326,7 +323,7 @@ class rbacclitests(BaseTestCase):
         options += (" --email-password={0}".format(setting_emaiL_password))
         options += (" --email-host={0}".format(setting_email_host))
         options += (" --email-port={0}".format(setting_email_port))
-        options += (" --enable-email-encrypt={0}".format(setting_email_encrypt))
+        #options += (" --enable-email-encrypt={0}".format(setting_email_encrypt))
         options += (" --alert-auto-failover-node")
         options += (" --alert-auto-failover-max-reached")
         options += (" --alert-auto-failover-node-down")
@@ -470,7 +467,6 @@ class XdcrCLITest(CliBaseTest):
             if self.source == 'saslauthd':
                 rest = RestConnection(self.master)
                 self.setupLDAPSettings(rest)
-                #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
                 self.set_user_role(rest,self.ldapUser,user_role=self.role)
 
 
@@ -507,7 +503,7 @@ class XdcrCLITest(CliBaseTest):
                                                 password=password)
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+        rest.set_user_roles(user_id=username,payload=payload)
 
     def _validate_roles(self,output,result):
         print output
@@ -521,6 +517,12 @@ class XdcrCLITest(CliBaseTest):
         self.assertTrue(final_result,"Incorrect Message for the role")
 
     def __xdcr_setup_create(self):
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                     'password': 'password'}]
+        rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                     'roles': 'admin'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
         # xdcr_hostname=the number of server in ini file to add to master as replication
         xdcr_cluster_name = self.input.param("xdcr-cluster-name", None)
         xdcr_hostname = self.input.param("xdcr-hostname", None)
@@ -535,6 +537,8 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
         print ("Value of xdcr_home is {0}".format(xdcr_hostname))
         if xdcr_hostname is not None:
+            RbacBase().create_user_source(testuser, 'builtin', self.servers[xdcr_hostname])
+            RbacBase().add_user_role(rolelist, RestConnection(self.servers[xdcr_hostname]), 'builtin')
             options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
         options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
         options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
@@ -597,11 +601,17 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-replication-mode=\'{0}\'".format(replication_mode), "")[replication_mode is None]
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         if from_bucket:
-            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
-                                               enable_replica_index=self.enable_replica_index)
+            bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                              replicas=self.num_replicas,
+                                                              enable_replica_index=self.enable_replica_index)
+            self.cluster.create_default_bucket(bucket_params)
+
         if to_bucket:
-            self.cluster.create_default_bucket(self.servers[xdcr_hostname], self.bucket_size, self.num_replicas,
-                                               enable_replica_index=self.enable_replica_index)
+            bucket_params = self._create_bucket_params(server=self.servers[xdcr_hostname], size=self.bucket_size,
+                                                              replicas=self.num_replicas,
+                                                              enable_replica_index=self.enable_replica_index)
+            self.cluster.create_default_bucket(bucket_params)
+
         output, _ = self.__execute_cli(cli_command, options)
         self._validate_roles(output,result)
 

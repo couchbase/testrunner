@@ -1,14 +1,17 @@
-import os
+import os, re
 import shutil
-import testconstants
 
 from basetestcase import BaseTestCase
+from couchbase_helper.data_analysis_helper import DataCollector
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
-from testconstants import COUCHBASE_FROM_4DOT6
+from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
+                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
+                          WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
+                          MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -19,16 +22,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
         self.backupset = Backupset()
+        self.cmd_ext = ""
+        self.database_path = COUCHBASE_DATA_PATH
+        self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+        self.debug_logs = self.input.param("debug_logs", False)
+        self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
+        self.root_path = LINUX_ROOT_PATH
         if info == 'linux':
-            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
-            self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
+            if self.nonroot:
+                base_path = "/home/%s" % self.master.ssh_username
+                self.cli_command_location = "%s%s" % (base_path,
+                                                      LINUX_COUCHBASE_BIN_PATH)
+                self.database_path = "%s%s" % (base_path, COUCHBASE_DATA_PATH)
+                self.root_path = "/home/%s/" % self.master.ssh_username
         elif info == 'windows':
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
-            self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH_RAW + "entbackup")
+            self.cmd_ext = ".exe"
+            self.database_path = WIN_COUCHBASE_DATA_PATH
+            self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
+            self.root_path = WIN_ROOT_PATH
+            self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
-            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+            self.cli_command_location = MAC_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
@@ -36,6 +52,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
+        self.compact_backup = self.input.param("compact-backup", False)
+        self.merged = self.input.param("merged", None)
+        self.do_restore = self.input.param("do-restore", False)
+        self.cluster_new_user = self.input.param("new_user", None)
+        self.cluster_new_role = self.input.param("new_role", None)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
             self.backupset.cluster_host_username = self.servers[1].rest_username
@@ -47,6 +68,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.same_cluster = self.input.param("same-cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
         self.no_progress_bar = self.input.param("no-progress-bar", True)
+        self.multi_threads = self.input.param("multi_threads", False)
+        self.threads_count = self.input.param("threads_count", 1)
+        self.bucket_delete = self.input.param("bucket_delete", False)
+        self.bucket_flush = self.input.param("bucket_flush", False)
         if self.same_cluster:
             self.backupset.restore_cluster_host = self.servers[0]
             self.backupset.restore_cluster_host_username = self.servers[0].rest_username
@@ -55,6 +80,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backupset.restore_cluster_host = self.input.clusters[0][0]
             self.backupset.restore_cluster_host_username = self.input.clusters[0][0].rest_username
             self.backupset.restore_cluster_host_password = self.input.clusters[0][0].rest_password
+        """ new user to test RBAC """
+        if self.cluster_new_user:
+            self.backupset.cluster_host_username = self.cluster_new_user
+            self.backupset.restore_cluster_host_username = self.cluster_new_user
         self.backupset.exclude_buckets = self.input.param("exclude-buckets", "")
         self.backupset.include_buckets = self.input.param("include-buckets", "")
         self.backupset.disable_bucket_config = self.input.param("disable-bucket-config", False)
@@ -71,11 +100,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.end = self.input.param("stop", 1)
         self.backupset.number_of_backups = self.input.param("number_of_backups", 1)
         self.backupset.filter_keys = self.input.param("filter-keys", "")
+        self.backupset.random_keys = self.input.param("random_keys", False)
         self.backupset.filter_values = self.input.param("filter-values", "")
+        self.backupset.no_ssl_verify = self.input.param("no-ssl-verify", False)
+        self.backupset.secure_conn = self.input.param("secure-conn", False)
+        self.backupset.bk_no_cert = self.input.param("bk-no-cert", False)
+        self.backupset.rt_no_cert = self.input.param("rt-no-cert", False)
         self.backupset.backup_list_name = self.input.param("list-names", None)
         self.backupset.backup_incr_backup = self.input.param("incr-backup", None)
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
+        self.backupset.map_buckets = self.input.param("map-buckets", None)
         self.backups = []
         self.validation_helper = BackupRestoreValidations(self.backupset, self.cluster_to_backup, self.cluster_to_restore,
                                                           self.buckets, self.backup_validation_files_location, self.backups,
@@ -102,7 +137,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if info == 'linux' or info == 'mac':
                 backup_directory = "/tmp/entbackup"
             elif info == 'windows':
-                backup_directory = testconstants.WIN_TMP_PATH_RAW + "entbackup"
+                backup_directory = WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
             validation_files_location = "/tmp/backuprestore"
@@ -189,22 +224,39 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail(msg)
         self.log.info(msg)
 
-    def backup_cluster(self):
-        args = "backup --archive {0} --repo {1} {6} http://{2}:{3} --username {4} --password {5}". \
-            format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
+    def backup_cluster(self, threads_count=1):
+        url_format = ""
+        secure_port = ""
+        if self.backupset.secure_conn:
+            cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
+                                                       self.backupset.cluster_host)
+            secure_port = "1"
+            url_format = "s"
+        args = "backup -a {0} -r {1} {6} http{7}://{2}:{8}{3} -u {4} -p {5}". \
+            format(self.backupset.directory, self.backupset.name,
+                   self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
-                   self.backupset.cluster_host_password, self.cluster_flag)
+                   self.backupset.cluster_host_password, self.cluster_flag, url_format,
+                   secure_port)
+        if self.backupset.no_ssl_verify:
+            args += " --no-ssl-verify"
+        if self.backupset.secure_conn:
+            if not self.backupset.bk_no_cert:
+                args += " --cacert %s" % cacert
         if self.backupset.resume:
             args += " --resume"
         if self.backupset.purge:
             args += " --purge"
         if self.no_progress_bar:
             args += " --no-progress-bar"
+        if self.multi_threads:
+            args += " --threads %s " % threads_count
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Backup successfully completed" not in output[0]:
+
+        if error or (output and "Backup successfully completed" not in output[0]):
             return output, error
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -214,10 +266,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Finished taking backup  with args: {0}".format(args))
         return output, error
 
-    def backup_cluster_validate(self):
-        output, error = self.backup_cluster()
-        if error or "Backup successfully completed" not in output[-1]:
-            self.fail("Taking cluster backup failed.")
+    def backup_cluster_validate(self, skip_backup=False):
+        if not skip_backup:
+            output, error = self.backup_cluster()
+            if error or "Backup successfully completed" not in output[-1]:
+                self.fail("Taking cluster backup failed.")
         status, msg = self.validation_helper.validate_backup()
         if not status:
             self.fail(msg)
@@ -237,14 +290,28 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "restore --archive {0} --repo {1} {2} http://{3}:{4} --username {5} "\
+        url_format = ""
+        secure_port = ""
+        if self.backupset.secure_conn:
+            cacert = self.get_cluster_certificate_info(self.backupset.backup_host,
+                                                       self.backupset.restore_cluster_host)
+            url_format = "s"
+            secure_port = "1"
+        args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} -u {5} "\
                "--password {6} --start {7} --end {8}" \
-                               .format(self.backupset.directory, self.backupset.name,
-                                       self.cluster_flag, self.backupset.restore_cluster_host.ip,
+                               .format(self.backupset.directory,
+                                       self.backupset.name,
+                                       self.cluster_flag,
+                                       self.backupset.restore_cluster_host.ip,
                                        self.backupset.restore_cluster_host.port,
                                        self.backupset.restore_cluster_host_username,
                                        self.backupset.restore_cluster_host_password,
-                                       backup_start, backup_end)
+                                       backup_start, backup_end, url_format, secure_port)
+        if self.backupset.no_ssl_verify:
+            args += " --no-ssl-verify"
+        if self.backupset.secure_conn:
+            if not self.backupset.rt_no_cert:
+                args += " --cacert %s" % cacert
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets {0}".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
@@ -263,9 +330,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-conf-res-restriction {0}".format(
                 self.backupset.disable_conf_res_restriction)
         if self.backupset.filter_keys:
-            args += " --filter_keys {0}".format(self.backupset.filter_keys)
+            args += " --filter-keys '{0}'".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
-            args += " --filter_values {0}".format(self.backupset.filter_values)
+            args += " --filter-values '{0}'".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
         if self.no_progress_bar:
@@ -273,19 +340,36 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             rest_helper = RestHelper(rest_conn)
+            count = 0
+            buckets = []
             for bucket in self.buckets:
-                if not rest_helper.bucket_exists(bucket.name):
-                    self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
-                                                                                   self.backupset.restore_cluster_host.ip))
-                    rest_conn.create_bucket(bucket=bucket.name,
-                                            ramQuotaMB=512,
-                                            authType=bucket.authType if bucket.authType else 'none',
-                                            proxyPort=bucket.port,
-                                            saslPassword=bucket.saslPassword,
-                                            lww=self.lww_new)
-                    bucket_ready = rest_helper.vbucket_map_ready(bucket.name)
+                bucket_name = bucket.name
+                if not rest_helper.bucket_exists(bucket_name):
+                    if self.backupset.map_buckets is None:
+                        self.log.info("Creating bucket {0} in restore host {1}"
+                                                .format(bucket_name,
+                                                 self.backupset.restore_cluster_host.ip))
+                    elif self.backupset.map_buckets:
+                        self.log.info("Create new bucket name to restore to this bucket")
+                        bucket_maps = ""
+                        bucket_name = bucket.name + "_" + str(count)
+                    self.log.info("Creating bucket {0} in restore host {1}"
+                                                .format(bucket_name,
+                                                 self.backupset.restore_cluster_host.ip))
+                    rest_conn.create_bucket(bucket=bucket_name,
+                                    ramQuotaMB=512,
+                                    authType=bucket.authType if bucket.authType else 'none',
+                                    proxyPort=bucket.port,
+                                    saslPassword=bucket.saslPassword,
+                                    lww=self.lww_new)
+                    bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
-                        self.fail("Bucket %s not created after 120 seconds." % bucket.name)
+                        self.fail("Bucket %s not created after 120 seconds." % bucket_name)
+                buckets.append("%s=%s" % (bucket.name, bucket_name))
+                count +=1
+            bucket_maps = ",".join(buckets)
+        if self.backupset.map_buckets:
+            args += " --map-buckets %s " % bucket_maps
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -327,12 +411,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Restoring backup failed.")
 
         self.log.info("Finished restoring backup")
+        self.log.info("Get current vseqno on node %s " % self.cluster_to_restore[0].ip )
 
-        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets, self.skip_consistency, self.per_node)
+        """ Add built-in user cbadminbucket to second cluster """
+        self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
+        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets,
+                                                 self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
-        status, msg = self.validation_helper.validate_restore(self.backupset.end, self.vbucket_seqno, current_vseqno,
-                                                              compare_uuid=compare_uuid, compare=seqno_compare_function,
-                                                              get_replica=replicas, mode=mode)
+        status, msg = self.validation_helper.validate_restore(self.backupset.end,
+                                              self.vbucket_seqno, current_vseqno,
+                                              compare_uuid=compare_uuid,
+                                              compare=seqno_compare_function,
+                                              get_replica=replicas, mode=mode)
 
         if not status:
             self.fail(msg)
@@ -405,6 +495,36 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail(message)
         self.log.info(message)
 
+    def backup_compact_deleted_keys_validation(self, delete_keys):
+        self.log.info("Check deleted keys status in file after compact")
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        output, error = conn.execute_command("ls %s/backup/201*/default*/data "\
+                                                     % self.backupset.directory)
+        deleted_key_status = {}
+        if "shard_0.fdb" in output:
+            cmd = "%sforestdb_dump%s --plain-meta --no-body "\
+                  "%s/backup/201*/default*/data/shard_0.fdb | grep -A 6 ent-backup "\
+                                         % (self.cli_command_location, self.cmd_ext,\
+                                         self.backupset.directory)
+            dump_output, error = conn.execute_command(cmd)
+            if dump_output:
+                key_ids = [x.split(":")[1].strip(' ') for x in dump_output[0::8]]
+                miss_keys = [x for x in delete_keys if x not in key_ids]
+                if miss_keys:
+                    raise Exception("Lost some keys %s ", miss_keys)
+                partition_ids =  [x.split(":")[1].strip(' ') for x in dump_output[1::8]]
+                status_ids =     [x.split(" ")[-3].strip(' ') for x in dump_output[6::8]]
+                for idx, key in enumerate(key_ids):
+                    deleted_key_status[key] = \
+                           {"KV store name":partition_ids[idx], "Status":status_ids[idx]}
+                    if status_ids[idx] != "deleted":
+                        raise Exception("key %s status was not deleted. " % key)
+            else:
+                raise Exception("backup compaction failed to keep delete docs in file")
+        else:
+            raise Exception("file shard_0.fdb did not created ")
+        return deleted_key_status
+
     def backup_merge(self):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
@@ -422,8 +542,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Merge completed successfully" not in output[0]:
+        if error:
             return False, error, "Merging backup failed"
+        elif output and "Merge completed successfully" not in output[0]:
+            return False, output, "Merging backup failed"
+        elif not output:
+            self.log.info("process cbbackupmge may be killed")
+            return False, [] , "cbbackupmgr may be killed"
         del self.backups[self.backupset.start - 1:self.backupset.end]
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -435,6 +560,162 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         return True, output, "Merging backup succeeded"
 
+    def validate_backup_data(self, server_host, server_bucket, master_key,
+                                   perNode, getReplica, mode, items, key_check,
+                                   validate_keys=False,
+                                   regex_pattern=None):
+        """
+            Compare data in backup file with data in bucket
+        """
+        data_matched = True
+        data_collector = DataCollector()
+        bk_file_data = data_collector.get_kv_dump_from_backup_file(server_host,
+                                      self.cli_command_location, self.cmd_ext,
+                                      self.backupset.directory, master_key,
+                                      self.buckets)
+        restore_file_data = bk_file_data
+        regex_backup_data = {}
+        if regex_pattern is not None:
+            pattern = re.compile("%s" % regex_pattern)
+            for bucket in self.buckets:
+                regex_backup_data[bucket.name] = {}
+                self.log.info("Extract keys with regex pattern '%s' either in key or body"
+                                                                          % regex_pattern)
+                for key in restore_file_data[bucket.name]:
+                    if self.debug_logs: print "key in backup file of bucket %s:  %s" \
+                                                               % (bucket.name, key)
+                    if validate_keys:
+                        if pattern.search(key):
+                            regex_backup_data[bucket.name][key] = \
+                                     restore_file_data[bucket.name][key]
+                        if self.debug_logs:
+                            print "\nKeys in backup file of bucket %s that matches "\
+                                        "pattern '%s'" % (bucket.name, regex_pattern)
+                            for x in regex_backup_data[bucket.name]:
+                                print x
+                    else:
+                        print "value of key in backup file  ", restore_file_data[bucket.name][key]
+                        if pattern.search(restore_file_data[bucket.name][key]["Value"]):
+                            regex_backup_data[bucket.name][key] = \
+                                         restore_file_data[bucket.name][key]
+                        if self.debug_logs:
+                            print "\nKeys and value in backup file of bucket %s "\
+                                  " that matches pattern '%s'" \
+                                    % (bucket.name, regex_pattern)
+                            for x in regex_backup_data[bucket.name]:
+                                print "key: ", x
+                                print "value: ", regex_backup_data[bucket.name][x]["Value"]
+                restore_file_data = regex_backup_data
+
+        buckets_data = {}
+        for bucket in self.buckets:
+            headerInfo, bucket_data = data_collector.collect_data(server_bucket, [bucket],
+                                                              perNode=False,
+                                                              getReplica=getReplica,
+                                                              mode=mode)
+            buckets_data[bucket.name] = bucket_data[bucket.name]
+            for key in buckets_data[bucket.name]:
+                value = buckets_data[bucket.name][key]
+                if self.backupset.random_keys:
+                    value = ",".join(value.split(',')[4:7])
+                    value = value[1:-1]
+                    value = value.replace('""', '"')
+                else:
+                    value = ",".join(value.split(',')[4:5])
+                buckets_data[bucket.name][key] = value
+            self.log.info("*** Compare data in bucket and in backup file of bucket %s ***"
+                                                                            % bucket.name)
+            count = 0
+            key_count = 0
+            for key in buckets_data[bucket.name]:
+                if buckets_data[bucket.name][key] != restore_file_data[bucket.name][key]["Value"]:
+                    if count < 20:
+                        self.log.error("Data does not match at key %s. bucket: %s != %s file"
+                                           % (key, buckets_data[bucket.name][key],
+                                              restore_file_data[bucket.name][key]["Value"]))
+                        data_matched = False
+                        count += 1
+                    else:
+                        raise Exception ("Data not match in backup bucket %s" % bucket.name)
+                key_count += 1
+            if len(restore_file_data[bucket.name]) != key_count:
+                raise Exception ("Total key counts do not match.  Backup %s != %s bucket"
+                                  % (restore_file_data[bucket.name], key_count))
+            self.log.info("******** Data macth in backup file and bucket %s ******** "
+                                                                        % bucket.name)
+            print "Bucket: ", bucket.name
+            print "Total items in backup file:   ", len(bk_file_data[bucket.name])
+            if regex_pattern is not None:
+                print "Total items to be restored with regex pattern '%s' is %s "\
+                                         % (regex_pattern,len(restore_file_data[bucket.name]))
+            print "Total items in bucket should be:   ", key_count
+            rest = RestConnection(server_bucket[0])
+            actual_keys = rest.get_active_key_count(bucket.name)
+            print "Total items actual in bucket:      ", actual_keys
+            if actual_keys != key_count:
+                self.fail("Total keys matched: %s != Total keys in bucket %s: %s" \
+                          "at node %s " % (key_count, bucket.name, actual_keys,
+                                           server_bucket[0]))
+            if self.merged:
+                if key_check:
+                    self.log.info("Check if deleted keys still in backup after merged" )
+                    for key in restore_file_data[bucket.name]:
+                        if key == key_check:
+                            raise Exception ("There is an old key after delete bucket,"
+                                         " backup and merged ")
+                    self.log.info("No deleted keys in backup after merged")
+        return data_matched
+
+    def get_info_in_database(self, server, bucket, text_search):
+        """
+            Get info from database file like couch.1
+        """
+        shell = RemoteMachineShellConnection(server)
+        cmd = "%s/couch_dbdump " % self.cli_command_location
+        """ since there is no load, it should have only one file per vbucket """
+        output, error = shell.execute_command("%s %s/%s/0.couch.* | grep deleted"
+                                               % (cmd, self.database_path,
+                                                  bucket.name))
+        found = False
+        if output:
+            self.log.info("Search for '%s' in database info" % text_search)
+            for x in output:
+                if text_search in x:
+                    self.log.info("Found %s in database" % text_search)
+                    found = True
+                    break
+        else:
+            self.log.info("output is empty")
+        shell.disconnect()
+        return found
+
+    def validate_help_content(self, output, source):
+        """
+            Compare content of of the list with sample output
+        """
+        for x in range(0, len(source)):
+            if ' '.join(output[x].split()) != ' '.join(source[x].split()):
+                self.log.error("Element %s in output did not match " % x)
+                self.log.error("Output => %s != %s <= Source" % (output[x], source[x]))
+                raise Exception("Content does not match "
+                                "Output => %s != %s <= Source" % (output[x], source[x]))
+
+    def get_cluster_certificate_info(self, server_host, server_cert):
+        """
+            This will get certificate info from cluster
+        """
+        cert_file_location = self.root_path + "cert.pem"
+        shell = RemoteMachineShellConnection(server_host)
+        cmd = "%s/couchbase-cli ssl-manage -c %s:8091 -u Administrator -p password "\
+              " --cluster-cert-info > %s" % (self.cli_command_location,
+                                                     server_cert.ip,
+                                                     cert_file_location)
+        output, _ = shell.execute_command(cmd)
+        if output and "Error" in output[0]:
+            self.fail("Failed to get CA certificate from cluster.")
+        shell.disconnect()
+        return cert_file_location
+
 class Backupset:
     def __init__(self):
         self.backup_host = None
@@ -443,6 +724,8 @@ class Backupset:
         self.cluster_host = None
         self.cluster_host_username = ''
         self.cluster_host_password = ''
+        self.cluster_new_user = None
+        self.cluster_new_role = None
         self.restore_cluster_host = None
         self.restore_cluster_host_username = ''
         self.restore_cluster_host_password = ''
@@ -463,7 +746,13 @@ class Backupset:
         self.number_of_backups = 1
         self.filter_keys = ''
         self.filter_values = ''
+        self.no_ssl_verify = False
+        self.random_keys = False
+        self.secure_conn = False
+        self.bk_no_cert = False
+        self.rt_no_cert = False
         self.backup_list_name = ''
         self.backup_incr_backup = ''
         self.bucket_backup = ''
         self.backup_to_compact = ''
+        self.map_buckets = None

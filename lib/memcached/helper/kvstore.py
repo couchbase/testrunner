@@ -4,7 +4,6 @@ import zlib
 import time
 import copy
 
-
 class KVStore(object):
     def __init__(self, num_locks=16):
         self.num_locks = num_locks
@@ -17,8 +16,12 @@ class KVStore(object):
             self.cache[itr] = {"lock": threading.Lock(),
                                "partition": Partition(itr)}
 
+
+    def partition(self, key):
+        return self.cache[self._hash(key)]
+
     def acquire_partition(self, key):
-        partition = self.cache[self._hash(key)]
+        partition = self.partition(key)
         partition["lock"].acquire()
         return partition["partition"]
 
@@ -71,12 +74,38 @@ class KVStore(object):
             self.cache[itr]["lock"].release()
         return valid_keys, deleted_keys
 
+    def get_partitions(self):
+        partitions = []
+        for itr in range(self.num_locks):
+            partitions.append({"itr": itr,
+                               "partition": self.cache[itr]["partition"]})
+        return partitions
+
+    def merge_partitions(self, partitions):
+        """
+        merges partitions from another  KVStore in a thread safe way
+
+        arguments:
+            partitions -- array of Partition objects
+        """
+
+        for itr in range(self.num_locks):
+
+            # lock
+            self.cache[itr]["lock"].acquire()
+
+            # merge
+            partition = partitions[itr]['partition']
+            self.cache[itr]["partition"].merge(partition)
+
+            # release
+            self.cache[itr]["lock"].release()
+
     def __len__(self):
         return sum([len(self.cache[itr]["partition"]) for itr in range(self.num_locks)])
 
     def _hash(self, key):
         return zlib.crc32(key) % self.num_locks
-
 
 class Partition(object):
     def __init__(self, part_id):
@@ -153,6 +182,31 @@ class Partition(object):
         valid_keys = copy.copy(self.__valid.keys())
         [self.__expire_key(key) for key in valid_keys]
         return self.__expired_keys
+
+    def merge(self, partition):
+        """
+        merges a partition with self
+
+        arguments:
+            partition -- type Partition
+        """
+
+        # update valid keys
+        valid_items = partition.__valid
+        self.__valid.update(valid_items)
+
+        # make sure key no longer marked as deleted
+        deleted_keys = set(valid_items.keys()) & set(self.__deleted.keys())
+        for key in deleted_keys:
+            del self.__deleted[key]
+
+        # make sure key no longer marked as expired
+        expired_keys = set(valid_items.keys()) & set(self.__expired_keys)
+        for key in expired_keys:
+            self.__expired_keys.remove(key)
+
+        # update timestamps
+        self.__timestamp.update(partition.__timestamp)
 
     def has_valid_keys(self):
         return len(self.__valid) > 0

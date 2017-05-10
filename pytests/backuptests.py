@@ -15,7 +15,9 @@ from builds.build_query import BuildQuery
 import testconstants
 import copy
 
-class BackupRestoreTests(unittest.TestCase):
+from basetestcase import BaseTestCase
+
+class BackupRestoreTests(BaseTestCase):
     input = None
     servers = None
     log = None
@@ -122,7 +124,7 @@ class BackupRestoreTests(unittest.TestCase):
                             msg="replication did not complete")
 
         self.log.info("Sleep {0} seconds after data load".format(delay_after_data_load))
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket, bucket_type=self.bucket_type)
         self.assertTrue(ready, "not all items persisted. see logs")
         node = RestConnection(self.master).get_nodes_self()
         if not startup_flag:
@@ -185,7 +187,7 @@ class BackupRestoreTests(unittest.TestCase):
                 self.fail(msg.format(key, client.vbucketId, error.status))
         client.close()
         self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket, bucket_type=self.bucket_type)
         self.assertTrue(ready, "not all items persisted. see logs")
         node = RestConnection(self.master).get_nodes_self()
 
@@ -232,7 +234,7 @@ class BackupRestoreTests(unittest.TestCase):
                 self.fail(msg.format(key, client.vbucketId, error.status))
         self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
 
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket, bucket_type=self.bucket_type)
         self.assertTrue(ready, "not all items persisted. see logs")
 
         for server in self.servers:
@@ -282,7 +284,7 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket, bucket_type=self.bucket_type)
         self.assertTrue(ready, "not all items persisted. see logs")
         #let's create a unique folder in the remote location
         for server in self.servers:
@@ -338,7 +340,7 @@ class BackupRestoreTests(unittest.TestCase):
 
         client.delete(keys[0])
 
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket, bucket_type=self.bucket_type)
         self.assertTrue(ready, "not all items persisted. see logs")
         #let's create a unique folder in the remote location
         for server in self.servers:
@@ -390,7 +392,7 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket, bucket_type=self.bucket_type)
         self.assertTrue(ready, "not all items persisted. see logs")
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -433,7 +435,7 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket, bucket_type=self.bucket_type)
         self.assertTrue(ready, "not all items persisted. see logs")
 
         for server in self.servers:

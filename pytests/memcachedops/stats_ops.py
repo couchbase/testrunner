@@ -19,7 +19,9 @@ class StatsCrashRepro(BaseTestCase):
 #        self.servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
 #        rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in, [])
 #        rebalance.result()
-        self.cluster.create_default_bucket(self.servers[0], self.bucket_size, self.num_replicas)
+        bucket_params=self._create_bucket_params(server=self.servers[0], size=self.bucket_size, replicas=self.num_replicas)
+        self.cluster.create_default_bucket(bucket_params)
+
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
              num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         rest = RestConnection(self.servers[0])
@@ -88,7 +90,7 @@ class StatsCrashRepro(BaseTestCase):
 
         # wait for draining of data before restart and warm up
         for bucket in self.buckets:
-            RebalanceHelper.wait_for_persistence(self.nodes_server[0], bucket)
+            RebalanceHelper.wait_for_persistence(self.nodes_server[0], bucket, bucket_type=self.bucket_type)
 
 
         while 1:

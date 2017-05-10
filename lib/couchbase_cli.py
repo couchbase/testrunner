@@ -1,6 +1,7 @@
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import COUCHBASE_FROM_4DOT6
 
+
 class CouchbaseCLI:
     def __init__(self, server, username, password, cb_version=None):
         self.server = server
@@ -9,14 +10,12 @@ class CouchbaseCLI:
         self.password = password
         self.cb_version = cb_version
 
-    def bucket_create(self, name, password, bucket_type, quota,
+    def bucket_create(self, name, bucket_type, quota,
                       eviction_policy, replica_count, enable_replica_indexes,
                       priority, enable_flush, wait):
         options = self._get_default_options()
         if name is not None:
             options += " --bucket " + name
-        if password is not None:
-            options += " --bucket-password " + password
         if bucket_type is not None:
             options += " --bucket-type " + bucket_type
         if quota is not None:
@@ -36,7 +35,7 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("bucket-create",
-                                                     self.hostname, options)
+                                                     self.hostname.split(":")[0], options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket created")
 
@@ -67,13 +66,11 @@ class CouchbaseCLI:
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket deleted")
 
-    def bucket_edit(self, name, password, quota, eviction_policy,
+    def bucket_edit(self, name, quota, eviction_policy,
                     replica_count, priority, enable_flush):
         options = self._get_default_options()
         if name is not None:
             options += " --bucket " + name
-        if password is not None:
-            options += " --bucket-password " + password
         if quota is not None:
             options += " --bucket-ramsize " + str(quota)
         if eviction_policy is not None:
@@ -137,11 +134,11 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("cluster-init",
-                                                     self.hostname, options)
+                                                     self.hostname.split(":")[0], options)
         remote_client.disconnect()
         print_msg = "Cluster initialized"
         if self.cb_version is not None and \
-               self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                        self.cb_version[:3] == "4.6":
             print_msg = "init/edit %s" % self.server.ip
         return stdout, stderr, self._was_success(stdout, print_msg)
 
@@ -456,7 +453,7 @@ class CouchbaseCLI:
         stdout, stderr = remote_client.couchbase_cli("setting-compaction",
                                                      self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "set compaction settings")
+        return stdout, stderr, self._was_success(stdout, "Compaction settings modified")
 
     def setting_index(self, max_rollbacks, stable_snap_interval,
                       mem_snap_interval, storage_mode, threads,

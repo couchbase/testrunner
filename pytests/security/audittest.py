@@ -64,7 +64,7 @@ class auditTest(BaseTestCase):
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+        content =  rest.set_user_roles(user_id=username,payload=payload)
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
@@ -85,19 +85,20 @@ class auditTest(BaseTestCase):
                                'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
-                               "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
+                               "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno', \
+                               'storage_mode':'couchstore'}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
 
         elif (ops in ['update']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':209715200, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
-                               "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':''}
+                               "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':'','storage_mode':'couchstore'}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
                                0, expectedResults['num_threads'], 0 , 'valueOnly')
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
-                               "user":user, "ip":self.ipAddress, "port":57457}
+                               "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore'}
             rest.change_bucket_props(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                      '11211', 1, 1)
 
@@ -112,7 +113,7 @@ class auditTest(BaseTestCase):
         elif (ops in ['flush']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':100, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
 			    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
-                               "user":user, "ip":self.ipAddress, "port":57457}
+                               "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore'}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'], expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                '11211', 'membase', 1, expectedResults['num_threads'], 1, 'valueOnly')
             self.sleep(10)
@@ -427,7 +428,7 @@ class auditTest(BaseTestCase):
             self.set_user_role(rest,username)
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
-            expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
+            expectedResults = {'source':'external', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         self.checkConfig(self.eventID, self.master, expectedResults)
 

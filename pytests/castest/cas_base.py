@@ -1,6 +1,6 @@
 from basetestcase import BaseTestCase
 from memcached.helper.data_helper import MemcachedClientHelper
-from membase.api.rest_client import Bucket
+
 
 class CasBaseTest(BaseTestCase):
     def setUp(self):

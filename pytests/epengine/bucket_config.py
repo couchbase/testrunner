@@ -21,10 +21,13 @@ from membase.helper.rebalance_helper import RebalanceHelper
 import re
 import traceback
 
+from basetestcase import BaseTestCase
 
-class BucketConfig(unittest.TestCase):
+
+class BucketConfig(BaseTestCase):
 
     def setUp(self):
+        super(BucketConfig, self).setUp()
         self.testcase = '2'
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
@@ -62,6 +65,8 @@ class BucketConfig(unittest.TestCase):
         self._create_bucket(self.lww, self.drift)
 
     def tearDown(self):
+        super(BucketConfig, self).tearDown()
+        return
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
             BucketOperationHelper.delete_all_buckets_or_assert(
                 self.servers, self.testcase)
@@ -167,7 +172,7 @@ class BucketConfig(unittest.TestCase):
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
             except Exception, e:
-                self.fail(e, 'unable to create bucket')
+                self.fail('unable to create bucket')
 
     # KETAKI tochange this
     def _modify_bucket(self):

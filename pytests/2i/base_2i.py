@@ -1,7 +1,9 @@
 import logging
 import random
+
 from newtuq import QueryTests
 from couchbase_helper.cluster import Cluster
+from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from membase.api.rest_client import RestConnection
 
@@ -26,6 +28,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.graceful = self.input.param("graceful",False)
         self.groups = self.input.param("groups", "all").split(":")
         self.use_rest = self.input.param("use_rest", False)
+        self.plasma_dgm = self.input.param("plasma_dgm", False)
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
             if self.dataset == "default" or self.dataset == "employee":
@@ -44,7 +47,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.generate_map_nodes_out_dist()
         self.memory_create_list = []
         self.memory_drop_list = []
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
         if self.index_loglevel:
@@ -53,12 +55,13 @@ class BaseSecondaryIndexingTests(QueryTests):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
+        self.num_index_replicas = self.input.param("num_index_replica", 0)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
-    def create_index(self, bucket, query_definition, deploy_node_info=None):
-        create_task = self.async_create_index(bucket, query_definition, deploy_node_info)
+    def create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
+        create_task = self.async_create_index(bucket, query_definition, deploy_node_info, desc=desc)
         create_task.result()
         if self.defer_build:
             build_index_task = self.async_build_index(bucket, [query_definition.index_name])
@@ -67,7 +70,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                             server=self.n1ql_node)
         self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
-    def async_create_index(self, bucket, query_definition, deploy_node_info=None):
+    def async_create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         index_where_clause = None
         if self.use_where_clause_in_index:
             index_where_clause = query_definition.index_where_clause
@@ -75,19 +78,20 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                   use_gsi_for_secondary=self.use_gsi_for_secondary,
                                                                   deploy_node_info=deploy_node_info,
                                                                   defer_build=self.defer_build,
-                                                                  index_where_clause=index_where_clause)
+                                                                  index_where_clause=index_where_clause, num_replica=self.num_index_replicas, desc=desc)
         create_index_task = self.gsi_thread.async_create_index(server=self.n1ql_node, bucket=bucket,
                                                                query=self.query, n1ql_helper=self.n1ql_helper,
                                                                index_name=query_definition.index_name,
                                                                defer_build=self.defer_build)
         return create_index_task
 
-    def create_index_using_rest(self, bucket, query_definition, exprType='N1QL', deploy_node_info=None):
+    def create_index_using_rest(self, bucket, query_definition, exprType='N1QL', deploy_node_info=None, desc=None):
         ind_content = query_definition.generate_gsi_index_create_query_using_rest(bucket=bucket,
                                                                                   deploy_node_info=deploy_node_info,
                                                                                   defer_build=None,
                                                                                   index_where_clause=None,
-                                                                                  gsi_type=self.gsi_type)
+                                                                                  gsi_type=self.gsi_type,
+                                                                                  desc=desc)
 
         log.info("Creating index {0}...".format(query_definition.index_name))
         return self.rest.create_index_with_rest(ind_content)
@@ -291,7 +295,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             expected_result = self.gen_results.generate_expected_result(print_expected_result=False)
         self.query = self.gen_results.query
         log.info("Query : {0}".format(self.query))
-        msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=420,
+        msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=500,
                                             expected_result=expected_result, scan_consistency=scan_consistency,
                                             scan_vector=scan_vector, verify_results=verify_results)
         self.assertTrue(check, msg)
@@ -681,6 +685,19 @@ class BaseSecondaryIndexingTests(QueryTests):
                         (bucket.name, query.index_name, bucket_count, index_count))
         self.log.info("Items Indexed Verified with bucket count...")
 
+    def _check_all_bucket_items_indexed(self, query_definitions=None, buckets=None):
+        """
+        :param bucket:
+        :param index:
+        :return:
+        """
+        count = 0
+        while not self._verify_items_count() and count < 15:
+            self.log.info("All Items Yet to be Indexed...")
+            self.sleep(10)
+            count += 1
+        self.assertTrue(self._verify_items_count(),"All Items didn't get Indexed...")
+
     def _create_operation_map(self):
         map_initial = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
         map_before = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
@@ -766,3 +783,74 @@ class BaseSecondaryIndexingTests(QueryTests):
         server = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(server)
         status = rest.set_indexer_params("logLevel", loglevel)
+
+    def wait_until_cluster_is_healthy(self):
+        master_node = self.master
+        if self.targetMaster:
+            if len(self.servers) > 1:
+                master_node = self.servers[1]
+        rest = RestConnection(master_node)
+        is_cluster_healthy = False
+        count = 0
+        while not is_cluster_healthy and count < 10:
+            count += 1
+            cluster_nodes = rest.node_statuses()
+            for node in cluster_nodes:
+                if node.status != "healthy":
+                    is_cluster_healthy = False
+                    log.info("Node {0} is in {1} state...".format(node.ip,
+                                                                  node.status))
+                    self.sleep(5)
+                    break
+                else:
+                    is_cluster_healthy = True
+        return is_cluster_healthy
+
+    def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
+        """
+        Internal Method to create OOM scenario
+        :return:
+        """
+        def validate_disk_writes(indexer_nodes=None):
+            if not indexer_nodes:
+                indexer_nodes = self.get_nodes_from_services_map(
+                    service_type="index", get_all_nodes=True)
+            for node in indexer_nodes:
+                indexer_rest = RestConnection(node)
+                content = indexer_rest.get_index_storage_stats()
+                for index in content.values():
+                    for stats in index.values():
+                        if stats["MainStore"]["resident_ratio"] >= 1.00:
+                            return False
+            return True
+
+        def kv_mutations(self, docs=1):
+            if not docs:
+                docs = self.docs_per_day
+            gens_load = self.generate_docs(docs)
+            self.full_docs_list = self.generate_full_docs_list(gens_load)
+            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+            tasks = self.async_load(generators_load=gens_load, op_type="create",
+                                batch_size=self.batch_size)
+            return tasks
+        if self.gsi_type != "plasma":
+            return
+        if not self.plasma_dgm:
+            return
+        log.info("Trying to get all indexes in DGM...")
+        log.info("Setting indexer memory quota to {0} MB...".format(memory_quota))
+        node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(node)
+        rest.set_indexer_memoryQuota(indexMemoryQuota=memory_quota)
+        cnt = 0
+        docs = 50
+        while cnt < 100:
+            if validate_disk_writes(indexer_nodes):
+                log.info("========== DGM is achieved ==========")
+                return True
+            for task in kv_mutations(self, docs):
+                task.result()
+            self.sleep(30)
+            cnt += 1
+            docs += 20
+        return False

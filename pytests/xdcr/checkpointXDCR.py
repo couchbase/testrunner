@@ -276,6 +276,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.log.info("Remote failover log: [{0}, {1}]".format(remote_vbuuid,remote_highseqno))
             self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
             self.load_one_mutation_into_source_vb0(active_src_node)
+            self.sleep(60)
             if local_highseqno == "0":
                 # avoid checking very first/empty checkpoint record
                 count += 1
@@ -445,6 +446,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                           format(self.num_successful_prereps_so_far))
             self.load_one_mutation_into_source_vb0(
                 self.get_active_vb0_node(self.src_master))
+            self.sleep(60)
             self.verify_next_checkpoint_passes()
         else:
             self.fail("ERROR: _pre_replicate following source crash was unsuccessful")

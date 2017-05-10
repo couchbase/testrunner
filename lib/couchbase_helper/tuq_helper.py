@@ -15,8 +15,8 @@ from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 
 class N1QLHelper():
-    def __init__(self, version = None, master = None, shell = None, use_rest = None, max_verify = 0, buckets = [],
-        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None,database = None):
+    def __init__(self, version = None, master = None, shell = None,  max_verify = 0, buckets = [],
+        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None,database = None,use_rest = None):
         self.version = version
         self.shell = shell
         self.max_verify = max_verify
@@ -25,7 +25,7 @@ class N1QLHelper():
         self.n1ql_port = n1ql_port
         self.input = input
         self.log = log
-        self.use_rest = True
+        self.use_rest = use_rest
         self.full_docs_list = full_docs_list
         self.master = master
         self.database = database
@@ -85,17 +85,26 @@ class N1QLHelper():
             #                                            end_msg='tuq_client>')
             # else:
             #os = self.shell.extract_remote_info().type.lower()
-            shell = RemoteMachineShellConnection(server)
             #query = query.replace('"', '\\"')
             #query = query.replace('`', '\\`')
             #if os == "linux":
+            shell = RemoteMachineShellConnection(server)
+            #cbqpath = '%scbq' % "/opt/couchbase/bin/"
+            url = "'http://%s:8093/query/service'" % server.ip
             cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+            query = query.replace('"','\\"')
+            if "#primary" in query:
+                query = query.replace("'#primary'",'\\"#primary\\"')
+            query = "select curl('POST', "+ url +", {'data' : 'statement=%s'})" % query
+            print query
             output = shell.execute_commands_inside(cmd,query,"","","","","")
             print "--------------------------------------------------------------------------------------------------------------------------------"
             print output
-            result = json.loads(output)
+            new_curl = json.dumps(output[47:])
+            string_curl = json.loads(new_curl)
+            result = json.loads(string_curl)
             print result
-            result = self._parse_query_output(output)
+            #result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
             length_display = len(error_result)
@@ -117,7 +126,7 @@ class N1QLHelper():
         if actual_result != expected_result:
             raise Exception(msg)
 
-    def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+    def _verify_results_rqg(self, subquery,aggregate=False,n1ql_result = [], sql_result = [], hints = ["a1"]):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -138,7 +147,22 @@ class N1QLHelper():
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
                                             len(actual_result), len(expected_result), extra_msg))
         msg = "The number of rows match but the results mismatch, please check"
-        if self._sort_data(actual_result) != self._sort_data(expected_result):
+        if subquery:
+            for x,y in zip(actual_result,expected_result):
+              if aggregate:
+                productId = x['ABC'][0]['$1']
+              else:
+                productId =   x['ABC'][0]['productId']
+              if(productId != y['ABC']) or x['datetime_field1']!=y['datetime_field1'] \
+                        or x['primary_key_id']!=y['primary_key_id'] or x['varchar_field1']!=y['varchar_field1'] \
+                        or x['decimal_field1']!=y['decimal_field1'] or x['char_field1']!=y['char_field1'] \
+                        or x['int_field1']!=y['int_field1'] or x['bool_field1']!=y['bool_field1']:
+                            print "actual_result is %s" %actual_result
+                            print "expected result is %s" %expected_result
+                            extra_msg = self._get_failure_message(expected_result, actual_result)
+                            raise Exception(msg+"\n "+extra_msg)
+        else:
+         if self._sort_data(actual_result) != self._sort_data(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception(msg+"\n "+extra_msg)
 
@@ -405,7 +429,7 @@ class N1QLHelper():
             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
-    def create_primary_index(self, using_gsi = True, server = None):
+    def create_primary_index(self,using_gsi = True, server = None):
         if server == None:
             server = self.master
         for bucket in self.buckets:
@@ -416,7 +440,8 @@ class N1QLHelper():
                 #     self.query += " WITH {'index_type': 'memdb'}"
             if not using_gsi:
                 self.query += " USING VIEW "
-            try:
+            if self.use_rest:
+             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if not check:
                     self.run_cbq_query(server = server,query_params={'timeout' : '900s'})
@@ -425,7 +450,7 @@ class N1QLHelper():
                         raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
                 else:
                     raise Exception(" Primary Index Already present, This looks like a bug !!!")
-            except Exception, ex:
+             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
                 raise ex
 
@@ -461,6 +486,18 @@ class N1QLHelper():
             finally:
                 try_count += 1
         return "ran query with success and validated results" , check
+
+    def get_index_names(self, server=None):
+        query = "select distinct(name) from system:indexes where `using`='gsi'"
+        index_names = []
+        if server == None:
+            server = self.master
+
+        res = self.run_cbq_query(query=query, server=server)
+        for item in res['results']:
+            index_names.append(item['name'])
+
+        return index_names
 
     def is_index_online_and_in_list(self, bucket, index_name, server=None, timeout=600.0):
         check = self._is_index_in_list(bucket, index_name, server = server)
@@ -637,3 +674,212 @@ class N1QLHelper():
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
         self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
+
+    def verify_indexes_redistributed(self, map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
+                                     stats_map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False):
+        # verify that number of indexes before and after rebalance are same
+        no_of_indexes_before_rebalance = 0
+        no_of_indexes_after_rebalance = 0
+        for bucket in map_before_rebalance:
+            no_of_indexes_before_rebalance += len(map_before_rebalance[bucket])
+        for bucket in map_after_rebalance:
+            no_of_indexes_after_rebalance += len(map_after_rebalance[bucket])
+        self.log.info("Number of indexes before rebalance : {0}".format(no_of_indexes_before_rebalance))
+        self.log.info("Number of indexes after rebalance  : {0}".format(no_of_indexes_after_rebalance))
+        if no_of_indexes_before_rebalance != no_of_indexes_after_rebalance:
+            self.log.info("some indexes are missing after rebalance")
+            raise Exception("some indexes are missing after rebalance")
+
+        # verify that index names before and after rebalance are same
+        index_names_before_rebalance = []
+        index_names_after_rebalance = []
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                index_names_before_rebalance.append(index)
+        for bucket in map_after_rebalance:
+            for index in map_after_rebalance[bucket]:
+                index_names_after_rebalance.append(index)
+        self.log.info("Index names before rebalance : {0}".format(sorted(index_names_before_rebalance)))
+        self.log.info("Index names after rebalance  : {0}".format(sorted(index_names_after_rebalance)))
+        if sorted(index_names_before_rebalance) != sorted(index_names_after_rebalance):
+            self.log.info("number of indexes are same but index names don't match")
+            raise Exception("number of indexes are same but index names don't match")
+
+        # verify that rebalanced out nodes are not present
+        host_names_before_rebalance = []
+        host_names_after_rebalance = []
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                host_names_before_rebalance.append(map_before_rebalance[bucket][index]['hosts'])
+        indexer_nodes_before_rebalance = sorted(set(host_names_before_rebalance))
+        for bucket in map_after_rebalance:
+            for index in map_after_rebalance[bucket]:
+                host_names_after_rebalance.append(map_after_rebalance[bucket][index]['hosts'])
+        indexer_nodes_after_rebalance = sorted(set(host_names_after_rebalance))
+        self.log.info("Host names of indexer nodes before rebalance : {0}".format(indexer_nodes_before_rebalance))
+        self.log.info("Host names of indexer nodes after rebalance  : {0}".format(indexer_nodes_after_rebalance))
+        # indexes need to redistributed in case of rebalance out, not necessarily in case of rebalance in
+        if nodes_out and indexer_nodes_before_rebalance == indexer_nodes_after_rebalance:
+            self.log.info("Even after rebalance some of rebalanced out nodes still have indexes")
+            raise Exception("Even after rebalance some of rebalanced out nodes still have indexes")
+        for node_out in nodes_out:
+            if node_out in indexer_nodes_after_rebalance:
+                self.log.info("rebalanced out node still present after rebalance {0} : {1}".format(node_out,
+                                                                                                   indexer_nodes_after_rebalance))
+                raise Exception("rebalanced out node still present after rebalance")
+        if swap_rebalance:
+            for node_in in nodes_in:
+                # strip of unnecessary data for comparison
+                ip_address = str(node_in).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "")
+                if ip_address not in indexer_nodes_after_rebalance:
+                    self.log.info("swap rebalanced in node is not distributed any indexes")
+                    raise Exception("swap rebalanced in node is not distributed any indexes")
+
+        # verify that items_count before and after rebalance are same
+        items_count_before_rebalance = {}
+        items_count_after_rebalance = {}
+        for bucket in stats_map_before_rebalance:
+            for index in stats_map_before_rebalance[bucket]:
+                items_count_before_rebalance[index] = stats_map_before_rebalance[bucket][index][
+                    "items_count"]
+        for bucket in stats_map_after_rebalance:
+            for index in stats_map_after_rebalance[bucket]:
+                items_count_after_rebalance[index] = stats_map_after_rebalance[bucket][index]["items_count"]
+        self.log.info("item_count of indexes before rebalance {0}".format(items_count_before_rebalance))
+        self.log.info("item_count of indexes after rebalance {0}".format(items_count_after_rebalance))
+        if cmp(items_count_before_rebalance, items_count_after_rebalance) != 0:
+            self.log.info("items_count mismatch")
+            raise Exception("items_count mismatch")
+
+        # verify that index status before and after rebalance are same
+        index_state_before_rebalance = {}
+        index_state_after_rebalance = {}
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                index_state_before_rebalance[index] = map_before_rebalance[bucket][index]["status"]
+        for bucket in map_after_rebalance:
+            for index in map_after_rebalance[bucket]:
+                index_state_after_rebalance[index] = map_after_rebalance[bucket][index]["status"]
+        self.log.info("index status of indexes rebalance {0}".format(index_state_before_rebalance))
+        self.log.info("index status of indexes rebalance {0}".format(index_state_after_rebalance))
+        if cmp(index_state_before_rebalance, index_state_after_rebalance) != 0:
+            self.log.info("index status mismatch")
+            raise Exception("index status mismatch")
+
+        # Rebalance is not guaranteed to achieve a balanced cluster.
+        # The indexes will be distributed in a manner to satisfy the resource requirements of each index.
+        # Hence printing the index distribution just for logging/debugging purposes
+        index_distribution_map_before_rebalance = {}
+        index_distribution_map_after_rebalance = {}
+        for node in host_names_before_rebalance:
+            index_distribution_map_before_rebalance[node] = index_distribution_map_before_rebalance.get(node, 0) + 1
+        for node in host_names_after_rebalance:
+            index_distribution_map_after_rebalance[node] = index_distribution_map_after_rebalance.get(node, 0) + 1
+        self.log.info("Distribution of indexes before rebalance")
+        for k, v in index_distribution_map_before_rebalance.iteritems():
+            print k, v
+        self.log.info("Distribution of indexes after rebalance")
+        for k, v in index_distribution_map_after_rebalance.iteritems():
+            print k, v
+
+
+    def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None):
+        # 1. Validate count of no_of_indexes
+        # 2. Validate index names
+        # 3. Validate index replica have the same id
+        # 4. Validate index replicas are on different hosts
+
+        nodes = []
+
+        for index_name in index_names:
+            index_host_name, index_id = self.get_index_details_using_index_name(index_name, index_map)
+            nodes.append(index_host_name)
+
+            for i in range(0, num_replicas):
+                index_replica_name = index_name + " (replica {0})".format(str(i+1))
+
+                try:
+                    index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
+                        index_replica_name, index_map)
+                except Exception, ex:
+                    self.log.info(str(ex))
+                    raise Exception(str(ex))
+
+                self.log.info("Hostnames : %s , %s" % (index_host_name, index_replica_hostname))
+                self.log.info("Index IDs : %s, %s" %( index_id, index_replica_id))
+
+                nodes.append(index_replica_hostname)
+
+                if index_id != index_replica_id:
+                    self.log.info("Index ID for main index and replica indexes not same")
+                    raise Exception("index id different for replicas")
+
+                if index_host_name == index_replica_hostname:
+                    self.log.info("Index hostname for main index and replica indexes are same")
+                    raise Exception("index hostname same for replicas")
+
+        if expected_nodes:
+            expected_nodes = expected_nodes.sort()
+            nodes = nodes.sort()
+
+            if not expected_nodes == nodes:
+                self.fail ("Replicas not created on expected hosts")
+
+    def verify_replica_indexes_build_status(self, index_map, num_replicas, defer_build=False):
+
+        index_names = self.get_index_names()
+
+        for index_name in index_names:
+            index_status, index_build_progress = self.get_index_status_using_index_name(index_name, index_map)
+            if not defer_build and index_status != "Ready":
+                self.log.info("Expected %s status to be Ready, but it is %s" % (
+                    index_name, index_status))
+                raise Exception("Index status incorrect")
+            elif defer_build and index_status != "Created":
+                self.log.info(
+                    "Expected %s status to be Created, but it is %s" % (
+                        index_name, index_status))
+                raise Exception("Index status incorrect")
+            else:
+                self.log.info("index_name = %s, defer_build = %s, index_status = %s" % (index_name, defer_build, index_status))
+
+            for i in range(1, num_replicas+1):
+                index_replica_name = index_name + " (replica {0})".format(
+                    str(i))
+
+                try:
+                    index_replica_status, index_replica_progress = self.get_index_status_using_index_name(index_replica_name, index_map)
+                except Exception, ex:
+                    self.log.info(str(ex))
+                    raise Exception (str(ex))
+
+                if not defer_build and index_replica_status != "Ready":
+                    self.log.info("Expected %s status to be Ready, but it is %s" % (index_replica_name, index_replica_status))
+                    raise Exception ("Index status incorrect")
+                elif defer_build and index_replica_status != "Created":
+                    self.log.info("Expected %s status to be Created, but it is %s" % (index_replica_name, index_replica_status))
+                    raise Exception("Index status incorrect")
+                else:
+                    self.log.info("index_name = %s, defer_build = %s, index_replica_status = %s" % (
+                        index_replica_name, defer_build, index_status))
+
+    def get_index_details_using_index_name(self, index_name, index_map):
+        for key in index_map.iterkeys():
+            if index_name in index_map[key].keys():
+                return index_map[key][index_name]['hosts'], index_map[key][index_name]['id']
+            else:
+                raise Exception ("Index does not exist - {0}".format(index_name))
+
+    def get_index_status_using_index_name(self, index_name, index_map):
+        for key in index_map.iterkeys():
+            if index_name in index_map[key].keys():
+                return index_map[key][index_name]['status'], \
+                       index_map[key][index_name]['progress']
+            else:
+                raise Exception("Index does not exist - {0}".format(index_name))
+
+
+
+
+
+

@@ -9,25 +9,28 @@ COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.
                       "2.1.1", "2.2.0", "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0",
                       "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3",
                       "3.1.4", "3.1.5", "3.1.6", "3.5.0", "4.0.0", "4.0.1", "4.1.0",
-                      "4.1.1", "4.1.2", "4.5.0", "4.5.1", "4.6.0", "4.7.0"]
-CB_RELEASE_BUILDS = {"2.1.1":"764", "2.2.0":"821", "2.5.2":"1154",
-                     "3.0.3":"1716", "3.1.5":"1859","3.1.6":"1904",
+                      "4.1.1", "4.1.2", "4.5.0", "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.7.0",
+                      "5.0.0"]
+CB_RELEASE_BUILDS = {"2.1.1":"764", "2.2.0":"821", "2.5.0":"1059", "2.5.1":"1083",
+                     "2.5.2":"1154","3.0.3":"1716", "3.1.5":"1859","3.1.6":"1904",
                      "4.0.0":"4051", "4.1.0":"5005", "4.1.1":"5914", "4.1.2":"6088",
-                     "4.5.0":"2061", "4.5.1":"0000", "4.6.0":"0000", "4.7.0":"0000"}
+                     "4.5.0":"2061", "4.5.1":"2844", "4.6.0":"3573", "4.6.1":"3652",
+                     "4.6.2":"0000", "4.7.0":"0000", "5.0.0":"0000"}
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1",
                             "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.5.0",
                             "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
-                            "4.5.1", "4.6.0", "4.7.0"]
+                            "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.7.0", "5.0.0"]
 COUCHBASE_RELEASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0",
                                     "3.1.1", "3.1.2", "3.1.3", "3.1.5", "4.0.0",
-                                    "4.1.0", "4.1.1", "4.1.2", "4.5.0"]
+                                    "4.1.0", "4.1.1", "4.1.2", "4.5.0", "4.5.1",
+                                    "4.6.0", "4.6.1"]
 COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
-                            "4.5.1", "4.6.0", "4.7.0"]
+                            "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.7.0", "5.0.0"]
 COUCHBASE_FROM_SHERLOCK = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
-                            "4.5.1", "4.6.0", "4.7.0"]
-COUCHBASE_FROM_4DOT6 = ["4.6.0", "4.7.0"]
-COUCHBASE_FROM_WATSON = ["4.5.0", "4.5.1", "4.6.0", "4.7.0"]
-COUCHBASE_FROM_SPOCK = ["4.7.0"]
+                            "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.7.0", "5.0.0"]
+COUCHBASE_FROM_4DOT6 = ["4.6.0", "4.6.1", "4.6.2", "4.7.0", "5.0.0"]
+COUCHBASE_FROM_WATSON = ["4.5.0", "4.5.1", "4.6.0", "4.6.1", "4.6.2","4.7.0", "5.0.0"]
+COUCHBASE_FROM_SPOCK = ["4.7.0", "5.0.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
                                 "3.0.3-1716", "3.1.0", "3.1.0-1797", "3.1.1", "3.1.1-1807",
                                 "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823", "3.1.5"]
@@ -42,9 +45,9 @@ COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.
 WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1","3.1.2",
                     "3.1.3", "3.1.4", "3.1.5", "3.1.6"]
 SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1", "4.1.1", "4.1.2"]
-WATSON_VERSION = ["4.5.0", "4.6.0", "4.5.1"]
+WATSON_VERSION = ["4.5.0", "4.5.1", "4.6.0", "4.6.1", "4.6.2"]
 CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson", "4.6":"watson",
-                   "4.7":"spock"}
+                   "4.7":"spock", "5.0":"spock"}
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
@@ -90,7 +93,10 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F",
                    "450":"A4BB2687-E63E-F424-F9F3-18D739053798",
                    "451":"B457D40B-E596-E1D4-417A-4DD6219B64B0",
                    "460":"C87D9A6D-C189-0C44-F1DF-91ADF99A9CCA",
-                   "470":"5F8BB367-A796-1104-05DE-00BCD7A787A5"}
+                   "461":"02225782-B8EE-CC04-4932-28981BC87C72",
+                   "462":"C4EC4311-8AE1-28D4-4174-A48CD0291F77",
+                   "470":"5F8BB367-A796-1104-05DE-00BCD7A787A5",
+                   "500":"5F8BB367-A796-1104-05DE-00BCD7A787A5"}
 """ This "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B" is for build 2.2.0-821 and earlier
     The new build register ID for 2.2.0-837 id is set in create_windows_capture_file
     in remote_util
@@ -108,6 +114,8 @@ MIN_KV_QUOTA = 250
 INDEX_QUOTA = 512
 FTS_QUOTA = 256
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
+LINUX_NONROOT_CB_BIN_PATH = "~/opt/couchbase/bin/"
+NR_INSTALL_LOCATION_FILE = "nonroot_install_location.txt"
 LINUX_COUCHBASE_PORT_CONFIG_PATH = "/opt/couchbase/etc/couchbase"
 LINUX_COUCHBASE_OLD_CONFIG_PATH = "/opt/couchbase/var/lib/couchbase/config/"
 LINUX_COUCHBASE_SAMPLE_PATH = "/opt/couchbase/samples/"
@@ -183,3 +191,8 @@ QUERY_5K_FIELDS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/q
 QUERY_5K_NUM_DATE = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/query_50000_functions_numeric_string_datetime.txt"
 QUERY_JOIN = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/queries_joins_50000.txt"
 QUERY_SUBQUERY = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/queries_subqueries_1000.txt"
+# the maximum number of processes to allow under high_throughput data loading
+THROUGHPUT_CONCURRENCY = 4
+# determine wether or not to use high throughput
+ALLOW_HTP = True
+IS_CONTAINER = False

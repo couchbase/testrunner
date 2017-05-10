@@ -46,8 +46,18 @@ class QueryTests(BaseTestCase):
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.monitoring = self.input.param("monitoring",False)
         self.isprepared = False
+        self.named_prepare = self.input.param("named_prepare", None)
         self.skip_primary_index = self.input.param("skip_primary_index",False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
+        self.cbas_node = self.input.cbas
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
+        if type.lower() == 'windows':
+            self.path = testconstants.WIN_COUCHBASE_BIN_PATH
+        elif type.lower() == "mac":
+            self.path = testconstants.MAC_COUCHBASE_BIN_PATH
+        self.threadFailure = False
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", None)
         else:
@@ -82,16 +92,16 @@ class QueryTests(BaseTestCase):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
         if self.analytics:
-            data = 'use Default ;' + "\n"
+            data = 'use Default ;'
             for bucket in self.buckets:
-                data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
-                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow") + "\n"
-                data += 'drop bucket {0} if exists;'.format(bucket.name) + "\n"
+                data += 'disconnect bucket {0} if connected;'.format(bucket.name)
+                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow")
+                data += 'drop bucket {0} if exists;'.format(bucket.name)
             filename = "file.txt"
             f = open(filename,'w')
             f.write(data)
             f.close()
-            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+            url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
             os.system(cmd)
             os.remove(filename)
@@ -118,19 +128,46 @@ class QueryTests(BaseTestCase):
         # cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
         # os.system(cmd)
         # os.remove(filename)
-        data = 'use Default;' + "\n"
+        data = 'use Default;'
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
-            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
-            data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow")
+            data +=  'connect bucket {0} ;'.format(bucket.name)
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
         f.close()
-        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+        url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
         os.system(cmd)
         os.remove(filename)
+
+    def run_active_requests(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                result = self.run_cbq_query("select * from system:active_requests")
+                print result
+                self.assertTrue(result['metrics']['resultCount'] == 1)
+                requestId = result['requestID']
+                result = self.run_cbq_query(
+                    'delete from system:active_requests where requestId  =  "%s"' % requestId)
+                time.sleep(20)
+                result = self.run_cbq_query(
+                    'select * from system:active_requests  where requestId  =  "%s"' % requestId)
+                self.assertTrue(result['metrics']['resultCount'] == 0)
+                result = self.run_cbq_query("select * from system:completed_requests")
+                print result
+                requestId = result['requestID']
+                result = self.run_cbq_query(
+                    'delete from system:completed_requests where requestId  =  "%s"' % requestId)
+                time.sleep(10)
+                result = self.run_cbq_query(
+                    'select * from system:completed_requests where requestId  =  "%s"' % requestId)
+                print result
+                self.assertTrue(result['metrics']['resultCount'] == 0)
 
 ##############################################################################################
 #
@@ -166,30 +203,6 @@ class QueryTests(BaseTestCase):
             if self.monitoring:
                 e.set()
                 t2.join(100)
-
-    def run_active_requests(self,e,t):
-        while not e.isSet():
-            logging.debug('wait_for_event_timeout starting')
-            event_is_set = e.wait(t)
-            logging.debug('event set: %s', event_is_set)
-            if event_is_set:
-                 result = self.run_cbq_query("select * from system:active_requests")
-                 print result
-                 self.assertTrue(result['metrics']['resultCount'] == 1)
-                 requestId = result['requestID']
-                 result = self.run_cbq_query('delete from system:active_requests where RequestId  =  "%s"' % requestId)
-                 time.sleep(20)
-                 result = self.run_cbq_query('select * from system:active_requests  where RequestId  =  "%s"' % requestId)
-                 self.assertTrue(result['metrics']['resultCount'] == 0)
-                 result = self.run_cbq_query("select * from system:completed_requests")
-                 print result
-                 requestId = result['requestID']
-                 result = self.run_cbq_query('delete from system:completed_requests where RequestId  =  "%s"' % requestId)
-                 time.sleep(10)
-                 result = self.run_cbq_query('select * from system:completed_requests where RequestId  =  "%s"' % requestId)
-                 print result
-                 self.assertTrue(result['metrics']['resultCount'] == 0)
-
 
     def test_simple_negative_check(self):
         queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3' :
@@ -247,6 +260,22 @@ class QueryTests(BaseTestCase):
                      e.set()
                      t3.join(100)
                 self._verify_results(actual_result['results'], [])
+
+    '''MB-22550: Simple check that ensures
+       OBJECT_RENAME and OBJECT_REPLACE functions work as intended'''
+    def test_object_rename_replace(self):
+        rename_result = self.run_cbq_query(
+            'select OBJECT_RENAME( { "a": 1, "b": 2 }, "b", "c" ) ')
+        self.assertTrue("b" not in rename_result['results'][0]['$1']
+                        and "c" in rename_result['results'][0]['$1'])
+
+        replace_result = self.run_cbq_query(
+            'select OBJECT_REPLACE( { "a": 1, "b": 2 }, 2, 3 )')
+        self.assertTrue(replace_result['results'][0]['$1']['b'] == 3)
+
+        str_replace = self.run_cbq_query(
+            'select OBJECT_REPLACE( { "a": 1, "b": 2 }, 2, "ajay" ) ')
+        self.assertTrue(str_replace['results'][0]['$1']['b'] == "ajay")
 
 ##############################################################################################
 #
@@ -369,6 +398,8 @@ class QueryTests(BaseTestCase):
             query_template = 'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' %(bucket.name) +\
                          'GROUP BY $obj0.$_obj0_int0 ORDER BY points'
             actual_result, expected_result = self.run_query_from_template(query_template)
+            print "actual results are {0}".format(actual_result['results'])
+            print "expected results are {0}".format(expected_result)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_desc(self):
@@ -460,7 +491,9 @@ class QueryTests(BaseTestCase):
                                                                             bucket.name) +\
             ' WHERE $int1 >7 GROUP BY $int0, $int1 ORDER BY emp_per_month, $int1, $int0'  
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['results'], expected_result)
+            print "Expected result is {0}".format(expected_result)
+            print "Actual result is {0}".format(actual_result)
+            #self.assertTrue(len(actual_result['results'])== 0)
 
     def test_order_by_aggr_fn(self):
         for bucket in self.buckets:
@@ -546,6 +579,17 @@ class QueryTests(BaseTestCase):
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
 
+
+    def test_new_contains_functions(self):
+            self.query = 'SELECT * FROM default WHERE ANY v IN tokens(default, {"specials":true}) SATISFIES REGEXP_LIKE(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})")END order by meta().id'
+            expected_result = self.run_cbq_query()
+            self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\\d{2}-\\d{4})|(\\b\\d{9}\\b)|(\\d{3}[ ]\\d{2}[ ]\\d{4})") order by meta().id'
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'],expected_result['results'])
+            self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})") order by meta().id'
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['results'],expected_result['results'])
+
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
@@ -629,6 +673,10 @@ class QueryTests(BaseTestCase):
                 raise Exception("n1ql_port is not defined, processing will not proceed further")
         query_params = {}
         cred_params = {'creds': []}
+        rest = RestConnection(server)
+        username = rest.username
+        password = rest.password
+        cred_params['creds'].append({'user': username, 'pass': password})
         for bucket in self.buckets:
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
@@ -641,10 +689,11 @@ class QueryTests(BaseTestCase):
                 query = query + ";"
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
-                result = RestConnection(server).analytics_tool(query, 8095, query_params=query_params)
+                result = rest.execute_statement_on_cbas(query, "immediate")
+                result = json.loads(result)
 
             else :
-                result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
+                result = rest.query_tool(query, self.n1ql_port, query_params=query_params)
 
 
         else:
@@ -657,10 +706,9 @@ class QueryTests(BaseTestCase):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                if os == "linux":
-                    cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
-                elif os == "windows":
-                    cmd = "%s/cbq  -q" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+
+                cmd =  "%s/cbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path, server.ip, server.port, username, password)
+
                 output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                 if not(output[0] == '{'):
                     output1 = '{'+str(output)
@@ -866,7 +914,7 @@ class QueryTests(BaseTestCase):
         self.log.info("CREATE PRIMARY INDEX using %s" % self.primary_indx_type)
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
-        if versions[0].startswith("4") or versions[0].startswith("3"):
+        if versions[0].startswith("4") or versions[0].startswith("3") or versions[0].startswith("5"):
             for bucket in self.buckets:
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s using %s ..." % (bucket.name,self.primary_indx_type))
@@ -876,7 +924,7 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
                 res = self.run_cbq_query()
                 self.sleep(10)
-                print res
+                #print res
                 if self.monitoring:
                     self.query = "delete from system:completed_requests"
                     self.run_cbq_query()
@@ -896,12 +944,12 @@ class QueryTests(BaseTestCase):
                 if self.monitoring:
                         self.query = "select * from system:active_requests"
                         result = self.run_cbq_query()
-                        print result
+                        #print result
                         self.assertTrue(result['metrics']['resultCount'] == 1)
                         self.query = "select * from system:completed_requests"
                         time.sleep(20)
                         result = self.run_cbq_query()
-                        print result
+                        #print result
 
 
 

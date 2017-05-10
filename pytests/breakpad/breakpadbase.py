@@ -6,9 +6,9 @@ from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 from lib.cluster_run_manager  import CRManager
-from sdk_client import SDKClient
 from logpoll import NSLogPoller
 from constants import MD_PATH, NS_NUM_NODES
+from memcached.helper.data_helper import VBucketAwareMemcached
 
 class BreakpadBase(BaseTestCase):
 
@@ -67,12 +67,11 @@ class BreakpadBase(BaseTestCase):
 
     def load_docs(self, node, num_docs, bucket = 'default', password = '',
                   exp = 0, flags = 0):
-        host = node.ip+":"+node.port
-        client = SDKClient(bucket = "default", hosts = [host], scheme = "http")
 
+        client = VBucketAwareMemcached(RestConnection(node), bucket)
         for i in range(num_docs):
             key = "key%s"%i
-            rc = client.upsert(key, "value")
+            rc = client.set(key, 0, 0, "value")
 
     def kill_memcached(self, index, sig=6, wait=10):  #NIX
         killed = False

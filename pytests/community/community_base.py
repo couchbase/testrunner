@@ -70,5 +70,5 @@ class CommunityXDCRBaseTest(XDCRReplicationBaseTest):
         super(CommunityXDCRBaseTest, self).setUp()
 
 
-    def tearDonw(self):
-        super(CommunityXDCRBaseTest, self).teardown()
+    def tearDown(self):
+        super(CommunityXDCRBaseTest, self).tearDown()

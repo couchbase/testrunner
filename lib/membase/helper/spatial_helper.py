@@ -121,7 +121,7 @@ class SpatialHelper:
                     break
                 except MemcachedError as e:
                     fail_count += 1
-                    if (e.status == 133 or e.status == 132) and fail_count < 60:
+                    if (e.status == 133 or e.status == 132 or e.status == 134) and fail_count < 60:
                         if i == 0:
                             self.log.error("waiting 5 seconds. error {0}"
                                            .format(e))

@@ -4,9 +4,10 @@ from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
 from tuqquery.tuq import ExplainPlanHelper
+from pytests.tuqquery.tuq import QueryTests
 
 
-class TokenTests(BaseTestCase):
+class TokenTests(QueryTests):
     def setUp(self):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
@@ -24,25 +25,11 @@ class TokenTests(BaseTestCase):
         self.sleep(20)
         super(TokenTests, self).tearDown()
 
-    # def suite_tearDown(self):
-    #     super(TokenTests, self).suite_tearDown()
-
-    def load_sample_buckets(self, bucketName="beer-sample" ):
-        """
-        Load the specified sample bucket in Couchbase
-        """
-        #self.cluster.bucket_delete(server=self.master, bucket="default")
-        server = self.master
-        shell = RemoteMachineShellConnection(server)
-        shell.execute_command("""curl -v -u Administrator:password \
-                             -X POST http://{0}:8091/sampleBuckets/install \
-                          -d '["{1}"]'""".format(server.ip, bucketName))
-        self.sleep(30)
-
-        shell.disconnect()
 
     def test_tokens_secondary_indexes(self):
-        self.load_sample_buckets()
+        self.rest.load_sample("beer-sample")
+        self.sleep(20)
+        created_indexes = []
         self.query = 'create primary index on `beer-sample`'
         self.run_cbq_query()
         self.query = 'create index idx1 on `beer-sample`(description,name )'
@@ -90,6 +77,9 @@ class TokenTests(BaseTestCase):
         self.query = 'create index idx22 on `beer-sample`( DISTINCT ARRAY v FOR v in tokens(description,{"specials":"random"}) END  )'
         self.run_cbq_query()
 
+        for i in xrange(1,22):
+            index = 'idx{0}'.format(i)
+            created_indexes.append(index)
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description) satisfies v = "golden" END limit 10'
         actual_result = self.run_cbq_query()
@@ -214,45 +204,81 @@ class TokenTests(BaseTestCase):
         self.query = 'select name from `beer-sample` use index(`#primary`) where any v in tokens(description,{"names":"random"}) satisfies  v = "golden"  END limit 10'
         expected_result = self.run_cbq_query()
         self.assertTrue(actual_result['results']==expected_result['results'])
+        for idx in created_indexes:
+            self.query = "DROP INDEX %s.%s USING %s" % ("`beer-sample`", idx, self.index_type)
+            actual_result = self.run_cbq_query()
 
+    #This test is specific to beer-sample bucket
+    def test_tokens_simple_syntax(self):
+        #self.rest.load_sample("beer-sample")
+        #self.sleep(20)
+        created_indexes = []
+        try:
+            idx1 = "idx_suffixes"
+            idx2 = "idx_tokens"
+            idx3 = "idx_pairs"
+            idx4 = "idx_addresses"
+            self.query = 'CREATE INDEX {0} ON `beer-sample`( DISTINCT SUFFIXES( name ) )'.format(idx1)
+            self.run_cbq_query()
+            created_indexes.append(idx1)
+            self.query = "explain select * from `beer-sample` where name like '%Cafe%'"
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index']==idx1)
+            self.query = 'CREATE INDEX {0} ON `beer-sample`( DISTINCT TOKENS( description ) )'.format(idx2)
+            self.run_cbq_query()
+            created_indexes.append(idx2)
+            self.query = "explain select * from `beer-sample` where contains_token(description,'Great')"
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index']==idx2)
+            self.query = "CREATE INDEX {0} ON `beer-sample`( DISTINCT PAIRS( SELF ) )".format(idx3)
+            self.run_cbq_query()
+            created_indexes.append(idx3)
+            self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 6"
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']== idx1)
+            self.assertTrue(plan['~children'][0]['scans'][1]['scan']['index']==idx3)
+            self.query = "CREATE INDEX {0} ON `beer-sample`( ALL address )".format(idx4)
+            self.run_cbq_query()
+            self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['index']==idx4)
+            self.query = "explain select count(a) from `beer-sample` unnest address as a"
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['index']==idx4)
+            self.query = "explain select * from `beer-sample` where any place in address satisfies " \
+                         "place LIKE '100 %' end"
+            actual_result=self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']== idx4)
+            self.assertTrue(plan['~children'][0]['scans'][1]['scan']['index']==idx3)
+        finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX `beer-sample`.%s" % ( idx)
+                    self.run_cbq_query()
 
-
-
-
-
-
-
-
-
-
-    def run_cbq_query(self, query=None, min_output_size=10, server=None):
-        if query is None:
-            query = self.query
-        if server is None:
-           server = self.master
-           if server.ip == "127.0.0.1":
-            self.n1ql_port = server.n1ql_port
-        else:
-            if server.ip == "127.0.0.1":
-                self.n1ql_port = server.n1ql_port
-            if self.input.tuq_client and "client" in self.input.tuq_client:
-                server = self.tuq_client
-        if self.n1ql_port == None or self.n1ql_port == '':
-            self.n1ql_port = self.input.param("n1ql_port", 8093)
-            if not self.n1ql_port:
-                self.log.info(" n1ql_port is not defined, processing will not proceed further")
-                raise Exception("n1ql_port is not defined, processing will not proceed further")
-        query_params = {}
-        cred_params = {'creds': []}
-        for bucket in self.buckets:
-            if bucket.saslPassword:
-                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
-        query_params.update(cred_params)
-        query_params.update({'scan_consistency': self.scan_consistency})
-        self.log.info('RUN QUERY %s' % query)
-
-        result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
-        if isinstance(result, str) or 'errors' in result:
-            raise CBQError(result, server.ip)
-        self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
-        return result
+    def test_dynamicindex_limit(self):
+        self.rest.load_sample("beer-sample")
+        self.sleep(20)
+        created_indexes = []
+        try:
+            idx1 = "idx_abv"
+            idx2 = "dynamic"
+            self.query = "CREATE INDEX idx_abv ON `beer-sample`( abv )"
+            self.run_cbq_query()
+            created_indexes.append(idx1)
+            self.query = "CREATE INDEX dynamic ON `beer-sample`( DISTINCT PAIRS( SELF ) )"
+            self.run_cbq_query()
+            created_indexes.append(idx2)
+            self.query = "Explain select * from `beer-sample` where abv > 5 LIMIT 10"
+            res = self.run_cbq_query()
+            plan = ExplainPlanHelper(res)
+            self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='10')
+        finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX `beer-sample`.%s" % ( idx)
+                    self.run_cbq_query()

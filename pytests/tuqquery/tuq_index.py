@@ -116,6 +116,113 @@ class QueriesViewsTests(QueryTests):
                 except:
                     pass
 
+    '''MB-22129: Test that the created index coveries the queries using LET and LETTING'''
+    def test_explain_let_letting(self):
+        idx = "idx_bc"
+        self.query = 'CREATE INDEX %s ON default( join_mo, join_yr) ' % idx
+        self.run_cbq_query()
+
+        # Test let
+        # Number of expected hits for the select query
+        result_count = 504
+        self.query = "EXPLAIN SELECT d, e FROM default LET d = join_mo, e = join_yr " \
+                     "WHERE d > 11 AND e > 2010"
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = "SELECT d, e FROM default LET d = join_mo, e = join_yr " \
+                     "WHERE d > 11 AND e > 2010"
+        result = self.run_cbq_query()
+        self.assertTrue(plan['~children'][0]['index'] == idx
+                        and 'join_mo' in plan['~children'][0]['covers'][0]
+                        and 'join_yr' in plan['~children'][0]['covers'][1]
+                        and result['metrics']['resultCount'] == result_count)
+
+        # Test letting
+        result_count = 2
+        self.query = 'EXPLAIN SELECT d, e FROM default LET d = join_mo ' \
+                     'WHERE d > 10 GROUP BY d LETTING e = SUM(join_yr) HAVING e > 20'
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = 'SELECT d, e FROM default LET d = join_mo ' \
+                     'WHERE d > 10 GROUP BY d LETTING e = SUM(join_yr) HAVING e > 20'
+        result = self.run_cbq_query()
+        self.assertTrue(plan['~children'][0]['index'] == idx
+                        and 'join_mo' in plan['~children'][0]['covers'][0]
+                        and 'join_yr' in plan['~children'][0]['covers'][1]
+                        and result['metrics']['resultCount'] == result_count)
+
+        self.query = "DROP INDEX default.%s USING %s" % (idx,self.index_type)
+
+    '''MB-22148: The span produced by an OR predicate should be variable in length'''
+    def test_variable_length_sarging_or(self):
+        idx = "idx_ab"
+        result_count = 468
+        self.query = 'CREATE INDEX %s ON default( join_day, join_mo) ' % idx
+        self.run_cbq_query()
+
+        self.query = "EXPLAIN SELECT * FROM default " \
+                     "WHERE join_day = 5 OR ( join_day = 10 AND join_mo = 10 )"
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = "SELECT * FROM default WHERE join_day = 5 OR ( join_day = 10 AND join_mo = 10 )"
+        result = self.run_cbq_query()
+        self.assertTrue(result['metrics']['resultCount'] == result_count)
+        self.assertTrue(len(plan['~children'][0]['scans'][1]['spans'][0]['range']) == 2)
+
+        self.query = "DROP INDEX default.%s USING %s" % (idx, self.index_type)
+
+    '''MB-22111: Unnest array covering indexes should not have DistinctScan unless a Distinct array
+       is being used in the index'''
+    def test_unnest_covering_array_index(self):
+        idx = "by_VMs"
+        self.query = 'CREATE INDEX %s ON default (ALL ARRAY r.`name` FOR r IN VMs END, email)' % idx
+        self.run_cbq_query()
+
+        result_count = 3024
+        self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` IN [ "vm_12", "vm_13" ]'
+        result = self.run_cbq_query()
+        plan = ExplainPlanHelper(result)
+        self.query = 'SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` IN [ "vm_12", "vm_13" ]'
+        query_result = self.run_cbq_query()
+        # plan.values()[1][0].values() is where DistinctScan would appear if it exists
+        self.assertTrue("DistinctScan" not in plan.values()[1][0].values()
+                        and query_result['metrics']['resultCount'] == result_count)
+
+        result_count = 2016
+        self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        result = self.run_cbq_query()
+        plan2 = ExplainPlanHelper(result)
+        self.query = 'SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        query_result2 = self.run_cbq_query()
+        # plan.values()[1][0].values() is where DistinctScan would appear if it exists
+        self.assertTrue("DistinctScan" not in plan2.values()[1][0].values()
+                        and query_result2['metrics']['resultCount'] == result_count)
+        self.query = "DROP INDEX default.%s USING %s" % (idx, self.index_type)
+        self.run_cbq_query()
+
+        idx2 = "by_VMs2"
+        self.query = 'CREATE INDEX %s ON ' \
+                     'default (DISTINCT ARRAY r.`name` FOR r IN VMs END,VMs, email)' % idx2
+        self.run_cbq_query()
+
+        self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        result = self.run_cbq_query()
+        plan3 = ExplainPlanHelper(result)
+        self.query = 'SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
+                     'WHERE r.`name` = "vm_12"'
+        query_result3 = self.run_cbq_query()
+        # Since DistinctScan does exist we can just look for its specific key
+        self.assertTrue("DistinctScan" in plan3.values()[1][0].values()
+                        and plan3['~children'][0]['#operator'] == "DistinctScan"
+                        and query_result3['metrics']['resultCount'] == result_count)
+        self.query = "DROP INDEX default.%s USING %s" % (idx2, self.index_type)
+        self.run_cbq_query()
+
     def test_explain(self):
         for bucket in self.buckets:
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
@@ -204,13 +311,170 @@ class QueriesViewsTests(QueryTests):
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
 
+    def test_push_limit_intersect_unionscan(self):
+      created_indexes = []
+      try:
+        self.query = "create index ix1 on default(join_day,VMs[0].os)"
+        self.run_cbq_query()
+        created_indexes.append("ix1")
+        self.query = "create index ix2 on default(VMs[0].os)"
+        self.run_cbq_query()
+        created_indexes.append("ix2")
+        self.query = "create index ix3 on default(VMs[0].memory) where VMs[0].memory > 10"
+        self.run_cbq_query()
+        created_indexes.append("ix3")
+        self.query = "explain select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.query = "explain select * from default where join_day > 10 AND VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("covers" not in str(plan))
+        self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" not in str(plan))
+        self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+        expected_result = self.run_cbq_query()
+        self.query = "create index ix4 on default(VMs[0].memory,join_day) where VMs[0].memory > 10"
+        self.run_cbq_query()
+        created_indexes.append("ix4")
+        self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" in str(plan))
+        self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+        actual_result = self.run_cbq_query()
+        self.assertTrue(actual_result['results']==expected_result['results'])
+        self.query = "select join_day from default use index(`#primary`) where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+        expected_result = self.run_cbq_query()
+        self.assertTrue(actual_result['results']==expected_result['results'])
+        self.query = "select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
+        self.query = "explain select * from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" not in str(plan))
+        self.query = "explain select join_day from default where join_day > 10 OR VMs[0].memory > 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" in str(plan))
+        self.query = "explain select join_day from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("cover" not  in str(plan))
+        #self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
+        self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
+        self.query = "explain select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        plan = ExplainPlanHelper(res)
+        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.query = "select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
+        res = self.run_cbq_query()
+        self.assertTrue(res['metrics']['resultCount']==10)
+      finally:
+        for idx in created_indexes:
+            self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+            self.run_cbq_query()
+
+    def test_meta_no_duplicate_results(self):
+        self.query = 'insert into default values ("k01",{"name":"abc"})'
+        self.run_cbq_query()
+        self.query = 'select name,meta().id from default where meta().id IN ["k01",""]'
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'id': u'k01', u'name': u'abc'}])
+        self.query = 'delete from default use keys ["k01"]'
+        self.run_cbq_query()
+
+    def test_unnest_when(self):
+        created_indexes = []
+        for bucket in self.buckets:
+            try:
+                idx1 = "unnest_idx"
+                idx2 = "idx"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i.memory FOR i in %s  when i.memory > 10 END) " % (
+                    idx1, bucket.name, "VMs")
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx1)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx1)
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i.memory FOR i in %s END) " % (
+                    idx2, bucket.name, "VMs")
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx1)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                self.assertTrue(self._is_index_in_list(bucket, idx1), "Index is not in list")
+                self.query = "EXPLAIN select %s.name from %s UNNEST VMs as x where any i in default.VMs satisfies i.memory > 9 END" % (bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                result1 =plan['~children'][0]['scan']['index']
+                self.assertTrue(result1==idx2)
+                self.query = "EXPLAIN select %s.name from %s UNNEST VMs as x where any i in default.VMs satisfies i.memory > 10 END" % (bucket.name,bucket.name)
+                actual_result = self.run_cbq_query()
+		plan = ExplainPlanHelper(actual_result)
+                result1 =plan['~children'][0]['scans'][0]['scan']['index']
+                self.assertTrue(result1==idx1)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+                    self.run_cbq_query()
+
+
+
+    def test_notin_notwithin(self):
+      created_indexes = []
+      try:
+        idx = "ix"
+        self.query = 'create index {0} on default(join_day)'.format(idx)
+        self.run_cbq_query()
+        self.query = 'explain select 1 from default where NOT (join_day IN [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+        self.query = 'explain select 1 from default where NOT (join_day WITHIN [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index'] ==idx)
+        self.query = 'explain select 1 from default where (join_day IN NOT [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index']==idx)
+        self.query = 'explain select 1 from default where (join_day WITHIN NOT [ 1])'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index']==idx)
+        self.query = 'explain select 1 from default where join_day NOT WITHIN [ 1]'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['index'] ==idx)
+        self.query = 'explain select 1 from default where join_day NOT IN [ 1]'
+        actual_result = self.run_cbq_query()
+        plan = ExplainPlanHelper(actual_result)
+        self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+      finally:
+        for idx in created_indexes:
+            self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+            self.run_cbq_query()
+
+    def test_create_arrays_ranging_over_object(self):
+        self.query = 'select array j for i:j in {"a":1, "b":2} end'
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'$1': [1, 2]}])
+        self.query = 'select array j for i:j in {"a":1, "b":2, "c":[2,3], "d": "%s", "e":2, "f": %s } end'%("verbose",'{"a":1}')
+        res = self.run_cbq_query()
+        self.assertTrue(res['results']==[{u'$1': [1, 2, [2, 3], u'verbose', 2, {u'a': 1}]}])
+
+
     def test_explain_index_with_fn(self):
         for bucket in self.buckets:
             index_name = "my_index_fn"
             try:
                 self.query = "CREATE INDEX %s ON %s(round(test_rate)) USING %s" % (index_name, bucket.name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN select name, round(test_rate) as rate from %s WHERE round(test_rate) = 2' % (bucket.name, bucket.name)
@@ -230,8 +494,6 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "my_attr_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     self.query = "EXPLAIN SELECT * FROM %s WHERE %s = 'abc'" % (bucket.name, self.FIELDS_TO_INDEX[ind - 1])
@@ -250,8 +512,6 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_non_index"
             try:
                 self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = "EXPLAIN SELECT * FROM %s WHERE email = 'abc'" % (bucket.name)
@@ -866,8 +1126,6 @@ class QueriesViewsTests(QueryTests):
                     index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                     query = "CREATE INDEX %s ON %s(%s) USING %s" % (
                     index_name, bucket.name, ','.join(field.split(';')), self.index_type)
-                    # if self.gsi_type:
-                    #     query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query(query=query)
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
@@ -885,7 +1143,6 @@ class QueriesViewsTests(QueryTests):
 
 	    plan = ExplainPlanHelper(res)
             print plan
-            #import pdb;pdb.set_trace()
             self.log.info('-'*100)
             if (query.find("CREATE INDEX") < 0):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
@@ -893,8 +1150,9 @@ class QueriesViewsTests(QueryTests):
                 print result
                 #import pdb;pdb.set_trace()
                 if not(result['scans'][0]['#operator']=='DistinctScan'):
-                    self.assertTrue(result["#operator"] == 'IntersectScan',
-                                    "Index should be intersect scan and is %s" % (plan))
+                    if not (result["#operator"] == 'UnionScan'):
+                        self.assertTrue(result["#operator"] == 'IntersectScan',
+                                        "Index should be intersect scan and is %s" % (plan))
                     # actual_indexes = []
                     # for scan in result['scans']:
                     #     print scan
@@ -905,10 +1163,12 @@ class QueriesViewsTests(QueryTests):
                     #         actual_indexes.append([result['scans'][0]['scan']['index']])
                     #     else:
                     #          actual_indexes.append(scan['index'])
-
-
-                    actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
-                            for scan in result['scans']]
+                    if result["#operator"] == 'UnionScan':
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                          for results in result['scans'] for scan in results['scans']]
+                    else:
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                for scan in result['scans']]
 
                     print actual_indexes
 

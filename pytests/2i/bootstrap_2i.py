@@ -47,7 +47,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
                                     self.nodes_in_list,
                                    self.nodes_out_list, services=self.services_in)
             self.sleep(3)
-            tasks = self.async_check_and_run_operations(buckets=self.buckets, in_between=True)
+            tasks = self.async_run_operations(buckets=self.buckets, phase="in_between")
             # runs operations
             for task in tasks:
                 task.result()
@@ -64,7 +64,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
 
     def test_failover(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets=self.buckets, before=True)
+            tasks = self.async_run_operations(buckets=self.buckets, phase="before")
             for task in tasks:
                 task.result()
             servr_out = self.nodes_out_list
@@ -75,7 +75,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
             self.log.info ("Rebalance Second time")
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
-            tasks = self.async_check_and_run_operations(buckets=self.buckets, in_between=True)
+            tasks = self.async_run_operations(buckets=self.buckets, phase="in_between")
             self._run_aync_tasks()
             self.run_after_operations()
         except Exception, ex:
@@ -87,7 +87,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             recoveryType = self.input.param("recoveryType", "full")
             servr_out = self.nodes_out_list
             nodes_all = rest.node_statuses()
-            tasks = self.async_check_and_run_operations(buckets=self.buckets, before=True)
+            tasks = self.async_run_operations(buckets=self.buckets, phase="before")
             for task in tasks:
                 task.result()
             failover_task = self.cluster.async_failover([self.master],
@@ -132,7 +132,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             raise
         finally:
             remote.start_server()
-            tasks = self.async_check_and_run_operations(buckets=self.buckets, after=True)
+            tasks = self.async_run_operations(buckets=self.buckets, phase="after")
             for task in tasks:
                 task.result()
 

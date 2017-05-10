@@ -1,6 +1,10 @@
 import json
 import string
 import random
+from random import choice
+from string import ascii_uppercase
+from string import ascii_lowercase
+from string import digits
 import gzip
 from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
 from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
@@ -79,9 +83,15 @@ class DocumentGenerator(KVGenerator):
             value = arg[seed % len(arg)]
             doc_args.append(value)
             seed /= len(arg)
-        doc = self.template.format(*doc_args).replace('\'', '"').replace('True', 'true').replace('False', 'false').replace('\\', '\\\\')
+        doc = self.template.format(*doc_args).replace('\'', '"').replace('True',
+                             'true').replace('False', 'false').replace('\\', '\\\\')
         json_doc = json.loads(doc)
-        json_doc['_id'] = self.name + '-' + str(self.itr)
+        if self.name == "random_keys":
+            """ This will generate a random ascii key with 12 characters """
+            json_doc['_id'] = ''.join(choice(ascii_uppercase+ascii_lowercase+digits) \
+                                                                   for i in range(12))
+        else:
+            json_doc['_id'] = self.name + '-' + str(self.itr)
         self.itr += 1
         return json_doc['_id'], json.dumps(json_doc).encode("ascii", "ignore")
 
@@ -147,7 +157,10 @@ class BlobGenerator(KVGenerator):
         if self.itr >= self.end:
             raise StopIteration
 
-        key = self.name + str(self.itr)
+        if self.name == "random_keys":
+            key = ''.join(choice(ascii_uppercase+ascii_lowercase+digits) for i in range(12))
+        else:
+            key = self.name + str(self.itr)
         if self.value_size == 1:
             value = random.choice(string.letters)
         else:

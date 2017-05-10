@@ -25,6 +25,10 @@ class QueryTests(BaseTestCase):
             self.log.info ("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
 
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        # Set indexer storage mode
+        indexer_rest = RestConnection(indexer_node[0])
+        doc = {"indexer.settings.storage_mode": self.gsi_type}
+        indexer_rest.set_index_settings(doc)
         self.indexer_scanTimeout = self.input.param("indexer_scanTimeout", None)
         if self.indexer_scanTimeout is not None:
             for server in indexer_node:
@@ -74,14 +78,14 @@ class QueryTests(BaseTestCase):
             buckets=self.buckets, item_flag=self.item_flag,
             n1ql_port=self.n1ql_port, full_docs_list=self.full_docs_list,
             log=self.log, input=self.input, master=self.master)
-        n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
-        self.log.info(n1ql_server)
-        #self.n1ql_helper._start_command_line_query(n1ql_server)
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.log.info(self.n1ql_node)
+        #self.n1ql_helper._start_command_line_query(self.n1ql_node)
         # sleep to avoid race condition during bootstrap
         if self.create_primary_index:
             try:
                 self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
-                 server=n1ql_server)
+                 server=self.n1ql_node)
             except Exception, ex:
                 self.log.info(ex)
                 raise ex
@@ -90,8 +94,8 @@ class QueryTests(BaseTestCase):
         self.check_gsi_logs_for_panic()
         if hasattr(self, 'n1ql_helper'):
             if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
-                n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
-                self.n1ql_helper.drop_primary_index(using_gsi=self.use_gsi_for_primary, server=n1ql_server)
+                self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+                self.n1ql_helper.drop_primary_index(using_gsi=self.use_gsi_for_primary, server=self.n1ql_node)
         if hasattr(self, 'shell'):
             if not self.skip_cleanup:
                 self.n1ql_helper._restart_indexer()
@@ -113,7 +117,7 @@ class QueryTests(BaseTestCase):
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
         except Exception, ex:
-            self.log.info(ex)
+            self.log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
     def generate_ops_docs(self, num_items, start=0):
@@ -130,7 +134,7 @@ class QueryTests(BaseTestCase):
             if self.dataset == "bigdata":
                 return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
             if self.dataset == "array":
-                return self.generate_ops(num_items, start, json_generator.generate_docs_employee_array)
+                return self.generate_ops(num_items, start, json_generator.generate_all_type_documents_for_gsi)
         except Exception, ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
@@ -160,9 +164,9 @@ class QueryTests(BaseTestCase):
         return json_generator.generate_docs_bigdata(docs_per_day=docs_per_day,
             start=start, value_size=self.value_size)
 
-    def generate_docs_array(self, docs_per_day, start=0):
+    def generate_docs_array(self, num_items=10, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_array(docs_per_day=docs_per_day,
+        return json_generator.generate_all_type_documents_for_gsi(docs_per_day=num_items,
             start=start)
 
     def generate_ops(self, docs_per_day, start=0, method=None):
@@ -214,36 +218,39 @@ class QueryTests(BaseTestCase):
         """ Checks if a string 'str' is present in goxdcr.log on server
             and returns the number of occurances
         """
+        self.generate_map_nodes_out_dist()
         panic_str = "panic"
         indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not indexers:
             return None
         for server in indexers:
-            shell = RemoteMachineShellConnection(server)
-            _, dir = RestConnection(server).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
-            indexer_log = str(dir) + '/indexer.log*'
-            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                        format(panic_str, indexer_log))
-            if isinstance(count, list):
-                count = int(count[0])
-            else:
-                count = int(count)
-            shell.disconnect()
-            if count > 0:
-                self.log.info("===== PANIC OBSERVED IN INDEXER LOGS ON SERVER {0}=====".format(server.ip))
+            if server not in self.nodes_out_list:
+                shell = RemoteMachineShellConnection(server)
+                _, dir = RestConnection(server).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+                indexer_log = str(dir) + '/indexer.log*'
+                count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                            format(panic_str, indexer_log))
+                if isinstance(count, list):
+                    count = int(count[0])
+                else:
+                    count = int(count)
+                shell.disconnect()
+                if count > 0:
+                    self.log.info("===== PANIC OBSERVED IN INDEXER LOGS ON SERVER {0}=====".format(server.ip))
         projectors = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         if not projectors:
             return None
         for server in projectors:
-            shell = RemoteMachineShellConnection(server)
-            _, dir = RestConnection(server).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
-            projector_log = str(dir) + '/projector.log*'
-            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                        format(panic_str, projector_log))
-            if isinstance(count, list):
-                count = int(count[0])
-            else:
-                count = int(count)
-            shell.disconnect()
-            if count > 0:
-                self.log.info("===== PANIC OBSERVED IN PROJECTOR LOGS ON SERVER {0}=====".format(server.ip))
+            if server not in self.nodes_out_list:
+                shell = RemoteMachineShellConnection(server)
+                _, dir = RestConnection(server).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+                projector_log = str(dir) + '/projector.log*'
+                count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                            format(panic_str, projector_log))
+                if isinstance(count, list):
+                    count = int(count[0])
+                else:
+                    count = int(count)
+                shell.disconnect()
+                if count > 0:
+                    self.log.info("===== PANIC OBSERVED IN PROJECTOR LOGS ON SERVER {0}=====".format(server.ip))

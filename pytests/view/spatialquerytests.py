@@ -10,19 +10,23 @@ from remote.remote_util import RemoteMachineShellConnection
 import json
 import sys
 
+from basetestcase import BaseTestCase
+
 from membase.helper.spatial_helper import SpatialHelper
 
 
-class SpatialQueryTests(unittest.TestCase):
+class SpatialQueryTests(BaseTestCase):
     def setUp(self):
-        self.log = logger.Logger.get_logger()
         self.helper = SpatialHelper(self, "default")
+        super(SpatialQueryTests, self).setUp()
+        self.log = logger.Logger.get_logger()
+
         self.helper.setup_cluster()
         self.cluster = Cluster()
         self.servers = self.helper.servers
 
     def tearDown(self):
-        self.helper.cleanup_cluster()
+        super(SpatialQueryTests, self).tearDown()
 
     def test_simple_dataset_limit_queries(self):
         num_docs = self.helper.input.param("num-docs")

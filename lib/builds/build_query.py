@@ -210,6 +210,8 @@ class BuildQuery(object):
                         os_name = "ubuntu12.04"
                         if  "ubuntu 14.04" in os_version:
                             os_name = "ubuntu14.04"
+                        elif "ubuntu 16.04" in os_version:
+                            os_name = "ubuntu16.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
@@ -236,6 +238,8 @@ class BuildQuery(object):
                         os_name = "ubuntu12.04"
                         if  "ubuntu 14.04" in os_version:
                             os_name = "ubuntu14.04"
+                        elif "ubuntu 16.04" in os_version:
+                            os_name = "ubuntu16.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
                             deliverable_type, build_details[:5], os_name,
@@ -258,7 +262,8 @@ class BuildQuery(object):
         return build
 
     def find_couchbase_release_build(self, product, deliverable_type, os_architecture,
-                                    build_version, is_amazon=False, os_version=""):
+                                    build_version, is_amazon=False, os_version="",
+                                    direct_build_url=None):
         build_details = build_version
         if build_version[:5] in COUCHBASE_VERSION_2_WITH_REL:
             if build_version[-4:] != "-rel":
@@ -346,16 +351,30 @@ class BuildQuery(object):
                         os_name = "ubuntu12.04"
                         if  "ubuntu 14.04" in os_version:
                             os_name = "ubuntu14.04"
+                        elif "ubuntu 16.04" in os_version:
+                            os_name = "ubuntu16.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
                                  build_details[:5], os_name, CB_RELEASE_REPO)
                 else:
                     if "2.5.2" in build_details[:5]:
-                        build.url = "{5}{0}/{1}_{4}_{2}.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type,
-                            build_details[:5], CB_RELEASE_REPO)
+                        if product == "moxi-server" and deliverable_type == "deb":
+                            build.url = "{5}{0}/{1}_{4}_{2}_openssl098.{3}".format(
+                                            build_version[:build_version.find('-')],
+                                            product,
+                                            os_architecture,
+                                            deliverable_type,
+                                            build_details[:5],
+                                            CB_RELEASE_REPO)
+                        else:
+                            build.url = "{5}{0}/{1}_{4}_{2}.{3}".format(
+                                            build_version[:build_version.find('-')],
+                                            product,
+                                            os_architecture,
+                                            deliverable_type,
+                                            build_details[:5],
+                                            CB_RELEASE_REPO)
                     else:
                         build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
                             .format(build_version[:build_version.find('-')],
@@ -384,6 +403,8 @@ class BuildQuery(object):
                         os_name = "ubuntu12.04"
                         if  "ubuntu 14.04" in os_version:
                             os_name = "ubuntu14.04"
+                        elif "ubuntu 16.04" in os_version:
+                            os_name = "ubuntu16.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
                             deliverable_type, build_details[:5], os_name,
@@ -411,6 +432,8 @@ class BuildQuery(object):
                                                        deliverable_type)
             build.url = build.url.replace("enterprise", "community")
             build.name = build.name.replace("enterprise", "community")
+        if direct_build_url is not None and deliverable_type != "exe":
+            build.url = direct_build_url
         return build
 
     def sort_builds_by_version(self, builds):
@@ -569,7 +592,7 @@ class BuildQuery(object):
 
             if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
                 deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
-                             "windows", "macos"]
+                             "ubuntu16.04", "windows", "macos"]
                 if "centos" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
@@ -599,8 +622,9 @@ class BuildQuery(object):
                 elif "-amd64" in build_info:
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("-amd64", "")
-                del_words = ["centos6", "debian7", "debian8", "ubuntu12.04", \
-                             "ubuntu14.04", "windows", "macos", "centos7"]
+                del_words = ["centos6", "debian7", "debian8", "ubuntu12.04",
+                             "ubuntu14.04", "ubuntu16.04", "windows", "macos",
+                             "centos7"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -688,7 +712,7 @@ class BuildQuery(object):
                     build.product_version = version + "-rel"
                 else:
                     build.product_version = version
-        if "exe" in deliverable_type:
+        if deliverable_type in ["exe", "msi"]:
             if version[:5] in COUCHBASE_VERSION_2:
                 setup = "setup."
             else:
@@ -736,17 +760,25 @@ class BuildQuery(object):
                 distribution version:    centos release 6.5 (final)  """
             centos_version = "centos6"
 
-            if "centos" in distribution_version:
+            if "centos" in distribution_version or "red hat" in distribution_version:
                 if "centos 7" in distribution_version:
+                    centos_version = "centos7"
+                elif "red hat enterprise linux server release 6" in distribution_version:
+                    centos_version = "centos6"
+                elif "red hat enterprise linux server release 7" in distribution_version:
                     centos_version = "centos7"
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + centos_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "suse" in distribution_version:
-                build.distribution_version = "suse11"
-                os_name = "suse11"
+                if "suse linux enterprise server 12" in distribution_version:
+                    suse_version="suse12"
+                    build.distribution_version = "suse12"
+                else:
+                    suse_version="suse11"
+                    build.distribution_version = "suse11"
                 build.name = edition_type + "-" + build.product_version + \
-                   "-" + os_name + "." + build.architecture_type + \
+                   "-" + suse_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "oracle linux" in distribution_version:
                 build.distribution_version = "oracle linux"
@@ -756,12 +788,17 @@ class BuildQuery(object):
                    "." + build.deliverable_type
             else:
                 os_name = ""
+                joint_char = "-"
+                if build.deliverable_type == "msi":
+                    joint_char = "_"
                 """ sherlock build in unix only support 64-bit """
                 build.architecture_type = "amd64"
                 if  "ubuntu 12.04" in distribution_version:
                     os_name = "ubuntu12.04"
                 elif "ubuntu 14.04" in distribution_version:
                     os_name = "ubuntu14.04"
+                elif "ubuntu 16.04" in distribution_version:
+                    os_name = "ubuntu16.04"
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"
@@ -776,7 +813,7 @@ class BuildQuery(object):
                     os_name = "macos"
                     build.architecture_type = "x86_64"
                 build.name = edition_type + "_" + build.product_version + \
-                   "-" + os_name + "_" +  build.architecture_type + \
+                   joint_char + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type
             build.url = repo + build_number + "/" + build.name
         elif toy is not "":

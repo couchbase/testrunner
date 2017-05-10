@@ -920,37 +920,38 @@ class JsonGenerator:
                    '"address":{4}, "travel_history":{5}, "travel_history_code":{6}, "travel_details":{7},' \
                    '"booking":{8}, "credit_cards":{9}, "secret_combination":{10}, "countries_visited":{11}, ' \
                    '"question_values":{12}}}'
-        name = random.choice(FIRST_NAMES)
-        age = random.randint(25, 70)
-        last_name = random.choice(LAST_NAMES)
-        dob = "{0}-{1}-{2}".format(random.randint(1970, 1999),
-                                   random.randint(1, 28), random.randint(1, 12))
-        email = "{0}.{1}.{2}@abc.com".format(name, last_name, dob.split("-")[1])
-        premium_customer = random.choice(bool_vals)
-        address = {}
-        address["line_1"] = "Street No. {0}".format(random.randint(100, 200))
-        address["line_2"] = "null"
-        if not random.choice(bool_vals):
-            address["address2"] = "Building {0}".format(random.randint(1, 6))
-        address["city"] = "Bangalore"
-        address["contact"] = "{0} {1}".format(name, last_name)
-        address["country"] = "India"
-        address["postal_code"] = "{0}".format(random.randint(560071, 560090))
-        credit_cards = [random.randint(-1000000, 9999999) for i in range(random.randint(3, 7))]
-        secret_combo = [''.join(random.choice(string.lowercase) for i in range(7)),
-                        random.randint(1000000, 9999999)]
-        travel_history = [random.choice(COUNTRIES[:9]) for i in range(1, 11)]
-        travel_history_code = [COUNTRY_CODE[COUNTRIES.index(i)] for i in travel_history]
-        travel_details = [{"country": travel_history[i], "code": travel_history_code[i]}
-                          for i in range(len(travel_history))]
-        countries_visited = list(set(travel_history))
-        booking = {"source": random.choice(COUNTRIES), "destination": random.choice(COUNTRIES)}
-        confirm_question_values = [random.choice(bool_vals) for i in range(5)]
-        prefix = "airline_record_" + str(random.random()*100000)
-        generators.append(DocumentGenerator(prefix, template, [name], [email], [age], [premium_customer],
-                                            [address], [travel_history], [travel_history_code], [travel_details],
-                                            [booking], [credit_cards], [secret_combo], [countries_visited],
-                                            [confirm_question_values], start=start, end=docs_per_day))
+        for i in range(docs_per_day):
+            name = random.choice(FIRST_NAMES)
+            age = random.randint(25, 70)
+            last_name = random.choice(LAST_NAMES)
+            dob = "{0}-{1}-{2}".format(random.randint(1970, 1999),
+                                       random.randint(1, 28), random.randint(1, 12))
+            email = "{0}.{1}.{2}@abc.com".format(name, last_name, dob.split("-")[1])
+            premium_customer = random.choice(bool_vals)
+            address = {}
+            address["line_1"] = "Street No. {0}".format(random.randint(100, 200))
+            address["line_2"] = "null"
+            if not random.choice(bool_vals):
+                address["address2"] = "Building {0}".format(random.randint(1, 6))
+            address["city"] = "Bangalore"
+            address["contact"] = "{0} {1}".format(name, last_name)
+            address["country"] = "India"
+            address["postal_code"] = "{0}".format(random.randint(560071, 560090))
+            credit_cards = [random.randint(-1000000, 9999999) for i in range(random.randint(3, 7))]
+            secret_combo = [''.join(random.choice(string.lowercase) for i in range(7)),
+                            random.randint(1000000, 9999999)]
+            travel_history = [random.choice(COUNTRIES[:9]) for i in range(1, 11)]
+            travel_history_code = [COUNTRY_CODE[COUNTRIES.index(i)] for i in travel_history]
+            travel_details = [{"country": travel_history[i], "code": travel_history_code[i]}
+                              for i in range(len(travel_history))]
+            countries_visited = list(set(travel_history))
+            booking = {"source": random.choice(COUNTRIES), "destination": random.choice(COUNTRIES)}
+            confirm_question_values = [random.choice(bool_vals) for i in range(5)]
+            prefix = "airline_record_" + str(random.random()*100000)
+            generators.append(DocumentGenerator(prefix, template, [name], [email], [age], [premium_customer],
+                                                [address], [travel_history], [travel_history_code], [travel_details],
+                                                [booking], [credit_cards], [secret_combo], [countries_visited],
+                                                [confirm_question_values], start=start, end=1))
         return generators
 
     def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day = 1, isShuffle = False):

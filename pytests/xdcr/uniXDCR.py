@@ -9,6 +9,7 @@ from xdcrnewbasetests import XDCRNewBaseTest
 from xdcrnewbasetests import NodeHelper
 from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
 from scripts.install import InstallerJob
+from lib.memcached.helper.data_helper import MemcachedClientHelper
 
 
 # Assumption that at least 2 nodes on every cluster
@@ -500,9 +501,8 @@ class unidirectional(XDCRNewBaseTest):
 
         bucket = self.dest_cluster.get_bucket_by_name(BUCKET_NAME.DEFAULT)
         self.dest_cluster.delete_bucket(BUCKET_NAME.DEFAULT)
-
-        self.dest_cluster.create_default_bucket(bucket.bucket_size)
-
+        bucket_params=self._create_bucket_params(size=bucket.bucket_size)
+        self.dest_cluster.create_default_bucket(bucket_params)
         self.sleep(self._wait_timeout)
 
         self.verify_results()
@@ -776,3 +776,67 @@ class unidirectional(XDCRNewBaseTest):
         self._wait_for_replication_to_catchup(timeout=600)
 
         self.verify_results()
+
+    def test_rollback(self):
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/goxdcr.log*'
+        self.setup_xdcr()
+
+        self.src_cluster.pause_all_replications()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        self.src_cluster.resume_all_replications()
+
+        bucket = self.src_cluster.get_buckets()[0]
+        nodes = self.src_cluster.get_nodes()
+
+        # Stop Persistence on Node A & Node B
+        for node in nodes:
+            mem_client = MemcachedClientHelper.direct_client(node, bucket)
+            mem_client.stop_persistence()
+
+        # Perform mutations on the bucket
+        self.async_perform_update_delete()
+
+        rest1 = RestConnection(self.src_cluster.get_master_node())
+        rest2 = RestConnection(self.dest_cluster.get_master_node())
+
+        # Fetch count of docs in src and dest cluster
+        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+
+        self.log.info("Before rollback src cluster count = {0} dest cluster count = {1}".format(_count1, _count2))
+
+        # Kill memcached on Node A so that Node B becomes master
+        shell = RemoteMachineShellConnection(self.src_cluster.get_master_node())
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        mem_client = MemcachedClientHelper.direct_client(nodes[1], bucket)
+        mem_client.start_persistence()
+
+        # Failover Node B
+        failover_task = self.src_cluster.async_failover()
+        failover_task.result()
+
+        # Wait for Failover & rollback to complete
+        self.sleep(60)
+
+        # Fetch count of docs in src and dest cluster
+        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+
+        self.log.info("After rollback src cluster count = {0} dest cluster count = {1}".format(_count1, _count2))
+
+        self.assertTrue(self.src_cluster.wait_for_outbound_mutations(),
+                        "Mutations in source cluster not replicated to target after rollback")
+        self.log.info("Mutations in source cluster replicated to target after rollback")
+
+        count = NodeHelper.check_goxdcr_log(
+                        nodes[0],
+                        "Received rollback from DCP stream",
+                        goxdcr_log)
+        self.assertGreater(count, 0, "rollback did not happen as expected")
+        self.log.info("rollback happened as expected")

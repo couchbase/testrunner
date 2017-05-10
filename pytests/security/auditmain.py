@@ -10,6 +10,7 @@ from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import LINUX_DISTRIBUTION_NAME
 from random import randint
 from datetime import datetime
 import time
@@ -41,6 +42,13 @@ class audit:
             raise Exception(" Install is not an enterprise edition, Audit requires enterprise edition.")
         self.method = method
         self.host = host
+        self.nonroot = False
+        shell = RemoteMachineShellConnection(self.host)
+        self.info = shell.extract_remote_info()
+        if self.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME and \
+                                                    host.ssh_username != "root":
+            self.nonroot = True
+        shell.disconnect()
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
         self.pathLogFile = self.getAuditLogPath()
         self.defaultFields = ['id', 'name', 'description']
@@ -64,8 +72,14 @@ class audit:
                 auditconfigpath = audit.MACCONFIGFILEPATH
                 self.currentLogFile = audit.MACLOGFILEPATH
         else:
-            auditconfigpath = audit.LINCONFIGFILEPATH
-            self.currentLogFile = audit.LINLOGFILEPATH
+            if self.nonroot:
+                auditconfigpath = "/home/%s%s" % (self.host.ssh_username,
+                                                  audit.LINCONFIGFILEPATH)
+                self.currentLogFile = "/home/%s%s" % (self.host.ssh_username,
+                                                      audit.LINLOGFILEPATH)
+            else:
+                auditconfigpath = audit.LINCONFIGFILEPATH
+                self.currentLogFile = audit.LINLOGFILEPATH
         return auditconfigpath
 
     '''
@@ -149,6 +163,7 @@ class audit:
                     tempJson = json.loads(line)
                     if (tempJson['id'] == eventNumber):
                         data.append(json.loads(line))
+            f.close()
             return data[len(data) - 1]
         except:
             log.info ("ERROR ---- Event Not Found in audit.log file. Please check the log file")
