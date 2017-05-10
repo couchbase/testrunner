@@ -150,6 +150,7 @@ class QueriesIndexTests(QueryTests):
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
                '] and meta().id = "query-testemployee10317.9004497-0"'
                actual_result = self.run_cbq_query()
+               print actual_result['results']
                self.assertTrue(actual_result['results'] == ([{u'$1': 1}]))
                self.query = 'explain select name from {0} where name = ['.format(bucket.name)+\
                '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
@@ -1830,8 +1831,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "idxtasks"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY x FOR x in %s END) USING %s" % (
                     idx2, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -2118,27 +2117,11 @@ class QueriesIndexTests(QueryTests):
                 idx4 = "idxVM2"
                 self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within %s END) USING %s" % (
                     idx4, bucket.name, "VMs", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
                 self._verify_results(create_result['results'], [])
                 created_indexes.append(idx4)
-
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
-
-                # idx5 = "idxVM3"
-                # self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.os FOR x within %s END) USING %s" % (
-                #     idx5, bucket.name, "VMs", self.index_type)
-                # # if self.gsi_type:
-                # #     self.query += " WITH {'index_type': 'memdb'}"
-                # create_result = self.run_cbq_query()
-                # self._wait_for_index_online(bucket, idx5)
-                # self._verify_results(create_result['results'], [])
-                # created_indexes.append(idx5)
-
-                #self.assertTrue(self._is_index_in_list(bucket, idx5), "Index is not in list")
-
                 self.query = "explain SELECT x FROM default emp1 USE INDEX(%s)  UNNEST emp1.VMs as x  JOIN default task ON KEYS meta(`emp1`).id where x.RAM > 1 and x.RAM < 5  ;" %(idx4)
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
@@ -2195,8 +2178,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr_nest"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2242,8 +2223,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr_nest"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END,tasks,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2278,8 +2257,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2289,8 +2266,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "nested_idx_attr2"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( All array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx2, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -2300,8 +2275,6 @@ class QueriesIndexTests(QueryTests):
                 idx3 = "nested_idx_attr3"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx3, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
                 self._verify_results(actual_result['results'], [])
@@ -2310,8 +2283,6 @@ class QueriesIndexTests(QueryTests):
                 idx4 = "nested_idx_attr4"
                 self.query = "CREATE INDEX %s ON %s(DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END,name,tasks) USING %s" % (
                     idx4, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
                 self._verify_results(actual_result['results'], [])
@@ -2403,8 +2374,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i FOR i within %s END) USING %s" % (
                     idx, bucket.name, "hobbies", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2414,8 +2383,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "nested_idx_attr2"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY i FOR i within %s END) USING %s" % (
                     idx2, bucket.name, "hobbies", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -2478,8 +2445,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i.dance end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "hobbies.hobby", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2601,8 +2566,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "idx"
                 self.query = "CREATE INDEX %s ON %s( distinct array i FOR i in %s END) WHERE (department = 'Support')  USING %s" % (
                   idx, bucket.name, "hobbies.hobby", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -3055,9 +3018,8 @@ class QueriesIndexTests(QueryTests):
                 self.query = "explain select * from default where join_yr in [2011,2012]"
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['spans'][0]['range']=={u'High': [u'successor(2011)'], u'Low': [u'2011'], u'Inclusion': 1})
-                self.assertTrue(plan['~children'][0]['spans'][1]['range']=={u'High': [u'successor(2012)'], u'Low': [u'2012'], u'Inclusion': 1})
-
+                self.assertTrue(plan['~children'][0]['spans'][0]['range']==[{u'high': u'2011', u'low': u'2011', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['spans'][1]['range']==[{u'high': u'2012', u'low': u'2012', u'inclusion': 3}])
                 self.query = "select * from default where join_yr in [2011,2012] order by meta().id"
                 actual_result = self.run_cbq_query()
                 self.query = 'select * from default use index(`#primary`) where join_yr in [2011,2012] order by meta().id'
@@ -3066,12 +3028,12 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'explain select * from default where join_yr =2011 and join_day in [1,2,3,$1,$2,null,""]'
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['range']=={u'High': [u'2011', u'1'], u'Low': [u'2011', u'1'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'2'], u'Low': [u'2011', u'2'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'3'], u'Low': [u'2011', u'3'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['range']=={u'High': [u'2011', u'$1'], u'Low': [u'2011', u'$1'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['range']=={u'High': [u'2011', u'$2'], u'Low': [u'2011', u'$2'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['range']=={u'High': [u'2011', u'""'], u'Low': [u'2011', u'""'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'1', u'low': u'1', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'2', u'low': u'2', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][2]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'3', u'low': u'3', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'$1', u'low': u'$1', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'$2', u'low': u'$2', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['range']== [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'""', u'low': u'""', u'inclusion': 3}])
                 self.query = 'select * from default where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
                 actual_result = self.run_cbq_query()
                 self.query = 'select * from default use index(`#primary`) where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
@@ -4458,8 +4420,6 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgroupbyhaving%s" % ind
                     self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate) USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -5532,8 +5492,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayreplace%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -5575,8 +5533,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraysort%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -5620,8 +5576,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithpolylength%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,tasks_points,VMs,skills)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -5661,8 +5615,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithmaximumlimit%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,name,mutated,skills,join_day,email,test_rate,join_yr,_id,VMs[0].RAM,VMs[1].os,job_title)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -5796,8 +5748,6 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_child2"
             try:
                 self.query = "CREATE INDEX %s ON %s(distinct array vm.RAM for vm in VMs END)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT VMs[0].RAM FROM %s ' % (bucket.name) + \
@@ -5818,8 +5768,6 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_obj"
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
@@ -5835,27 +5783,6 @@ class QueriesIndexTests(QueryTests):
                 except:
                     pass
 
-    # def test_explain_childs_objects_element(self):
-    #     for bucket in self.buckets:
-    #         index_name = "my_index_obj_el"
-    #         try:
-    #             self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
-    #             if self.gsi_type:
-    #                 self.query += " WITH {'index_type': 'memdb'}"
-    #             self.run_cbq_query()
-    #             self._wait_for_index_online(bucket, index_name)
-    #             self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
-    #                          'WHERE task_points.task1 > 0 and join_mo>7'
-    #             res = self.run_cbq_query()
-    #		  plan = ExplainPlanHelper(res)
-    #             self.assertTrue(plan["~children"][0]["index"] == index_name,
-    #                             "Index should be %s, but is: %s" % (index_name, plan))
-    #         finally:
-    #             self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
-    #             try:
-    #                 self.run_cbq_query()
-    #             except:
-    #                 pass
 
     def _is_index_in_list(self, bucket, index_name):
         query = "SELECT * FROM system:indexes"
@@ -6138,8 +6065,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "indexwitharraysum%s" % ind
                     self.query = "CREATE INDEX %s ON %s(department, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in tokens(VMs) END ) where join_yr=2012 USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -6176,8 +6101,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in tokens(department) end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6221,8 +6144,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in tokens(department) end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6266,8 +6187,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "iregex"
                 self.query = " CREATE INDEX %s ON %s( DISTINCT ARRAY REGEXP_LIKE(v.os,%s)  FOR v IN tokens(VMs) END )  USING %s" % (
                   idx, bucket.name,"'ub%'", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6308,8 +6227,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "outer_join"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.city for j in i end) FOR i in tokens(%s) END) USING %s" % (
                     idx, bucket.name, "address", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6318,8 +6235,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "outer_join_all"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( All array j.city for j in i end) FOR i in tokens(%s) END) USING %s" % (
                     idx2, bucket.name, "address", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
