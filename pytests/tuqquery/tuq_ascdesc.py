@@ -1,10 +1,5 @@
-from lib import testconstants
-from lib.membase.api.exception import CBQError
-from lib.membase.api.rest_client import RestConnection
-from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.basetestcase import BaseTestCase
-from tuqquery.tuq import ExplainPlanHelper
 from pytests.tuqquery.tuq import QueryTests
+from tuqquery.tuq import ExplainPlanHelper
 
 
 class AscDescTests(QueryTests):

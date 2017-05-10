@@ -1,9 +1,10 @@
-from sg.sg_config_base import GatewayConfigBaseTest
-from remote.remote_util import RemoteMachineShellConnection
-from membase.helper.bucket_helper import BucketOperationHelper
 import shutil
 import time
+
 from couchbase_helper.cluster import Cluster
+from membase.helper.bucket_helper import BucketOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
+from sg.sg_config_base import GatewayConfigBaseTest
 
 help_string = ['Usage of /opt/couchbase-sync-gateway/bin/sync_gateway:',
                '  -adminInterface="127.0.0.1:4985": Address to bind admin interface to',

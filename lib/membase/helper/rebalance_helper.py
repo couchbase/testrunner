@@ -1,15 +1,15 @@
-from random import shuffle
 import time
+from random import shuffle
+
 import logger
 from couchbase_helper.cluster import Cluster
+from mc_bin_client import MemcachedClient
 from membase.api.exception import StatsUnavailableException, \
     ServerAlreadyJoinedException, RebalanceFailedException, \
-    FailoverFailedException, InvalidArgumentException, ServerSelfJoinException, \
+    InvalidArgumentException, ServerSelfJoinException, \
     AddNodeException
-from membase.api.rest_client import RestConnection, RestHelper, Bucket
-from membase.helper.bucket_helper import BucketOperationHelper
+from membase.api.rest_client import RestConnection, Bucket
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
-from mc_bin_client import MemcachedClient, MemcachedError
 
 log = logger.Logger.get_logger()
 

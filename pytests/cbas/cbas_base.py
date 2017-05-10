@@ -1,11 +1,7 @@
-import json
 from TestInput import TestInputSingleton
-from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
-from lib.couchbase_helper.analytics_helper import *
 from couchbase_helper.documentgenerator import DocumentGenerator
-import urllib
-from lib.membase.api.rest_client import RestConnection
+from lib.couchbase_helper.analytics_helper import *
 from lib.couchbase_helper.cluster import *
 
 

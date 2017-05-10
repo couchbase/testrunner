@@ -1,14 +1,9 @@
-import logging
-import threading
 import json
-import uuid
-import time
 
-from tuq import QueryTests
 from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
+from tuq import QueryTests
 
 SOURCE_CB_PARAMS = {
                       "authUser": "default",

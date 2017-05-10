@@ -1,22 +1,23 @@
-import re, copy
+import copy
+import re
 from random import randrange
 from threading import Thread
 
+from couchbase.bucket import Bucket
+
 from couchbase_helper.cluster import Cluster
-from membase.helper.rebalance_helper import RebalanceHelper
+from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.stats_tools import StatsCommon
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
-from membase.api.rest_client import RestConnection, RestHelper, Bucket
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
+from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
-from newupgradebasetest import NewUpgradeBaseTest
-from couchbase.bucket import Bucket
-from couchbase_helper.document import View
 from tasks.future import TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
-from couchbase_helper.stats_tools import StatsCommon
-from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID= 20485

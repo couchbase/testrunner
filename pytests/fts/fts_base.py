@@ -2,34 +2,30 @@
 Base class for FTS/CBFT/Couchbase Full Text Search
 """
 
-import unittest
-import time
 import copy
-import logger
 import logging
 import re
-import json
+import time
+import unittest
 
+import logger
+from TestInput import TestInputSingleton
 from couchbase_helper.cluster import Cluster
-from membase.api.rest_client import RestConnection, Bucket
+from couchbase_helper.documentgenerator import *
+from couchbase_helper.documentgenerator import JsonDocGenerator
+from couchbase_helper.stats_tools import StatsCommon
+from es_base import ElasticSearchBase
+from lib.membase.api.exception import FTSException
 from membase.api.exception import ServerUnavailableException
+from membase.api.rest_client import RestConnection, Bucket
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT,LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, \
-    MAC_COUCHBASE_BIN_PATH
-from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase_helper.stats_tools import StatsCommon
-from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
-from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
-from couchbase_helper.documentgenerator import *
-
-from couchbase_helper.documentgenerator import JsonDocGenerator
-from lib.membase.api.exception import FTSException
-from es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
-
+from testconstants import STANDARD_BUCKET_PORT,LINUX_COUCHBASE_BIN_PATH
 
 
 class RenameNodeException(FTSException):

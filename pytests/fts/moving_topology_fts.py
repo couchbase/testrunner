@@ -1,10 +1,12 @@
-from fts_base import FTSBaseTest, FTSException
-from fts_base import NodeHelper
-from TestInput import TestInputSingleton
-from threading import Thread
-from lib.remote.remote_util import RemoteMachineShellConnection
-from lib.memcached.helper.data_helper import MemcachedClientHelper
 import json
+from threading import Thread
+
+from TestInput import TestInputSingleton
+from fts_base import FTSBaseTest
+from fts_base import NodeHelper
+from lib.memcached.helper.data_helper import MemcachedClientHelper
+from lib.remote.remote_util import RemoteMachineShellConnection
+
 
 class MovingTopFTS(FTSBaseTest):
 

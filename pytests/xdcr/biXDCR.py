@@ -1,13 +1,13 @@
 import copy
 
-from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.documentgenerator import BlobGenerator
-from xdcrnewbasetests import XDCRNewBaseTest
-from xdcrnewbasetests import NodeHelper
-from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
-from remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
+from xdcrnewbasetests import NodeHelper
+from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
+from xdcrnewbasetests import XDCRNewBaseTest
 
 
 # Assumption that at least 2 nodes on every cluster

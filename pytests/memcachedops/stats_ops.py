@@ -1,11 +1,13 @@
 import time
+from threading import Thread
+
+from basetestcase import BaseTestCase
+from couchbase_helper.documentgenerator import BlobGenerator
+from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
-from basetestcase import BaseTestCase
-from mc_bin_client import MemcachedError
-from couchbase_helper.documentgenerator import BlobGenerator
-from threading import Thread
+
 
 class StatsCrashRepro(BaseTestCase):
     def setUp(self):

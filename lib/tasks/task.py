@@ -1,36 +1,37 @@
-import os
-import time
-import logger
-import random
-import socket
-import string
 import copy
 import json
-import re
 import math
-import crc32
+import os
+import random
+import re
+import socket
+import string
+import time
 import traceback
-import testconstants
 from httplib import IncompleteRead
+from multiprocessing import Process, Manager, Semaphore
 from threading import Thread
-from memcacheConstants import ERR_NOT_FOUND,NotFoundError
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
-from membase.api.exception import BucketCreationException
-from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
-from memcached.helper.kvstore import KVStore
-from couchbase_helper.document import DesignDocument, View
-from mc_bin_client import MemcachedError
-from tasks.future import Future
+
+import crc32
+import logger
+import testconstants
+from TestInput import TestInputServer
+from couchbase_helper.document import DesignDocument
+from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
+from mc_bin_client import MemcachedError
+from membase.api.exception import BucketCreationException
 from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException, AutoFailoverException
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
+from membase.helper.bucket_helper import BucketOperationHelper
+from memcacheConstants import ERR_NOT_FOUND,NotFoundError
+from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.kvstore import KVStore
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from couchbase_helper.documentgenerator import BatchedDocumentGenerator
-from TestInput import TestInputServer
+from tasks.future import Future
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP
-from multiprocessing import Process, Manager, Semaphore
 
 try:
     CHECK_FLAG = False

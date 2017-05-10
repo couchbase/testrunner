@@ -1,33 +1,32 @@
-import re
-import testconstants
+import Queue
 import gc
+import re
 import sys
 import traceback
-import Queue
+from pprint import pprint
 from threading import Thread
-from basetestcase import BaseTestCase
-from mc_bin_client import MemcachedError
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-from membase.helper.bucket_helper import BucketOperationHelper
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+
+import testconstants
+from builds.build_query import BuildQuery
 from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
+from mc_bin_client import MemcachedError
+from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from query_tests_helper import QueryHelperTests
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from scripts.install import InstallerJob
-from builds.build_query import BuildQuery
-from pprint import pprint
 from testconstants import CB_REPO
-from testconstants import MV_LATESTBUILD_REPO
-from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import COUCHBASE_VERSIONS
-from testconstants import SHERLOCK_VERSION
 from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_MP_VERSION
-from testconstants import CE_EE_ON_SAME_FOLDER
+from testconstants import COUCHBASE_VERSIONS
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_3
+from testconstants import MV_LATESTBUILD_REPO
+from testconstants import SHERLOCK_VERSION
+
 
 class NewUpgradeBaseTest(QueryHelperTests):
     def setUp(self):

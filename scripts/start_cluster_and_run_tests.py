@@ -1,8 +1,8 @@
-import os
-import sys
-import time
-import subprocess
 import ConfigParser
+import os
+import subprocess
+import sys
+
 sys.path = ['.']+sys.path
 from lib.cluster_run_manager import CRManager
 

@@ -1,12 +1,12 @@
+import json
+
 from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
-import testconstants
-import json
-from testconstants import COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK,\
-                          LINUX_CB_PATH,\
-                          MAC_CB_PATH
 from membase.helper.bucket_helper import BucketOperationHelper
+from testconstants import COUCHBASE_FROM_WATSON,\
+                          COUCHBASE_FROM_SPOCK, \
+    MAC_CB_PATH
+
 
 class docloaderTests(CliBaseTest):
 

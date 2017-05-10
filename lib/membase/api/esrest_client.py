@@ -1,11 +1,12 @@
+import time
+
+import requests
+from pyes import ES, managers, query
+
+import logger
+from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection, Bucket, BucketStats, OtpNode, Node
 from remote.remote_util import RemoteMachineShellConnection
-from TestInput import TestInputSingleton
-from pyes import ES, managers, query
-import logger
-import time
-import requests
-
 
 log = logger.Logger.get_logger()
 

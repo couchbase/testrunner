@@ -1,15 +1,16 @@
 import logging
 import random
-
 from string import lowercase
+
 from couchbase.bucket import Bucket
-from couchbase_helper.documentgenerator import  DocumentGenerator
+
+from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.data import FIRST_NAMES, COUNTRIES
+from couchbase_helper.documentgenerator import  DocumentGenerator
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from base_2i import BaseSecondaryIndexingTests
 
 DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
 

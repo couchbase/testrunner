@@ -1,12 +1,12 @@
 import json
+import random
+from threading import Thread
 
 from base_2i import BaseSecondaryIndexingTests
-from membase.api.rest_client import RestConnection, RestHelper
-import random
 from lib import testconstants
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
-from threading import Thread
+from membase.api.rest_client import RestConnection, RestHelper
 from pytests.query_tests_helper import QueryHelperTests
 
 

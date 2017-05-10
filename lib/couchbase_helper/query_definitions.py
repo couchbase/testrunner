@@ -1,5 +1,5 @@
-import uuid
 import random
+import uuid
 
 FULL_SCAN_TEMPLATE = "SELECT {0} FROM %s"
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"

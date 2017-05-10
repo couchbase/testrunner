@@ -1,10 +1,11 @@
-import os, time
+import os
 import os.path
 import uuid
-from remote.remote_util import RemoteMachineShellConnection
-from lib.mc_bin_client import MemcachedClient
-from memcached.helper.data_helper import MemcachedClientHelper
+
 from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+
 # constants used in this file only
 DELETED_ITEMS_FAILURE_ANALYSIS_FORMAT="\n1) Failure :: Deleted Items :: Expected {0}, Actual {1}"
 DELETED_ITEMS_SUCCESS_ANALYSIS_FORMAT="\n1) Success :: Deleted Items "

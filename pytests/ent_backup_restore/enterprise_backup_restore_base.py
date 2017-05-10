@@ -1,13 +1,14 @@
-import os, re
+import os
+import re
 import shutil
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, RestHelper
 from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\

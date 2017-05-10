@@ -1,11 +1,12 @@
+import memcacheConstants as constants
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator
-from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from mc_bin_client import MemcachedError
-from memcached.helper.data_helper import VBucketAwareMemcached
 from membase.api.rest_client import RestConnection
-import memcacheConstants as constants
+from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
+
 
 class EvictionBase(BaseTestCase):
 

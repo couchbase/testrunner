@@ -1,19 +1,17 @@
-import json
-import ntplib
-
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
-from xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
-from xdcrnewbasetests import NodeHelper
-from membase.api.rest_client import RestConnection
-from testconstants import STANDARD_BUCKET_PORT
-from remote.remote_util import RemoteMachineShellConnection
-from couchbase.exceptions import NotFoundError
 from couchbase.bucket import Bucket
+from couchbase.exceptions import NotFoundError
+
 from couchbase_helper.cluster import Cluster
-from membase.helper.cluster_helper import ClusterOperationHelper
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from membase.api.exception import XDCRCheckpointException
+from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
+from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
+from testconstants import STANDARD_BUCKET_PORT
+from xdcrnewbasetests import NodeHelper
+from xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
 
 
 class Lww(XDCRNewBaseTest):

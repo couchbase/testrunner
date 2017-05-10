@@ -1,29 +1,26 @@
 import copy
-import socket
-from multiprocessing.process import Process
-from multiprocessing.queues import Queue
+import hashlib
+import json
 import random
+import socket
+import threading
 import time
-from random import Random
 import uuid
+import zlib
+from Queue import Queue
+from multiprocessing.process import Process
+from random import Random
+
+import crc32
+import logger
 from TestInput import TestInputServer
 from TestInput import TestInputSingleton
-import logger
-import zlib
-import crc32
-import hashlib
-import threading
-from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
-from memcached.helper.old_kvstore import ClientKeyValueStore
+from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper, Bucket, vBucket
-from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL
-import json
-import sys
+from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL
+from memcached.helper.old_kvstore import ClientKeyValueStore
 from perf_engines import mcsoda
-
-from Queue import Queue
-from threading import Thread
 
 log = logger.Logger.get_logger()
 try:

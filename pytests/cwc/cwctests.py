@@ -1,15 +1,12 @@
+import copy
+import random
 import time
-import unittest
 import urllib
-import random, copy
-import testconstants
-from TestInput import TestInputSingleton
 
 from cwc.cwc_base import CWCBaseTest
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import COUCHBASE_FROM_WATSON
-
 
 
 class CWCTests(CWCBaseTest):

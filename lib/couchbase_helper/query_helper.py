@@ -1,10 +1,10 @@
+import json
 import random
 import string
-import json
-import copy
-from random import randrange
-from random import randint
 from datetime import datetime
+from random import randint
+from random import randrange
+
 
 class QueryHelper(object):
     def _find_hints(self, n1ql_query):

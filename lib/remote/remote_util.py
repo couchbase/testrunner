@@ -1,53 +1,46 @@
+import copy
+import logging
 import os
 import re
+import stat
 import sys
-import copy
+import time
 import urllib
 import uuid
-import time
-import logging
-import stat
-import TestInput
 from subprocess import Popen, PIPE
 
+import TestInput
 import logger
-from builds.build_query import BuildQuery
 import testconstants
-from testconstants import VERSION_FILE
-from testconstants import WIN_REGISTER_ID
-from testconstants import MEMBASE_VERSIONS
-from testconstants import COUCHBASE_VERSIONS
-from testconstants import MISSING_UBUNTU_LIB
-from testconstants import MV_LATESTBUILD_REPO
-from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_VERSIONS
-from testconstants import WIN_CB_VERSION_3
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
+from builds.build_query import BuildQuery
+from membase.api.rest_client import RestConnection, RestHelper
+from testconstants import CB_RELEASE_APT_GET_REPO
+from testconstants import CB_RELEASE_YUM_REPO
+from testconstants import CB_REPO
+from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_FROM_VERSION_3,\
                           COUCHBASE_FROM_SPOCK
-from testconstants import COUCHBASE_RELEASE_VERSIONS_3
-from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
-from testconstants import RPM_DIS_NAME
+from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import COUCHBASE_VERSIONS
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_3
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
+from testconstants import MAC_CB_PATH, MAC_COUCHBASE_BIN_PATH
+from testconstants import MEMBASE_VERSIONS
+from testconstants import MISSING_UBUNTU_LIB
+from testconstants import MV_LATESTBUILD_REPO
+from testconstants import NR_INSTALL_LOCATION_FILE
+from testconstants import RPM_DIS_NAME
+from testconstants import SHERLOCK_BUILD_REPO
+from testconstants import VERSION_FILE
 from testconstants import WIN_COUCHBASE_BIN_PATH,\
                           WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
+from testconstants import WIN_PROCESSES_KILLED
+from testconstants import WIN_REGISTER_ID
 from testconstants import WIN_TMP_PATH
-
-from testconstants import MAC_CB_PATH, MAC_COUCHBASE_BIN_PATH
-
-from testconstants import CB_VERSION_NAME
-from testconstants import CB_REPO
-from testconstants import CB_RELEASE_APT_GET_REPO
-from testconstants import CB_RELEASE_YUM_REPO
-
-from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
-                          NR_INSTALL_LOCATION_FILE
-
-from membase.api.rest_client import RestConnection, RestHelper
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)

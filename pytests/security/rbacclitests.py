@@ -1,24 +1,18 @@
-import json
-from threading import Thread
-from membase.api.rest_client import RestConnection
+import commands
+import random
+import urllib
+
 from TestInput import TestInputSingleton
-from clitest.cli_base import CliBaseTest
-from remote.remote_util import RemoteMachineShellConnection
-from pprint import pprint
-from testconstants import CLI_COMMANDS
 from basetestcase import BaseTestCase
-from remote.remote_util import RemoteMachineShellConnection
+from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
-from testconstants import LINUX_COUCHBASE_BIN_PATH
-from testconstants import WIN_COUCHBASE_BIN_PATH
-from testconstants import MAC_COUCHBASE_BIN_PATH
+from remote.remote_util import RemoteMachineShellConnection
 from security.auditmain import audit
 from security.rbac_base import RbacBase
-import socket
-import random
-import zlib
-import commands
-import urllib
+from testconstants import LINUX_COUCHBASE_BIN_PATH
+from testconstants import MAC_COUCHBASE_BIN_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH
+
 
 class rbacclitests(BaseTestCase):
     def setUp(self):

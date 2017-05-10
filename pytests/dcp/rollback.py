@@ -1,16 +1,14 @@
 import time
-import logger
-from dcp.constants import *
-from mc_bin_client import MemcachedError
-from dcpbase import DCPBase
-from membase.api.rest_client import RestConnection, RestHelper
-from couchbase_helper.documentgenerator import BlobGenerator
-from remote.remote_util import RemoteMachineShellConnection
-
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-from memcacheConstants import *
 import zlib
+
+import logger
+from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
+from dcpbase import DCPBase
+from mc_bin_client import MemcachedError
+from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 log = logger.Logger.get_logger()
 

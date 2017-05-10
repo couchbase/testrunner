@@ -1,8 +1,7 @@
-from tasks.future import Future
-from tasks.taskmanager import TaskManager
-from tasks.task import *
 import types
 
+from tasks.task import *
+from tasks.taskmanager import TaskManager
 
 """An API for scheduling tasks that run against Couchbase Server
 

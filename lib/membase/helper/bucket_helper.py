@@ -1,23 +1,25 @@
+import Queue
 import copy
+import ctypes
 import exceptions
+import socket
 import time
 import uuid
 import zlib
+from collections import defaultdict
+from subprocess import call
+from threading import Thread
+
+import crc32
 import logger
 import mc_bin_client
-import crc32
-import socket
-import ctypes
-from membase.api.rest_client import RestConnection, RestHelper
 import memcacheConstants
-from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
-from mc_bin_client import MemcachedClient
-from threading import Thread
-import Queue
-from collections import defaultdict
 from couchbase_helper.stats_tools import StatsCommon
+from mc_bin_client import MemcachedClient
+from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection
-from subprocess import call
+
 
 class BucketOperationHelper():
 

@@ -1,14 +1,15 @@
 import json
 import math
 import re
-import uuid
 import time
+import uuid
 
-from tuq import QueryTests
-from tuq import ExplainPlanHelper
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
+from tuq import ExplainPlanHelper
+from tuq import QueryTests
+
 
 class QueriesIndexTests(QueryTests):
 

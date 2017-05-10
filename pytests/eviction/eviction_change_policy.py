@@ -1,15 +1,12 @@
-import time
+import json
+
 from couchbase_helper.documentgenerator import BlobGenerator
 from eviction.evictionbase import EvictionBase
-from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection
-
-from membase.api.rest_client import RestConnection, RestHelper
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-
 from mc_bin_client import MemcachedError
-
-import json
+from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class EvictionChangePolicy(EvictionBase):

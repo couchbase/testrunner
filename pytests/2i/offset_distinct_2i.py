@@ -3,15 +3,11 @@ import logging
 import random
 from threading import Thread
 
-from string import lowercase
-from couchbase.bucket import Bucket
-from couchbase_helper.data import FIRST_NAMES, COUNTRIES
-from couchbase_helper.query_definitions import QueryDefinition
-from membase.api.rest_client import RestConnection
-from membase.helper.bucket_helper import BucketOperationHelper
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.query_definitions import QueryDefinition
+from membase.api.rest_client import RestConnection
 
 DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"

@@ -1,27 +1,15 @@
-import time
-import logger
-import unittest
-from TestInput import TestInput, TestInputSingleton
-
-from memcacheConstants import ERR_NOT_FOUND
-from castest.cas_base import CasBaseTest
-from couchbase_helper.documentgenerator import BlobGenerator
-from mc_bin_client import MemcachedError
-
-from membase.api.rest_client import RestConnection, RestHelper
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-from membase.helper.bucket_helper import BucketOperationHelper
-import json
-from membase.helper.cluster_helper import ClusterOperationHelper
-import logger
-from couchbase_helper.cluster import Cluster
-
-from remote.remote_util import RemoteMachineShellConnection
-from membase.helper.rebalance_helper import RebalanceHelper
 import re
+import time
 import traceback
 
+import logger
+from TestInput import TestInputSingleton
 from basetestcase import BaseTestCase
+from couchbase_helper.cluster import Cluster
+from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class BucketConfig(BaseTestCase):

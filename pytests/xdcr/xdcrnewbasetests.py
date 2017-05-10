@@ -1,30 +1,28 @@
-import unittest
-import time
 import copy
-import logger
 import logging
 import re
+import time
+import unittest
 
+import logger
+from TestInput import TestInputSingleton
 from couchbase_helper.cluster import Cluster
-from membase.api.rest_client import RestConnection, Bucket
+from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.stats_tools import StatsCommon
+from lib.membase.api.exception import XDCRException
 from membase.api.exception import ServerUnavailableException
+from membase.api.rest_client import RestConnection, Bucket
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT
-from couchbase_helper.document import View
-from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase_helper.stats_tools import StatsCommon
-from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
-from TestInput import TestInputSingleton
-from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
-from tasks.future import TimeoutError
-
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
-from lib.membase.api.exception import XDCRException
+from scripts.collect_server_info import cbcollectRunner
 from security.auditmain import audit
 from security.rbac_base import RbacBase
+from testconstants import STANDARD_BUCKET_PORT
 
 
 class RenameNodeException(XDCRException):

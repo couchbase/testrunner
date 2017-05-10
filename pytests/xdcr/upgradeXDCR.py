@@ -1,20 +1,17 @@
-from threading import Thread
-import re
-import copy
 import Queue
-from datetime import datetime
-from membase.api.rest_client import RestConnection, Bucket
-from newupgradebasetest import NewUpgradeBaseTest
-from xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
+import copy
+import re
+
 from TestInput import TestInputSingleton
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.api.exception import RebalanceFailedException
-from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase_helper.documentgenerator import BlobGenerator
-from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.document import DesignDocument, View
+from couchbase_helper.documentgenerator import BlobGenerator
+from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
+from newupgradebasetest import NewUpgradeBaseTest
+from remote.remote_util import RemoteMachineShellConnection
 from testconstants import STANDARD_BUCKET_PORT
+from xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
+
 
 class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def setUp(self):

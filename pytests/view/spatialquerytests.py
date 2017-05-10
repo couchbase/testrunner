@@ -1,18 +1,15 @@
-import logger
-import time
-import unittest
-import threading
-from threading import Thread
-from membase.helper.rebalance_helper import RebalanceHelper
-from couchbase_helper.cluster import Cluster
-from basetestcase import BaseTestCase
-from remote.remote_util import RemoteMachineShellConnection
 import json
 import sys
+import threading
+import time
+import unittest
+from threading import Thread
 
+import logger
 from basetestcase import BaseTestCase
-
+from couchbase_helper.cluster import Cluster
 from membase.helper.spatial_helper import SpatialHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class SpatialQueryTests(BaseTestCase):

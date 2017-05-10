@@ -1,10 +1,11 @@
-import getopt
-import re
-from builds.build_query import BuildQuery
-import logger
 import ConfigParser
+import getopt
 import os
-import collections
+import re
+
+import logger
+from builds.build_query import BuildQuery
+
 
 #class to parse the inputs either from command line or from a ini file
 #command line supports a subset of

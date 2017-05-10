@@ -1,10 +1,9 @@
+import json
 import logging
 import threading
-import json
-import uuid
-import time
 
 from tuq_monitoring import QueryMonitoringTests
+
 
 class QueryProfilingTests(QueryMonitoringTests):
     def setUp(self):

@@ -1,19 +1,16 @@
 import json
 import random
-import logger
 import time
-import unittest
 
+import logger
+import memcacheConstants
 from TestInput import TestInputSingleton
 from couchbase_helper.document import DesignDocument, View
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper
 from memcached.helper.data_helper import MemcachedError
 from memcached.helper.data_helper import VBucketAwareMemcached
-import memcacheConstants
 
 
 # The SpatialHelper operates on a single bucket over a single RestConnection

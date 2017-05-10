@@ -1,5 +1,6 @@
-from mc_bin_client import MemcachedClient
 import logger
+from mc_bin_client import MemcachedClient
+
 log = logger.Logger.get_logger()
 
 

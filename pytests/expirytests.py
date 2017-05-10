@@ -1,20 +1,22 @@
+import datetime
+import time
+import unittest
+import uuid
 from Queue import Empty
 from multiprocessing import Queue
 from threading import Thread
-import unittest
-from TestInput import TestInputSingleton
-import mc_bin_client
-import uuid
+
 import logger
-import time
-import datetime
+import mc_bin_client
+import memcacheConstants
+from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection
 from membase.api.tap import TapConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper
 from security.rbac_base import RbacBase
+
 
 class ExpiryTests(unittest.TestCase):
     log = None

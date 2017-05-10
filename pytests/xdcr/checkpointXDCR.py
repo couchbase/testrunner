@@ -1,10 +1,11 @@
-from xdcrnewbasetests import XDCRNewBaseTest, XDCR_PARAM, REPLICATION_TYPE
-from remote.remote_util import RemoteMachineShellConnection
-from lib.membase.api.rest_client import RestConnection
-from membase.api.exception import XDCRCheckpointException
-from mc_bin_client import MemcachedClient, MemcachedError
-from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 import time
+
+from lib.membase.api.rest_client import RestConnection
+from mc_bin_client import MemcachedClient, MemcachedError
+from membase.api.exception import XDCRCheckpointException
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from remote.remote_util import RemoteMachineShellConnection
+from xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_TYPE
 
 
 class XDCRCheckpointUnitTest(XDCRNewBaseTest):

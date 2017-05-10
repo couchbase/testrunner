@@ -2,9 +2,9 @@ import copy
 import json
 import logging
 
+from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
-from base_2i import BaseSecondaryIndexingTests
 
 DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"

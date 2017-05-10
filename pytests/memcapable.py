@@ -1,21 +1,21 @@
+import datetime
+import logging
 import os
 import random
-from threading import Thread
-import unittest
-from TestInput import TestInputSingleton
-import mc_bin_client
 import time
+import unittest
 import uuid
+
 import logger
-import logging
-import datetime
+import mc_bin_client
+from TestInput import TestInputSingleton
+from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
-from basetestcase import BaseTestCase
 from security.rbac_base import RbacBase
 
 

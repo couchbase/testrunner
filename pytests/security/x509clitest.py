@@ -1,18 +1,7 @@
-import httplib2
-import httplib
-import base64
-import json
-import urllib
-import urllib2
-import ssl
-import socket
-import paramiko
-
-
+from remote.remote_util import RemoteMachineShellConnection
 from security.x509main import x509main
 from security.x509tests import x509tests
-from remote.remote_util import RemoteMachineShellConnection
-from clitest.cli_base import CliBaseTest
+
 
 class ServerInfo():
     def __init__(self,

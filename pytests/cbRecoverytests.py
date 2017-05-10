@@ -1,9 +1,10 @@
-from xdcr.xdcrbasetests import XDCRReplicationBaseTest
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.api.exception import CBRecoveryFailedException, InvalidArgumentException, BucketCreationException
-from testconstants import STANDARD_BUCKET_PORT
 import time
+
+from membase.api.exception import CBRecoveryFailedException, InvalidArgumentException, BucketCreationException
+from membase.api.rest_client import RestConnection, RestHelper
+from remote.remote_util import RemoteMachineShellConnection
+from testconstants import STANDARD_BUCKET_PORT
+from xdcr.xdcrbasetests import XDCRReplicationBaseTest
 
 
 class CBRbaseclass(XDCRReplicationBaseTest):

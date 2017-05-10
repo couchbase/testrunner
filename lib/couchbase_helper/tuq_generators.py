@@ -1,13 +1,14 @@
 import copy
-from documentgenerator import  DocumentGenerator
-import re
 import datetime
 import json
-import random, string
 import os
-import logger
+import random
+import re
+import string
 
+import logger
 from data import COUNTRIES, COUNTRY_CODE, FIRST_NAMES, LAST_NAMES
+from documentgenerator import  DocumentGenerator
 
 log = logger.Logger.get_logger()
 

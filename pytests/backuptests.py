@@ -1,21 +1,21 @@
+import copy
 import time
-import unittest
 import uuid
+
 import crc32
-from TestInput import TestInputSingleton
 import logger
 import mc_bin_client
+import testconstants
+from TestInput import TestInputSingleton
+from basetestcase import BaseTestCase
+from builds.build_query import BuildQuery
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-from builds.build_query import BuildQuery
-import testconstants
-import copy
 
-from basetestcase import BaseTestCase
 
 class BackupRestoreTests(BaseTestCase):
     input = None

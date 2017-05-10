@@ -1,7 +1,9 @@
 import json
-from tuq import QueryTests
+
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from tuq import QueryTests
+
 
 class N1QLRBACTests(QueryTests):
 

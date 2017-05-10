@@ -2,14 +2,15 @@
 
 import base64
 import gzip
-from httplib import BadStatusLine
 import os
-import urllib2
 import sys
 import threading
-from os.path import basename, splitext
+import urllib2
+from httplib import BadStatusLine
 from multiprocessing import Process
+from os.path import basename, splitext
 from pprint import pprint
+
 sys.path = ["lib", "pytests", "pysystests"] + sys.path
 
 if sys.hexversion < 0x02060000:

@@ -1,9 +1,10 @@
 import time
+
 import logger
+from couchbase_helper.documentgenerator import BlobGenerator
 from dcp.constants import *
 from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
-from couchbase_helper.documentgenerator import BlobGenerator
 
 log = logger.Logger.get_logger()
 

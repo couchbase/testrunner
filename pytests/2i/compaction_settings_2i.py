@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection

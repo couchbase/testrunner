@@ -1,20 +1,22 @@
-import time
 import datetime
+import time
 import unittest
-from TestInput import TestInputSingleton
+from threading import Thread
+
 import logger
+from TestInput import TestInputSingleton
+from basetestcase import BaseTestCase
 from couchbase_helper.cluster import Cluster
+from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import LoadWithMcsoda
-from threading import Thread
-from remote.remote_util import RemoteMachineShellConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-from membase.api.exception import RebalanceFailedException
-from basetestcase import BaseTestCase
+from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
+
 
 class SwapRebalanceBase(unittest.TestCase):
 

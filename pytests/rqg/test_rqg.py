@@ -1,22 +1,19 @@
-import sys
-import paramiko
-from basetestcase import BaseTestCase
-import json
-import os
-import zipfile
-import pprint
 import Queue
 import json
-from membase.helper.cluster_helper import ClusterOperationHelper
-import mc_bin_client
+import os
 import threading
+import zipfile
+
+import paramiko
+
+from basetestcase import BaseTestCase
+from couchbase_helper.query_helper import QueryHelper
+from couchbase_helper.tuq_helper import N1QLHelper
+from lib.membase.helper.bucket_helper import BucketOperationHelper
+from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import  VBucketAwareMemcached
 from mysql_client import MySQLClient
-from membase.api.rest_client import RestConnection, Bucket
-from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
 from remote.remote_util import RemoteMachineShellConnection
-from lib.membase.helper.bucket_helper import BucketOperationHelper
 
 
 class RQGTests(BaseTestCase):

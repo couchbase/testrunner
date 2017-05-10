@@ -1,5 +1,6 @@
-from tuqquery.tuq import QueryTests
 from couchbase_helper.documentgenerator import DocumentGenerator
+from tuqquery.tuq import QueryTests
+
 
 class NULLTests(QueryTests):
     def setUp(self):

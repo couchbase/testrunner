@@ -1,24 +1,11 @@
 import json
-import time
-import unittest
 import urllib
-import testconstants
-from TestInput import TestInputSingleton
 
 from community.community_base import CommunityBaseTest
 from community.community_base import CommunityXDCRBaseTest
-from memcached.helper.data_helper import  MemcachedClientHelper
-from membase.api.rest_client import RestConnection, Bucket
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.api.exception import RebalanceFailedException
-from couchbase_helper.documentgenerator import BlobGenerator
+from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from membase.helper.cluster_helper import ClusterOperationHelper
-from scripts.install import InstallerJob
-from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK
-
-
 
 
 class CommunityTests(CommunityBaseTest):

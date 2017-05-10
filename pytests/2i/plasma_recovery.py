@@ -1,11 +1,11 @@
 import logging
 
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
+from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
+from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
-from base_2i import BaseSecondaryIndexingTests
+from remote.remote_util import RemoteMachineShellConnection
 
 
 log = logging.getLogger(__name__)

@@ -1,16 +1,15 @@
+import random
 import time
 import urllib
-import random
-import testconstants
 
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_CW_LOG_PATH
 from testconstants import MAC_CW_LOG_PATH
 from testconstants import WINDOWS_CW_LOG_PATH
-from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 
 

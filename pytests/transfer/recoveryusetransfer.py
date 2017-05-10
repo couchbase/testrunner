@@ -1,8 +1,10 @@
+import time
+
+from membase.api.rest_client import Bucket
+from remote.remote_util import RemoteMachineShellConnection
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH
 from transfer.transfer_base import TransferBaseTest
-from membase.api.rest_client import RestConnection, Bucket
-from remote.remote_util import RemoteMachineShellConnection
-import time
+
 
 class RecoveryUseTransferTests(TransferBaseTest):
 

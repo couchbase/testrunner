@@ -1,8 +1,9 @@
-import threading
-import random
-import zlib
-import time
 import copy
+import random
+import threading
+import time
+import zlib
+
 
 class KVStore(object):
     def __init__(self, num_locks=16):

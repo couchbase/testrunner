@@ -1,13 +1,14 @@
 import time
+
+from TestInput import TestInputSingleton
+from basetestcase import BaseTestCase
 from dcp.constants import *
 from dcp_bin_client import DcpClient
-from basetestcase import BaseTestCase
-from mc_bin_client import MemcachedClient, MemcachedError
 from lib.cluster_run_manager import CRManager
+from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection
-from TestInput import TestInputSingleton
-from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class DCPBase(BaseTestCase):

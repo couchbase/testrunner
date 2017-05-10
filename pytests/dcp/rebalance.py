@@ -1,10 +1,11 @@
 import time
+
 import logger
+from couchbase_helper.documentgenerator import BlobGenerator
 from dcp.constants import VBSEQNO_STAT, PRODUCER
 from dcpbase import DCPBase
+from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
-from mc_bin_client import MemcachedClient, MemcachedError
-from couchbase_helper.documentgenerator import BlobGenerator
 
 log = logger.Logger.get_logger()
 

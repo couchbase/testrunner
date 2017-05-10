@@ -1,7 +1,7 @@
-from user_base_abc import UserBase
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
 import logger
+from membase.api.rest_client import RestConnection
+from user_base_abc import UserBase
+
 log = logger.Logger.get_logger()
 
 class InternalUser(UserBase):

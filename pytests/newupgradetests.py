@@ -1,12 +1,14 @@
 import Queue
 import copy
-from newupgradebasetest import NewUpgradeBaseTest
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+
 from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
+from newupgradebasetest import NewUpgradeBaseTest
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+
 # from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3

@@ -1,18 +1,12 @@
-import paramiko
-import logger
 import json
-import uuid
-import math
-import re
 import time
+
 import testconstants
-import datetime
-import time
-from datetime import date
 from couchbase_helper.tuq_generators import TuqGenerators
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.exception import CBQError, ReadDocumentException
+from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class N1QLHelper():
     def __init__(self, version = None, master = None, shell = None,  max_verify = 0, buckets = [],

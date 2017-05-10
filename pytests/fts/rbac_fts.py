@@ -1,8 +1,8 @@
-from fts_base import FTSBaseTest, FTSIndex
 from TestInput import TestInputSingleton
-from security.rbac_base import RbacBase
+from fts_base import FTSBaseTest, FTSIndex
 from lib.membase.api.rest_client import RestConnection
-import json
+from security.rbac_base import RbacBase
+
 
 class RbacFTS(FTSBaseTest):
 

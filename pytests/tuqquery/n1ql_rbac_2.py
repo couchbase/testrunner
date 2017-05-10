@@ -1,10 +1,11 @@
-from tuq import QueryTests
+import json
+
 from TestInput import TestInputSingleton
-from security.rbac_base import RbacBase
 from lib.membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from security.rbac_base import RbacBase
+from tuq import QueryTests
 
-import json
 
 class RbacN1QL(QueryTests):
 

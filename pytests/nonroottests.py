@@ -1,16 +1,12 @@
-import logger
-import unittest
 import copy
-import datetime
 import time
-import paramiko
-import os
+import unittest
 
-from couchbase_helper.cluster import Cluster
+import logger
 from TestInput import TestInputSingleton
-from membase.api.rest_client import RestConnection, Bucket
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class NonRootTests(unittest.TestCase):
     def setUp(self):

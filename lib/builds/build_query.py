@@ -1,26 +1,27 @@
 #this class will contain methods which we
 #use later to
 # map a version # -> rpm url
-from datetime import datetime
-import time
-import urllib2
 import re
 import socket
-import BeautifulSoup
-import testconstants
-import logger
-import traceback
 import sys
-from testconstants import WIN_CB_VERSION_3
-from testconstants import SHERLOCK_VERSION
-from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import COUCHBASE_VERSION_2_WITH_REL
-from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3
-from testconstants import COUCHBASE_FROM_VERSION_3
-from testconstants import CB_RELEASE_REPO
+import time
+import traceback
+import urllib2
+from datetime import datetime
+
+import BeautifulSoup
+import logger
+import testconstants
 from testconstants import CB_LATESTBUILDS_REPO
+from testconstants import CB_RELEASE_REPO
 from testconstants import CE_EE_ON_SAME_FOLDER
+from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_2_WITH_REL
+from testconstants import COUCHBASE_VERSION_3
+from testconstants import SHERLOCK_VERSION
+from testconstants import WIN_CB_VERSION_3
 
 
 class MembaseBuild(object):

@@ -2,14 +2,16 @@
 """
 Python based MySQL interface
 """
-import mysql.connector
-import zipfile
 import os
-from os.path import basename
 import shutil
-import json
+import zipfile
+from os.path import basename
+
+import mysql.connector
 from mysql.connector import FieldType
+
 from couchbase_helper.query_helper import QueryHelper
+
 
 class MySQLClient(object):
     """Python MySQLClient Client Implementation for testrunner"""

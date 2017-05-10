@@ -1,8 +1,9 @@
-from ldap_user import LdapUser
-from internal_user import InternalUser
-from remote.remote_util import RemoteMachineShellConnection
-import urllib
 import json
+import urllib
+
+from internal_user import InternalUser
+from ldap_user import LdapUser
+
 
 class RbacBase:
 

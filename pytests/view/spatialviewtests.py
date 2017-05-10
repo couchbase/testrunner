@@ -1,17 +1,15 @@
 import random
-import threading
-from threading import Thread, Event
-import unittest
-import uuid
-import logger
-import time
 import string
+import threading
+import time
+from threading import Thread, Event
 
+import logger
 from basetestcase import BaseTestCase
 from couchbase_helper.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
-from membase.helper.spatial_helper import SpatialHelper
 from membase.helper.rebalance_helper import RebalanceHelper
+from membase.helper.spatial_helper import SpatialHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 

@@ -1,16 +1,13 @@
 import time
+import zlib
+
 from basetestcase import BaseTestCase
-
-
+from couchbase_helper.documentgenerator import BlobGenerator
+from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
 from sdk_client import SDKClient
 
-
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection
-from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection, RestHelper
-
-import zlib
 
 class LWWStatsTests(BaseTestCase):
 

@@ -1,15 +1,16 @@
-from basetestcase import BaseTestCase
-from security.x509main import x509main
-from newupgradebasetest import NewUpgradeBaseTest
-from membase.api.rest_client import RestConnection
-import commands
 import json
 import socket
+from threading import Thread
+
 from couchbase.bucket import Bucket
-from threading import Thread, Event
+
+from basetestcase import BaseTestCase
+from membase.api.rest_client import RestConnection
+from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from security.auditmain import audit
-from security.rbac_base import RbacBase
+from security.x509main import x509main
+
 
 class x509tests(BaseTestCase):
 

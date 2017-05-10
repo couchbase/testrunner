@@ -1,13 +1,14 @@
-import json
-import string
-import random
-from random import choice
-from string import ascii_uppercase
-from string import ascii_lowercase
-from string import digits
 import gzip
-from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
+import json
+import random
+import string
+from random import choice
+from string import ascii_lowercase
+from string import ascii_uppercase
+from string import digits
+
 from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
+
 
 class KVGenerator(object):
     def __init__(self, name, start, end):

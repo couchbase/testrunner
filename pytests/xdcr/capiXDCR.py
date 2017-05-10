@@ -1,18 +1,17 @@
 import json
-import Queue
 
-from xdcrnewbasetests import XDCRNewBaseTest, XDCRRemoteClusterRef
-from xdcrnewbasetests import REPL_PARAM, Utility, NodeHelper
-from couchbase_helper.documentgenerator import DocumentGenerator
-from membase.api.rest_client import RestConnection
-from membase.api.esrest_client import EsRestConnection
 from couchbase_helper.cluster import Cluster
-from memcached.helper.data_helper import VBucketAwareMemcached
+from couchbase_helper.documentgenerator import DocumentGenerator
+from membase.api.esrest_client import EsRestConnection
 from membase.api.exception import XDCRCheckpointException
-from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
 from newupgradebasetest import NewUpgradeBaseTest
+from remote.remote_util import RemoteMachineShellConnection
 from testconstants import STANDARD_BUCKET_PORT
+from xdcrnewbasetests import REPL_PARAM, Utility, NodeHelper
+from xdcrnewbasetests import XDCRNewBaseTest, XDCRRemoteClusterRef
 
 
 class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):

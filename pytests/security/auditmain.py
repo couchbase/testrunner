@@ -1,21 +1,10 @@
 import json
-import time
-from threading import Thread, Event
-from basetestcase import BaseTestCase
-from couchbase_helper.document import DesignDocument, View
-from couchbase_helper.documentgenerator import DocumentGenerator
+
+import logger
 from membase.api.rest_client import RestConnection
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.api.exception import ReadDocumentException
-from membase.api.exception import DesignDocCreationException
-from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import LINUX_DISTRIBUTION_NAME
-from random import randint
-from datetime import datetime
-import time
-import commands
-import logger
+
 log = logger.Logger.get_logger()
 
 class audit:

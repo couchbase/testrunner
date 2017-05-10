@@ -1,16 +1,12 @@
+import json
 import time
-from memcacheConstants import ERR_NOT_FOUND
+
 from castest.cas_base import CasBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
-
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection
+from memcacheConstants import ERR_NOT_FOUND
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-import json
-from sdk_client import SDKClient
-from couchbase.exceptions import NotFoundError
-
-
 from remote.remote_util import RemoteMachineShellConnection
 
 

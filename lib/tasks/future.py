@@ -1,7 +1,7 @@
 import logging
 import threading
-import traceback
 import time
+import traceback
 
 # Possible future states (for internal use by the futures package).
 PENDING = 'PENDING'

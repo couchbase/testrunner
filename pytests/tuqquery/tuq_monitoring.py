@@ -1,14 +1,13 @@
+import json
 import logging
 import threading
-import json
-import uuid
 import time
+import uuid
 
-from newtuq import QueryTests
+from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError, ReadDocumentException
+from newtuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
-
 
 
 class QueryMonitoringTests(QueryTests):

@@ -1,5 +1,4 @@
 from basetestcase import BaseTestCase
-from couchbase_helper.cluster import Cluster
 from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection

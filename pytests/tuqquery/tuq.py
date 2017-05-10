@@ -1,23 +1,22 @@
+import copy
+import datetime
+import json
+import math
 import os
 import pprint
-import logging
-import threading
-import json
-import uuid
-import copy
-import math
 import re
-import testconstants
-from datetime import date, timedelta
-import datetime
 import time
-from remote.remote_util import RemoteMachineShellConnection
-from couchbase_helper.tuq_generators import JsonGenerator
+import uuid
+from datetime import date
+
+import testconstants
 from basetestcase import BaseTestCase
-from couchbase_helper.documentgenerator import DocumentGenerator
-from membase.api.exception import CBQError, ReadDocumentException
+from couchbase_helper.tuq_generators import JsonGenerator
+from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+
+
 #from sdk_client import SDKClient
 
 

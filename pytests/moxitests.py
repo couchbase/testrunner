@@ -1,13 +1,13 @@
-import logger
-import struct, socket
+import socket
+import struct
 
-from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
-from remote.remote_util import RemoteMachineShellConnection
-from memcached.helper.data_helper import MemcachedClientHelper
+from couchbase_helper.documentgenerator import BlobGenerator
 from memcacheConstants import MEMCACHED_REQUEST_MAGIC, DATA_TYPE,\
                               VBUCKET
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class MoxiTests(BaseTestCase):
 
