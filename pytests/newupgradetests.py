@@ -41,7 +41,7 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
-
+            self.add_built_in_server_user(node=self.master)
             self.sleep(self.expire_time)
             #            if not self.is_linux:
             #                self.wait_node_restarted(self.master, wait_time=1200, wait_if_warmup=True, check_service=True)
@@ -159,6 +159,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed. See logs above!")
+            self.add_built_in_server_user()
             self.sleep(self.expire_time)
             if self.during_ops:
                 if "add_back_failover" in self.during_ops:
@@ -203,6 +204,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed!")
             self.dcp_rebalance_in_offline_upgrade_from_version2()
+            self.add_built_in_server_user()
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -300,6 +302,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
                 self.dcp_rebalance_in_offline_upgrade_from_version2()
+                self.add_built_in_server_user()
                 self.sleep(self.expire_time)
                 for server in servers_with_not_default:
                     rest = RestConnection(server)
@@ -393,6 +396,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         modify_data()
         task_reb = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, servs_out)
+        self.add_built_in_server_user()
         while task_reb.state != "FINISHED":
             modify_data()
         task_reb.result()
@@ -425,6 +429,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for bucket in self.buckets:
                 bucket.kvs[1] = KVStore()
         self.online_upgrade()
+        self.add_built_in_server_user()
         self.sleep(10)
 
         if self.input.param('initial_version', '')[:5] in COUCHBASE_FROM_VERSION_3:
@@ -503,6 +508,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.fail("Upgrade failed!")
             self.cluster.rebalance(self.servers[half_node:], self.servers[:half_node], [])
             self.log.info("Rebalanced in all new version nodes")
+            self.add_built_in_server_user()
             self.sleep(self.sleep_time)
             self.verification(self.servers)
         finally:
