@@ -84,8 +84,10 @@ class QueryTests(BaseTestCase):
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
+        self.curl_path = "curl"
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
+            self.curl_path = "%scurl" % self.path
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
         if self.primary_indx_type.lower() == "gsi":
@@ -226,12 +228,13 @@ class QueryTests(BaseTestCase):
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 result = remote.execute_command(
-                    "curl http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
+                    "%s http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
                     "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'"
-                    % (server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
+                    % (self.curl_path,server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
                 new_list = [string.strip() for string in result[0]]
                 concat_string = ''.join(new_list)
                 json_output = json.loads(concat_string)
+                print json_output['metrics']['resultCount']
                 self.assertTrue(json_output['metrics']['resultCount'] == result_count)
         finally:
             self.rest.delete_bucket("beer-sample")
