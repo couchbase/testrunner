@@ -1665,10 +1665,10 @@ class StableTopFTS(FTSBaseTest):
         :return: Nothing
         """
 
-        lon1 = float(TestInputSingleton.input.param("lon1", 2.387075))
-        lat1 = float(TestInputSingleton.input.param("lat1", 49.873019))
-        lon2 = float(TestInputSingleton.input.param("lon2", 1.954764))
-        lat2 = float(TestInputSingleton.input.param("lat2", 50.962097))
+        lon1 = float(TestInputSingleton.input.param("lon1", 1.954764))
+        lat1 = float(TestInputSingleton.input.param("lat1", 50.962097))
+        lon2 = float(TestInputSingleton.input.param("lon2", 2.387075))
+        lat2 = float(TestInputSingleton.input.param("lat2", 49.873019))
 
         expected_hits = TestInputSingleton.input.param("expected_hits", None)
         dist_unit = TestInputSingleton.input.param("unit", "mi")
