@@ -253,6 +253,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.start_server()
+            self.sleep(20)
 
     def test_server_restart(self):
         pre_recovery_tasks = self.async_run_operations(phase="before")
