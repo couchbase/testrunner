@@ -734,6 +734,54 @@ class CouchbaseCliTest(CliBaseTest):
         rest = RestConnection(server)
         rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
 
+    def test_set_cluster_name(self):
+        """
+        Test set and rename cluster name
+        1. Reset node back to initial setup
+        2. Set cluster-name by IP (if param is None)
+        3. Rename cluster-name
+        :return: nothing
+        """
+        cluster_name = self.input.param("cluster-name", None)
+        if cluster_name is None:
+            cluster_name = self.master.ip
+        self.log.info("Reset node back to initial page")
+        rest = RestConnection(self.master)
+        rest.force_eject_node()
+        options = "--cluster-username Administrator --cluster-password password " \
+                  "--cluster-port 8091 --cluster-name '%s' " % cluster_name
+        output, error = self.shell.couchbase_cli("cluster-init", self.master.ip,
+                                                                        options)
+        if "SUCCESS: Cluster initialized" not in output[0]:
+            self.fail("Failed to initialize node '%s' " % self.master.ip)
+
+        self.log.info("Verify hostname is set in cluster")
+        settings = rest.get_pools_default()
+        if cluster_name not in settings["clusterName"]:
+            self.fail("Fail to set hostname in cluster. "
+                      "Host name in cluster is '%s' " % settings["clusterName"])
+        else:
+            self.log.info("Cluster name is set to '%s' " % settings["clusterName"])
+
+        change_hostname = self.input.param("change-hostname", None)
+        if change_hostname is not None:
+            if change_hostname == "ip":
+                change_hostname = self.master.ip
+
+            self.log.info("Rename hostname in cluster.")
+            options = "-u Administrator -p password --cluster-name '%s' " \
+                                                        % change_hostname
+            output, error = self.shell.couchbase_cli("setting-cluster",
+                                                     self.master.ip, options)
+            settings = rest.get_pools_default()
+            if change_hostname not in settings["clusterName"]:
+                self.fail("Fail to set new hostname in cluster. "
+                          "Host name in cluster is '%s' " % settings["clusterName"])
+            else:
+                self.log.info("Cluster name is set to '%s' " % settings["clusterName"])
+
+
+
     def testRebalanceStop(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)

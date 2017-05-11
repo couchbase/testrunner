@@ -209,7 +209,8 @@ class CliBaseTest(BaseTestCase):
             server - A TestInputServer object of the server to connect to
             expected_services - A comma separated list of services
 
-            Returns a boolean corresponding to whether or not the expected services are available on the server.
+            Returns a boolean corresponding to whether or not the expected services
+            are available on the server.
         """
         rest = RestConnection(server)
         hostname = "%s:%s" % (server.ip, server.port)
@@ -372,8 +373,9 @@ class CliBaseTest(BaseTestCase):
         Options:
         server - A TestInputServer object of the server to connect to
 
-        Checks to see whether or not the default pool was created in order to determine whether
-        or no the server was initialized. Returns a boolean value to indicate initialization.
+        Checks to see whether or not the default pool was created in order to
+        determine whether or no the server was initialized. Returns a boolean value
+        to indicate initialization.
         """
         rest = RestConnection(server)
         settings = rest.get_pools_info()
