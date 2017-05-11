@@ -313,7 +313,8 @@ class QueriesViewsTests(QueryTests):
 
     def test_push_limit_intersect_unionscan(self):
       created_indexes = []
-      try:
+      for bucket in self.buckets:
+       try:
         self.query = "create index ix1 on default(join_day,VMs[0].os)"
         self.run_cbq_query()
         created_indexes.append("ix1")
@@ -340,7 +341,9 @@ class QueriesViewsTests(QueryTests):
         expected_result = self.run_cbq_query()
         self.query = "create index ix4 on default(VMs[0].memory,join_day) where VMs[0].memory > 10"
         self.run_cbq_query()
-        created_indexes.append("ix4")
+        actual_result = created_indexes.append("ix4")
+        self._wait_for_index_online(bucket, "idx4")
+        self._verify_results(actual_result['results'], [])
         self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
@@ -377,7 +380,7 @@ class QueriesViewsTests(QueryTests):
         self.query = "select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         self.assertTrue(res['metrics']['resultCount']==10)
-      finally:
+       finally:
         for idx in created_indexes:
             self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
             self.run_cbq_query()
@@ -419,7 +422,7 @@ class QueriesViewsTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 result1 =plan['~children'][0]['scans'][0]['scan']['index']
-                self.assertTrue(result1==idx1)
+                self.assertTrue(result1==idx1 or result1==idx2)
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
