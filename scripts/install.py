@@ -520,6 +520,8 @@ class CouchbaseServerInstaller(Installer):
                         rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
                                                         services=set_services)
+                    if "index" in set_services:
+                        rest.set_indexer_storage_mode()
                     rest.init_cluster(username=server.rest_username,
                                          password=server.rest_password)
 

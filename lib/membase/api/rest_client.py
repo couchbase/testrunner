@@ -920,10 +920,13 @@ class RestConnection(object):
 
     def set_indexer_storage_mode(self, username='Administrator',
                                  password='password',
-                                 storageMode='forestdb'):
+                                 storageMode='plasma'):
+        """
+           From spock, we replace forestdb with plasma
+        """
         api = self.baseUrl + 'settings/indexes'
         params = urllib.urlencode({'storageMode': storageMode})
-        error_message = "storageMode must be one of forestdb, memory_optimized"
+        error_message = "storageMode must be one of plasma, memory_optimized"
         log.info('settings/indexes params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         if not status and error_message in content:
