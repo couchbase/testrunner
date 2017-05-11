@@ -149,6 +149,8 @@ class CreateBucketTests(BaseTestCase):
         except Exception, e:
             if e:
                 print e
+        self.log.info("Add new user after reset node! ")
+        self.add_built_in_server_user(node=self.master)
         if status:
             if self.node_version[:5] in COUCHBASE_FROM_WATSON:
                 self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
@@ -216,6 +218,8 @@ class CreateBucketTests(BaseTestCase):
             use rest to reset node to set services correctly: index,kv,n1ql """
         self.rest.force_eject_node()
 
+        self.log.info("Add new user after reset node! ")
+        self.add_built_in_server_user(node=self.master)
         shell = RemoteMachineShellConnection(self.master)
         set_index_storage_type = ""
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
