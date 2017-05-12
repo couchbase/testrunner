@@ -1594,7 +1594,6 @@ class RestConnection(object):
         api = self.index_baseUrl + 'stats/storage'
         status, content, header = self._http_request(api, timeout=timeout)
         index_stats = dict()
-        stats = dict()
         data = content.split("\n")
         index = "unknown"
         store = "unknown"
@@ -1609,7 +1608,6 @@ class RestConnection(object):
                     index_stats[bucket] = {}
                 if index not in index_stats[bucket].keys():
                     index_stats[bucket][index] = dict()
-                stats = dict()
                 continue
             if "Store" in line:
                 store = re.findall("[a-zA-Z]+", line)[0]
@@ -1619,8 +1617,7 @@ class RestConnection(object):
             data = line.split("=")
             if len(data) == 2:
                 metric = data[0].strip()
-                stats[metric] = float(data[1].strip().replace("%", ""))
-            index_stats[bucket][index][store] = stats
+                index_stats[bucket][index][store][metric] = float(data[1].strip().replace("%", ""))
         return index_stats
 
     def get_indexer_stats(self, timeout=120, index_map=None):
