@@ -625,7 +625,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         """ verify DCP upgrade in 3.0.0 version """
         self.monitor_dcp_rebalance()
-
+        self.add_built_in_server_user()
         self.verification(new_servers)
 
     def online_upgrade_add_services(self):
