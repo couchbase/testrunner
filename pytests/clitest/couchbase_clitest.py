@@ -1272,33 +1272,61 @@ class CouchbaseCliTest(CliBaseTest):
         initialized = self.input.param("initialized", True)
         expect_error = self.input.param("expect-error")
         error_msg = self.input.param("error-msg", "")
+        reset_node = self.input.param("reset-node", True)
 
         server = copy.deepcopy(self.servers[0])
 
-        rest = RestConnection(server)
-        rest.force_eject_node()
+        if reset_node:
+            rest = RestConnection(server)
+            rest.force_eject_node()
 
         cli = CouchbaseCLI(server, username, password)
-        if initialized:
-            _, _, success = cli.cluster_init(512, None, None, None, None, None, server.rest_username,
+        if initialized and reset_node:
+            _, _, success = cli.cluster_init(512, None, None, None, None, None,
+                                             server.rest_username,
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
-        stdout, _, _ = cli.bucket_create(bucket_name, bucket_type, memory_quota, eviction_policy,
-                                         replica_count, enable_index_replica, priority, enable_flush, wait)
+        stdout, _, _ = cli.bucket_create(bucket_name, bucket_type, memory_quota,
+                                         eviction_policy, replica_count,
+                                         enable_index_replica, priority,
+                                         enable_flush, wait)
 
         if not expect_error:
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket created"),
-                            "Expected command to succeed")
-            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_type, memory_quota,
-                                                      eviction_policy, replica_count, enable_index_replica, priority,
-                                                      enable_flush),
-                            "Bucket settings not set properly")
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
+                                                     "Bucket created"),
+                                                     "Expected command to succeed")
+            self.assertTrue(self.verifyBucketSettings(server, bucket_name,
+                                                bucket_type, memory_quota,
+                                                eviction_policy, replica_count,
+                                                enable_index_replica, priority,
+                                                enable_flush),
+                                                "Bucket settings not set properly")
         else:
             self.assertTrue(not self.verifyContainsBucket(server, bucket_name),
                             "Bucket was created even though an error occurred")
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
-                            "Expected error message not found")
+            self.assertTrue(self.verifyCommandOutput(stdout,
+                                 expect_error, error_msg),
+                                 "Expected error message not found")
+
+    def testRecreateBucket(self):
+        """
+            Create a bucket name A
+            Delete bucket name A
+            Recreate bucket name A
+            :return: nothing
+        """
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+
+        server=copy.deepcopy(self.servers[0])
+
+        self.testBucketCreate()
+        cli = CouchbaseCLI(server, username, password)
+        cli.bucket_delete(bucket_name)
+        self.testBucketCreate()
+
 
     def testBucketEdit(self):
         username = self.input.param("username", None)
@@ -2469,6 +2497,85 @@ class XdcrCLITest(CliBaseTest):
 
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options
+
+    def __verify_bucket_config(self, server, bucket_name, bucket_type,
+                               memory_quota, eviction_policy, replica_count,
+                               enable_index_replica, priority, enable_flush,
+                               stdout, expect_error):
+        self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
+                                                 "Bucket created"),
+                                                 "Expected command to succeed")
+        self.assertTrue(self.verifyBucketSettings(server, bucket_name,
+                                                bucket_type, memory_quota,
+                                                eviction_policy, replica_count,
+                                                enable_index_replica, priority,
+                                                enable_flush),
+                                                "Bucket settings not set properly")
+    def test_xdcr_recreate_bucket(self):
+        """
+            Setup an XDCR cluster.
+            Create bucket at both remote and source
+            Delete bucket at both remote and source
+            Recreate bucket at both remote and source
+        :return:
+        """
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        bucket_type = self.input.param("bucket-type", None)
+        memory_quota = self.input.param("memory-quota", None)
+        eviction_policy = self.input.param("eviction-policy", None)
+        replica_count = self.input.param("replica-count", None)
+        enable_index_replica = self.input.param("enable-replica-index", None)
+        priority = self.input.param("priority", None)
+        enable_flush = self.input.param("enable-flush", None)
+        wait = self.input.param("wait", False)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        self.__xdcr_setup_create()
+        server_s = copy.deepcopy(self.servers[0])
+
+        cli_s = CouchbaseCLI(server_s, username, password)
+        stdout_s, _, _ = cli_s.bucket_create(bucket_name, bucket_type, memory_quota,
+                                         eviction_policy, replica_count,
+                                         enable_index_replica, priority,
+                                         enable_flush, wait)
+        self.__verify_bucket_config(server_s, bucket_name, bucket_type,
+                                    memory_quota, eviction_policy, replica_count,
+                                    enable_index_replica, priority, enable_flush,
+                                    stdout_s, expect_error)
+
+        cli_s.bucket_delete(bucket_name)
+        stdout_s, _, _ = cli_s.bucket_create(bucket_name, bucket_type, memory_quota,
+                                             eviction_policy, replica_count,
+                                             enable_index_replica, priority,
+                                             enable_flush, wait)
+        self.__verify_bucket_config(server_s, bucket_name, bucket_type,
+                                    memory_quota, eviction_policy, replica_count,
+                                    enable_index_replica, priority, enable_flush,
+                                    stdout_s, expect_error)
+
+        server_r = copy.deepcopy(self.dest_nodes[0])
+        cli_r = CouchbaseCLI(server_r, username, password)
+        stdout_r, _, _ = cli_r.bucket_create(bucket_name, bucket_type, memory_quota,
+                                         eviction_policy, replica_count,
+                                         enable_index_replica, priority,
+                                         enable_flush, wait)
+        self.__verify_bucket_config(server_r, bucket_name, bucket_type,
+                                   memory_quota, eviction_policy, replica_count,
+                                   enable_index_replica, priority, enable_flush,
+                                   stdout_r, expect_error)
+
+        cli_r.bucket_delete(bucket_name)
+        stdout_r, _, _ = cli_r.bucket_create(bucket_name, bucket_type, memory_quota,
+                                             eviction_policy, replica_count,
+                                             enable_index_replica, priority,
+                                             enable_flush, wait)
+        self.__verify_bucket_config(server_r, bucket_name, bucket_type,
+                                   memory_quota, eviction_policy, replica_count,
+                                   enable_index_replica, priority, enable_flush,
+                                   stdout_r, expect_error)
 
     def testXDCRSetup(self):
         error_expected_in_command = self.input.param("error-expected", None)
