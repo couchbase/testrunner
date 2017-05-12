@@ -248,11 +248,11 @@ class QueryTests(BaseTestCase):
             idx = "ix1"
             self.query = "CREATE INDEX %s ON default(x,y) USING VIEW" % idx
             self.run_cbq_query()
+            created_indexes.append(idx)
             time.sleep(15)
             self.run_cbq_query("insert into default values ('k01',{'x':10})")
             result = self.run_cbq_query("select x,y from default where x > 3")
             self.assertTrue(result['results'][0] == {"x":10})
-            created_indexes.append(idx)
 
             self.run_cbq_query('insert into default values("k02", {"x": 20, "y": 20})')
             self.run_cbq_query('insert into default values("k03", {"x": 30, "z": 30})')
@@ -260,11 +260,12 @@ class QueryTests(BaseTestCase):
             idx2 = "iv1"
             self.query = "CREATE INDEX %s ON default(x,y,z) USING VIEW" % idx2
             self.run_cbq_query()
+            created_indexes.append(idx2)
             expected_result = [{'x':10},{'x':20,'y':20},{'x':30,'z':30},{'x':40,'y':40,'z':40}]
             result = self.run_cbq_query('select x,y,z from default use index (iv1 using view) '
                                         'where x is not missing')
             self.assertTrue(result['results'] == expected_result)
-            created_indexes.append(idx2)
+
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX %s.%s USING VIEW" % ("default", idx)
@@ -3570,20 +3571,22 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "drop primary index on %s USING %s" % (bucket.name,self.primary_indx_type);
             self.run_cbq_query()
-        self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
-        actual_list = self.run_cbq_query()
-        bucket_names=[]
-        for bucket in self.buckets:
-            bucket_names.append(bucket.name)
-        count = 0
-        for bucket in self.buckets:
-            if((actual_list['results'][count]['keyspace_id']) in bucket_names):
-                count +=1
-            else:
-              self.log.error("Wrong keyspace id returned or empty keyspace id returned")
-        for bucket in self.buckets:
-            self.query = "create primary index on %s" % bucket.name;
-            self.run_cbq_query()
+        try:
+            self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
+            actual_list = self.run_cbq_query()
+            bucket_names=[]
+            for bucket in self.buckets:
+                bucket_names.append(bucket.name)
+            count = 0
+            for bucket in self.buckets:
+                if((actual_list['results'][count]['keyspace_id']) in bucket_names):
+                    count +=1
+                else:
+                  self.log.error("Wrong keyspace id returned or empty keyspace id returned")
+        finally:
+            for bucket in self.buckets:
+                self.query = "create primary index on %s" % bucket.name
+                self.run_cbq_query()
 
     def test_except(self):
         for bucket in self.buckets:
