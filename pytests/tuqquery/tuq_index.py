@@ -342,7 +342,7 @@ class QueriesViewsTests(QueryTests):
         self.query = "create index ix4 on default(VMs[0].memory,join_day) where VMs[0].memory > 10"
         self.run_cbq_query()
         actual_result = created_indexes.append("ix4")
-        self._wait_for_index_online(bucket, "idx4")
+        self._wait_for_index_online(bucket, "ix4")
         self._verify_results(actual_result['results'], [])
         self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
         res = self.run_cbq_query()
