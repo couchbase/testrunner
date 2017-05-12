@@ -632,9 +632,17 @@ class BaseTestCase(unittest.TestCase):
         bucket_params['size'] = bucket_size
         bucket_params['bucket_type'] = self.bucket_type
 
+        versions = RestConnection(server).get_nodes_versions()
+        pre_spock = False
+        for version in versions:
+            if "5" > version:
+                pre_spock = True
+
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             port = STANDARD_BUCKET_PORT + i + 1
+            if pre_spock:
+                bucket_params['proxyPort'] = port
             bucket_priority = None
             if self.standard_bucket_priority is not None:
                 bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
@@ -705,10 +713,19 @@ class BaseTestCase(unittest.TestCase):
         bucket_params = copy.deepcopy(self.bucket_base_params['memcached'])
         bucket_params['size'] = bucket_size
 
+        versions = RestConnection(server).get_nodes_versions()
+        pre_spock = False
+        for version in versions:
+            if "5" > version:
+                pre_spock = True
+
         for i in range(num_buckets):
 
             name = 'memcached_bucket' + str(i)
             port = STANDARD_BUCKET_PORT + self.standard_buckets + 2 + i
+
+            if pre_spock:
+                bucket_params['proxyPort'] = port
 
             bucket_tasks.append(self.cluster.async_create_memcached_bucket(name=name, port=port,
                                                                            bucket_params=bucket_params))
