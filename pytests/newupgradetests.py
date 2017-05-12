@@ -495,6 +495,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 if self.port and self.port != '8091':
                     server.port = self.port
             self._new_master(self.servers[half_node])
+            self.add_built_in_server_user()
             self.verification(self.servers[half_node:])
             self.log.info("Upgrade nodes of old version")
             upgrade_threads = self._async_update(self.upgrade_versions[0], self.servers[:half_node],
