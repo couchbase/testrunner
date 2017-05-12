@@ -2159,6 +2159,15 @@ class RestConnection(object):
         if bucketType == 'ephemeral':
             del init_params['replicaIndex']     # does not apply to ephemeral buckets, and is even rejected
 
+        versions = self.get_nodes_versions()
+        pre_spock = False
+        for version in versions:
+            if "5" > version:
+                pre_spock = True
+
+        if pre_spock:
+            init_params['proxyPort'] = proxyPort
+
         params = urllib.urlencode(init_params)
 
         log.info("{0} with param: {1}".format(api, params))
