@@ -3911,30 +3911,19 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_test_dataset(self, server, docs):
         """
-        Creates documents using cbdocloader in the default bucket from a given
-        list of json data
+        Creates documents using MemcachedClient in the default bucket
+        from a given list of json data
         :param server: Server on which docs are to be loaded
         :param docs: List of json data
         :return: None
         """
-        remote = RemoteMachineShellConnection(server)
-        info = remote.extract_remote_info()
-        if info.type.lower() != 'windows':
-            self.log.info("Creating test dataset")
-            command = "cd /tmp; rm -rf dataset; mkdir -p dataset; cd dataset; mkdir docs; cd docs"
-            remote.execute_command(command)
-            i = 1
-            for doc in docs:
-                command = "cd /tmp/dataset/docs; echo \"%s\" > %s.json;" % (
-                doc, i)
-                i += 1
-                output, error = remote.execute_command(command)
-                for o in output:
-                    self.log.info(o)
-            command = "{0}/cbdocloader -c {1} -u {2} -p {3} -b default -d /tmp/dataset -m 100 -v".format(
-                self.cli_command_location,
-                server.ip, server.rest_username,
-                server.rest_password)
-            output, error = remote.execute_command(command)
-            for o in output:
-                self.log.info(o)
+        from memcached.helper.data_helper import MemcachedClientHelper
+        memc_client  = MemcachedClientHelper.direct_client(server, 'default')
+
+        for i, doc in enumerate(docs):
+            try:
+                memc_client.set(key=str(i+1), exp=0, flags=0,
+                                val=json.dumps(doc))
+            except Exception as e:
+                self.log.error(e)
+                raise e
