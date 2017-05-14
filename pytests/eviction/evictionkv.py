@@ -298,7 +298,7 @@ class EvictionKV(EvictionBase):
                 self.fail("Views not allowed for ephemeral buckets")
             except DesignDocCreationException as e:
                 self.assertEquals(e._message,
-                                  'Error occured design document _design/ddoc1: {"error":"not_found","reason":"no_couchbase_bucket_exists"}\n')
+                                  'Error occured design document _design/ddoc1: {"error":"not_found","reason":"views are supported only on couchbase buckets"}\n')
 
 
 class EphemeralBackupRestoreTest(EvictionBase):
