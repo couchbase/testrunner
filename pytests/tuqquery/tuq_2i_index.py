@@ -434,15 +434,8 @@ class QueriesIndexTests(QueryTests):
     def test_pairs(self):
         self.query = "select pairs(self) from default order by meta().id limit 1"
         actual_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results']==[{u'$1': [[u'name', [{u'FirstName': u'employeefirstname-9'}, {u'MiddleName': u'employeemiddlename-9'},
-                        {u'LastName': u'employeelastname-9'}]], [u'name', {u'FirstName': u'employeefirstname-9'}], [u'name', {u'MiddleName': u'employeemiddlename-9'}],
-                        [u'name', {u'LastName': u'employeelastname-9'}], [u'FirstName', u'employeefirstname-9'], [u'MiddleName', u'employeemiddlename-9'],
-                        [u'LastName', u'employeelastname-9'], [u'email', u'9-mail@couchbase.com'], [u'mutated', 0], [u'hobbies', {u'hobby': [{u'sports': [u'Badminton', u'Football',
-                        u'Basketball']}, {u'dance': [u'hip hop', u'bollywood', u'contemporary']}, u'art']}], [u'hobby', [{u'sports': [u'Badminton', u'Football', u'Basketball']},
-                        {u'dance': [u'hip hop', u'bollywood', u'contemporary']}, u'art']], [u'hobby', {u'sports': [u'Badminton', u'Football', u'Basketball']}],
-                        [u'hobby', {u'dance': [u'hip hop', u'bollywood', u'contemporary']}], [u'hobby', u'art'], [u'sports', [u'Badminton', u'Football', u'Basketball']],
-                        [u'sports', u'Badminton'], [u'sports', u'Football'], [u'sports', u'Basketball'], [u'dance', [u'hip hop', u'bollywood', u'contemporary']],
-                        [u'dance', u'hip hop'], [u'dance', u'bollywood'], [u'dance', u'contemporary'], [u'department', u'Support'], [u'join_yr', [2013, 2015, 2012]], [u'join_yr', 2013], [u'join_yr', 2015], [u'join_yr', 2012], [u'_id', u'query-testemployee10153.1877827-0'], [u'VMs', [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}, {u'RAM': 10, u'os': u'centos', u'name': u'vm_12', u'memory': 10}, {u'RAM': 10, u'os': u'macos', u'name': u'vm_13', u'memory': 10}]], [u'VMs', {u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}], [u'VMs', {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], [u'VMs', {u'RAM': 10, u'os': u'centos', u'name': u'vm_12', u'memory': 10}], [u'VMs', {u'RAM': 10, u'os': u'macos', u'name': u'vm_13', u'memory': 10}], [u'RAM', 10], [u'os', u'ubuntu'], [u'name', u'vm_10'], [u'memory', 10], [u'RAM', 10], [u'os', u'windows'], [u'name', u'vm_11'], [u'memory', 10], [u'RAM', 10], [u'os', u'centos'], [u'name', u'vm_12'], [u'memory', 10], [u'RAM', 10], [u'os', u'macos'], [u'name', u'vm_13'], [u'memory', 10], [u'tasks', [{u'Marketing': [{u'region2': u'International', u'region1': u'South'}, {u'region2': u'South'}], u'Developer': [u'IOS', u'Indexing']}, u'Sales', u'QA']], [u'tasks', {u'Marketing': [{u'region2': u'International', u'region1': u'South'}, {u'region2': u'South'}], u'Developer': [u'IOS', u'Indexing']}], [u'tasks', u'Sales'], [u'tasks', u'QA'], [u'Marketing', [{u'region2': u'International', u'region1': u'South'}, {u'region2': u'South'}]], [u'Marketing', {u'region2': u'International', u'region1': u'South'}], [u'Marketing', {u'region2': u'South'}], [u'region2', u'International'], [u'region1', u'South'], [u'region2', u'South'], [u'Developer', [u'IOS', u'Indexing']], [u'Developer', u'IOS'], [u'Developer', u'Indexing'], [u'address', [[{u'city': u'Delhi'}, {u'street': u'12th street'}], [{u'country': u'EUROPE', u'apartment': 123}]]], [u'address', [{u'city': u'Delhi'}, {u'street': u'12th street'}]], [u'address', [{u'country': u'EUROPE', u'apartment': 123}]], [u'city', u'Delhi'], [u'street', u'12th street'], [u'country', u'EUROPE'], [u'apartment', 123]]}])
+        self.assertTrue( actual_result['metrics']['resultSize']==17557)
+        self.assertTrue( actual_result['metrics']['sortCount']==82320)
 
     def test_index_missing_null(self):
         for bucket in self.buckets:
@@ -1280,7 +1273,7 @@ class QueriesIndexTests(QueryTests):
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue("cover" in str(plan))
             self.assertTrue("IntersectScan" in str(plan))
-            self.assertTrue(plan['~children'][0]['scans'][0]['index']==idx2)
+            self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']==idx2)
             self.query = "select count(*) from default where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
             actual_result = self.run_cbq_query()
             self.query = "select count(*) from default use index(`#primary`) where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
