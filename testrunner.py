@@ -107,7 +107,10 @@ def create_log_file(log_config_file_name, log_file_name, level):
 
 def append_test(tests, name):
     prefix = ".".join(name.split(".")[0:-1])
-    if name.find('*') > 0:
+    """
+        Some tests carry special chars, need to skip it
+    """
+    if "test_restore_with_filter_regex" not in name and name.find('*') > 0:
         for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
             tests.append(prefix + '.' + t._testMethodName)
     else:
