@@ -2611,6 +2611,7 @@ class QueriesIndexTests(QueryTests):
 
     def test_indexcountscan(self):
         for bucket in self.buckets:
+            try:
                 created_indexes = []
                 idx = "idx"
                 self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'meta().id')+\
@@ -2628,48 +2629,48 @@ class QueriesIndexTests(QueryTests):
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
                 result1 = plan['~children'][0]['index']
-                self.assertTrue(result1 == '#primary')
+                self.assertTrue(result1 == idx)
+                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
+                self.sleep(15,'wait for index')
                 self.query = "select count(1) from %s use index(idx) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
-                self.assertTrue(actual_result['results']==[{u'$1': 12096}])
+                self.assertTrue(actual_result['results']==[{u'$1': 98784}])
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexCountScan2',
                     "IndexCountScan is not being used")
-                self.query = "explain select a.cnt from (select count(1) from default where meta().id is not null) as a"
+                self.query = "explain select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result2)
                 self.assertTrue(
                     plan['~children'][0]['#operator'] != 'IndexCountScan2',
                     "IndexCountScan should not be used in subquery")
-                self.query = "select a.cnt from (select count(1) from default where meta().id is not null) as a"
+                self.query = "select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
+                self.query = "select a.cnt from (select count(1) as cnt from %s where _id is not null) as a " %(bucket.name)
+                result = self.run_cbq_query()
+                self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
+                self.assertTrue(actual_result2['results']==[{u'$1': 98784}])
                 self.query = "select count(DISTINCT 1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==[{u'$1': 1}])
-
                 self.query = "select count(DISTINCT meta().id) from %s use index(idx) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.query = "select count(DISTINCT meta().id) from %s use index(`#primary`) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
-                self.assertTrue(actual_result['results']==[{u'$1': 12096}])
-
+                self.assertTrue(actual_result['results']==[{u'$1': 98784}])
+                self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s'  " %(bucket.name,'query-test%')
+                result = self.run_cbq_query()
+                self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
+            finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-                    self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-                    self.run_cbq_query()
-                    self.sleep(15,'wait for index')
-                    self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s'  " %(bucket.name,'query-test%')
-                    result = self.run_cbq_query()
-                    self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
-                    self.query = "select a.cnt from (select count(1) from %s where _id is not null) as a " %(bucket.name)
-                    result = self.run_cbq_query()
-                    self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
                     self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                     self.run_cbq_query()
 
