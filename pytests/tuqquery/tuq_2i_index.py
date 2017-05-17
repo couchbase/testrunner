@@ -430,10 +430,12 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-
+    
     def test_pairs(self):
         self.query = "select pairs(self) from default order by meta().id limit 1"
         actual_result = self.run_cbq_query()
+        print actual_result['metrics']['resultSize']
+        print actual_result['metrics']['sortCount']
         self.assertTrue( actual_result['metrics']['resultSize']==17557)
         self.assertTrue( actual_result['metrics']['sortCount']==82320)
 
@@ -1876,7 +1878,7 @@ class QueriesIndexTests(QueryTests):
                                for doc in self.full_list
                                if re.match(r'.*@.*\..*', doc['email']) and \
                                   doc['join_day'] > 10]
-                    self._verify_results(actual_result2['results'], expected_result)
+                    self._verify_results(sorted(actual_result2['results']), sorted(expected_result))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
