@@ -1,27 +1,15 @@
-from newupgradebasetest import NewUpgradeBaseTest
-import json
-import os
-import zipfile
-import pprint
 import Queue
-import json
-import logging
 import copy
-from membase.helper.cluster_helper import ClusterOperationHelper
-import mc_bin_client
 import threading
-from fts.fts_base import FTSIndex
-from memcached.helper.data_helper import  VBucketAwareMemcached
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from membase.api.rest_client import RestConnection, Bucket
-from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
-from TestInput import TestInputSingleton
-from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
-from membase.api.rest_client import RestConnection, RestHelper
+
 from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.tuq_helper import N1QLHelper
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from newupgradebasetest import NewUpgradeBaseTest
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class UpgradeTests(NewUpgradeBaseTest):
 
@@ -130,6 +118,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.generate_map_nodes_out_dist_upgrade(\
                                       self.after_upgrade_services_out_dist)
             self.log.info("*** Start operations after upgrade is done ***")
+            self.add_built_in_server_user()
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
             self.finish_events(self.after_event_threads)
