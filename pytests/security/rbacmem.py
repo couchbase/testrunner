@@ -170,7 +170,7 @@ class RbacTestMemcached(BaseTestCase):
         self.user_id = self.input.param("user_id",None)
         self.user_role = self.input.param("user_role",None)
         self.bucket_name = self.input.param("bucket_name",None)
-        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
+        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100,lww=True)
         self.role_map = self.input.param("role_map",None)
         self.incorrect_bucket = self.input.param("incorrect_bucket",False)
         self.new_role = self.input.param("new_role",None)
@@ -180,7 +180,7 @@ class RbacTestMemcached(BaseTestCase):
         self.all_buckets = self.input.param("all_buckets",None)
         self.ldap_users = rbacmain().returnUserList(self.user_id)
         if self.no_bucket_access:
-            rest.create_bucket(bucket=self.no_access_bucket_name, ramQuotaMB=100)
+            rest.create_bucket(bucket=self.no_access_bucket_name, ramQuotaMB=100, lww=True)
         if self.auth_type == 'ldap':
             rbacmain(self.master, 'builtin')._delete_user('cbadminbucket')
         if self.auth_type == 'ldap':
@@ -237,7 +237,7 @@ class RbacTestMemcached(BaseTestCase):
             for users in self.ldap_users:
                     if self.no_bucket_access:
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.no_access_bucket_name, users[0], users[1])
-                        sdk_conn, result = TestSDK().connection(self.master.ip, self.no_access_bucket_name, users[0],
+                        sdk_conn, result = TestSDK().connection(self.master.ip, self.no_access_bucket_name, users[0],\
                                                                       users[1])
                     else:
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.bucket_name, users[0], users[1])
@@ -256,7 +256,7 @@ class RbacTestMemcached(BaseTestCase):
                         elif temp_action[0] == 'WriteMeta':
                             result_action = TestMemcachedClient().set_meta(self.master.ip, mc, self.bucket_name)
                         elif temp_action[0] == 'WriteXattr':
-                            result_action = TestSDK().set_xattr(self.master.ip, sdk_conn, self.bucket_name)
+                            result_action = TestSDK().set_xattr(sdk_conn)
                         elif temp_action[0] == 'ReadXattr':
                             result_action = TestSDK().get_xattr(self.master.ip, sdk_conn, self.bucket_name)
                         self.log.info ("Result of action - {0} is {1}".format(action, result_action))

@@ -86,7 +86,7 @@ class TestSDK():
             cb = Bucket(connection_string, password=password)
             if cb is not None:
                 result = True
-                return result, cb
+                return cb, result
         except Exception, ex:
             return result
 
@@ -102,7 +102,7 @@ class TestSDK():
 
     def get_xattr(self, client_ip, sdk_conn, bucket_name):
         try:
-            temp_conn = self.connection(client_ip, bucket_name, 'Administrator', 'password')
+            temp_conn, result = self.connection(client_ip, bucket_name, 'Administrator', 'password')
             self.set_xattr(temp_conn)
             k = 'sdk_1'
             rv = sdk_conn.lookup_in(k, SD.get('my', xattr=True))
