@@ -705,3 +705,404 @@ class RbacN1QL(QueryTests):
                             "Able to select from {0} as user {1} - not expected".
                             format(self.buckets[1].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
+
+    # select,insert,delete,updaete,drop system catalog tables.
+    # This test will run with Administrator,cluster admin,bucket admin and view admin.
+    def test_select_system_catalog(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params = {'creds': []}
+        query_params['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.system_catalog_helper_select(query_params,"test_select_system_catalog")
+        self.system_catalog_helper_delete(query_params,"test_select_system_catalog")
+        self.system_catalog_helper_insert(query_params,"test_select_system_catalog")
+        self.system_catalog_helper_update(query_params,"test_select_system_catalog")
+
+
+    # This test will select/delete on any system table with read only admin user.
+    def test_read_only_admin_select_delete(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params = {'creds': []}
+        query_params['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.system_catalog_helper_select(query_params,"test_read_only_admin_select_delete")
+        self.system_catalog_helper_delete(query_params,"test_read_only_admin_select_delete")
+
+    # This test will be specific to system catalog role.
+    def test_sys_catalog(self):
+        self.create_users()
+        rest = RestConnection(self.master)
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params = {'creds': []}
+        query_params['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.system_catalog_helper_select(query_params,"test_sys_catalog")
+        perm =  RbacBase().check_user_permission(
+                        self.users[0]['id'],
+                        self.users[0]['password'],
+                        'cluster.bucket[%s].n1ql.select!execute' %(self.buckets[0].name),rest
+                        )
+        self.log.info("Permissions for user: %s on bucket %s is: %s"
+                              %(self.users[0]['id'],self.buckets[0].name,perm))
+
+        self.system_catalog_helper_delete(query_params,"test_sys_catalog")
+        self.system_catalog_helper_insert(query_params,"test_sys_catalog")
+        self.system_catalog_helper_update(query_params,"test_sys_catalog")
+
+    def test_query_select_role(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params = {'creds': []}
+        query_params['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.system_catalog_helper_select(query_params,"test_query_select_role")
+        self.select_my_user_info(query_params,"test_query_select_role")
+
+    def test_query_insert_role(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params = {'creds': []}
+        query_params['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.system_catalog_helper_select(query_params,"test_query_insert_role")
+        self.system_catalog_helper_insert(query_params,"test_query_insert_role")
+
+    def test_query_update_role(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params = {'creds': []}
+        query_params['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.system_catalog_helper_select(query_params,"test_query_update_role")
+        self.system_catalog_helper_update(query_params,"test_query_update_role")
+
+    def test_query_delete_role(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params = {'creds': []}
+        query_params['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.system_catalog_helper_select(query_params,"test_query_delete_role")
+        self.system_catalog_helper_delete(query_params,"test_query_delete_role")
+
+    # Creates user with select role,select system:indexes.select should not work,
+    # Grant system catalog to the same user, select should work.
+    # Revoke system catalog from the user,select should not work.
+    # Right now the test fails ,hence no asserts until behavior is confirmed.
+    def test_grant_revoke_permissions(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        query_params_with_roles = {'creds': []}
+        query_params_with_roles['creds'].append({'user': self.users[0]['id'], 'pass': self.users[0]['password']})
+        self.query = 'select * from system:indexes'
+        self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assign_role(roles=[{'id': self.users[0]['id'],
+                                         'name': self.users[0]['name'],
+                                         'roles': 'query_system_catalog'
+                                                  }])
+        self.query = 'select * from system:indexes'
+        self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.revoke_role(role='query_system_catalog')
+        self.query = 'select * from system:indexes'
+        self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+
+
+
+    def system_catalog_helper_select(self,query_params_with_roles,test = ""):
+        self.query = 'select * from system:datastores'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==1)
+        self.query = 'select * from system:namespaces'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==1)
+        self.query = 'select * from system:keyspaces'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==1)
+        self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
+        self.run_cbq_query()
+        self.query = 'select * from system:indexes'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==2)
+        self.query = 'select * from system:dual'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==1)
+        self.query = 'select * from system:user_info'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==3)
+        self.query = 'select * from system:nodes'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==2)
+        self.query = 'select * from system:applicable_roles'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==2)
+        self.query = 'select * from system:completed_requests'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue('completed_requests' in res['results'][0])
+        self.query = 'select * from system:prepareds'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==0)
+        self.query = 'select * from system:active_requests'
+        res = self.run_cbq_query(query_params=query_params_with_roles,query_with_roles=True)
+        self.assertTrue(res['metrics']['resultCount']==1)
+
+    def system_catalog_helper_insert(self,query_params_with_roles,test = ""):
+        self.query = 'insert into system:datastores values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+                    self.log.error(ex)
+                    self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:namespaces values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+                    self.log.error(ex)
+                    self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:keyspaces values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:indexes values("k051", { "id":123  } )'
+        try:
+           self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:dual values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore error Mutations not allowed on system:dual.")!=-1)
+        self.query = 'insert into system:user_info values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:nodes values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:applicable_roles values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:prepareds values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:completed_requests values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'insert into system:active_requests values("k051", { "id":123  } )'
+        try:
+            self.run_cbq_query(query_params=query_params_with_roles)
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+
+
+    def system_catalog_helper_update(self,query_params_with_roles,test = ""):
+        self.query = 'update system:datastores use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+        self.query = 'update system:namespaces use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11003")!=-1)
+        self.query = 'update system:keyspaces use keys "%s" set name="%s"'%("id","test")
+        # panic seen here as of now,hence commenting it out for now.
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+        self.query = 'update system:indexes use keys "%s" set name="%s"'%("id","test")
+        # panic seen here as of now,hence commenting it out for now.
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+        self.query = 'update system:dual use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+        self.query = 'update system:user_info use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.assertTrue(str(ex).find("'code': 5200")!=-1)
+        self.query = 'update system:nodes use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11003}")!=-1)
+        # panic seen here as of now,hence commenting it out for now.
+        self.query = 'update system:applicable_roles use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+        self.query = 'update system:active_requests use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+        self.query = 'update system:completed_requests use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+        self.query = 'update system:prepareds use keys "%s" set name="%s"'%("id","test")
+        try:
+            self.run_cbq_query()
+        except Exception, ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("'code': 11000")!=-1)
+
+    # Query does not support drop these tables or buckets yet.We can add the test once it is supported.
+    # Right now we cannot compare results in assert.
+    # def system_catalog_helper_drop(self,query_params_with_roles,test = ""):
+    #     self.query = 'drop system:datastores'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:namespaces'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:keyspaces'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:indexes'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:dual'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:user_info'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:nodes'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:applicable_roles'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:prepareds'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:completed_requests'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:active_requests'
+    #     res = self.run_cbq_query()
+    #     print res
+
+
+    def system_catalog_helper_delete(self,query_params_with_roles,test = ""):
+        self.query = 'delete from system:datastores'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                    self.log.error(ex)
+                    self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        else:
+            self.fail("There was no errors.")
+        self.query = 'delete from system:namespaces'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        else:
+            self.fail("There was no errors.")
+        self.query = 'delete from system:keyspaces'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        else:
+            self.fail("There was no errors.")
+        self.query = 'delete from system:indexes'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        else:
+            self.fail("There was no errors.")
+        self.query = 'delete from system:dual'
+        try:
+                 self.run_cbq_query()
+        except Exception, ex:
+                 self.log.error(ex)
+                 self.assertTrue(str(ex).find('System datastore error Mutations not allowed on system:dual.')!=-1)
+        self.query = 'delete from system:user_info'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'delete from system:nodes'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'delete from system:applicable_roles'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'delete from system:completed_requests'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'delete from system:active_requests'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+        self.query = 'delete from system:prepareds'
+        try:
+                self.run_cbq_query()
+        except Exception, ex:
+                self.log.error(ex)
+                self.assertTrue(str(ex).find("System datastore :  Not implemented ")!=-1)
+
+    def select_my_user_info(self,query_params_with_roles,test = ""):
+        self.query == 'select * from system:my_user_info'
+        res = self.run_cbq_query()
+        # no results seen as of now,assert will be added once bug is fixed.
+        print res
