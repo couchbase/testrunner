@@ -33,10 +33,10 @@ class QUERY_TYPE:
     CUSTOM_QUERY_TYPES = {
         'text': ["match", "bool", "match_phrase",
                  "prefix", "wildcard", "query_string",
-                 "conjunction", "disjunction", "term-range"],
+                 "conjunction", "disjunction", "term_range"],
         'str': ["match", "bool", "match_phrase",
                  "prefix", "wildcard", "query_string",
-                 "conjunction", "disjunction", "term-range"],
+                 "conjunction", "disjunction", "term_range"],
         'num': ["numeric_range"],
         'date': ["date_range"]
     }
