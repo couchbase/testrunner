@@ -254,13 +254,15 @@ class RbacTestMemcached(BaseTestCase):
                         elif temp_action[0] == 'WriteMeta':
                             result_action = TestMemcachedClient().set_meta(self.master.ip, mc, self.bucket_name)
                         elif temp_action[0] == 'WriteXattr':
-                            if self.no_access_bucket_name:
+                            if self.no_bucket_access:
                                 self.log.info ("No access to bucket via SDK")
+                                result_action = True
                             else:
                                 result_action = TestSDK().set_xattr(sdk_conn)
                         elif temp_action[0] == 'ReadXattr':
-                            if self.no_access_bucket_name:
+                            if self.no_bucket_access:
                                 self.log.info ("No access to bucket via SDK")
+                                result_action = True
                             else:
                                 result_action = TestSDK().get_xattr(self.master.ip, sdk_conn, self.bucket_name)
                         self.log.info ("Result of action - {0} is {1}".format(action, result_action))
