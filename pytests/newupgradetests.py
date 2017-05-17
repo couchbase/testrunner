@@ -488,6 +488,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         """ verify DCP upgrade in 3.x.x version """
         self.master = self.servers[half_node]
+        self.add_built_in_server_user()
         self.monitor_dcp_rebalance()
         self.sleep(self.sleep_time)
         try:
