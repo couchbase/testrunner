@@ -434,10 +434,8 @@ class QueriesIndexTests(QueryTests):
     def test_pairs(self):
         self.query = "select pairs(self) from default order by meta().id limit 1"
         actual_result = self.run_cbq_query()
-        print actual_result['metrics']['resultSize']
-        print actual_result['metrics']['sortCount']
-        self.assertTrue( actual_result['metrics']['resultSize']==17557)
-        self.assertTrue( actual_result['metrics']['sortCount']==82320)
+        self.assertTrue( actual_result['metrics']['resultSize']==18317)
+        self.assertTrue( actual_result['metrics']['sortCount']==10078)
 
     def test_index_missing_null(self):
         for bucket in self.buckets:
@@ -833,6 +831,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['#operator']=='UnionScan')
+                print plan
                 self.assertTrue(plan['~children'][0]['scans'][0]['index']=='idx4')
                 self.query = 'explain SELECT meta().cas, meta().expiration,meta().id FROM default where meta().cas = 1487875768758304768 and meta().expiration > 0'
                 actual_result = self.run_cbq_query()
@@ -904,6 +903,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "idxjoin_yr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY v FOR v in %s END) USING %s" % (
                     idx, bucket.name, "join_yr", self.index_type)
@@ -1690,6 +1691,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+
                 idx = "nested_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END,tasks,department,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
@@ -1796,6 +1798,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
@@ -2000,6 +2004,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "unnest_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( ALL array j for j in i end) FOR i in %s END,department,tasks,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
@@ -2119,6 +2125,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes=[]
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx4 = "idxVM2"
                 self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within %s END,VMs) USING %s" % (
                     idx4, bucket.name, "VMs", self.index_type)
@@ -2151,6 +2159,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_idx_attr_nest"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
@@ -2502,6 +2512,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( all array j for j in i.dance end) FOR i in %s END,hobbies.hobby,department,name) USING %s" % (
                     idx, bucket.name, "hobbies.hobby", self.index_type)
@@ -3151,6 +3163,8 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
 
     def test_between_spans(self):
+        if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         for bucket in self.buckets:
             self.query = 'create index ix5 on %s(x)' % bucket.name
             self.run_cbq_query()
@@ -3309,6 +3323,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
              created_indexes = []
              try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_inner_join"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.city for j in i end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "address", self.index_type)
@@ -3502,6 +3518,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "iregex"
                 self.query = " CREATE INDEX %s ON %s( DISTINCT ARRAY REGEXP_LIKE(v.os,%s)  FOR v IN VMs END,VMs )  USING %s" % (
                   idx, bucket.name,"'ub%'", self.index_type)
@@ -4005,6 +4023,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     view_name = "my_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING GSI" % (
@@ -4025,6 +4045,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     view_name = "tuq_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s)  USING GSI" % (view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
@@ -4173,6 +4195,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 self.query = "CREATE INDEX %s ON %s(VMs, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
@@ -4192,6 +4216,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 self.query = "CREATE INDEX %s ON %s(VMs, join_yr)  USING %s" % (index_name, bucket.name,self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
@@ -4211,6 +4237,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_meta"
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 self.query = "CREATE INDEX %s ON %s(meta(%s).id, name)  USING %s" % (index_name, bucket.name, bucket.name,self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
@@ -4235,6 +4263,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindex%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
@@ -4272,6 +4302,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name)  USING %s" % (index_name, bucket.name,self.index_type)
@@ -4294,6 +4326,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithwhere%s" % ind
                     self.query = "CREATE INDEX %s ON %s(email, VMs, join_day) where join_day > 10 USING %s" % (index_name, bucket.name,self.index_type)
@@ -4333,6 +4367,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithlimit%s" % ind
                     self.query = "CREATE INDEX %s ON %s(skills[0], join_yr, VMs[0].os,name) where join_yr =2010 USING %s" % (index_name, bucket.name,self.index_type)
@@ -5685,6 +5721,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name, project)  USING %s" % (index_name, bucket.name,self.index_type)
