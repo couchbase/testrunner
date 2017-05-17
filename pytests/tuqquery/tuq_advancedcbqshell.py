@@ -1,10 +1,15 @@
 import paramiko
 from membase.api.rest_client import RestConnection
 import testconstants
+import time
 import json
+import logger
+import os
+from subprocess import Popen, PIPE
 from remote.remote_util import RemoteMachineShellConnection
 from tuq import QueryTests
 
+log = logger.Logger.get_logger()
 
 class AdvancedQueryTests(QueryTests):
     def setUp(self):
@@ -42,7 +47,7 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside(self.cbqpath,'\quit','','','','','','')
+                    o = self.execute_commands_inside(self.cbqpath,'\quit','','','','','','')
                     if self.analytics:
                         self.query = '\quit'
                         o = self.run_cbq_query()
@@ -57,12 +62,13 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside(self.cbqpath,'\quit1','','','','','')
+                    o = self.execute_commands_inside(self.cbqpath,'\quit1','','','','','')
                     if self.analytics:
                         self.query = '\quit1'
                         o = self.run_cbq_query()
                         print o
-                    self.assertTrue("Commanddoesnotexist" in o)
+                    print o
+                    self.assertTrue("Command does not exist" in o)
                 finally:
                     shell.disconnect()
 
@@ -71,10 +77,9 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside('%s/cbq  -q -ne' % (self.path),'select * from %s' % bucket.name,'','','','','')
-                    self.assertTrue("Notconnectedtoanycluster" in o)
-                    o = shell.execute_commands_inside('%s/cbq -q -ne' % (self.path),'\SET','','','','','')
-                    print o
+                    o = self.execute_commands_inside('%s/cbq  -q -ne' % (self.path),'select * from %s' % bucket.name,'','','','','')
+                    self.assertTrue("Not connected to any cluster" in o)
+                    o = self.execute_commands_inside('%s/cbq -q -ne' % (self.path),'\SET','','','','','')
                     if self.analytics:
                         self.query = '\SET'
                         o = self.run_cbq_query()
@@ -91,7 +96,7 @@ class AdvancedQueryTests(QueryTests):
             password = self.rest.password
             try:
                 queries = ['\set -timeout "10ms";',"select * from default;"]
-                o = shell.execute_commands_inside(self.cbqpath,
+                o = self.execute_commands_inside(self.cbqpath,
                                                   '',queries,'','','','')
                 if self.analytics:
                     self.query = '\set -timeout "10ms"'
@@ -102,6 +107,14 @@ class AdvancedQueryTests(QueryTests):
                 self.assertTrue("timeout" in o)
             finally:
                 shell.disconnect()
+
+    def test_exit_on_error(self):
+        shell = RemoteMachineShellConnection(self.master)
+        queries = ['\set 1']
+        o = self.execute_commands_inside(self.cbqpath + ' -exit-on-error', '', queries, '',
+                                          '', '', '')
+        import pdb; pdb.set_trace()
+        print o
 
     # difference combinations of username/password and creds
     def check_onesaslbucket_auth(self):
@@ -224,65 +237,57 @@ class AdvancedQueryTests(QueryTests):
     def test_version(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            o = shell.execute_commands_inside('%s/cbq --version' % (self.path),'','','','','','' )
+            o = self.execute_commands_inside('%s/cbq --version' % (self.path),'','','','','','' )
             print o
-            o = shell.execute_commands_inside('%s/cbq -s="\HELP VERSION"' % (self.path),'','','','','','' )
+            o = self.execute_commands_inside('%s/cbq -s="\HELP VERSION"' % (self.path),'','','','','','' )
             print o
 
     def test_pretty_false(self):
         shell = RemoteMachineShellConnection(self.master)
         queries = ['\SET -pretty true;',
                    'select * from default limit 5;']
-        pretty = shell.execute_commands_inside(self.cbqpath,'',queries,'','','','')
+        pretty = self.execute_commands_inside(self.cbqpath,'',queries,'','','','')
         pretty_json = json.loads(pretty)
         pretty_size = pretty_json['metrics']['resultSize']
         queries = ['\SET -pretty false;',
                    'select * from default limit 5;']
-        ugly = shell.execute_commands_inside(self.cbqpath, '', queries, '', '', '', '')
+        ugly = self.execute_commands_inside(self.cbqpath, '', queries, '', '', '', '')
         ugly_json = json.loads(ugly)
         ugly_size = ugly_json['metrics']['resultSize']
         self.assertTrue(pretty_size > ugly_size)
 
-    #
-    # def test_invalid_input_url(self):
-    #
     def test_connect_disconnect(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ['\connect http://localhost:8091;','drop primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
                 # wrong disconnect
                 queries = ['\disconnect http://localhost:8091;','create primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                # o currently comes back as status:FAIL
-                self.assertTrue("Toomanyinputargumentstocommand" in o)
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                self.assertTrue("Too many input arguments to command" in o)
                 #wrong port
                 queries = ['\connect http://localhost:8097;','create primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                # o currently comes back as status:FAIL
-                self.assertTrue("Connectionfailed" in o)
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                self.assertTrue("Connection failed" in o)
                 #wrong url including http
                 queries = ['\connect http://localhost345:8097;','create primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                # o currently comes back as status:FAIL
-                self.assertTrue("Connectionfailed" in o)
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                self.assertTrue("Connection failed" in o)
                 #wrong url not including http
                 queries = ['\connect localhost3458097;','create primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                # o currently comes back as status:FAIL
-                self.assertTrue("InvalidinputURLmissingportinaddresslocalhost" in o)
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                self.assertTrue("no such host" in o)
                 queries = ['\disconnect','drop primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                # o currently comes back as status:FAIL
-                self.assertTrue("Toomanyinputargumentstocommand" in o)
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                self.assertTrue("Too many input arguments to command" in o)
                 queries = ['\disconnect','create primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                #o currently comes back as status:FAIL
-                self.assertTrue("Toomanyinputargumentstocommand" in o)
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                self.assertTrue("Too many input arguments to command" in o)
                 queries = ['\connect http://localhost:8091;','create primary index on bucketname;','drop primary index on bucketname;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                self.assertTrue("GSICreatePrimaryIndex()-cause:Index#primaryalreadyexists." in o)
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                print o
+                self.assertTrue("GSI CreatePrimaryIndex() - cause: Index #primary already exists." in o)
 
     def test_history(self):
          for server in self.servers:
@@ -308,38 +313,31 @@ class AdvancedQueryTests(QueryTests):
                     queries6 = ["\set $a /abcde;"]
 
                 queries.extend(['\ALIAS tempcommand create primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand2 select * from bucketname limit 1;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;','\echo histfile;'])
-                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 if type2.lower() == "linux":
                     self.assertTrue('/tmp/history' in o)
 
                 queries2.extend(["\set histfile \\\\p;","\echo histfile;","\set histfile '\\\\p';","\echo histfile;"])
-                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries2,'','',bucket.name,'' )
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries2,'','',bucket.name,'' )
 
                 if type2.lower() == "linux":
                     self.assertTrue('/tmp/history2' in o)
                     self.assertTrue('\\p' in o)
 
                 queries3.extend(["\set histfile $a;","\echo histfile;"])
-                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries3,'','',bucket.name,'' )
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries3,'','',bucket.name,'' )
 
 
                 queries4 = ["\push histfile newhistory.txt;","\echo histfile;",'\ALIAS tempcommand create primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand2 select * from bucketname limit 1;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;','\echo histfile;']
-                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries4,'','',bucket.name,'' )
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries4,'','',bucket.name,'' )
 
 
                 queries5.append("\echo $a;")
-                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries5,'','',bucket.name,'' )
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries5,'','',bucket.name,'' )
 
 
                 queries6.append("\echo $a;")
-                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries6,'','',bucket.name,'' )
-
-
-
-
-
-
-
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries6,'','',bucket.name,'' )
 
     def test_alias_and_echo(self):
         for server in self.servers:
@@ -347,43 +345,34 @@ class AdvancedQueryTests(QueryTests):
             type2 = shell.extract_remote_info().distribution_type
             for bucket in self.buckets:
                 queries = ["\ALIAS tempcommand create primary index on bucketname;","\\\\tempcommand;",'\ALIAS tempcommand2 select *,email from bucketname limit 10;',"\\\\tempcommand2;",'\ALIAS;','\echo \\\\tempcommand1;','\echo \\\\tempcommand2;']
-                o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
-                self.assertTrue("ERROR141:Aliasdoesnotexisttempcommand1" in o)
-                #print o
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                self.assertTrue("ERROR 141 : Alias does not exist  tempcommand1" in o)
                 queries = ['\ALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand create primary index on bucketname;','\ALIAS tempcommand2 drop primary index on bucketname;','\\\\tempcommand;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;']
-                o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
-                #print o
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 queries = ['\UNALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;']
-                o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 if type2.lower() == "windows":
                    print o
                 else:
-                    self.assertTrue("Aliasdoesnotexist" in o)
-                #print o
+                    self.assertTrue("Alias does not exist" in o)
                 queries = ['\UNALIAS tempcommand;','\\\\tempcommand;']
-                o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
-                self.assertTrue("Aliasdoesnotexist" in o)
-                #print o
-
-
-
+                o = self.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                self.assertTrue("Alias does not exist" in o)
 
     def test_positional_params(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ['\SET -args [7, 0,1,2011];','prepare temp from SELECT tasks_points.task1 AS task from bucketname WHERE join_mo>$1 GROUP BY tasks_points.task1 HAVING COUNT(tasks_points.task1) > $2 AND  (MIN(join_day)=$3 OR MAX(join_yr=$4)) ORDER BY tasks_points.task1 ;','execute temp;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name ,'')
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name ,'')
                 # Test neeeds to be finished
-
-
 
     def test_named_params(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ['\SET -$join_day 2;','\SET -$project "AB";','prepare temp from select name, tasks_ids,join_day from bucketname where join_day>=$join_day and tasks_ids[0] IN (select ARRAY_AGG(DISTINCT task_name) as names from bucketname d use keys ["test_task-1", "test_task-2"] where project!=$project)[0].names;','execute temp;']
-                o = shell.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
+                o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
                 # Test needs to be finished
 
     def test_push_pop_set(self):
@@ -392,26 +381,26 @@ class AdvancedQueryTests(QueryTests):
             for bucket in self.buckets:
                 i=1
                 pushqueries=['\set -$project "AB";','\push -$project "CD";','\push -$project "EF";','\push -$project "GH";','select $project;']
-                o = shell.execute_commands_inside(self.cbqpath,'',pushqueries,'','',bucket.name,'' )
-                self.assertTrue('{"$1":"GH"}' in o)
+                o = self.execute_commands_inside(self.cbqpath,'',pushqueries,'','',bucket.name,'' )
+                self.assertTrue('{"$1": "GH"}' in o)
                 pushqueries.append('\pop;')
                 pushqueries.append('select $project;')
-                o = shell.execute_commands_inside(self.cbqpath,'',pushqueries,'','',bucket.name,'' )
-                self.assertTrue('{"$1":"EF"}' in o)
+                o = self.execute_commands_inside(self.cbqpath,'',pushqueries,'','',bucket.name,'' )
+                self.assertTrue('{"$1": "EF"}' in o)
 
                 popqueries=['\pop;','select $project;']
-                o = shell.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
-                self.assertTrue('Errorevaluatingprojection' in o)
+                o = self.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
+                self.assertTrue('Error evaluating projection' in o)
 
                 popqueries.extend(['\push -$project "CD";','\push -$project "EF";','\push -$project "GH";','\pop -$project;','\pop;','select $project;'])
-                o = shell.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
-                self.assertTrue('{"$1":"CD"}' in o)
+                o = self.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
+                self.assertTrue('{"$1": "CD"}' in o)
                 popqueries.append('\pop -$project;')
                 popqueries.append('select $project;')
-                self.assertTrue('Errorevaluatingprojection' in o)
+                self.assertTrue('Error evaluating projection' in o)
                 popqueries.extend(['\set -$project "AB";','\push -$project "CD";','\push -$project "EF";','\pop;','\unset -$project;','select $project;'])
-                o = shell.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
-                self.assertTrue('Errorevaluatingprojection' in o)
+                o = self.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
+                self.assertTrue('Error evaluating projection' in o)
 
 
                 while(i<15):
@@ -429,7 +418,7 @@ class AdvancedQueryTests(QueryTests):
                     pushqueries.append('execute temp;')
                     pushqueries.append('\set;')
                     i=i+1
-                    o = shell.execute_commands_inside(self.cbqpath,'',pushqueries,'','',bucket.name,'' )
+                    o = self.execute_commands_inside(self.cbqpath,'',pushqueries,'','',bucket.name,'' )
                 i=1
                 popqueries =[]
                 while(i<10):
@@ -443,7 +432,7 @@ class AdvancedQueryTests(QueryTests):
                     popqueries.append('prepare temp from select tasks_points.task1 AS task from bucketname where join_day>=$join_day and  join_mo>$1 GROUP BY tasks_points.task1 HAVING COUNT(tasks_points.task1) > $2 AND  (MIN(join_day)=$3 OR MAX(join_yr=$4));')
                     popqueries.append('execute temp;')
                     i=i+1
-                    o = shell.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
+                    o = self.execute_commands_inside(self.cbqpath,'',popqueries,'','',bucket.name,'' )
 
     def test_redirect(self):
         for server in self.servers:
@@ -460,10 +449,101 @@ class AdvancedQueryTests(QueryTests):
                 print o
 
 
-#select * from,select multiple columns, select *,multiple columns from--same results
-                    #add node,rebalance,rem
-    # def test_file_input_and_source
+    def execute_commands_inside(self, main_command, query, queries, bucket1, password, bucket2, source,
+                                subcommands=[], min_output_size=0,
+                                end_msg='', timeout=250):
+        shell = RemoteMachineShellConnection(self.master)
+        shell.extract_remote_info()
+        filename = "/tmp/test2"
+        iswin = False
 
+        if shell.info.type.lower() == 'windows':
+            iswin = True
+            filename = "/cygdrive/c/tmp/test.txt"
 
+        filedata = ""
+        if not (query == ""):
+            main_command = main_command + " -s=\"" + query + '"'
+        elif (shell.remote and not (queries == "")):
+            sftp = shell._ssh_client.open_sftp()
+            filein = sftp.open(filename, 'w')
+            for query in queries:
+                filein.write(query)
+                filein.write('\n')
+            fileout = sftp.open(filename, 'r')
+            filedata = fileout.read()
+            fileout.close()
+        elif not (queries == ""):
+            f = open(filename, 'w')
+            for query in queries:
+                f.write(query)
+                f.write('\n')
+            f.close()
+            fileout = open(filename, 'r')
+            filedata = fileout.read()
+            fileout.close()
 
+        newdata = filedata.replace("bucketname", bucket2)
+        newdata = newdata.replace("user", bucket1)
+        newdata = newdata.replace("pass", password)
+        newdata = newdata.replace("bucket1", bucket1)
 
+        newdata = newdata.replace("user1", bucket1)
+        newdata = newdata.replace("pass1", password)
+        newdata = newdata.replace("bucket2", bucket2)
+        newdata = newdata.replace("user2", bucket2)
+        newdata = newdata.replace("pass2", password)
+
+        if (shell.remote and not (queries == "")):
+            f = sftp.open(filename, 'w')
+            f.write(newdata)
+            f.close()
+        elif not (queries == ""):
+            f = open(filename, 'w')
+            f.write(newdata)
+            f.close()
+        if not (queries == ""):
+            if (source):
+                if iswin:
+                    main_command = main_command + "  -s=\"\SOURCE " + 'c:\\\\tmp\\\\test.txt'
+                else:
+                    main_command = main_command + "  -s=\"\SOURCE " + filename + '"'
+            else:
+                if iswin:
+                    main_command = main_command + " -f=" + 'c:\\\\tmp\\\\test.txt'
+                else:
+                    main_command = main_command + " -f=" + filename
+
+        log.info("running command on {0}: {1}".format(self.master.ip, main_command))
+        output = ""
+        if shell.remote:
+            stdin, stdout, stderro = shell._ssh_client.exec_command(main_command)
+            time.sleep(20)
+            count = 0
+            for line in stdout.readlines():
+                if (count >= 0):
+                    output += line.strip()
+                    output = output.strip()
+                    if "Inputwasnotastatement" in output:
+                        output = "status:FAIL"
+                        break
+                    if "timeout" in output:
+                        output = "status:timeout"
+                else:
+                    count += 1
+            stdin.close()
+            stdout.close()
+            stderro.close()
+        else:
+            p = Popen(main_command, shell=True, stdout=PIPE, stderr=PIPE)
+            stdout, stderro = p.communicate()
+            output = stdout
+            print output
+            time.sleep(1)
+        if (shell.remote and not (queries == "")):
+            sftp.remove(filename)
+            sftp.close()
+        elif not (queries == ""):
+            os.remove(filename)
+
+        return (output)

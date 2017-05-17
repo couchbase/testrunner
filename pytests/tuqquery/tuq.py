@@ -226,7 +226,7 @@ class QueryTests(BaseTestCase):
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.start_server()
-            time.sleep(20)
+            time.sleep(30)
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 result = remote.execute_command(
@@ -236,7 +236,7 @@ class QueryTests(BaseTestCase):
                 new_list = [string.strip() for string in result[0]]
                 concat_string = ''.join(new_list)
                 json_output = json.loads(concat_string)
-                print json_output['metrics']['resultCount']
+                self.log.info(json_output['metrics']['resultCount'])
                 self.assertTrue(json_output['metrics']['resultCount'] == result_count)
         finally:
             self.rest.delete_bucket("beer-sample")
