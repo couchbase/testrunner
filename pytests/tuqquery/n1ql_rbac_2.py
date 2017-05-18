@@ -124,9 +124,14 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output), "Able to select from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Query executed successfully")
+            self.log.info("Query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Query executed successfully")
 
     def test_update(self):
         self.create_users()
@@ -220,9 +225,14 @@ class RbacN1QL(QueryTests):
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to build index on {0} as user {1}".
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output), "Able to build index on {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Build Query executed successfully")
+            self.log.info("Build Query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to build index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Build Query executed successfully")
 
     def test_create_drop_index(self):
         self.create_users()
@@ -242,9 +252,14 @@ class RbacN1QL(QueryTests):
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to build index on {0} as user {1}".
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output), "Able to build index on {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Drop Query executed successfully")
+            self.log.info("Drop Query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to build index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Drop Query executed successfully")
 
     def test_prepare(self):
         self.create_users()
@@ -268,9 +283,14 @@ class RbacN1QL(QueryTests):
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to infer from {0} as user {1}".
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output), "Able to infer from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Infer query executed successfully")
+            self.log.info("Infer query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to infer from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Infer query executed successfully")
 
     def test_explain(self):
         self.create_users()
@@ -281,9 +301,14 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to explain select from {0} as user {1}".
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output), "Able to explain select from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Explain query executed successfully")
+            self.log.info("Explain query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to explain select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Explain query executed successfully")
 
     def test_create_user_roles(self):
         self.create_users()
