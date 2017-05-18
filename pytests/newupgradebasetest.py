@@ -605,7 +605,7 @@ class NewUpgradeBaseTest(QueryHelperTests):
     def post_upgrade(self, servers):
         print("before post_upgrade")
         self.ddocs_num = 0
-        self.add_built_in_server_user(node=self.master)
+        self.add_built_in_server_user()
         self.create_ddocs_and_views()
         kv_tasks = self.async_run_doc_ops()
         operation_type = self.input.param("post_upgrade", "")
