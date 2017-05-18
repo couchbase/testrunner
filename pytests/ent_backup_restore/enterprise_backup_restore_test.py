@@ -932,6 +932,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rolelist = [{"id": "%s" % self.cluster_new_user,
                      "name": "%s" % self.cluster_new_user,
                      "roles": "%s" % self.cluster_new_role}]
+        users_can_backup_all = ["admin", "cluster_admin", "ro_admin",
+                                    "bucket_full_access[*]", "bucket_admin[*]",
+                                    "data_backup[*]"]
+        users_can_not_backup_all = ["views_admin[*]", "replication_admin",
+                                    "replication_target[*]", "data_monitoring[*]",
+                                    "data_writer[*]", "data_reader[*]",
+                                    "data_dcp_reader[*]", "fts_searcher[*]",
+                                    "fts_admin[*]", "query_manage_index[*]"]
         try:
             status = self.add_built_in_server_user(testuser, rolelist)
             if not status:
@@ -939,14 +947,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                          % (self.cluster_new_user,
                                             self.cluster_new_role))
             output, error = self.backup_cluster()
-            users_can_backup_all = ["admin", "cluster_admin", "ro_admin",
-                                    "bucket_full_access[*]", "bucket_admin[*]",
-                                    "data_backup[*]"]
-            users_can_not_backup_all = ["views_admin[*]", "replication_admin",
-                                        "replication_target[*]", "data_monitoring[*]",
-                                        "data_writer[*]", "data_reader[*]",
-                                        "data_dcp_reader[*]", "fts_searcher[*]",
-                                        "fts_admin[*]", "query_manage_index[*]"]
             success_msg = ['Backup successfully completed']
             fail_msg = "Error backing up cluster: Forbidden"
             if self.cluster_new_role in users_can_backup_all:
