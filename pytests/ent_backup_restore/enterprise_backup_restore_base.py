@@ -294,9 +294,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_restore(self):
         if self.restore_only:
             if self.create_fts_index:
-                self.backups.append("2017-05-08T23_29_03.982123245-07_00")
+                self.backups.append("2017-05-18T13_40_30.842368123-07_00")
             else:
-                self.backups.append("2017-05-09T09_31_17.22809618-07_00")
+                self.backups.append("2017-05-18T11_55_22.009680763-07_00")
         try:
             backup_start = self.backups[int(self.backupset.start) - 1]
         except IndexError:

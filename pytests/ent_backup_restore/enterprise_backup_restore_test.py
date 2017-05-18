@@ -932,14 +932,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rolelist = [{"id": "%s" % self.cluster_new_user,
                      "name": "%s" % self.cluster_new_user,
                      "roles": "%s" % self.cluster_new_role}]
-        users_can_backup_all = ["admin", "cluster_admin", "ro_admin",
-                                    "bucket_full_access[*]", "bucket_admin[*]",
+        users_can_backup_all = ["admin", "cluster_admin", "bucket_full_access[*]",
+                                "bucket_admin[*]",
                                     "data_backup[*]"]
         users_can_not_backup_all = ["views_admin[*]", "replication_admin",
                                     "replication_target[*]", "data_monitoring[*]",
                                     "data_writer[*]", "data_reader[*]",
                                     "data_dcp_reader[*]", "fts_searcher[*]",
-                                    "fts_admin[*]", "query_manage_index[*]"]
+                                    "fts_admin[*]", "query_manage_index[*]",
+                                    "ro_admin"]
         try:
             status = self.add_built_in_server_user(testuser, rolelist)
             if not status:
@@ -948,7 +949,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                             self.cluster_new_role))
             output, error = self.backup_cluster()
             success_msg = ['Backup successfully completed']
-            fail_msg = "Error backing up cluster: Forbidden"
+            fail_msg = "Error backing up cluster:"
             if self.cluster_new_role in users_can_backup_all:
                 if success_msg != output:
                     self.fail("User %s failed to backup data.\n"
@@ -979,10 +980,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 print "Exception error:   ", e
             if self.cluster_new_role in users_can_not_backup_all:
                 error_found = False
+                error_messages = ["Error backing up cluster: Forbidden",
+                                  "Could not find file shard_0.fdb",
+                                  "Error backing up cluster: Invalid permissions",
+                                  "Database file is empty"]
                 if self.do_verify:
-                    if "Error backing up cluster: Forbidden" in str(e):
-                        error_found = True
-                    if "Could not find file shard_0.fdb" in str(e):
+                    if str(e) in error_messages:
                         error_found = True
                     if not error_found:
                         raise Exception("cbbackupmgr does not block user role: %s to backup" \
@@ -1031,11 +1034,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         fts = ""
         if self.create_fts_index:
             fts = "-fts"
-        shell.execute_command("cp entbackup%s.zip %s " % (fts, self.tmp_path))
-        output, error = shell.execute_command("cd %s; unzip entbackup%s.zip "\
-                                                      % (self.tmp_path, fts))
+        shell.execute_command("cp -r entbackup%s %s/entbackup" % (fts, self.tmp_path))
+        output, error = shell.execute_command("cd %s/backup/*/*/data; "\
+                                              "unzip shar*.zip"\
+                                             % self.backupset.directory)
         shell.log_command_output(output, error)
-        shell.execute_command("echo '' > %s/logs/backup.log" % self.backupset.directory)
+        shell.execute_command("echo '' > {0}/logs/backup.log" \
+                              .format(self.backupset.directory))
         shell.disconnect()
         status, _, message = self.backup_list()
         if not status:
@@ -1067,7 +1072,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                          "data_dcp_reader[*]", "fts_searcher[*]",
                                          "fts_admin[*]", "query_manage_index[*]"]
             success_msg = ['Restore completed successfully']
-            fail_msg = "Error restore cluster: Forbidden"
+            fail_msg = "Error restoring cluster: Forbidden"
             rest = RestConnection(self.master)
             actual_keys = rest.get_active_key_count("default")
             print "\nActual keys in default bucket: %s \n" % actual_keys
@@ -1093,9 +1098,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                             self.cluster_new_role))
                 if fail_msg not in output[0]:
                     self.fail("cbbackupmgr failed to block user to restore")
-        except Exception as e:
-            if e:
-                print e
         finally:
             self.log.info("Delete new create user: %s " % self.cluster_new_user)
             shell = RemoteMachineShellConnection(self.backupset.backup_host)
