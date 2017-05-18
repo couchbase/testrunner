@@ -110,7 +110,10 @@ def append_test(tests, name):
     """
         Some tests carry special chars, need to skip it
     """
-    if "test_restore_with_filter_regex" not in name and name.find('*') > 0:
+    if "test_restore_with_filter_regex" not in name and \
+        "test_restore_with_rbac" not in name and \
+        "test_backup_with_rbac" not in name and \
+         name.find('*') > 0:
         for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
             tests.append(prefix + '.' + t._testMethodName)
     else:
