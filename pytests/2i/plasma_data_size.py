@@ -80,16 +80,16 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                 query_definitions=[query_definition])
         self.sleep(30)
         intervals = [["d", "e", "f"], ["j", "k", "l", "m"], ["p", "q", "r", "s"] ]
-        for doc_gen in generators:
+        for doc_gen in self.full_docs_list:
             for interval in intervals:
                 for character in interval:
-                    if doc_gen.name.lower().startswith(character):
+                    if doc_gen["name"].lower().startswith(character):
                         for bucket in buckets:
                             url = "couchbase://{0}/{1}".format(self.master.ip,
                                                                bucket.name)
-                            cb = Bucket(url)
-                            cb.remove(doc_gen._id)
-                            generators.remove(doc_gen)
+                            cb = Bucket(url, username=bucket.name, password="password")
+                            cb.remove(doc_gen["_id"])
+                            self.full_docs_list.remove(doc_gen)
                 if not self.multi_intervals:
                     break
         self.multi_query_using_index(buckets=buckets,
@@ -117,16 +117,16 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                 query_definitions=[query_definition])
         self.sleep(30)
         intervals = [["p", "q", "r", "s"], ["j", "k", "l", "m"], ["d", "e", "f"]]
-        for doc_gen in generators:
+        for doc_gen in self.full_docs_list:
             for interval in intervals:
                 for character in interval:
-                    if doc_gen.name.lower().startswith(character):
+                    if doc_gen["name"].lower().startswith(character):
                         for bucket in buckets:
                             url = "couchbase://{0}/{1}".format(self.master.ip,
                                                                bucket.name)
-                            cb = Bucket(url)
-                            cb.remove(doc_gen._id)
-                            generators.remove(doc_gen)
+                            cb = Bucket(url, username=bucket.name, password="password")
+                            cb.remove(doc_gen["_id"])
+                            self.full_docs_list.remove(doc_gen)
                 if not self.multi_intervals:
                     break
         self.multi_query_using_index(buckets=buckets,
@@ -214,7 +214,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                          query_definitions=[query_definition])
             for i in range(10):
                 name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id_size = random.choice(range(1000, 5000))
+                id_size = random.choice(range(100, 5000))
                 long_str = "".join(random.choice(lowercase) for k in range(id_size))
                 id = "{0}-{1}".format(name, long_str)
                 age = random.choice(range(4, 19))
@@ -294,6 +294,12 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                             len(self.buckets)+len(buckets))
         self._create_buckets(server=self.master, bucket_list=buckets,
                              bucket_size=bucket_size)
+        testuser = []
+        rolelist = []
+        for bucket in buckets:
+            testuser.append({'id': bucket, 'name': bucket, 'password': 'password'})
+            rolelist.append({'id': bucket, 'name': bucket, 'roles': 'admin'})
+        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
         buckets = []
         for bucket in self.buckets:
             if bucket.name.startswith("plasma_dgm"):
