@@ -900,7 +900,7 @@ class QueryCurlTests(QueryTests):
 
         error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.n1ql.curl!execute.Addrole" \
                     "QueryExternalAccesstoallowthequerytorun."
-        cbqpath = '%scbq' % self.path + " -u 'no_curl' -p 'password'"
+        cbqpath = '%scbq' % self.path + " -q -u 'no_curl' -p 'password'"
         n1ql_query = 'select * from \`beer-sample\` limit 1'
         insert_query ="insert into default (key UUID(), value curl_result.results[0].\`beer-sample\`) "
         query = "select curl("+ self.query_service_url +", "
