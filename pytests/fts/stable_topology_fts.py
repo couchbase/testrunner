@@ -1392,19 +1392,18 @@ class StableTopFTS(FTSBaseTest):
         """
         Test if fuzzy queries work fine
         """
-        test_data = ["{\\\"text\\\":\\\"simmer\\\"}",
-                     "{\\\"text\\\":\\\"dimmer\\\"}",
-                     "{\\\"text\\\":\\\"hammer\\\"}",
-                     "{\\\"text\\\":\\\"shimmer\\\"}",
-                     "{\\\"text\\\":\\\"rubber\\\"}",
-                     "{\\\"text\\\":\\\"jabber\\\"}",
-                     "{\\\"text\\\":\\\"kilmer\\\"}",
-                     "{\\\"text\\\":\\\"year\\\"}",
-                     "{\\\"text\\\":\\\"mumma\\\"}",
-                     "{\\\"text\\\":\\\"tool stemmer\\\"}",
-                     "{\\\"text\\\":\\\"he is weak at grammar\\\"}",
-                     "{\\\"text\\\":\\\"sum of all the rows\\\"}"
-                     ]
+        test_data = [{"text":"simmer"},
+                     {"text":"dimmer"},
+                     {"text":"hammer"},
+                     {"text":"shimmer"},
+                     {"text":"rubber"},
+                     {"text":"jabber"},
+                     {"text":"kilmer"},
+                     {"text":"year"},
+                     {"text":"mumma"},
+                     {"text":"tool stemmer"},
+                     {"text":"he is weak at grammar"},
+                     {"text":"sum of all the rows"}]
 
         self.create_test_dataset(self._master, test_data)
         index = self.create_index(bucket=self._cb_cluster.get_bucket_by_name(
