@@ -95,7 +95,7 @@ class dataRoles():
     def _data_backup_master():
         per_set = {
             "name": "Data Backup",
-            "permissionSet": "read!True,write!True,statsRead!False,ReadMeta!False,WriteMeta!False"}
+            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!False,WriteMeta!False"}
         return per_set
 
     @staticmethod
