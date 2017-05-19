@@ -1034,6 +1034,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         fts = ""
         if self.create_fts_index:
             fts = "-fts"
+        if "-" in self.cluster_new_role:
+            self.cluster_new_role = self.cluster_new_role.replace("-", ",")
         shell.execute_command("cp -r entbackup%s %s/entbackup" % (fts, self.tmp_path))
         output, error = shell.execute_command("cd %s/backup/*/*/data; "\
                                               "unzip shar*.zip"\
@@ -1065,20 +1067,21 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
             users_can_restore_all = ["admin", "cluster_admin",
                                     "bucket_full_access[*]", "bucket_admin[*]",
-                                    "data_backup[*]", "replication_target[*]"]
+                                    "data_backup[*]"]
             users_can_not_restore_all = ["views_admin[*]", "ro_admin",
                                          "replication_admin", "data_monitoring[*]",
                                          "data_writer[*]", "data_reader[*]",
                                          "data_dcp_reader[*]", "fts_searcher[*]",
-                                         "fts_admin[*]", "query_manage_index[*]"]
+                                         "fts_admin[*]", "query_manage_index[*]",
+                                         "replication_target[*]"]
             success_msg = ['Restore completed successfully']
-            fail_msg = "Error restoring cluster: Forbidden"
+            fail_msg = "Error restoring cluster:"
             rest = RestConnection(self.master)
             actual_keys = rest.get_active_key_count("default")
             print "\nActual keys in default bucket: %s \n" % actual_keys
             if self.cluster_new_role in users_can_restore_all:
                 if success_msg != output:
-                    self.fail("User %s failed to restore data.\n"
+                    self.fail("User with roles: %s failed to restore data.\n"
                               "Here is the output %s " % \
                               (self.cluster_new_role, output))
 
@@ -1088,9 +1091,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if set(roles) & set(users_can_not_restore_all) and \
                    set(roles) & set(users_can_restore_all):
                     if success_msg != output:
-                        self.fail("User %s failed to restore data with roles: %s. "\
+                        self.fail("User: %s failed to restore data with roles: %s. "\
                                   "Here is the output %s " % \
-                                  (self.cluster_new_role, roles, output))
+                                  (self.cluster_new_user, roles, output))
+                    if int(actual_keys) != 1000:
+                        self.fail("User: %s failed to restore data with roles: %s. "\
+                                  "Here is the actual docs in bucket %s " % \
+                                  (self.cluster_new_user, roles, actual_keys))
             elif self.cluster_new_role in users_can_not_restore_all:
                 if int(actual_keys) == 1000:
                     self.fail("User: %s with role: %s should not allow to restore data"\
