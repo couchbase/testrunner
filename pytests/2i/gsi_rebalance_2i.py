@@ -165,6 +165,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="before")
         self.sleep(30)
         services_in = ["index"]
+        index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
         # rebalance in a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in)
@@ -174,7 +175,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.sleep(2)
         try:
             # when rebalance is in progress, run create index
-            index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
             self.n1ql_helper.run_cbq_query(
                 query="CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {'defer_build': True};",
                 server=self.n1ql_node)
@@ -189,7 +189,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
-    # rerun once MB-22886 is fixed
     def test_drop_index_when_gsi_rebalance_in_progress(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.run_operation(phase="before")
@@ -207,10 +206,10 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self._drop_index(self.query_definitions[0], self.buckets[0])
         except Exception, ex:
             log.info(str(ex))
-            if "Indexer Cannot Process Create Index - Rebalance In Progress" not in str(ex):
-                self.fail("index creation did not fail with expected error : {0}".format(str(ex)))
+            if "Indexer Cannot Process Drop Index - Rebalance In Progress" not in str(ex):
+                self.fail("drop index did not fail with expected error : {0}".format(str(ex)))
         else:
-            self.fail("drop index did not fail as expected: See MB-22886 for more details")
+            self.fail("drop index did not fail as expected during rebalance")
         self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1077,7 +1076,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         log.info(stats_map_after_rebalance)
         self.run_operation(phase="after")
 
-    # TODO: See MB-23265. Rerun once that is fixed.
     def test_build_index_when_kv_rebalance_in_progress(self):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         self.sleep(30)
