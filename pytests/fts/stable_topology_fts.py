@@ -29,7 +29,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_default_index(self):
         plan_params = self.construct_plan_params()
         self.load_data()
-        self.sleep(10, "waiting 10s after batch_load...")
+        self.wait_till_items_in_bucket_equal(self._num_items/2)
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
             self.wait_for_indexing_complete()
@@ -895,6 +895,7 @@ class StableTopFTS(FTSBaseTest):
     def test_boost_query_type(self):
         # Create bucket, create index
         self.load_data()
+        self.wait_till_items_in_bucket_equal(items=self._num_items/2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -910,8 +911,7 @@ class StableTopFTS(FTSBaseTest):
 
         # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
         # emp10000042. Should be the same
-        query = {"disjuncts": [{"match": "Safiya", "field": "name"},
-                               {"match": "Palmer", "field": "name"}]}
+        query = {"match": "Marketing", "field": "dept"}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
@@ -924,27 +924,26 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
                 score_before_boosting_doc1 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000071')
+                    contents=contents, doc_id=u'emp10000021')
                 score_before_boosting_doc2 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000042')
+                    contents=contents, doc_id=u'emp10000086')
 
                 self.log.info("Scores before boosting:")
                 self.log.info("")
-                self.log.info("emp10000071: %s", score_before_boosting_doc1)
-                self.log.info("emp10000042: %s", score_before_boosting_doc2)
+                self.log.info("emp10000021: %s", score_before_boosting_doc1)
+                self.log.info("emp10000086: %s", score_before_boosting_doc2)
 
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
 
         if not score_before_boosting_doc1 == score_before_boosting_doc2:
-            self.fail("Testcase failed: Scores for emp10000071 & emp10000042 "
+            self.fail("Testcase failed: Scores for emp10000021 & emp10000086 "
                       "are not equal before boosting")
 
-        # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
-        # emp10000042. emp10000071 score should have improved w.r.t. emp10000042
-        query = {"disjuncts": [{"match": "Safiya^2", "field": "name"},
-                               {"match": "Palmer", "field": "name"}]}
+        # Run Query w/o Boosting and compare the scores for Docs emp10000021 &
+        # emp10000086. emp10000021 score should have improved w.r.t. emp10000086
+        query = {"match": "Marketing^2", "field": "dept"}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
@@ -957,20 +956,20 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
                 score_after_boosting_doc1 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000071')
+                    contents=contents, doc_id=u'emp10000021')
                 score_after_boosting_doc2 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000042')
+                    contents=contents, doc_id=u'emp10000086')
 
                 self.log.info("Scores after boosting:")
                 self.log.info("")
-                self.log.info("emp10000071: %s", score_after_boosting_doc1)
-                self.log.info("emp10000042: %s", score_after_boosting_doc2)
+                self.log.info("emp10000021: %s", score_after_boosting_doc1)
+                self.log.info("emp10000086: %s", score_after_boosting_doc2)
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
 
         if not score_after_boosting_doc1 > score_after_boosting_doc2:
-            self.fail("Testcase failed: Boosting didn't improve score for emp10000071 w.r.t emp10000042")
+            self.fail("Testcase failed: Boosting didn't improve score for emp10000021 w.r.t emp10000086")
 
     def test_doc_id_query_type(self):
         # Create bucket, create index
@@ -1046,6 +1045,7 @@ class StableTopFTS(FTSBaseTest):
 
     def test_sorting_of_results(self):
         self.load_data()
+        self.wait_till_items_in_bucket_equal(self._num_items/2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -1137,6 +1137,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1193,6 +1194,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy fox and a brown fox\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1238,6 +1240,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1294,6 +1297,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1349,6 +1353,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1406,6 +1411,7 @@ class StableTopFTS(FTSBaseTest):
                      {"text":"sum of all the rows"}]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         index = self.create_index(bucket=self._cb_cluster.get_bucket_by_name(
                                       'default'),
                                   index_name="default_index")
@@ -1436,6 +1442,7 @@ class StableTopFTS(FTSBaseTest):
         max_matches = self._input.param("query_max_matches",10000000)
         show_results_from_item = self._input.param("show_results_from_item",0)
         self.load_data()
+        self.wait_till_items_in_bucket_equal(items = self._num_items/2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
