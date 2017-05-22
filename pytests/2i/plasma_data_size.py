@@ -80,6 +80,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                 query_definitions=[query_definition])
         self.sleep(30)
         intervals = [["d", "e", "f"], ["j", "k", "l", "m"], ["p", "q", "r", "s"] ]
+        temp_list = []
         for doc_gen in self.full_docs_list:
             for interval in intervals:
                 for character in interval:
@@ -89,9 +90,11 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                                                bucket.name)
                             cb = Bucket(url, username=bucket.name, password="password")
                             cb.remove(doc_gen["_id"])
-                            self.full_docs_list.remove(doc_gen)
+                            temp_list.append(doc_gen)
                 if not self.multi_intervals:
                     break
+        self.full_docs_list = [doc for doc in self.full_docs_list if doc not in temp_list]
+        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
         self.multi_query_using_index(buckets=buckets,
                                      query_definitions=[query_definition])
         self.sleep(30)
@@ -117,6 +120,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                 query_definitions=[query_definition])
         self.sleep(30)
         intervals = [["p", "q", "r", "s"], ["j", "k", "l", "m"], ["d", "e", "f"]]
+        temp_list = []
         for doc_gen in self.full_docs_list:
             for interval in intervals:
                 for character in interval:
@@ -126,9 +130,11 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                                                bucket.name)
                             cb = Bucket(url, username=bucket.name, password="password")
                             cb.remove(doc_gen["_id"])
-                            self.full_docs_list.remove(doc_gen)
+                            temp_list.append(doc_gen)
                 if not self.multi_intervals:
                     break
+        self.full_docs_list = [doc for doc in self.full_docs_list if doc not in temp_list]
+        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
         self.multi_query_using_index(buckets=buckets,
                                      query_definitions=[query_definition])
         self.sleep(30)
