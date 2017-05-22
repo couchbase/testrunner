@@ -67,7 +67,6 @@ class AdvancedQueryTests(QueryTests):
                         self.query = '\quit1'
                         o = self.run_cbq_query()
                         print o
-                    print o
                     self.assertTrue("Command does not exist" in o)
                 finally:
                     shell.disconnect()
@@ -108,13 +107,6 @@ class AdvancedQueryTests(QueryTests):
             finally:
                 shell.disconnect()
 
-    def test_exit_on_error(self):
-        shell = RemoteMachineShellConnection(self.master)
-        queries = ['\set 1']
-        o = self.execute_commands_inside(self.cbqpath + ' -exit-on-error', '', queries, '',
-                                          '', '', '')
-        import pdb; pdb.set_trace()
-        print o
 
     # difference combinations of username/password and creds
     def check_onesaslbucket_auth(self):
@@ -284,9 +276,8 @@ class AdvancedQueryTests(QueryTests):
                 queries = ['\disconnect','create primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
                 self.assertTrue("Too many input arguments to command" in o)
-                queries = ['\connect http://localhost:8091;','create primary index on bucketname;','drop primary index on bucketname;']
+                queries = ['\connect http://localhost:8091;','create primary index on bucketname;']
                 o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
-                print o
                 self.assertTrue("GSI CreatePrimaryIndex() - cause: Index #primary already exists." in o)
 
     def test_history(self):
