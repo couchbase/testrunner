@@ -2,7 +2,7 @@ import copy
 import json
 import os
 import random
-import string
+import string, re
 import time
 from threading import Thread
 
@@ -780,7 +780,58 @@ class CouchbaseCliTest(CliBaseTest):
             else:
                 self.log.info("Cluster name is set to '%s' " % settings["clusterName"])
 
+    def test_rebalance_display_bar(self):
+        """
+            Test display bar when rebalance and stop/start rebalance
+        """
+        server = copy.deepcopy(self.servers[0])
+        add_server = self.servers[1]
+        stop_rebalance = self.input.param("stop-rebalance", False)
+        rest = RestConnection(server)
+        self.default_bucket = True
+        self._bucket_creation()
+        cli = CouchbaseCLI(server, "cbadminbucket", "password")
+        output_add, error, msg = cli.server_add(add_server.ip, "Administrator",
+                                                "password", None, "data", None)
+        if "SUCCESS: Server added" not in output_add[0]:
+            self.fail("Could not add node %s to cluster" % add_server.ip)
 
+        reb_result = ""
+        reb_bar = ""
+        ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
+
+        if not stop_rebalance:
+            output, error, msg = cli.rebalance(None)
+        else:
+            sts = rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+                                ejectedNodes=[])
+            for bucket in self.buckets:
+                if len(bucket.vbuckets) > 128:
+                    self.sleep(3, "wait for rebalance to run")
+                    break
+            if sts:
+                _, _, stop_status = cli.rebalance_stop()
+                if stop_status:
+                    output, error, msg = cli.rebalance(None)
+                else:
+                    self.fail("Fail sto stop rebalance")
+            else:
+                print "Fail to rebalance using rest call"
+        if output:
+            reb_result = output[-1]
+            """ remove ANSI code """
+            reb_bar = ansi_escape.sub('', output[-2])
+            if "SUCCESS: Rebalance complete" not in reb_result:
+                self.fail("Rebalance failed")
+
+            if "100.0%" not in reb_bar:
+                self.fail("Rebalance failed.  It not reach 100%")
+            reb_bar = reb_bar.replace(" 100.0%", "").strip(" ")
+            print "rebalance bar: %s" % reb_bar
+            if " " in reb_bar:
+                self.fail("rebalance bar did not display correctly")
+        else:
+            self.fail("output is empty %s " % output)
 
     def testRebalanceStop(self):
         username = self.input.param("username", None)
