@@ -2652,7 +2652,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
-                self.assertTrue(actual_result['results']==[{u'$1': 98784}])
+                self.assertTrue(actual_result['results']==[{u'$1': self.docs_per_day*2016}])
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexCountScan2',
                     "IndexCountScan is not being used")
@@ -2667,7 +2667,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select a.cnt from (select count(1) as cnt from %s where _id is not null) as a " %(bucket.name)
                 result = self.run_cbq_query()
                 self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
-                self.assertTrue(actual_result2['results']==[{u'$1': 98784}])
+                self.assertTrue(actual_result2['results']==[{u'cnt': self.docs_per_day*2016}])
                 self.query = "select count(DISTINCT 1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==[{u'$1': 1}])
@@ -2676,7 +2676,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select count(DISTINCT meta().id) from %s use index(`#primary`) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
-                self.assertTrue(actual_result['results']==[{u'$1': 98784}])
+                self.assertTrue(actual_result['results']==[{u'$1': self.docs_per_day*2016}])
                 self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s'  " %(bucket.name,'query-test%')
                 result = self.run_cbq_query()
                 self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
