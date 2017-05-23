@@ -64,6 +64,7 @@ class CliBaseTest(BaseTestCase):
         self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
         self.skip_docs = self.input.param("skip-docs", None)
+        self.limit_docs = self.input.param("limit-docs", None)
         self.verify_data = self.input.param("verify-data", False)
         info = self.shell.extract_remote_info()
         type = info.type.lower()

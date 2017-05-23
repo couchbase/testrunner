@@ -781,6 +781,9 @@ class ImportExportTests(CliBaseTest):
                 skip_docs = ""
                 if self.skip_docs is not None:
                     skip_docs = " --skip-docs %s " % self.skip_docs
+                limit_docs = ""
+                if self.limit_docs is not None:
+                    limit_docs = " --limit-docs %s " % self.limit_docs
                 output, error = self.shell.execute_command("ls %s " % self.tmp_path)
                 if self._check_output("import", output):
                     self.log.info("remove %simport directory" % self.tmp_path)
@@ -820,14 +823,15 @@ class ImportExportTests(CliBaseTest):
                     if self.cmd_ext:
                         des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s "\
-                                  "-g %s %s %s"\
+                                  "-g %s %s %s %s"\
                                               % (self.cli_command_path, cmd,
                                                  self.cmd_ext, self.imex_type,
                                                  server.ip, username, password,
                                                  bucket.name, import_method,
                                                  des_file, format_flag,
                                                  self.format_type, key_gen,
-                                                 field_separator_flag, skip_docs)
+                                                 field_separator_flag, skip_docs,
+                                                 limit_docs)
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
@@ -854,11 +858,16 @@ class ImportExportTests(CliBaseTest):
     def _verify_import_data(self, options):
         if self.format_type == "lines":
             keys = self.rest.get_active_key_count("default")
-            docs_import = int(options["docs"]) - int(self.skip_docs)
+            docs_import = int(options["docs"])
+            skip_docs = ""
+            if self.skip_docs:
+                docs_import = int(options["docs"]) - int(self.skip_docs)
+                skip_docs = int(self.skip_docs)
             print "Total docs in bucket: ", keys
             print "Docs need to import: ", docs_import
-            if docs_import != int(keys):
-                self.fail("Import failed to skip %s docs" % self.skip_docs)
+            if self.skip_docs:
+                if docs_import != int(keys):
+                    self.fail("Import failed to skip %s docs" % self.skip_docs)
 
             if self.verify_data:
                 export_file = self.tmp_path + "bucket_data"
@@ -869,10 +878,14 @@ class ImportExportTests(CliBaseTest):
                                      "default", export_file)
                 output, error = self.shell.execute_command(cmd)
                 self.shell.log_command_output(output, error)
-                self.log.info("Get data from %sth line" % self.skip_docs)
                 with open("resources/imex/json_%s_lines" % options["docs"]) as f:
-                    src_data_after_skip = f.read().splitlines()[self.skip_docs:]
-                source_data_skipped = [x.replace(" ", "") for x in src_data_skipped]
+                    if self.skip_docs:
+                        self.log.info("Get data from %dth line" % skip_docs)
+                        src_data = f.read().splitlines()[skip_docs:]
+                    else:
+                        self.log.info("Get data from source file")
+                        src_data = f.read().splitlines()
+                src_data = [x.replace(" ", "") for x in src_data]
 
                 self.log.info("Copy bucket data from remote to local")
                 self.shell.copy_file_remote_to_local(export_file,
@@ -880,7 +893,7 @@ class ImportExportTests(CliBaseTest):
                 with open("/tmp/bucket_data") as f:
                     bucket_data = f.read().splitlines()
                 self.log.info("Compare source data and bucket data")
-                if sorted(source_data_after_skip) == sorted(bucket_data):
+                if sorted(src_data) == sorted(bucket_data):
                     self.log.info("Import data match bucket data")
                 else:
                     self.fail("Import data does not match bucket data")
