@@ -4,6 +4,7 @@ from lib.membase.api.rest_client import RestConnection
 from membase.api.exception import XDCRCheckpointException
 from mc_bin_client import MemcachedClient, MemcachedError
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from xdcrnewbasetests import NodeHelper
 import time
 
 
@@ -229,6 +230,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def load_one_mutation_into_source_vb0(self, vb0_active_src_node):
         key = self.vb0_keys[self.key_counter]
         memc_client = MemcachedClient(vb0_active_src_node.ip, 11210)
+        memc_client.sasl_auth_plain("cbadminbucket","password")
+        memc_client.bucket_select("default")
         try:
             memc_client.set(key, exp=0, flags=0, val="dummy val")
             self.key_counter += 1
@@ -267,6 +270,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def mutate_and_checkpoint(self, n=3):
         count = 1
         # get vb0 active source node
+        stats_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
+                     + '/stats.log'
         active_src_node = self.get_active_vb0_node(self.src_master)
         while count <=n:
             remote_vbuuid, remote_highseqno = self.get_failover_log(self.dest_master)
@@ -283,8 +288,13 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 continue
             end_time = time.time() + self._wait_timeout
             while time.time() < end_time:
-                if self.was_checkpointing_successful():
-                    self.log.info("Validating checkpoint record ...")
+                stats_count = NodeHelper.check_goxdcr_log(
+                            active_src_node,
+                            "docs_checked,{0}".format(count),
+                            stats_log)
+                if stats_count > 0:
+                    self.log.info("Checkpoint recorded as expected")
+                    self.log.info("Validating latest checkpoint")
                     self.get_and_validate_latest_checkpoint()
                     break
                 else:
