@@ -1335,6 +1335,13 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def test_rebalance_out_with_different_topologies(self):
         self.server_out = self.input.param("server_out")
+        # remove the n1ql node which is being rebalanced out
+        all_n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        for n1ql_node in all_n1ql_nodes:
+            if n1ql_node.ip not in str(self.servers[self.server_out]):
+                self.n1ql_server = n1ql_node
+                self.n1ql_node = n1ql_node
+                break
         self.run_operation(phase="before")
         self.sleep(30)
         nodes_out_list = self.servers[self.server_out]
@@ -1345,7 +1352,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
-        self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
         self.run_operation(phase="after")
 
     def test_swap_rebalance_with_different_topologies(self):
@@ -1353,8 +1359,15 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.services_in = self.input.param("services_in")
         self.run_operation(phase="before")
         self.sleep(30)
-        # do a swap rebalance
         nodes_out_list = self.servers[self.server_out]
+        # remove the n1ql node which is being rebalanced out
+        all_n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        for n1ql_node in all_n1ql_nodes:
+            if n1ql_node.ip not in str(self.servers[self.server_out]):
+                self.n1ql_server = n1ql_node
+                self.n1ql_node = n1ql_node
+                break
+        # do a swap rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                  [], services=[self.services_in])
         self.run_operation(phase="during")
@@ -1368,7 +1381,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
-        self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
         self.run_operation(phase="after")
 
     def test_backup_restore_after_gsi_rebalance(self):
