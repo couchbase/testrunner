@@ -2,46 +2,38 @@ import json
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
-from lib.couchbase_helper.analytics_helper import *
+from lib.couchbase_helper.analytics_helper import AnalyticsHelper
 from couchbase_helper.documentgenerator import DocumentGenerator
 import urllib
 from lib.membase.api.rest_client import RestConnection
 from lib.couchbase_helper.cluster import *
-
+from lib.membase.helper.bucket_helper import BucketOperationHelper
 
 class CBASBaseTest(BaseTestCase):
     def setUp(self):
         super(CBASBaseTest, self).setUp()
         self.cbas_node = self.input.cbas
         self.analytics_helper = AnalyticsHelper()
-        self._cb_cluster = Cluster()
+        self._cb_cluster = self.cluster
         invalid_ip = '10.111.151.109'
-        self.cb_bucket_name = TestInputSingleton.input.param('cb_bucket_name',
-                                                             'travel-sample')
-        self.cbas_bucket_name = TestInputSingleton.input.param(
-            'cbas_bucket_name', 'travel')
-        self.cb_bucket_password = TestInputSingleton.input.param(
-            'cb_bucket_password', '')
-        self.expected_error = TestInputSingleton.input.param("error", None)
+        self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
+        self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
+        self.cb_bucket_password = self.input.param('cb_bucket_password', '')
+        self.expected_error = self.input.param("error", None)
+        
         if self.expected_error:
             self.expected_error = self.expected_error.replace("INVALID_IP",invalid_ip)
             self.expected_error = self.expected_error.replace("PORT",self.master.port)
-        self.cb_server_ip = TestInputSingleton.input.param("cb_server_ip",
-                                                           self.master.ip)
+        
+        self.cb_server_ip = self.input.param("cb_server_ip", self.master.ip)
         self.cb_server_ip = self.cb_server_ip.replace('INVALID_IP',invalid_ip)
-        self.cbas_dataset_name = TestInputSingleton.input.param(
-            "cbas_dataset_name", 'travel_ds')
-        self.cbas_bucket_name_invalid = self.input.param(
-            'cbas_bucket_name_invalid', self.cbas_bucket_name)
+        self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
+        self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid', self.cbas_bucket_name)
         self.cbas_dataset2_name = self.input.param('cbas_dataset2_name', None)
-        self.skip_create_dataset = self.input.param('skip_create_dataset',
-                                                    False)
-        self.disconnect_if_connected = self.input.param(
-            'disconnect_if_connected', False)
-        self.cbas_dataset_name_invalid = self.input.param(
-            'cbas_dataset_name_invalid', self.cbas_dataset_name)
-        self.skip_drop_connection = self.input.param('skip_drop_connection',
-                                                     False)
+        self.skip_create_dataset = self.input.param('skip_create_dataset', False)
+        self.disconnect_if_connected = self.input.param('disconnect_if_connected', False)
+        self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid', self.cbas_dataset_name)
+        self.skip_drop_connection = self.input.param('skip_drop_connection',False)
         self.skip_drop_dataset = self.input.param('skip_drop_dataset', False)
 
         self.query_id = self.input.param('query_id',None)
@@ -52,7 +44,8 @@ class CBASBaseTest(BaseTestCase):
         self.compiler_param_val = self.input.param('compiler_param_val', None)
         self.expect_reject = self.input.param('expect_reject', False)
         self.expect_failure = self.input.param('expect_failure', False)
-
+        
+        self.rest = RestConnection(self.master)
         # Drop any existing buckets and datasets
         self.cleanup_cbas()
 
@@ -63,10 +56,8 @@ class CBASBaseTest(BaseTestCase):
         """
         Load the specified sample bucket in Couchbase
         """
-        shell = RemoteMachineShellConnection(server)
-        shell.execute_command("""curl -v -u Administrator:password -X POST http://{0}:8091/sampleBuckets/install -d '["{1}"]'""".format(server.ip, bucketName))
-        shell.disconnect()
-        self.sleep(5)
+        self.rest.load_sample(bucketName)
+        return BucketOperationHelper.wait_for_memcached(self.master, "travel-sample")
 
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
                               cb_server_ip,
@@ -261,11 +252,12 @@ class CBASBaseTest(BaseTestCase):
         """
         if status != "success":
             actual_error = errors[0]["msg"]
-            if self.expected_error != actual_error:
+            if self.expected_error not in actual_error:
                 return False
             else:
                 return True
-
+        return False
+    
     def cleanup_cbas(self):
         """
         Drops all connections, datasets and buckets from CBAS
@@ -402,7 +394,7 @@ class CBASBaseTest(BaseTestCase):
         else:
             return None
 
-    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None, timeout=70, client_context_id=None):
+    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None, timeout=120, client_context_id=None):
         """
         Executes a statement on CBAS using the REST API using REST Client
         """
@@ -449,7 +441,7 @@ class CBASBaseTest(BaseTestCase):
         failed_queries = []
         for count in range(0, num_queries):
             tasks.append(self._cb_cluster.async_cbas_query_execute(self.master,
-                                                                   cbas_base_url,
+                                                                   self.cbas_base_url,
                                                                    statement,
                                                                    mode,
                                                                    pretty))

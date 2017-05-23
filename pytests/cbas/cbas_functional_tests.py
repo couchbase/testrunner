@@ -3,19 +3,22 @@ from cbas_base import *
 
 class CBASFunctionalTests(CBASBaseTest):
     def setUp(self):
+        self.input = TestInputSingleton.input
+        if "default_bucket" not in self.input.test_params:
+            self.input.test_params.update({"default_bucket":False})
+                    
         super(CBASFunctionalTests, self).setUp()
         self.validate_error = False
         if self.expected_error:
             self.validate_error = True
-
+        
+        result = self.load_sample_buckets(server=self.master, bucketName="travel-sample")
+        self.assertTrue(result, msg="wait_for_memcached failed while loading sample bucket: travel-sample")
+        
     def tearDown(self):
         super(CBASFunctionalTests, self).tearDown()
 
     def test_create_bucket_on_cbas(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
-
         # Create bucket on CBAS
         result = self.create_bucket_on_cbas(
             cbas_bucket_name=self.cbas_bucket_name,
@@ -26,10 +29,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_create_another_bucket_on_cbas(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
-
         # Create first bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -45,10 +44,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("Test failed")
 
     def test_create_dataset_on_bucket(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -64,10 +59,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_create_another_dataset_on_bucket(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -86,11 +77,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_connect_bucket(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master,
-                                 bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -112,11 +98,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_connect_bucket_on_a_connected_bucket(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master,
-                                 bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -140,11 +121,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_disconnect_bucket(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master,
-                                 bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -169,10 +145,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_disconnect_bucket_already_disconnected(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -202,10 +174,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_drop_dataset_on_bucket(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -232,10 +200,6 @@ class CBASFunctionalTests(CBASBaseTest):
             self.fail("FAIL : Actual error msg does not match the expected")
 
     def test_drop_cbas_bucket(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
-
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
@@ -269,10 +233,6 @@ class CBASFunctionalTests(CBASBaseTest):
                                                                   "=").replace(
             "&qt", "\"")
         self.log.info("predicates = %s", predicates)
-
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master, bucketName="travel-sample")
 
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
