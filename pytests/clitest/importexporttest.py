@@ -648,9 +648,8 @@ class ImportExportTests(CliBaseTest):
         self.import_file = self.input.param("import_file", None)
         return self._common_imex_test("import", options)
 
-    """ not in 4.6 """
-    def test_import_json_with_limit_first_10_lines(self):
-        options = {"load_doc": False}
+    def test_import_json_with_limit_n_docs(self):
+        options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
 
     def test_import_json_with_skip_n_docs(self):
@@ -860,14 +859,21 @@ class ImportExportTests(CliBaseTest):
             keys = self.rest.get_active_key_count("default")
             docs_import = int(options["docs"])
             skip_docs = ""
+            limit_docs = ""
             if self.skip_docs:
                 docs_import = int(options["docs"]) - int(self.skip_docs)
                 skip_docs = int(self.skip_docs)
+            if self.limit_docs:
+                docs_import = int(self.limit_docs)
+                limit_docs = int(self.limit_docs)
             print "Total docs in bucket: ", keys
             print "Docs need to import: ", docs_import
-            if self.skip_docs:
-                if docs_import != int(keys):
+
+            if docs_import != int(keys):
+                if self.skip_docs:
                     self.fail("Import failed to skip %s docs" % self.skip_docs)
+                if self.limit_docs:
+                    self.fail("Import failed to limit %s docs" % self.limit_docs)
 
             if self.verify_data:
                 export_file = self.tmp_path + "bucket_data"
@@ -882,6 +888,9 @@ class ImportExportTests(CliBaseTest):
                     if self.skip_docs:
                         self.log.info("Get data from %dth line" % skip_docs)
                         src_data = f.read().splitlines()[skip_docs:]
+                    elif self.limit_docs:
+                        self.log.info("Get limit data to %d lines" % limit_docs)
+                        src_data = f.read().splitlines()[:limit_docs]
                     else:
                         self.log.info("Get data from source file")
                         src_data = f.read().splitlines()
