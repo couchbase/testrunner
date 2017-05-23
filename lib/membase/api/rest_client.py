@@ -993,7 +993,7 @@ class RestConnection(object):
         elif str(header['status']) == '503':
             log.info("Request Rejected")
             raise Exception("Request Rejected")
-        elif str(header['status']) == '500':
+        elif str(header['status']) in ['500','400']:
             json_content = json.loads(content)
             if "Job requirement capacity" in json_content['errors'][0]['msg']:
                 raise Exception("Capacity cannot meet job requirement")

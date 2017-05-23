@@ -1,8 +1,12 @@
 from cbas_base import *
-
+import datetime
 
 class CBASAsyncResultDeliveryTests(CBASBaseTest):
     def setUp(self):
+        self.input = TestInputSingleton.input
+        if "cb_bucket_name" not in self.input.test_params:
+            self.input.test_params.update({"default_bucket":False})
+        
         super(CBASAsyncResultDeliveryTests, self).setUp()
         self.validate_error = False
         if self.expected_error:
@@ -12,8 +16,6 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         super(CBASAsyncResultDeliveryTests, self).tearDown()
 
     def setupForTest(self):
-        # Delete Default bucket and load travel-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
         self.load_sample_buckets(server=self.master,
                                  bucketName="travel-sample")
 
@@ -32,7 +34,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
                                cb_bucket_password=self.cb_bucket_password)
 
         # Allow ingestion to complete
-        self.sleep(60)
+        self.sleep(20)
 
     def test_mode(self):
         self.setupForTest()
