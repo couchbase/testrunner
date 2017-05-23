@@ -1671,6 +1671,20 @@ class RestConnection(object):
             index_map = RestParser().parse_index_status_response(json_parsed)
         return index_map
 
+    def get_index_id_map(self, timeout=120):
+        api = self.baseUrl + 'indexStatus'
+        index_map = {}
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            for map in json_parsed["indexes"]:
+                bucket_name = map['bucket'].encode('ascii', 'ignore')
+                if bucket_name not in index_map.keys():
+                    index_map[bucket_name] = {}
+                index_name = map['index'].encode('ascii', 'ignore')
+                index_map[bucket_name][index_name] = {}
+                index_map[bucket_name][index_name]['id'] = map['id']
+        return index_map
     # returns node data for this host
     def get_nodes_self(self, timeout=120):
         node = None
