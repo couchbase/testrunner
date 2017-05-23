@@ -11,6 +11,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
+from couchbase_helper.data_analysis_helper import DataCollector
 from couchbase_cli import CouchbaseCLI
 from security.rbac_base import RbacBase
 from pprint import pprint
@@ -652,6 +653,15 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": False}
         return self._common_imex_test("import", options)
 
+    def test_import_json_with_skip_n_docs(self):
+        """
+           import docs with option to skip n docs
+           flag --skip-docs
+           :return: None
+        """
+        options = {"load_doc": False, "docs": "1000"}
+        return self._common_imex_test("import", options)
+
     def test_import_csv_file(self):
         options = {"load_doc": False}
         self.import_file = self.input.param("import_file", None)
@@ -768,11 +778,15 @@ class ImportExportTests(CliBaseTest):
             if import_method != "":
                 self.im_path = self.tmp_path + "import/"
                 self.log.info("copy import file from local to remote")
+                skip_docs = ""
+                if self.skip_docs is not None:
+                    skip_docs = " --skip-docs %s " % self.skip_docs
                 output, error = self.shell.execute_command("ls %s " % self.tmp_path)
                 if self._check_output("import", output):
                     self.log.info("remove %simport directory" % self.tmp_path)
                     self.shell.execute_command("rm -rf  %simport " % self.tmp_path)
-                    output, error = self.shell.execute_command("ls %s " % self.tmp_path)
+                    output, error = self.shell.execute_command("ls %s " \
+                                                                   % self.tmp_path)
                     if self._check_output("import", output):
                         self.fail("fail to delete import dir ")
                 self.shell.execute_command("mkdir  %simport " % self.tmp_path)
@@ -796,19 +810,24 @@ class ImportExportTests(CliBaseTest):
                             """ we test tab separator in this case """
                             field_separator_flag = "--field-separator $'\\t' "
                         else:
-                            field_separator_flag = "--field-separator %s " % self.field_separator
+                            field_separator_flag = "--field-separator %s " \
+                                                            % self.field_separator
                 for bucket in self.buckets:
                     key_gen = "key::%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
-                    -b default -d file:///tmp/export/default -f list -g key::%index%  """
+                        -b default -d file:///tmp/export/default -f list -g key::%index%
+                    """
                     if self.cmd_ext:
                         des_file = des_file.replace("/cygdrive/c", "c:")
-                    imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s %s"\
-                         % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
-                                          server.ip, username, password, bucket.name,
-                                                             import_method, des_file,
-                                              format_flag, self.format_type, key_gen,
-                                                                field_separator_flag)
+                    imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s "\
+                                  "-g %s %s %s"\
+                                              % (self.cli_command_path, cmd,
+                                                 self.cmd_ext, self.imex_type,
+                                                 server.ip, username, password,
+                                                 bucket.name, import_method,
+                                                 des_file, format_flag,
+                                                 self.format_type, key_gen,
+                                                 field_separator_flag, skip_docs)
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
@@ -829,6 +848,45 @@ class ImportExportTests(CliBaseTest):
                         json_loaded = True
                     if not json_loaded:
                         self.fail("Failed to execute command")
+                    self.sleep(5)
+                    self._verify_import_data(options)
+
+    def _verify_import_data(self, options):
+        if self.format_type == "lines":
+            keys = self.rest.get_active_key_count("default")
+            docs_import = int(options["docs"]) - int(self.skip_docs)
+            print "Total docs in bucket: ", keys
+            print "Docs need to import: ", docs_import
+            if docs_import != int(keys):
+                self.fail("Import failed to skip %s docs" % self.skip_docs)
+
+            if self.verify_data:
+                export_file = self.tmp_path + "bucket_data"
+                self.shell.execute_command("rm -rf %s " % export_file)
+                cmd = "%scbexport%s json -c %s -u %s -p %s -b %s -f lines -o %s"\
+                                  % (self.cli_command_path, self.cmd_ext,
+                                     self.master.ip, "cbadminbucket", "password",
+                                     "default", export_file)
+                output, error = self.shell.execute_command(cmd)
+                self.shell.log_command_output(output, error)
+                self.log.info("Get data from %sth line" % self.skip_docs)
+                with open("resources/imex/json_%s_lines" % options["docs"]) as f:
+                    src_data_after_skip = f.read().splitlines()[self.skip_docs:]
+                source_data_skipped = [x.replace(" ", "") for x in src_data_skipped]
+
+                self.log.info("Copy bucket data from remote to local")
+                self.shell.copy_file_remote_to_local(export_file,
+                                           "/tmp/bucket_data")
+                with open("/tmp/bucket_data") as f:
+                    bucket_data = f.read().splitlines()
+                self.log.info("Compare source data and bucket data")
+                if sorted(source_data_after_skip) == sorted(bucket_data):
+                    self.log.info("Import data match bucket data")
+                else:
+                    self.fail("Import data does not match bucket data")
+
+
+
 
     def _verify_export_file(self, export_file_name, options):
         if not options["load_doc"]:
