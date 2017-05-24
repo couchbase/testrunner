@@ -228,11 +228,13 @@ class EvictionKV(EvictionBase):
                                               " all -u Administrator -p password | grep ephemeral")
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
+                               ' ep_dcp_ephemeral_backfill_type:                        buffered',
                                ' ep_ephemeral_full_policy:                              fail_new_data',
                                ' ep_ephemeral_metadata_purge_age:                       259200',
                                ' ep_ephemeral_metadata_purge_interval:                  60'], output)
         else:
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
+                               ' ep_dcp_ephemeral_backfill_type:                        buffered',
                                ' ep_ephemeral_full_policy:                              auto_delete',
                                ' ep_ephemeral_metadata_purge_age:                       259200',
                                ' ep_ephemeral_metadata_purge_interval:                  60'], output)
