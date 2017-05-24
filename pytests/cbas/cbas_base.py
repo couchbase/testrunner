@@ -445,7 +445,7 @@ class CBASBaseTest(BaseTestCase):
         failed_queries = []
         for count in range(0, num_queries):
             tasks.append(self._cb_cluster.async_cbas_query_execute(self.master,
-                                                                   self.cbas_base_url,
+                                                                   cbas_base_url,
                                                                    statement,
                                                                    mode,
                                                                    pretty))
