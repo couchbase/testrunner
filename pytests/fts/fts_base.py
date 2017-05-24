@@ -3920,16 +3920,22 @@ class FTSBaseTest(unittest.TestCase):
         :param docs: List of json data
         :return: None
         """
-        from memcached.helper.data_helper import MemcachedClientHelper
-        memc_client  = MemcachedClientHelper.direct_client(server, 'default')
-
+        from memcached.helper.data_helper import KVStoreAwareSmartClient
+        memc_client  = KVStoreAwareSmartClient(RestConnection(server),
+                                               'default')
+        count = 1
         for i, doc in enumerate(docs):
-            try:
-                memc_client.set(key=str(i+1), exp=0, flags=0,
-                                val=json.dumps(doc))
-            except Exception as e:
-                self.log.error(e)
-                raise e
+            while True:
+                try:
+                    memc_client.set(key=str(i+1),
+                                    value=json.dumps(doc))
+                    break
+                except Exception as e:
+                    self.log.error(e)
+                    self.sleep(5)
+                    count += 1
+                    if count > 5:
+                        raise e
 
     def wait_till_items_in_bucket_equal(self, items=None):
         """
@@ -3942,14 +3948,24 @@ class FTSBaseTest(unittest.TestCase):
             counter = 0
             if not items:
                 items = self._num_items/2
+            while True:
+                try:
+                    doc_count = self._cb_cluster.get_doc_count_in_bucket(
+                        self._cb_cluster.get_buckets()[0])
+                    break
+                except KeyError:
+                    self.log.info("bucket stats not ready yet...")
+                    self.sleep(2)
             for bucket in self._cb_cluster.get_buckets():
-                while items > self._cb_cluster.get_doc_count_in_bucket(bucket):
+                while items > self._cb_cluster.get_doc_count_in_bucket(
+                        bucket):
                     self.log.info("Docs in bucket {0} = {1}".
                         format(
                             bucket.name,
-                            self._cb_cluster.get_doc_count_in_bucket(bucket)))
-                    self.sleep(1, "sleeping 1s to allow for item loading...")
+                            self._cb_cluster.get_doc_count_in_bucket(
+                                bucket)))
+                    self.sleep(1, "sleeping 1s to allow for item loading")
                     counter += 1
                     if counter > 20:
-                        self.log.info("Exiting load sleep loop after 21 secs")
+                        self.log.info("Exiting load sleep loop after 21s")
                         return
