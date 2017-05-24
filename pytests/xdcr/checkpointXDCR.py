@@ -560,6 +560,10 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         dest_node = self.get_active_vb0_node(self.dest_master)
         src_client = MemcachedClient(src_node.ip, 11210)
         dest_client = MemcachedClient(dest_node.ip, 11210)
+        src_client.sasl_auth_plain("cbadminbucket","password")
+        src_client.bucket_select("default")
+        dest_client.sasl_auth_plain("cbadminbucket","password")
+        dest_client.bucket_select("default")
         for key in self.keys_loaded:
             try:
                 src_meta = src_client.getMeta(key)
