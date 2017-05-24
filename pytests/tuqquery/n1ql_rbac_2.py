@@ -217,9 +217,14 @@ class RbacN1QL(QueryTests):
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to create index on {0} as user {1}".
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output), "Able to create index on {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Create Query executed successfully")
+            self.log.info("Create Query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to create index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Create Query executed successfully")
         cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
               "'statement=BUILD INDEX ON %s(`age-index`) USING GSI'"%\
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
@@ -244,9 +249,14 @@ class RbacN1QL(QueryTests):
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to create index on {0} as user {1}".
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output), "Able to create index on {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Create Query executed successfully")
+            self.log.info("Create Query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to create index on {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Create Query executed successfully")
         cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
               "'statement=DROP INDEX %s.`age-index` USING GSI'"%\
                 (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
@@ -551,23 +561,6 @@ class RbacN1QL(QueryTests):
                             format(self.buckets[0].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
 
-    def test_upsert_nested_with_select_with_no_access(self):
-        self.create_users()
-        self.shell.execute_command("killall cbq-engine")
-        self.grant_role()
-        shell = RemoteMachineShellConnection(self.master)
-        cmd = "curl -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=UPSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'"%\
-                (self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, self.buckets[0].name)
-        output, error = shell.execute_command(cmd)
-        shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[default].n1ql.select!execute. "
-                            "Add role Query Select [default] to allow the query to run." in line for line in output),
-                            "Able to upsert into {0} as user {1} - not expected".
-                            format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Query failed as expected")
-
     def test_update_nested_with_select_with_no_access(self):
         self.create_users()
         self.shell.execute_command("killall cbq-engine")
@@ -634,7 +627,7 @@ class RbacN1QL(QueryTests):
                             format(self.buckets[1].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
 
-    def test_upsert_nested_with_select_with_full_access_with_diff_buckets(self):
+    def test_upsert_nested_with_select_with_full_access_and_diff_buckets(self):
         self.create_users()
         self.shell.execute_command("killall cbq-engine")
         self.grant_role()
@@ -704,7 +697,7 @@ class RbacN1QL(QueryTests):
         self.create_users()
         self.shell.execute_command("killall cbq-engine")
         self.grant_role()
-        self.grant_role(role="query_select(default)")
+        self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "curl -u {0}:{1} http://{2}:8093/query/service -d " \
               "'statement=DELETE FROM {3} a WHERE name IN (SELECT name FROM {4} WHERE age > 10)'".\
