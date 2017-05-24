@@ -1,11 +1,11 @@
 import logging
 
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
+from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
+from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
-from base_2i import BaseSecondaryIndexingTests
+from remote.remote_util import RemoteMachineShellConnection
 
 
 log = logging.getLogger(__name__)
@@ -244,7 +244,6 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
                 remote.stop_server()
             mid_recovery_tasks = self.async_run_operations(phase="in_between")
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
-            self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception, ex:
@@ -559,34 +558,38 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         self._start_disk_writes_for_plasma()
         kvOps_tasks = self._run_kvops_tasks()
         #Flush the bucket
-        for bucket in self.buckets:
-            log.info("Flushing bucket {0}...".format(bucket.name))
-            rest = RestConnection(self.master)
-            rest.flush_bucket(bucket.name)
-            count = 0
-            while rest.get_bucket_status(bucket.name) != "healthy" and \
-                            count < 10:
-                log.info("Bucket {0} Status is {1}. Sleeping...".format(
+        try:
+            for bucket in self.buckets:
+                log.info("Flushing bucket {0}...".format(bucket.name))
+                rest = RestConnection(self.master)
+                rest.flush_bucket(bucket.name)
+                count = 0
+                while rest.get_bucket_status(bucket.name) != "healthy" and \
+                                count < 10:
+                    log.info("Bucket {0} Status is {1}. Sleeping...".format(
+                        bucket.name, rest.get_bucket_status(bucket.name)))
+                    count += 1
+                    self.sleep(10)
+                log.info("Bucket {0} is {1}".format(
                     bucket.name, rest.get_bucket_status(bucket.name)))
-                count += 1
-                self.sleep(10)
-            log.info("Bucket {0} is {1}".format(
-                bucket.name, rest.get_bucket_status(bucket.name)))
-        mid_recovery_tasks = self.async_run_operations(phase="in_between")
-        self._run_tasks([kvOps_tasks, mid_recovery_tasks])
-        #check if the nodes in cluster are healthy
-        msg = "Cluster not in Healthy state"
-        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-        log.info("==== Cluster in healthy state ====")
-        self._check_all_bucket_items_indexed()
-        post_recovery_tasks = self.async_run_operations(phase="after")
-        self._run_tasks([post_recovery_tasks])
+            mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
+            #check if the nodes in cluster are healthy
+            msg = "Cluster not in Healthy state"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("==== Cluster in healthy state ====")
+            self._check_all_bucket_items_indexed()
+            post_recovery_tasks = self.async_run_operations(phase="after")
+            self._run_tasks([post_recovery_tasks])
+        except Exception, ex:
+            log.info(str(ex))
+            raise
 
     def test_multiple_recovery_with_dgm(self):
         pre_recovery_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_recovery_tasks])
         indexer_node = self.get_nodes_from_services_map(service_type="index")
-        self._start_disk_writes_for_plasma(indexer_node)
+        self._start_disk_writes_for_plasma([indexer_node])
         self._create_replica_indexes()
         remote = RemoteMachineShellConnection(indexer_node.ip)
         for i in range(3):
@@ -658,9 +661,8 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
             gens_load = self.generate_docs(docs)
             self.full_docs_list = self.generate_full_docs_list(gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-            tasks = self.async_load(generators_load=gens_load, op_type="create",
-                                batch_size=self.batch_size)
-            return tasks
+            self.load(gens_load, buckets=self.buckets, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
         if self.gsi_type != "plasma":
             return
         if not self.plasma_dgm:
@@ -671,13 +673,12 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         rest = RestConnection(node)
         rest.set_indexer_memoryQuota(indexMemoryQuota=256)
         cnt = 0
-        docs = 50
+        docs = 50 + self.docs_per_day
         while cnt < 100:
             if validate_disk_writes(indexer_nodes):
                 log.info("========== DGM is achieved on atleast one index ==========")
                 return True
-            for task in kv_mutations(self, docs):
-                task.result()
+            kv_mutations(self, docs)
             self.sleep(30)
             cnt += 1
             docs += 20
