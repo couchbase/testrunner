@@ -660,6 +660,15 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
 
+    def test_import_csv_with_limit_n_rows(self):
+        """
+           import csv with option to limit number of rows
+           flag --limit-rows
+           :return: None
+        """
+        options = {"load_doc": False, "docs": "1000"}
+        return self._common_imex_test("import", options)
+
     def test_import_csv_file(self):
         options = {"load_doc": False}
         self.import_file = self.input.param("import_file", None)
@@ -782,11 +791,13 @@ class ImportExportTests(CliBaseTest):
                 self.im_path = self.tmp_path + "import/"
                 self.log.info("copy import file from local to remote")
                 skip_docs = ""
-                if self.skip_docs is not None:
+                if self.skip_docs:
                     skip_docs = " --skip-docs %s " % self.skip_docs
-                limit_docs = ""
-                if self.limit_docs is not None:
-                    limit_docs = " --limit-docs %s " % self.limit_docs
+                limit_lines = ""
+                if self.limit_docs:
+                    limit_lines = " --limit-docs %s " % self.limit_docs
+                if self.limit_rows:
+                    limit_lines = " --limit-rows %s " % self.limit_rows
                 fx_generator = ""
                 if self.fx_generator:
                     fx_generator = "::#%s#" % self.fx_generator.upper()
@@ -841,7 +852,7 @@ class ImportExportTests(CliBaseTest):
                                                  self.format_type,
                                                  key_gen, fx_generator,
                                                  field_separator_flag, skip_docs,
-                                                 limit_docs)
+                                                 limit_lines)
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
@@ -857,6 +868,7 @@ class ImportExportTests(CliBaseTest):
                     """ Json `file:///root/json_list` imported to `http://host:8091`
                         successfully
                     """
+
                     json_loaded = False
                     if "invalid" in self.import_file:
                         if self._check_output("Json import failed:", output):
@@ -869,60 +881,73 @@ class ImportExportTests(CliBaseTest):
                     self._verify_import_data(options)
 
     def _verify_import_data(self, options):
-        if self.format_type == "lines":
-            keys = self.rest.get_active_key_count("default")
-            docs_import = int(options["docs"])
-            skip_docs = ""
-            limit_docs = ""
+        keys = self.rest.get_active_key_count("default")
+        skip_docs = ""
+        limit_lines = ""
+        data_import = ""
+        if options["docs"]:
+            data_import = int(options["docs"])
+        if self.skip_docs:
+            data_import = int(options["docs"]) - int(self.skip_docs)
+            skip_docs = int(self.skip_docs)
+        if self.limit_docs:
+            data_import = int(self.limit_docs)
+            limit_lines = int(self.limit_docs)
+        if self.limit_rows:
+            data_import = int(self.limit_rows)
+            limit_lines = int(self.limit_rows)
+        print "Total docs in bucket: ", keys
+        print "Docs need to import: ", data_import
+
+        if data_import != int(keys):
             if self.skip_docs:
-                docs_import = int(options["docs"]) - int(self.skip_docs)
-                skip_docs = int(self.skip_docs)
+                self.fail("Import failed to skip %s docs" % self.skip_docs)
             if self.limit_docs:
-                docs_import = int(self.limit_docs)
-                limit_docs = int(self.limit_docs)
-            print "Total docs in bucket: ", keys
-            print "Docs need to import: ", docs_import
+                self.fail("Import failed to limit %s docs" % self.limit_docs)
+            if self.limit_rows:
+                self.fail("Import failed to limit %s rows" % self.limit_rows)
 
-            if docs_import != int(keys):
-                if self.skip_docs:
-                    self.fail("Import failed to skip %s docs" % self.skip_docs)
-                if self.limit_docs:
-                    self.fail("Import failed to limit %s docs" % self.limit_docs)
-
-            if self.verify_data:
-                export_file = self.tmp_path + "bucket_data"
-                self.shell.execute_command("rm -rf %s " % export_file)
-                cmd = "%scbexport%s json -c %s -u %s -p %s -b %s -f lines -o %s"\
-                                  % (self.cli_command_path, self.cmd_ext,
-                                     self.master.ip, "cbadminbucket", "password",
-                                     "default", export_file)
-                output, error = self.shell.execute_command(cmd)
-                self.shell.log_command_output(output, error)
-                with open("resources/imex/json_%s_lines" % options["docs"]) as f:
-                    if self.skip_docs:
-                        self.log.info("Get data from %dth line" % skip_docs)
-                        src_data = f.read().splitlines()[skip_docs:]
-                    elif self.limit_docs:
-                        self.log.info("Get limit data to %d lines" % limit_docs)
-                        src_data = f.read().splitlines()[:limit_docs]
-                    else:
-                        self.log.info("Get data from source file")
-                        src_data = f.read().splitlines()
-                src_data = [x.replace(" ", "") for x in src_data]
-
-                self.log.info("Copy bucket data from remote to local")
-                self.shell.copy_file_remote_to_local(export_file,
-                                           "/tmp/bucket_data")
-                with open("/tmp/bucket_data") as f:
-                    bucket_data = f.read().splitlines()
-                self.log.info("Compare source data and bucket data")
-                if sorted(src_data) == sorted(bucket_data):
-                    self.log.info("Import data match bucket data")
+        if self.verify_data:
+            if self.imex_type != "json":
+                self.log.info("Does not support export data with csv format ")
+                return
+            export_file = self.tmp_path + "bucket_data"
+            self.shell.execute_command("rm -rf %s " % export_file)
+            cmd = "%scbexport%s %s -c %s -u %s -p %s -b %s -f lines -o %s"\
+                              % (self.cli_command_path, self.cmd_ext,
+                                 self.imex_type,
+                                 self.master.ip, "cbadminbucket", "password",
+                                 "default", export_file)
+            output, error = self.shell.execute_command(cmd)
+            self.shell.log_command_output(output, error)
+            format_type = "json"
+            if self.imex_type == "csv":
+                if self.field_separator == "comma":
+                    format_type = "csv_comma"
                 else:
-                    self.fail("Import data does not match bucket data")
-
-
-
+                    format_type = "csv_tab"
+            with open("resources/imex/%s_%s_lines" % (format_type,
+                                                      options["docs"])) as f:
+                if self.skip_docs:
+                    self.log.info("Get data from %dth line" % skip_docs)
+                    src_data = f.read().splitlines()[skip_docs:]
+                elif self.limit_docs or self.limit_rows:
+                    self.log.info("Get limit data to %d lines" % limit_lines)
+                    src_data = f.read().splitlines()[:limit_lines]
+                else:
+                    self.log.info("Get data from source file")
+                    src_data = f.read().splitlines()
+            src_data = [x.replace(" ", "") for x in src_data]
+            self.log.info("Copy bucket data from remote to local")
+            self.shell.copy_file_remote_to_local(export_file,
+                                       "/tmp/bucket_data")
+            with open("/tmp/bucket_data") as f:
+                bucket_data = f.read().splitlines()
+            self.log.info("Compare source data and bucket data")
+            if sorted(src_data) == sorted(bucket_data):
+                self.log.info("Import data match bucket data")
+            else:
+                self.fail("Import data does not match bucket data")
 
     def _verify_export_file(self, export_file_name, options):
         if not options["load_doc"]:

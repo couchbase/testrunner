@@ -65,6 +65,7 @@ class CliBaseTest(BaseTestCase):
         self.force_failover = self.input.param("force_failover", False)
         self.skip_docs = self.input.param("skip-docs", None)
         self.limit_docs = self.input.param("limit-docs", None)
+        self.limit_rows = self.input.param("limit-rows", None)
         self.fx_generator = self.input.param("fx-generator", None)
         self.fx_gen_start = self.input.param("fx-gen-start", None)
         self.verify_data = self.input.param("verify-data", False)
