@@ -644,8 +644,7 @@ class ImportExportTests(CliBaseTest):
         return self._common_imex_test("import", options)
 
     def test_import_json_generate_keys(self):
-        options = {"load_doc": False}
-        self.import_file = self.input.param("import_file", None)
+        options = {"load_doc": False, "docs":"1000"}
         return self._common_imex_test("import", options)
 
     def test_import_json_with_limit_n_docs(self):
@@ -761,14 +760,19 @@ class ImportExportTests(CliBaseTest):
                     self.quota = info.memoryQuota
                 imp_rest.init_node()
                 self.cluster.rebalance(import_servers[2:], [import_servers[3]], [])
-                bucket_params=self._create_bucket_params(server=import_servers[2],size=250,replicas=self.num_replicas,
-                                                         enable_replica_index=self.enable_replica_index,
-                                                         eviction_policy=self.eviction_policy)
+                bucket_params=self._create_bucket_params(server=import_servers[2],
+                                        size=250,
+                                        replicas=self.num_replicas,
+                                        enable_replica_index=self.enable_replica_index,
+                                        eviction_policy=self.eviction_policy)
                 self.cluster.create_default_bucket(bucket_params)
-                imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d file://%s -f %s -g key::%%%s%%"\
-                              % (self.cli_command_path, "cbimport", self.cmd_ext, self.imex_type,
-                                 import_servers[2].ip, username, password, "default",
-                                 import_file, self.format_type, "index")
+                imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s "\
+                                        "-d file://%s -f %s -g key::%%%s%%"\
+                                        % (self.cli_command_path, "cbimport",
+                                           self.cmd_ext, self.imex_type,
+                                           import_servers[2].ip, username, password,
+                                           "default", import_file, self.format_type,
+                                           "index")
                 output, error = import_shell.execute_command(imp_cmd_str)
                 if self._check_output("error", output):
                     self.fail("Fail to run import back to bucket")
@@ -783,6 +787,12 @@ class ImportExportTests(CliBaseTest):
                 limit_docs = ""
                 if self.limit_docs is not None:
                     limit_docs = " --limit-docs %s " % self.limit_docs
+                fx_generator = ""
+                if self.fx_generator:
+                    fx_generator = "::#%s#" % self.fx_generator.upper()
+                if self.fx_generator and self.fx_gen_start:
+                    fx_generator = "::#%s[%s]#" \
+                                    % (self.fx_generator.upper(), self.fx_gen_start)
                 output, error = self.shell.execute_command("ls %s " % self.tmp_path)
                 if self._check_output("import", output):
                     self.log.info("remove %simport directory" % self.tmp_path)
@@ -822,13 +832,14 @@ class ImportExportTests(CliBaseTest):
                     if self.cmd_ext:
                         des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s "\
-                                  "-g %s %s %s %s"\
+                                  "-g %s%s %s %s %s"\
                                               % (self.cli_command_path, cmd,
                                                  self.cmd_ext, self.imex_type,
                                                  server.ip, username, password,
                                                  bucket.name, import_method,
                                                  des_file, format_flag,
-                                                 self.format_type, key_gen,
+                                                 self.format_type,
+                                                 key_gen, fx_generator,
                                                  field_separator_flag, skip_docs,
                                                  limit_docs)
                     if self.dgm_run and self.active_resident_threshold:
@@ -839,10 +850,13 @@ class ImportExportTests(CliBaseTest):
                         self.log.info("**** Load bucket to %s of active resident"\
                                           % self.active_resident_threshold)
                         self._load_all_buckets(self.master, kv_gen, "create", 0)
+
                     self.log.info("Import data to bucket")
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
-                    """ Json `file:///root/json_list` imported to `http://host:8091` successfully """
+                    """ Json `file:///root/json_list` imported to `http://host:8091`
+                        successfully
+                    """
                     json_loaded = False
                     if "invalid" in self.import_file:
                         if self._check_output("Json import failed:", output):
@@ -915,13 +929,14 @@ class ImportExportTests(CliBaseTest):
             if "bucket" in options and options["bucket"] == "empty":
                 output, error = self.shell.execute_command("ls %s" % self.ex_path)
                 if export_file_name in output[0]:
-                    self.log.info("check if export file %s is empty" % export_file_name)
+                    self.log.info("check if export file %s is empty"
+                                                                % export_file_name)
                     output, error = self.shell.execute_command("cat %s%s"\
                                                  % (self.ex_path, export_file_name))
                     if output:
                         self.fail("file %s should be empty" % export_file_name)
                 else:
-                    self.fail("Fail to export.  File %s does not exist" \
+                    self.fail("Fail to export.  File %s does not exist"
                                                             % export_file_name)
         elif options["load_doc"]:
             found = self.shell.file_exists(self.ex_path, export_file_name)
@@ -930,7 +945,7 @@ class ImportExportTests(CliBaseTest):
                 if os.path.exists("/tmp/export"):
                     shutil.rmtree("/tmp/export")
                 os.makedirs("/tmp/export")
-                self.shell.copy_file_remote_to_local(self.ex_path+export_file_name,\
+                self.shell.copy_file_remote_to_local(self.ex_path+export_file_name,
                                                     "/tmp/export/"+export_file_name)
                 self.log.info("compare 2 json files")
                 if self.format_type == "lines":
@@ -945,7 +960,8 @@ class ImportExportTests(CliBaseTest):
                     sample_file.close()
                     export_file.close()
                 elif self.format_type == "list":
-                    sample_file = open("resources/imex/json_list_%s_lines" % options["docs"])
+                    sample_file = open("resources/imex/json_list_%s_lines"\
+                                                                 % options["docs"])
                     samples = sample_file.read()
                     samples = ast.literal_eval(samples)
                     samples.sort(key=lambda k: k['name'])
