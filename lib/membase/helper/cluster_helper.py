@@ -15,9 +15,9 @@ import traceback
 
 
 class ClusterOperationHelper(object):
-    #the first ip is taken as the master ip
+    # the first ip is taken as the master ip
 
-    # Returns True if cluster successfully finished ther rebalance
+    # Returns True if cluster successfully finished then rebalance
     @staticmethod
     def add_and_rebalance(servers, wait_for_rebalance=True):
         log = logger.Logger.get_logger()
@@ -88,8 +88,8 @@ class ClusterOperationHelper(object):
             else:
                 testcase.fail("ns_server {0} is not running in {1} sec".format(server.ip, wait_time))
 
-    #returns true if warmup is completed in wait_time sec
-    #otherwise return false
+    # returns true if warmup is completed in wait_time sec
+    # otherwise return false
     @staticmethod
     def _wait_warmup_completed(self, servers, bucket_name, wait_time=300):
         warmed_up = False
@@ -129,7 +129,7 @@ class ClusterOperationHelper(object):
                     log.info(
                                 "still warming up .... curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
                 else:
-                    fail("Value of ep warmup thread does not exist, exiting from this server")
+                    self.fail("Value of ep warmup thread does not exist, exiting from this server")
                 time.sleep(5)
             mc.close()
         return warmed_up
@@ -142,7 +142,7 @@ class ClusterOperationHelper(object):
         log.info("Verifying Persistence")
         buckets = rest.get_buckets()
         for bucket in buckets:
-        #Load some data
+        # Load some data
             l_threads = MemcachedClientHelper.create_threads([master], bucket.name,
                                                                      - 1, keys_count, {1024: 0.50, 512: 0.50}, 2, -1,
                                                                      True, True)
@@ -157,7 +157,6 @@ class ClusterOperationHelper(object):
                 t.join()
             log.info("persistence thread has finished...")
             test.assertTrue(ready, msg="Cannot verify persistence")
-
 
     @staticmethod
     def persistence_verification(servers, bucket, timeout_in_seconds=1260):
@@ -239,7 +238,7 @@ class ClusterOperationHelper(object):
     @staticmethod
     def cleanup_cluster(servers, wait_for_rebalance=True, master = None):
         log = logger.Logger.get_logger()
-        if master == None:
+        if master is None:
             master = servers[0]
         rest = RestConnection(master)
         helper = RestHelper(rest)
@@ -377,7 +376,7 @@ class ClusterOperationHelper(object):
         rest = RestConnection(master)
         servers = rest.get_nodes()
         for server in servers:
-            #this is not bucket specific so no need to pass in the bucketname
+            # this is not bucket specific so no need to pass in the bucketname
             log.info("connecting to memcached {0}:{1}".format(server.ip, server.memcached))
             mc = MemcachedClientHelper.direct_client(server, bucket)
             log.info("Set exp_pager_stime flush param on server {0}:{1}".format(server.ip, server.port))

@@ -2279,8 +2279,40 @@ class RestConnection(object):
                          wget --user=Administrator --password=asdasd --post-data='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
         return status
 
+    # return AutoReprovisionSettings
+    def get_autoreprovision_settings(self):
+        settings = None
+        api = self.baseUrl + 'settings/autoReprovision'
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        if status:
+            settings = AutoReprovisionSettings()
+            settings.enabled = json_parsed["enabled"]
+            settings.count = json_parsed["count"]
+            settings.max_nodes = json_parsed["max_nodes"]
+        return settings
+
+    def update_autoreprovision_settings(self, enabled, maxNodes=1):
+        if enabled:
+            params = urllib.urlencode({'enabled': 'true',
+                                       'maxNodes': maxNodes})
+        else:
+            params = urllib.urlencode({'enabled': 'false',
+                                       'maxNodes': maxNodes})
+        api = self.baseUrl + 'settings/autoReprovision'
+        log.info('settings/autoReprovision params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status:
+            log.error('failed to change autoReprovision_settings!')
+        return status
+
     def reset_autofailover(self):
         api = self.baseUrl + 'settings/autoFailover/resetCount'
+        status, content, header = self._http_request(api, 'POST', '')
+        return status
+
+    def reset_autoreprovision(self):
+        api = self.baseUrl + 'settings/autoReprovision/resetCount'
         status, content, header = self._http_request(api, 'POST', '')
         return status
 
@@ -3962,6 +3994,13 @@ class AutoFailoverSettings(object):
     def __init__(self):
         self.enabled = True
         self.timeout = 0
+        self.count = 0
+
+
+class AutoReprovisionSettings(object):
+    def __init__(self):
+        self.enabled = True
+        self.max_nodes = 0
         self.count = 0
 
 

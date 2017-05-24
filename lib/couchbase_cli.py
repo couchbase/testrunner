@@ -386,9 +386,23 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-autofailover",
-                                                     self.hostname, options)
+                                                     self.server.ip, options)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Auto-failover "
+                                                         "settings modified")
+
+    def setting_autoreprovision(self, enabled, max_nodes):
+        options = self._get_default_options()
+        if enabled is not None:
+            options += " --enabled " + str(enabled)
+        if max_nodes is not None:
+            options += " --max-nodes " + str(max_nodes)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("setting-autoreprovision",
+                                                     self.server.ip, options)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Auto-reprovision "
                                                          "settings modified")
 
     def setting_cluster(self, data_ramsize, index_ramsize, fts_ramsize,

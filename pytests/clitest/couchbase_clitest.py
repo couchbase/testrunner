@@ -1023,6 +1023,46 @@ class CouchbaseCliTest(CliBaseTest):
                 self.assertTrue(not self.isClusterInitialized(server),
                                 "Cluster was initialized, but error was received")
 
+    def testSettingAutoReprovision(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        enabled = self.input.param("enabled", None)
+        max_nodes = self.input.param("max-nodes", 1)
+        initialized = self.input.param("initialized", True)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        server = copy.deepcopy(self.servers[0])
+
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli = CouchbaseCLI(server, username, password)
+        if initialized:
+            _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
+                                             server.rest_password, None)
+            self.assertTrue(success, "Cluster initialization failed during test setup")
+
+        stdout, _, _ = cli.setting_autoreprovision(enabled, max_nodes)
+
+        if not expect_error:
+            if enabled == 0:
+                # WARNING: --max-servers will not take affect because auto-reprovision is being disabled
+                max_nodes = 1
+                self.assertEquals(stdout[0], 'WARNING: --max-servers will not take affect because auto-reprovision is being disabled')
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Auto-reprovision settings modified"),
+                            "Expected command to succeed")
+            self.assertTrue(self.verifyAutoreprovisionSettings(server, enabled, max_nodes),
+                            "Auto-failover settings were not set properly")
+
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                            "Expected error message not found")
+            if not initialized:
+                self.assertTrue(not self.isClusterInitialized(server),
+                                "Cluster was initialized, but error was received")
+
+
     def testSettingNotification(self):
         enable = self.input.param("enable", None)
         username = self.input.param("username", None)
