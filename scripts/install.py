@@ -228,7 +228,7 @@ class Installer(object):
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
-        if "-" in version and int(version.split("-")[1]) >= 2924:
+        if msi:
             info.deliverable_type = "msi"
         remote_client.disconnect()
         if ok and not linux_repo:
@@ -632,17 +632,10 @@ class CouchbaseServerInstaller(Installer):
         if not linux_repo:
             if type == "windows":
                 log.info('***** Download Windows binary*****')
-                if "-" in params["version"] and \
-                                int(params["version"].split("-")[1]) >= 2924:
-                    self.msi = True
-                    os_type = "msi"
-                remote_client.download_binary_in_win(build.url, params["version"],
-                                                             msi_install=self.msi)
-                success = remote_client.install_server_win(build,
-                                             params["version"].replace("-rel", ""),
-                                             vbuckets=vbuckets,
-                                             fts_query_limit=fts_query_limit,
-                                             windows_msi=self.msi )
+                remote_client.download_binary_in_win(build.url, params["version"],msi_install=self.msi)
+                success = remote_client.install_server_win(build, \
+                        params["version"].replace("-rel", ""), vbuckets=vbuckets,
+                        fts_query_limit=fts_query_limit,windows_msi=self.msi )
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:
