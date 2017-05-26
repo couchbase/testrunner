@@ -687,6 +687,8 @@ class BuildQuery(object):
                               couchbase_server-enterprise-windows-amd64-3.0.3-1716.exe
                               couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
                               couchbase-server-enterprise_3.5.0-1390-windows_x86.exe
+            From build 5.0.0-2924, we don't make any exe build.
+            It will be all in msi
         """
         build.toy = "toy-" + toy
         build.deliverable_type = deliverable_type
@@ -697,6 +699,7 @@ class BuildQuery(object):
         os_name = ""
         setup = ""
         build_number = ""
+
         unix_deliverable_type = ["deb", "rpm", "zip"]
         if deliverable_type in unix_deliverable_type:
             if toy == "" and version[:5] not in COUCHBASE_VERSION_2 and \
@@ -730,6 +733,8 @@ class BuildQuery(object):
                     build.architecture_type = "amd64"
                 elif "x86" in architecture_type:
                     build.architecture_type = "x86"
+            if "-" in version and int(version.split("-")[1]) >= 2924:
+                deliverable_type = "msi"
 
         if "deb" in deliverable_type and "centos6" in edition_type:
             edition_type = edition_type.replace("centos6", "ubuntu_1204")
@@ -789,8 +794,6 @@ class BuildQuery(object):
             else:
                 os_name = ""
                 joint_char = "-"
-                if build.deliverable_type == "msi":
-                    joint_char = "_"
                 """ sherlock build in unix only support 64-bit """
                 build.architecture_type = "amd64"
                 if  "ubuntu 12.04" in distribution_version:
