@@ -2243,8 +2243,8 @@ class RemoteMachineShellConnection:
                     uninstall_process = full_version[:10]
                     if not windows_msi:
                         ended = self.wait_till_process_ended(uninstall_process)
-                    if not ended:
-                        sys.exit("****  Node %s failed to uninstall  ****"
+                        if not ended:
+                            sys.exit("****  Node %s failed to uninstall  ****"
                                                               % (self.ip))
                 if full_version[:3] == "2.5":
                     self.sleep(20, "next step is to install")
