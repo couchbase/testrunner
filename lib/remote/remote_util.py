@@ -28,7 +28,8 @@ from testconstants import COUCHBASE_FROM_VERSION_3,\
                           COUCHBASE_FROM_SPOCK
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
-from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
+from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
+                          COUCHBASE_FROM_SPOCK
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
@@ -2100,25 +2101,7 @@ class RemoteMachineShellConnection:
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         fv, sv, bn = self.get_cbversion(type)
-        if windows_msi and False:
-            log.info('{0} ***** MSI Uninstall'.format( self.ip))
-
-            # only one command?
-            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
-
-            # from Hari
-            f1 = open('/tmp/u.bat', 'w')
-            f1.write('"c:\\Program Files\\Couchbase\\Server\\uninstall.exe" /S')
-            f1.close()
-            self.copy_file_local_to_remote('/tmp/u.bat', '/cygdrive/c/automation/u.bat')
-
-            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
-            output, error = self.execute_command("chmod +x /cygdrive/c/automation/u.bat; /cygdrive/c/automation/u.bat")
-            self.sleep(30, 'waiting 30 seconds to complete the uninstallation')
-
-            self.log_command_output(output, error)
-            log.info('{0} ***** MSI Uninstall - complete'.format(self.ip))
-        elif type == 'windows':
+        if type == 'windows':
             product = "cb"
             query = BuildQuery()
             os_type = "exe"
@@ -2145,10 +2128,21 @@ class RemoteMachineShellConnection:
 
                 build_name, short_version, full_version = \
                     self.find_build_version(version_path, VERSION_FILE, product)
-                if "-" in full_version and int(full_version.split("-")[1]) >= 2924:
-                    os_type = "msi"
-                    windows_msi = True
-                    self.info.deliverable_type = "msi"
+
+                if "-" in full_version:
+                    msi_build = full_version.split("-")
+                    if msi_build[0] in COUCHBASE_FROM_SPOCK and \
+                                    int(msi_build[1]) >= 2924:
+                        os_type = "msi"
+                        windows_msi = True
+                        self.info.deliverable_type = "msi"
+                else:
+                    mesg = " ***** ERROR: ***** \n" \
+                           " Couchbase Server version format is not correct. \n" \
+                           " It should be 0.0.0-DDDD format\n" \
+                           % (self.ip, os.getpid())
+                    self.stop_current_python_running(mesg)
+
                 build_repo = MV_LATESTBUILD_REPO
                 if full_version[:5] not in COUCHBASE_VERSION_2 and \
                    full_version[:5] not in COUCHBASE_VERSION_3:
