@@ -404,7 +404,7 @@ class NodeHelper:
             matches, err = shell.execute_command("zgrep \"{0}\" {1}".
                                         format(str, goxdcr_log))
             if matches:
-                NodeHelper._log.info(print_matches)
+                NodeHelper._log.info(matches)
 
         count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
                                         format(str, goxdcr_log))
@@ -817,7 +817,8 @@ class XDCReplication:
             self.__to_bucket.name,
             param,
             value)
-
+        self.log.info("Updated {0}={1} on bucket'{2}' on {3}".format(param, value, self.__from_bucket.name,
+                                                                     self.__src_cluster.get_master_node().ip))
         self.__updated_params[param] = value
         if verify_event:
             self.__validate_set_param_event()
