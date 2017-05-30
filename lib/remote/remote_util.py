@@ -230,6 +230,7 @@ class RemoteMachineShellConnection:
         """ self.info.distribution_type.lower() == "ubuntu" """
         self.cmd_ext = ""
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        self.msi = False
         if self.nonroot:
             self.bin_path = self.nr_home_path + self.bin_path
         self.extract_remote_info()
@@ -1788,10 +1789,8 @@ class RemoteMachineShellConnection:
 
         log.info('******start install_server_win ********')
         if windows_msi:
-            log.info("***** msi method ******")
-            msg = "There is a bug MB-22956 that blocks this installation method"
-            self.stop_current_python_running(msg)
-            output, error = self.execute_command("cd /cygdrive/c/tmp; msiexec /i {0}.msi /qn "\
+            output, error = self.execute_command("cd /cygdrive/c/tmp;"
+                                                 "msiexec /i {0}.msi /qn "\
                                                 .format(version))
             self.log_command_output(output, error)
             return len(error) == 0
@@ -2131,9 +2130,6 @@ class RemoteMachineShellConnection:
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
-            if self.file_exists(version_path, VERSION_FILE):
-                build_name, short_version, full_version = \
-                    self.find_build_version(version_path, VERSION_FILE, product)
             capture_iss_file = ""
             log.info("kill any in/uninstall process from version 3 in node %s"
                                                                         % self.ip)
@@ -2146,8 +2142,13 @@ class RemoteMachineShellConnection:
                                        "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1",
                                        "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
                                        "3.1.3", "3.1.5"]
+
                 build_name, short_version, full_version = \
                     self.find_build_version(version_path, VERSION_FILE, product)
+                if "-" in full_version and int(full_version.split("-")[1]) >= 2924:
+                    os_type = "msi"
+                    windows_msi = True
+                    self.info.deliverable_type = "msi"
                 build_repo = MV_LATESTBUILD_REPO
                 if full_version[:5] not in COUCHBASE_VERSION_2 and \
                    full_version[:5] not in COUCHBASE_VERSION_3:
@@ -2155,8 +2156,9 @@ class RemoteMachineShellConnection:
                         build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
                     else:
                         sys.exit("version is not support yet")
-                log.info("*****VERSION file exists.  Start to uninstall {0} on {1} server"\
-                                                           .format(product, self.ip))
+                log.info("*****VERSION file exists."
+                                   "Start to uninstall {0} on {1} server"
+                                   .format(product, self.ip))
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
@@ -2181,10 +2183,12 @@ class RemoteMachineShellConnection:
                             os_version=self.info.distribution_version.lower())
                     else:
                         builds, changes = query.get_all_builds(version=full_version,
-                                        deliverable_type=self.info.deliverable_type,
+                                      deliverable_type=self.info.deliverable_type,
                                       architecture_type=self.info.architecture_type,
-                                         edition_type=product_name, repo=build_repo,
-                            distribution_version=self.info.distribution_version.lower())
+                                      edition_type=product_name, repo=build_repo,
+                                      distribution_version=\
+                                            self.info.distribution_version.lower())
+
                         build = query.find_build(builds, product_name, os_type,
                                                    self.info.architecture_type,
                                                                   full_version,
@@ -2196,14 +2200,13 @@ class RemoteMachineShellConnection:
                                              .format(short_version, self.ip))
                     else:
                         log.error('Download {0}.exe failed'.format(short_version))
-                dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
-                self.create_multiple_dir(dir_paths)
-                self.copy_files_local_to_remote('resources/windows/automation',
-                                                      '/cygdrive/c/automation')
-                self.stop_couchbase()
-                # modify bat file to run uninstall schedule task
-                #self.create_windows_capture_file(task, product, full_version)
                 if not windows_msi:
+                    dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+                    self.create_multiple_dir(dir_paths)
+                    self.copy_files_local_to_remote('resources/windows/automation',
+                                                      '/cygdrive/c/automation')
+                    # modify bat file to run uninstall schedule task
+                    #self.create_windows_capture_file(task, product, full_version)
                     capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
                                         bat_file, product, short_version, task)
                     self.stop_schedule_tasks()
@@ -2216,22 +2219,17 @@ class RemoteMachineShellConnection:
                                     'schedule uninstall on {0}'.format(self.ip))
                 """ End remove this workaround when bug MB-14504 is fixed """
 
-                """ the code below need to remove when bug MB-11328
-                                                            is fixed in 3.0.1 """
-                output, error = self.kill_erlang(os="windows")
-                self.log_command_output(output, error)
-                """ end remove code """
-
+                self.stop_couchbase()
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
                 if windows_msi:
                     log.info("******** uninstall via msi method ***********")
-                    msg = "\nThere is a bug MB-22956 \nthat blocks this uninstallation method\n"
-                    self.stop_current_python_running(msg)
                     output, error = \
                         self.execute_command("cd /cygdrive/c/tmp; msiexec /x %s /qn"\
                                              % build_name)
                     self.log_command_output(output, error)
+                    var_dir = "/cygdrive/c/Program\ Files/Couchbase/Server/var"
+                    self.execute_command("rm -rf %s" % var_dir)
                 else:
                     output, error = \
                         self.execute_command("cmd /c schtasks /run /tn removeme")
@@ -2243,11 +2241,11 @@ class RemoteMachineShellConnection:
                     sys.exit()
                 if full_version[:3] != "2.5":
                     uninstall_process = full_version[:10]
-                    if windows_msi:
-                        uninstall_process = "msiexec"
-                    ended = self.wait_till_process_ended(uninstall_process)
+                    if not windows_msi:
+                        ended = self.wait_till_process_ended(uninstall_process)
                     if not ended:
-                        sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
+                        sys.exit("****  Node %s failed to uninstall  ****"
+                                                              % (self.ip))
                 if full_version[:3] == "2.5":
                     self.sleep(20, "next step is to install")
                 else:
