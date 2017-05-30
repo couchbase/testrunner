@@ -14,6 +14,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def setUp(self):
         super(GSIReplicaIndexesTests, self).setUp()
         self.rest = RestConnection(self.servers[0])
+        self.n1ql_server = self.get_nodes_from_services_map(
+            service_type="n1ql")
         self.create_primary_index = False
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
@@ -2506,6 +2508,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         output, error, json = self._cbindexplan_plan(self.servers[0],
                                                      self.num_index_replicas,
                                                      "age")
+
         if error:
             self.fail("cbindexplan errored out")
         else:
@@ -2669,7 +2672,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 for node in result["placement"]:
                     if node["indexes"] != []:
                         num_recommended_nodes += 1
-                        actual_node_list.append(node["nodeId"])
+                        actual_node_list.append(str(node["nodeId"]))
 
                 expected_num_recommended_nodes = self.num_index_replicas + 1
                 if self.eq_index_node:
@@ -2677,13 +2680,12 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
                 self.assertEqual(expected_num_recommended_nodes, num_recommended_nodes, "cbindexplan doesnt give recommendations for all replicas" )
 
-
-
                 # Validate if there is an expected node list, the placement recommendation matches it
                 if expected_node_list:
-                    self.assertListEqual(actual_node_list.sort(), expected_node_list.sort(), "Placement recommendation not matching expected node list")
-                else:
-                    self.fail("Result contains no placement recommendations")
+                    actual_node_list.sort()
+                    expected_node_list.sort()
+                    self.assertListEqual(actual_node_list, expected_node_list, "Placement recommendation not matching expected node list")
+
 
     def _generate_index_json_for_cbindex_plan(self, num_replica, bucket, field):
         idx_json = {}
