@@ -18,6 +18,7 @@ from couchbase_helper.query_helper import QueryHelper
 from remote.remote_util import RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
 import random
+from itertools import combinations
 
 
 class RQGTests(BaseTestCase):
@@ -80,6 +81,7 @@ class RQGTests(BaseTestCase):
         self.drop_index = self.input.param("drop_index",False)
         self.drop_bucket = self.input.param("drop_bucket",False)
         self.dynamic_indexing = self.input.param("dynamic_indexing", False)
+        self.pushdown = self.input.param("pushdown",False)
         self.subquery = self.input.param("subquery",False)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
@@ -1403,6 +1405,33 @@ class RQGTests(BaseTestCase):
         build_index_list = []
         batch_index_definitions = {}
         batch_index_definitions = index_map
+        table_field_map = self.client._get_field_list_map_for_tables()
+        fields = table_field_map['simple_table']
+        if self.pushdown:
+           combination_fields = sum([map(list, combinations(fields, i)) for i in range(len(fields) + 1)], [])
+           for x in xrange(1,len(combination_fields)):
+               input = combination_fields[x]
+               if len(input)==1:
+                   fields_indexed = str(input[0])
+                   index_name = "ix_" + str(0)+str(x)
+               else:
+                 fields_indexed = str(input[0])
+                 for i in xrange(1,len(input)):
+                   index_name = "ix_" + str(i)+str(x)
+                   fields_indexed = fields_indexed+"," + str(x[i])
+               query = "CREATE INDEX {0} ON {1}({2})".format(
+                     index_name, table_name, fields_indexed)
+               build_index_list.append(index_name)
+               self.log.info(" Running Query {0} ".format(query))
+               try:
+                    self.n1ql_helper.run_cbq_query(
+                    query=query, server=self.n1ql_server, verbose=False)
+                    build_index_list.append(index_name)
+                    check = self.n1ql_helper.is_index_online_and_in_list(table_name, index_name,
+                            server = self.n1ql_server, timeout = 240)
+               except Exception, ex:
+                    self.log.info(ex)
+
         if self.dynamic_indexing:
             index_name = "idx_" + table_name
             query = "CREATE INDEX {0} ON {1}(DISTINCT ARRAY v FOR v IN PAIRS(SELF) END) WITH {2}".format(
