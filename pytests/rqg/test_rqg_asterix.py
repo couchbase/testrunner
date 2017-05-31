@@ -1,23 +1,18 @@
-import sys
-import paramiko
-import re
-from basetestcase import BaseTestCase
-import json
-import os
-import zipfile
-import pprint
 import Queue
 import json
-from membase.helper.cluster_helper import ClusterOperationHelper
-import mc_bin_client
+import os
 import threading
-from memcached.helper.data_helper import  VBucketAwareMemcached
-from mysql_client import MySQLClient
-from membase.api.rest_client import RestConnection, Bucket
+import zipfile
+
+import paramiko
+
+from basetestcase import BaseTestCase
 from couchbase_helper.analytics_helper import AnalyticsHelper
 from couchbase_helper.query_helper import QueryHelper
-from remote.remote_util import RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
+from membase.api.rest_client import RestConnection
+from mysql_client import MySQLClient
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class RQGASTERIXTests(BaseTestCase):
@@ -228,9 +223,14 @@ class RQGASTERIXTests(BaseTestCase):
 
         data = 'use Default;' + "\n"
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)  + "\n"
-            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow") + "\n"
-            data +=  'connect bucket {0} ;'.format(bucket.name) + "\n"
+            bucket_username = "cbadminbucket"
+            bucket_password = "password"
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(
+                bucket.name, self.master.ip)
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,
+                                                                bucket.name + "_shadow")
+            data += 'connect bucket {0} with {{"username":"{1}","password":"{2}"}};'.format(
+                bucket.name, bucket_username, bucket_password)
         #import pdb;pdb.set_trace()
         filename = "file.txt"
         f = open(filename,'w')

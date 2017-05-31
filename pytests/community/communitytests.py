@@ -211,7 +211,8 @@ class CommunityTests(CommunityBaseTest):
 
         self.remote = RemoteMachineShellConnection(self.master)
         """ put params items=0 in test param so that init items = 0 """
-        self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000"
+        self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 " \
+                                    "-u Administrator -p password" \
                                             .format(self.bin_path, self.master.ip))
         """ delete backup location before run backup """
         self.remote.execute_command("rm -rf {0}*".format(self.backup_location))
@@ -220,32 +221,43 @@ class CommunityTests(CommunityBaseTest):
         self.remote.log_command_output(output, error)
 
         """ first full backup """
-        self.remote.execute_command("{0}cbbackup http://{1}:8091 {2} -m full"
-                .format(self.bin_path, self.master.ip, self.backup_c_location))
+        self.remote.execute_command("{0}cbbackup http://{1}:8091 {2} -m full " \
+                                    "-u Administrator -p password"\
+                                    .format(self.bin_path,
+                                            self.master.ip,
+                                            self.backup_c_location))
         output, error = self.remote.execute_command("ls -lh {0}*/"
                                         .format(self.backup_location))
         self.remote.log_command_output(output, error)
-        output, error = self.remote.execute_command("{0}cbtransfer {1}*/*-full/ stdout: \
-                                                         | grep set | uniq | wc -l"
-                                    .format(self.bin_path, self.backup_c_location))
-        self.remote.log_command_output(output, error)
+        o, e = self.remote.execute_command("{0}cbtransfer -u Administrator "\
+                                           "-p password {1}*/*-full/ " \
+                                           "stdout: | grep set | uniq | wc -l"\
+                                           .format(self.bin_path,
+                                                   self.backup_c_location))
+        self.remote.log_command_output(o, e)
         if int(output[0]) != 1000:
             self.fail("full backup did not work in CE. "
                       "Expected 1000, actual: {0}".format(output[0]))
-        self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 --prefix=t_"
-                                            .format(self.bin_path, self.master.ip))
+        self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 "\
+                                    " -u Administrator -p password --prefix=t_"
+                                    .format(self.bin_path, self.master.ip))
         """ do different backup mode """
-        self.remote.execute_command("{0}cbbackup http://{1}:8091 {2} -m {3}"
-                       .format(self.bin_path, self.master.ip, self.backup_c_location,
-                                                               self.backup_option))
+        self.remote.execute_command("{0}cbbackup -u Administrator -p password "\
+                                    "http://{1}:8091 {2} -m {3}"\
+                                    .format(self.bin_path,
+                                            self.master.ip,
+                                            self.backup_c_location,
+                                            self.backup_option))
         output, error = self.remote.execute_command("ls -lh {0}"
                                                      .format(self.backup_location))
         self.remote.log_command_output(output, error)
-        output, error = self.remote.execute_command("{0}cbtransfer {1}*/*-{2}/ stdout: \
-                                                         | grep set | uniq | wc -l"
-                                       .format(self.bin_path, self.backup_c_location,
-                                                               self.backup_option))
-        self.remote.log_command_output(output, error)
+        o, e = self.remote.execute_command("{0}cbtransfer -u Administrator "\
+                                           "-p password {1}*/*-{2}/ stdout: "\
+                                           "| grep set | uniq | wc -l"\
+                                           .format(self.bin_path,
+                                                   self.backup_c_location,
+                                                   self.backup_option))
+        self.remote.log_command_output(o, e)
         if int(output[0]) == 2000:
             self.log.info("backup option 'diff' is enforced in CE")
         elif int(output[0]) == 1000:

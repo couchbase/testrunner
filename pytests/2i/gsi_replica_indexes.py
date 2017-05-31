@@ -14,8 +14,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def setUp(self):
         super(GSIReplicaIndexesTests, self).setUp()
         self.rest = RestConnection(self.servers[0])
-        self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql",
-                                                            get_all_nodes=False)
+        self.n1ql_server = self.get_nodes_from_services_map(
+            service_type="n1ql")
         self.create_primary_index = False
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
@@ -23,7 +23,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
         elif info == 'windows':
             self.cmd_ext = ".exe"
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH
         elif info == 'mac':
             self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
         else:
@@ -2508,6 +2508,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         output, error, json = self._cbindexplan_plan(self.servers[0],
                                                      self.num_index_replicas,
                                                      "age")
+
         if error:
             self.fail("cbindexplan errored out")
         else:
@@ -2671,23 +2672,20 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 for node in result["placement"]:
                     if node["indexes"] != []:
                         num_recommended_nodes += 1
-                        actual_node_list.append(node["nodeId"])
-                if not (self.num_index_replicas + 1) == num_recommended_nodes:
-                    self.fail(
-                        "cbindexplan doesnt give recommendations for all replicas")
-                else:
-                    self.log.info("# of recommendations is correct")
+                        actual_node_list.append(str(node["nodeId"]))
 
-                    # Validate if there is an expected node list, the placement recommendation matches it
+                expected_num_recommended_nodes = self.num_index_replicas + 1
+                if self.eq_index_node:
+                    expected_num_recommended_nodes += 1
+
+                self.assertEqual(expected_num_recommended_nodes, num_recommended_nodes, "cbindexplan doesnt give recommendations for all replicas" )
+
+                # Validate if there is an expected node list, the placement recommendation matches it
                 if expected_node_list:
-                    if cmp(actual_node_list, expected_node_list):
-                        self.fail(
-                            "Placement recommendation not matching expected node list")
-                    else:
-                        self.log.info("Recommended nodes matches expected nodes")
+                    actual_node_list.sort()
+                    expected_node_list.sort()
+                    self.assertListEqual(actual_node_list, expected_node_list, "Placement recommendation not matching expected node list")
 
-            else:
-                self.fail("Result contains no placement recommendations")
 
     def _generate_index_json_for_cbindex_plan(self, num_replica, bucket, field):
         idx_json = {}

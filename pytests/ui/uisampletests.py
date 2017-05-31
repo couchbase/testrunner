@@ -39,7 +39,7 @@ class BucketTests(BaseUITestCase):
 
     def test_add_bucket_with_ops(self):
         error = self.input.param('error', None)
-        bucket_helper = BucketHelper(self)
+        # bucket_helper = BucketHelper(self)
         bucket = Bucket(parse_bucket=self.input)
         bucket.num_replica = '0'
         NavigationHelper(self).navigate('Buckets')
@@ -69,7 +69,7 @@ class BucketTests(BaseUITestCase):
         NavigationHelper(self).navigate('Buckets')
         BaseHelper(self).wait_ajax_loaded()
         BucketHelper(self).open_stats(self.bucket)
-        total_views_st = BucketHelper(self).get_stat("views total disk size")
+        total_views_st = BucketHelper(self).get_stat("views total disk size").replace(' views total', '')
         view_st = BucketHelper(self).get_stat("disk size", block="view")
         self.assertEquals(total_views_st, view_st,
                           "Stats should be equal, but views total disk size is %s"
@@ -84,10 +84,10 @@ class BucketTests(BaseUITestCase):
         BucketHelper(self).create(self.bucket)
 
         BucketHelper(self).open_stats(self.bucket)
-        conn_st = BucketHelper(self).get_stat("connections")
-        conn_per_sec_st = BucketHelper(self).get_stat("port 8091 reqs/sec")
-        idle_st = BucketHelper(self).get_stat("idle streaming requests")
-        wakeups_st = BucketHelper(self).get_stat("streaming wakeups/sec")
+        conn_st = BucketHelper(self).get_stat("connections").replace(' connections', '')
+        conn_per_sec_st = BucketHelper(self).get_stat("port 8091 reqs/sec").replace(' port 8091 reqs/sec', '')
+        idle_st = BucketHelper(self).get_stat("idle streaming requests").replace(' idle streaming requests', '')
+        wakeups_st = BucketHelper(self).get_stat("streaming wakeups/sec").replace(' streaming wakeups/sec', '')
 
         client = MemcachedClientHelper.direct_client(self.servers[0], self.bucket.name)
         conn_stat = int(client.stats()["curr_connections"])
@@ -113,13 +113,12 @@ class InitializeTest(BaseUITestCase):
             super(InitializeTest, self).tearDown()
         finally:
             if hasattr(self, 'cluster'):
+                self._initialize_api()
                 self.cluster.shutdown()
 
     def test_initialize(self):
-        try:
-            NodeInitializeHelper(self).initialize(self.input)
-        except:
-            self._initialize_api()
+        time.sleep(3)
+        NodeInitializeHelper(self).initialize(self.input)
 
     def _initialize_api(self):
         init_tasks = []
@@ -239,7 +238,7 @@ class DocumentsTest(BaseUITestCase):
         num_docs = self.input.param('num-docs', 10)
         doc_name = self.input.param('doc_name', 'test')
         doc_content = self.input.param('content', '{"test" : "test"}')
-        num_pages = int(num_docs/items_per_page)
+        num_pages = int(num_docs / items_per_page)
 
         DocsHelper(self).select_docs_per_page('100')
         for i in xrange(num_docs):
@@ -249,17 +248,17 @@ class DocumentsTest(BaseUITestCase):
                             % DocsHelper(self).get_error())
 
         DocsHelper(self).select_docs_per_page(str(items_per_page))
-        self.assertEquals(num_pages,  DocsHelper(self).get_total_pages_num(),
-                          "Total number of pages should be %s, actual is %s" %\
+        self.assertEquals(num_pages, DocsHelper(self).get_total_pages_num(),
+                          "Total number of pages should be %s, actual is %s" % \
                           (num_pages, DocsHelper(self).get_total_pages_num()))
 
         self.log.info("total number of pages is %s as expected" % num_pages)
 
         for page in xrange(1, num_pages + 1):
             self.assertTrue(items_per_page >= DocsHelper(self).get_rows_count(),
-                            "Items number per page is incorrect %s, expected %s" %\
+                            "Items number per page is incorrect %s, expected %s" % \
                             (DocsHelper(self).get_rows_count(), items_per_page))
-            self.log.info("Page has correct number of items: %s" %\
+            self.log.info("Page has correct number of items: %s" % \
                           DocsHelper(self).get_rows_count())
             if page != num_pages:
                 DocsHelper(self).go_to_next_page()
@@ -418,7 +417,7 @@ class ExternalUserTests(BaseUITestCase):
         mode = self.input.param('mode', 'enable')
 
         if roles == "":
-            roles =[]
+            roles = []
         else:
             roles = roles.split(";")
             roles = [role.replace("@", "*") for role in roles]
@@ -466,7 +465,7 @@ class  RebalanceProgressTests(BaseUITestCase):
     def _verify_stats(self, stats):
         self.assertTrue(int(stats["total_transfer"]) >= int(stats["estimated_transfer"]),
                         "total_transfer should be greater than estimated  in stats %s" % stats)
-        self.assertTrue(re.match(r'.*Active#-.*Replica#-.*',str(stats["vbuckets"])),
+        self.assertTrue(re.match(r'.*Active#-.*Replica#-.*', str(stats["vbuckets"])),
                         "VBuckets in stats %s has incorrect format" % stats)
 
 
@@ -474,7 +473,7 @@ class  RebalanceProgressTests(BaseUITestCase):
 class GracefullFailoverTests(BaseUITestCase):
     def setUp(self):
         super(GracefullFailoverTests, self).setUp()
-        self.master=self.servers[0]
+        self.master = self.servers[0]
         try:
             self.nodes_init = self.input.param("nodes_init", 2)
             self.rebalance = self.input.param("rebalance", False)
@@ -526,13 +525,13 @@ class GracefullFailoverTests(BaseUITestCase):
     def test_failover_multiply_nodes(self):
         is_graceful = self.input.param("graceful", "true;true")
         is_graceful = is_graceful.split(';')
-        is_graceful = [(False,True)[item.lower() == "true"] for item in is_graceful]
+        is_graceful = [(False, True)[item.lower() == "true"] for item in is_graceful]
         if len(self.servers) < (len(is_graceful) + 1):
             self.fail("There is no enough VMs. Need at least %s" % len(is_graceful))
         NavigationHelper(self).navigate('Server Nodes')
         confirm_failover_check = True
         for iter in xrange(len(is_graceful)):
-            if self.num_replica < self.nodes_init -1 and self.rebalance:
+            if self.num_replica < self.nodes_init - 1 and self.rebalance:
                 confirm_failover_check = False
             ServerHelper(self).failover(self.servers[iter + 1], confirm=True, graceful=is_graceful[iter], confirm_failover=confirm_failover_check)
 
@@ -595,7 +594,7 @@ class ViewsTests(BaseUITestCase):
 
     def _initialize_nodes(self):
         for server in self.servers:
-            RestConnection(server).init_cluster(self.input.membase_settings.rest_username,self.input.membase_settings.rest_password, '8091')
+            RestConnection(server).init_cluster(self.input.membase_settings.rest_username, self.input.membase_settings.rest_password, '8091')
 
     def test_add_dev_view(self):
         try:
@@ -711,7 +710,7 @@ class ServerTestControls():
 
 
     def set_quota_btn(self):
-        return self.helper.find_control('server_nodes','set_quota')
+        return self.helper.find_control('server_nodes', 'set_quota')
 
     def pending_rebalance_tab(self):
         return self.helper.find_control('server_nodes', 'pending_rebalance_tab')
@@ -734,7 +733,7 @@ class ServerTestControls():
         self.add_server_confirm_btn = self.helper.find_control('server_nodes', 'add_server_dialog_btn',
                                                                parent_locator='confirm_server_addition')
         self.index = self.helper.find_control('server_nodes', 'index')
-        self.n1ql = self.helper.find_control('server_nodes','n1ql')
+        self.n1ql = self.helper.find_control('server_nodes', 'n1ql')
         return self
 
     def remove_server_dialog(self, parent='remove_server_pop_up'):
@@ -743,8 +742,8 @@ class ServerTestControls():
         return self
 
     def server_row_controls(self):
-        self.failover_btns = self.helper.find_controls('server_nodes','failover_btn')
-        self.remove_btns = self.helper.find_controls('server_nodes','remove_btn')
+        self.failover_btns = self.helper.find_controls('server_nodes', 'failover_btn')
+        self.remove_btns = self.helper.find_controls('server_nodes', 'remove_btn')
         return self
 
     def server_row_btns(self, server_ip):
@@ -821,6 +820,7 @@ class ServerTestControls():
     def server_rows(self):
         return self.helper.find_controls('server_info', 'server_rows')
 
+
 class BucketTestsControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
@@ -828,24 +828,26 @@ class BucketTestsControls():
 
     def bucket_pop_up(self, parent='create_bucket_pop_up'):
         self.parent = parent
-        self.create_bucket_pop_up = self.helper.find_control('bucket','create_bucket_pop_up')
-        self.name = self.helper.find_control('bucket','name', 'create_bucket_pop_up')
-        self.ram_quota = self.helper.find_control('bucket','ram_quota', parent_locator=self.parent)
-        self.standart_port_radio = self.helper.find_control('bucket','standart_port_radio',
+        self.create_bucket_pop_up = self.helper.find_control('bucket', 'create_bucket_pop_up')
+        self.show_advanced_settings = self.helper.find_control('bucket', 'show_advanced_settings')
+        self.hide_advanced_settings = self.helper.find_control('bucket', 'hide_advanced_settings')
+        self.name = self.helper.find_control('bucket', 'name', 'create_bucket_pop_up')
+        self.ram_quota = self.helper.find_control('bucket', 'ram_quota', parent_locator=self.parent)
+        self.standart_port_radio = self.helper.find_control('bucket', 'standart_port_radio',
                                                             parent_locator=self.parent)
-        self.dedicated_port_radio = self.helper.find_control('bucket','dedicated_port_radio',
+        self.dedicated_port_radio = self.helper.find_control('bucket', 'dedicated_port_radio',
                                                              parent_locator=self.parent)
-        self.sasl_password = self.helper.find_control('bucket','sasl_password',
+        self.sasl_password = self.helper.find_control('bucket', 'sasl_password',
                                                       parent_locator=self.parent)
-        self.port = self.helper.find_control('bucket','port', parent_locator=self.parent)
-        self.enable_replica_cb = self.helper.find_control('bucket','enable_replica_cb',
+        self.port = self.helper.find_control('bucket', 'port', parent_locator=self.parent)
+        self.enable_replica_cb = self.helper.find_control('bucket', 'enable_replica_cb',
                                                           parent_locator=self.parent)
-        self.replica_num = self.helper.find_control('bucket','replica_num', parent_locator=self.parent)
-        self.index_replica_cb = self.helper.find_control('bucket','index_replica_cb',
+        self.replica_num = self.helper.find_control('bucket', 'replica_num', parent_locator=self.parent)
+        self.index_replica_cb = self.helper.find_control('bucket', 'index_replica_cb',
                                                          parent_locator=self.parent)
-        self.override_comp_cb = self.helper.find_control('bucket','auto_comp_settings_override',
+        self.override_comp_cb = self.helper.find_control('bucket', 'auto_comp_settings_override',
                                                          parent_locator=self.parent)
-        self.create_btn = self.helper.find_control('bucket','create_btn',
+        self.create_btn = self.helper.find_control('bucket', 'create_btn',
                                                    parent_locator='create_bucket_pop_up')
         return self
 
@@ -856,33 +858,33 @@ class BucketTestsControls():
         return self.helper.find_control('bucket', 'io_priority', parent_locator=parent, text=text)
 
     def bucket_compaction(self, parent='create_bucket_pop_up'):
-        self.frag_percent_cb = self.helper.find_control('bucket','frag_percent_cb',
+        self.frag_percent_cb = self.helper.find_control('bucket', 'frag_percent_cb',
                                                       parent_locator=parent)
-        self.frag_percent = self.helper.find_control('bucket','frag_percent', parent_locator=parent)
-        self.frag_mb_cb = self.helper.find_control('bucket','frag_mb_cb',
+        self.frag_percent = self.helper.find_control('bucket', 'frag_percent', parent_locator=parent)
+        self.frag_mb_cb = self.helper.find_control('bucket', 'frag_mb_cb',
                                                           parent_locator=parent)
-        self.frag_mb = self.helper.find_control('bucket','frag_mb', parent_locator=parent)
-        self.view_frag_percent_cb = self.helper.find_control('bucket','view_frag_percent_cb',
+        self.frag_mb = self.helper.find_control('bucket', 'frag_mb', parent_locator=parent)
+        self.view_frag_percent_cb = self.helper.find_control('bucket', 'view_frag_percent_cb',
                                                          parent_locator=parent)
-        self.view_frag_percent = self.helper.find_control('bucket','view_frag_percent',
+        self.view_frag_percent = self.helper.find_control('bucket', 'view_frag_percent',
                                                    parent_locator=parent)
-        self.view_frag_mb = self.helper.find_control('bucket','view_frag_mb',
+        self.view_frag_mb = self.helper.find_control('bucket', 'view_frag_mb',
                                                       parent_locator=parent)
-        self.view_frag_mb_cb = self.helper.find_control('bucket','view_frag_mb_cb', parent_locator=parent)
-        self.comp_allowed_period_cb = self.helper.find_control('bucket','comp_allowed_period_cb',
+        self.view_frag_mb_cb = self.helper.find_control('bucket', 'view_frag_mb_cb', parent_locator=parent)
+        self.comp_allowed_period_cb = self.helper.find_control('bucket', 'comp_allowed_period_cb',
                                                           parent_locator=parent)
-        self.comp_allowed_period_start_h = self.helper.find_control('bucket','comp_allowed_period_start_h', parent_locator=parent)
-        self.comp_allowed_period_start_min = self.helper.find_control('bucket','comp_allowed_period_start_min',
+        self.comp_allowed_period_start_h = self.helper.find_control('bucket', 'comp_allowed_period_start_h', parent_locator=parent)
+        self.comp_allowed_period_start_min = self.helper.find_control('bucket', 'comp_allowed_period_start_min',
                                                          parent_locator=parent)
-        self.comp_allowed_period_end_h = self.helper.find_control('bucket','comp_allowed_period_end_h',
+        self.comp_allowed_period_end_h = self.helper.find_control('bucket', 'comp_allowed_period_end_h',
                                                    parent_locator=parent)
-        self.comp_allowed_period_end_min = self.helper.find_control('bucket','comp_allowed_period_end_min',
+        self.comp_allowed_period_end_min = self.helper.find_control('bucket', 'comp_allowed_period_end_min',
                                                          parent_locator=parent)
-        self.abort_comp_cb = self.helper.find_control('bucket','abort_comp_cb',
+        self.abort_comp_cb = self.helper.find_control('bucket', 'abort_comp_cb',
                                                    parent_locator=parent)
-        self.comp_in_parallel_cb = self.helper.find_control('bucket','comp_in_parallel_cb',
+        self.comp_in_parallel_cb = self.helper.find_control('bucket', 'comp_in_parallel_cb',
                                                          parent_locator=parent)
-        self.purge_interval = self.helper.find_control('bucket','purge_interval',
+        self.purge_interval = self.helper.find_control('bucket', 'purge_interval',
                                                    parent_locator=parent)
         return self
 
@@ -890,17 +892,17 @@ class BucketTestsControls():
         return self.helper.find_controls('bucket', 'error', parent_locator='create_bucket_pop_up')
 
     def bucket_info(self, bucket_name):
-        self.arrow = self.helper.find_control('bucket_row','arrow', parent_locator='bucket_row',
+        self.arrow = self.helper.find_control('bucket_row', 'arrow', parent_locator='bucket_row',
                                                text=bucket_name)
-        self.name = self.helper.find_control('bucket_row','name', parent_locator='bucket_row',
+        self.name = self.helper.find_control('bucket_row', 'name', parent_locator='bucket_row',
                                               text=bucket_name)
-        self.nodes = self.helper.find_control('bucket_row','nodes', parent_locator='bucket_row',
+        self.nodes = self.helper.find_control('bucket_row', 'nodes', parent_locator='bucket_row',
                                                text=bucket_name)
-        self.items_count = self.helper.find_control('bucket_row','items_count',
+        self.items_count = self.helper.find_control('bucket_row', 'items_count',
                                                     parent_locator='bucket_row', text=bucket_name)
-        self.documents = self.helper.find_control('bucket_row','documents',
+        self.documents = self.helper.find_control('bucket_row', 'documents',
                                                   parent_locator='bucket_row', text=bucket_name)
-        self.views = self.helper.find_control('bucket_row','views', parent_locator='bucket_row',
+        self.views = self.helper.find_control('bucket_row', 'views', parent_locator='bucket_row',
                                                text=bucket_name)
         self.health = self.helper.find_first_visible('bucket_row', 'health',
                                                      parent_locator='bucket_row',
@@ -908,13 +910,13 @@ class BucketTestsControls():
         return self
 
     def type(self, type):
-        return self.helper.find_control('bucket','type', parent_locator='create_bucket_pop_up')
+        return self.helper.find_control('bucket', 'type', text=type)
 
     def warning_pop_up(self, text):
         return self.helper.find_control('errors', 'warning_pop_up', text=text)
 
     def edit_btn(self):
-        return self.helper.find_control('bucket','edit_btn')
+        return self.helper.find_control('bucket', 'edit_btn')
 
     def bucket_stats(self, stat=None, tab=None):
         self.arrow = self.helper.find_control('bucket_stats', 'value_stat_arrow', text=tab)
@@ -922,10 +924,10 @@ class BucketTestsControls():
         return self
 
     def bucket_stat_view_block(self):
-        return self.helper.find_control('bucket_stats','view_stats_block')
+        return self.helper.find_control('bucket_stats', 'view_stats_block')
 
     def bucket_stat_from_view_block(self, stat):
-        return self.helper.find_control('bucket_stats','value_stat', parent_locator='view_stats_block', text=stat)
+        return self.helper.find_control('bucket_stats', 'value_stat', parent_locator='view_stats_block', text=stat)
 
 class NodeInitializeControls():
     def __init__(self, driver):
@@ -957,7 +959,7 @@ class NodeInitializeControls():
         return self
 
     def step_2_sample(self, sample):
-        return self.helper.find_control('step_2','sample', text=sample)
+        return self.helper.find_control('step_2', 'sample', text=sample)
 
     def step_4(self):
         self.enable_updates = self.helper.find_control('step_4', 'enable_updates')
@@ -1007,7 +1009,7 @@ class DdocViewControls():
     def view_row(self, view=''):
         self.row = self.helper.find_control('view_row', 'row', text=view)
         self.name = self.helper.find_control('view_row', 'name', text=view)
-        #self.row_name = self.helper.find_control('view_row', 'row_name', text=view)
+        # self.row_name = self.helper.find_control('view_row', 'row_name', text=view)
         self.edit_btn = self.helper.find_control('view_row', 'edit_btn', text=view, parent_locator='row')
         self.delete_btn = self.helper.find_control('view_row', 'delete_btn', text=view, parent_locator='row')
         return self
@@ -1169,20 +1171,20 @@ class SettingsTestControls():
         return self.helper.find_controls('external_user', 'ext_error_message')
 
     def confirmation_user_delete(self):
-        self.confirmation_dlg = self.helper.find_control('confirm_delete_ro','dlg')
-        self.delete_btn  = self.helper.find_control('confirm_delete_ro','confirm_btn', parent_locator='dlg')
+        self.confirmation_dlg = self.helper.find_control('confirm_delete_ro', 'dlg')
+        self.delete_btn = self.helper.find_control('confirm_delete_ro', 'confirm_btn', parent_locator='dlg')
         return self
 
     def confirmation_external_user_delete(self):
-        self.confirmation_dlg = self.helper.find_control('confirm_delete_external_user','dlg')
-        self.delete_btn  = self.helper.find_control('confirm_delete_external_user', 'confirm_btn', parent_locator='dlg')
+        self.confirmation_dlg = self.helper.find_control('confirm_delete_external_user', 'dlg')
+        self.delete_btn = self.helper.find_control('confirm_delete_external_user', 'confirm_btn', parent_locator='dlg')
         return self
 
     def samples_buckets(self, bucket=''):
         self.sample_cb = self.helper.find_control('sample_buckets', 'sample_cb', text=bucket)
         self.installed_sample = self.helper.find_control('sample_buckets', 'installed_sample', text=bucket)
-        self.save_btn = self.helper.find_control('sample_buckets','save_btn')
-        self.error_msg = self.helper.find_controls('sample_buckets','error')
+        self.save_btn = self.helper.find_control('sample_buckets', 'save_btn')
+        self.error_msg = self.helper.find_controls('sample_buckets', 'error')
         return self
 
     def external_user_create_info(self, roles=[]):
@@ -1205,7 +1207,6 @@ class SettingsTestControls():
             self.roles_items.append(self.helper.find_control('external_user', 'roles_item', text=role))
         return self
 
-
 '''
 Helpers
 '''
@@ -1213,10 +1214,11 @@ class NavigationHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = NavigationTestControls(tc.driver)
-        self.wait = WebDriverWait(tc.driver, timeout=250)
+        self.wait = WebDriverWait(tc.driver, timeout=25)
 
     def _is_tab_selected(self, text):
-        return self.controls._navigation_tab(text).get_attribute('class') \
+        return self.controls._navigation_tab(text).is_displayed() and\
+               self.controls._navigation_tab(text).get_attribute('class') \
                                                     .find('currentNav') > -1
 
     def navigate(self, tab):
@@ -1233,7 +1235,7 @@ class NavigationHelper():
 class ServerHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=250)
+        self.wait = WebDriverWait(tc.driver, timeout=25)
         self.controls = ServerTestControls(tc.driver)
 
     def _is_btn_enabled(self, btn):
@@ -1335,7 +1337,7 @@ class ServerHelper():
 
     def open_server_stats(self, server):
         self.tc.log.info("Open stats for server % s" % server.ip)
-        for i in [1,2,3]:
+        for i in [1, 2, 3]:
             try:
                 self.controls.server_info(server.ip).server_arrow.click()
                 break
@@ -1343,7 +1345,7 @@ class ServerHelper():
                 pass
         self.wait.until(lambda fn:
                         self.controls.server_info(server.ip).server_arrow_opened.is_displayed(),
-                        "Server info %s is not enabled in %d sec" % (server.ip, self.wait._timeout*3))
+                        "Server info %s is not enabled in %d sec" % (server.ip, self.wait._timeout * 3))
         time.sleep(3)
         self.tc.log.info("Stats for %s are opened" % server.ip)
 
@@ -1372,7 +1374,7 @@ class ServerHelper():
         stats = {}
         stats["total_transfer"] = src[1].replace("Total number of keys to be transferred:", "")
         stats["estimated_transfer"] = src[2].replace("Estimated number of keys transferred:", "")
-        stats["vbuckets"] = src[3].replace("Number of Active# vBuckets and Replica# vBuckets to transfer:","")
+        stats["vbuckets"] = src[3].replace("Number of Active# vBuckets and Replica# vBuckets to transfer:", "")
         self.close_server_stats(server)
         return stats
 
@@ -1533,36 +1535,36 @@ class ServerHelper():
 class BucketHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=250)
+        self.wait = WebDriverWait(tc.driver, timeout=25)
         self.controls = BucketTestsControls(tc.driver)
 
     def create(self, bucket):
         self.tc.log.info("trying create bucket '%s' with options %s" % (bucket.name, bucket))
         self.controls.create_bucket_btn.click()
         self.wait.until(lambda fn:
-                        self.controls.bucket_pop_up().create_bucket_pop_up.is_displayed() or \
+                        self.controls.bucket_pop_up().create_bucket_pop_up.is_displayed() or
                         self.controls.warning_pop_up('Memory Fully Allocated').is_displayed(),
-                        "no reaction for click create new bucket btn in %d sec"
-                        % self.wait._timeout)
+                        "no reaction for click create new bucket btn in %d sec" % self.wait._timeout)
         self.tc.assertFalse(self.controls.warning_pop_up('Memory Fully Allocated').is_displayed(),
                             "Warning 'Cluster Memory Fully Allocated' appeared")
         self.fill_bucket_info(bucket)
         self.controls.bucket_pop_up().create_btn.click()
         self.tc.log.info("created bucket '%s'" % bucket.name)
         if self.controls.bucket_pop_up().create_bucket_pop_up.is_present():
-             self.wait.until_not(lambda fn:
-                                 self.controls.bucket_pop_up().create_bucket_pop_up.is_displayed(),
-                                 "create new bucket pop up is not closed in %d sec" % self.wait._timeout)
+            self.wait.until_not(lambda fn:
+                                self.controls.bucket_pop_up().create_bucket_pop_up.is_displayed(),
+                                "create new bucket pop up is not closed in %d sec" % self.wait._timeout)
         self.wait.until(lambda fn: self.is_bucket_present(bucket),
                         "Bucket '%s' is not displayed" % bucket)
         self.tc.log.info("bucket '%s' is displayed" % bucket)
-        #self.wait.until(lambda fn: self.is_bucket_helthy(bucket),
+        # self.wait.until(lambda fn: self.is_bucket_healthy(bucket),
         #                "Bucket '%s' is not  in healthy state" % bucket)
 
     def fill_bucket_info(self, bucket, parent='create_bucket_pop_up'):
         if not parent == 'initialize_step':
             self.controls.bucket_pop_up(parent).name.type(bucket.name)
         if bucket.type:
+            self.controls.bucket_pop_up(parent).show_advanced_settings.click()
             self.controls.bucket_pop_up(parent).type(bucket.type).click()
         self.controls.bucket_pop_up(parent).ram_quota.type(bucket.ram_quota)
         if bucket.sasl_password:
@@ -1573,12 +1575,11 @@ class BucketHelper():
             self.controls.bucket_pop_up().port.type(bucket.protocol_port)
         if bucket.num_replica:
             if bucket.num_replica == '0':
-                self.controls.bucket_pop_up(parent).enable_replica_cb.check(setTrue=False)
+                self.controls.bucket_pop_up(parent).enable_replica_cb.click()
             else:
-                self.controls.bucket_pop_up(parent).enable_replica_cb.check()
                 self.controls.bucket_pop_up(parent).replica_num.select(str(bucket.num_replica))
         if bucket.index_replica is not None:
-            self.controls.bucket_pop_up(parent).index_replica_cb.check(setTrue=bucket.index_replica)
+            self.controls.bucket_pop_up(parent).index_replica_cb.click()
         if bucket.meta_data is not None:
             self.controls.bucket_meta_data(parent=parent, text=bucket.meta_data).click()
         if bucket.io_priority is not None:
@@ -1591,7 +1592,7 @@ class BucketHelper():
           bucket.abort_comp_cb or bucket.comp_in_parallel_cb or bucket.purge_interval:
             self.controls.bucket_pop_up(parent).override_comp_cb.check(setTrue=True)
             if bucket.frag_percent_cb is not None or bucket.frag_percent is not None:
-                self.controls.bucket_compaction(parent).frag_percent_cb.check(setTrue=True)
+                # self.controls.bucket_compaction(parent).frag_percent_cb.check(setTrue=True)
                 self.controls.bucket_compaction(parent).frag_percent.web_element.clear()
             if bucket.frag_percent is not None:
                 self.controls.bucket_compaction(parent).frag_percent.type(bucket.frag_percent)
@@ -1643,9 +1644,9 @@ class BucketHelper():
     def get_error(self):
         for err in self.controls.bucket_create_error():
             if err.is_displayed() and err.get_text() != '':
-                return err.get_text()
+                 return err.get_text()
 
-    def is_bucket_helthy(self, bucket):
+    def is_bucket_healthy(self, bucket):
         try:
             self.controls.bucket_info(bucket.name).health.mouse_over()
             self.wait.until(lambda fn:
@@ -1675,8 +1676,8 @@ class BucketHelper():
     def open_stats(self, bucket):
         self.controls.bucket_info(bucket.name).name.click()
         self.tc.log.info("Stats page is opened")
-        #time.sleep(30)
-        #self.controls.bucket_stats(tab="Server Resources").arrow.click()
+        # time.sleep(30)
+        # self.controls.bucket_stats(tab="Server Resources").arrow.click()
 
     def open_view_block_stats(self):
         self.wait.until(lambda fn:
@@ -1706,10 +1707,11 @@ class BucketHelper():
     def get_items_number(self, bucket):
         return self.controls.bucket_info(bucket.name).items_count.get_text()
 
+
 class NodeInitializeHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=250)
+        self.wait = WebDriverWait(tc.driver, timeout=25)
         self.controls = NodeInitializeControls(tc.driver)
 
     def _get_error(self):
@@ -1719,8 +1721,9 @@ class NodeInitializeHelper():
                 if not error.get_text():
                     time.sleep(1)
                 error_text += error.get_text()
-        if self.controls.errors().error_warn.is_displayed():
-            error_text += self.controls.errors().error_warn.get_text()
+        # TODO
+        # if self.controls.errors().error_warn.is_displayed():
+        #     error_text += self.controls.errors().error_warn.get_text()
         return error_text
 
     def _go_next_step(self, last_step=False):
@@ -1728,8 +1731,8 @@ class NodeInitializeHelper():
         self.tc.log.info("try to open next step. Now you are on %s" % step)
         self.controls.step_screen().next_btn.click()
         if last_step:
-            self.wait.until(lambda fn: NavigationHelper(self.tc)._is_tab_selected('Cluster Overview'),
-                                "Main page is not opened")
+            self.wait.until(lambda fn: NavigationHelper(self.tc)._is_tab_selected('Dashboard'),
+                            "Main page is not opened")
         else:
             self.wait.until(lambda fn: self._get_current_step_num() == step + 1 or
                                        self._get_error() != '',
@@ -1742,7 +1745,7 @@ class NodeInitializeHelper():
         if self.controls.step_screen().current_step is None:
             return 0
         if self.controls.step_screen().current_step.get_text():
-            return int(self.controls.step_screen().current_step.get_text())
+            return int(re.match(r'Step (.*) of (.*)', self.controls.step_screen().current_step.get_text()).group(1))
         else:
             return 0
 
@@ -1756,24 +1759,27 @@ class NodeInitializeHelper():
     ip_cluster - ip for joining cluster
     '''
     def _fill_1_step(self, input):
-        if input.param("db_path",None):
-            self.controls.step_1().db_path.type(input.param("db_path",None))
-        if input.param("indeces_path",None):
-            self.controls.step_1().indeces_path.type(input.param("indeces_path",None))
-        if input.param("ram_quota_node",None):
-            self.controls.step_1().new_cluster_cb.click()
-            self.controls.step_1().ram_quota.type(input.param("ram_quota_node",None))
-        if input.param("user_cluster",None) or input.param("password_cluster",None) \
-                                            or input.param("ip_cluster",None):
-            self.controls.step_1().join_cluster.click()
-            self.controls.step_1().user_cluster.type(input.param("user_cluster",None))
-            self.controls.step_1().password_cluster.type(input.param("password_cluster",None), is_pwd=True)
-            self.controls.step_1().ip_cluster.type(input.param("ip_cluster",None))
+        if input.param("db_path", None):
+            self.controls.step_1().db_path.type(input.param("db_path", None))
+        if input.param("indeces_path", None):
+            self.controls.step_1().indeces_path.type(input.param("indeces_path", None))
+        if input.param("ram_quota_node", None):
+            if self.controls.step_1().new_cluster_cb.is_displayed():
+                self.controls.step_1().new_cluster_cb.click()
+            self.controls.step_1().ram_quota.type(input.param("ram_quota_node", None))
+            self.controls.step_1().ram_quota.mouse_over()
+        if input.param("user_cluster", None) or input.param("password_cluster", None) \
+                                            or input.param("ip_cluster", None):
+            if self.controls.step_1().join_cluster.is_displayed():
+                self.controls.step_1().join_cluster.click()
+            self.controls.step_1().user_cluster.type(input.param("user_cluster", None))
+            self.controls.step_1().password_cluster.type(input.param("password_cluster", None), is_pwd=True)
+            self.controls.step_1().ip_cluster.type(input.param("ip_cluster", None))
 
     def _fill_2_step(self, input):
         if input.param("sample", None):
             self.controls.step_2_sample(input.param("sample", None)).check()
-            #TODO successful loading?
+            # TODO successful loading?
 
     def _fill_3_step(self, input):
         BucketHelper(self.tc).fill_bucket_info(Bucket(parse_bucket=input),
@@ -1801,7 +1807,7 @@ class NodeInitializeHelper():
         self.tc.log.info('Starting initializing node')
         self.controls.setup_btn.click()
         self.wait.until(lambda fn: self._get_current_step_num() == 1, "first step screen is not opened")
-        for i in xrange(1,6):
+        for i in xrange(1, 6):
             self.tc.log.info('Filling step %d ...' % i)
             getattr(self, '_fill_{0}_step'.format(i))(input)
             self.tc.log.info('Step %d filled in' % i)
@@ -1810,10 +1816,11 @@ class NodeInitializeHelper():
             else:
                 self._go_next_step()
 
+
 class DdocViewHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=250)
+        self.wait = WebDriverWait(tc.driver, timeout=25)
         self.controls = DdocViewControls(tc.driver)
 
     def click_view_tab(self, text=''):
@@ -2008,7 +2015,7 @@ class DdocViewHelper():
 class DocsHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=250)
+        self.wait = WebDriverWait(tc.driver, timeout=25)
         self.controls = DocumentsControls(tc.driver)
 
     def create_doc(self, doc):
@@ -2051,7 +2058,7 @@ class DocsHelper():
         self.fill_edit_doc_screen(Document(name, content), action)
         return Document(name, content)
 
-    def fill_edit_doc_screen(self, doc, action = 'save'):
+    def fill_edit_doc_screen(self, doc, action='save'):
         self.tc.log.info('trying to edit doc %s' % doc)
         if doc.content:
             self.controls.edit_document_screen().content.type_native(doc.content)
@@ -2090,7 +2097,7 @@ class DocsHelper():
             original_content = self.controls.edit_document_screen().content.get_text()
             original_content = original_content.split('\n')
             original_content = "".join(original_content[1::2])
-            opened &= (re.sub(r'\s', '', original_content) ==
+            opened &= (re.sub(r'\s', '', original_content) == 
                        re.sub(r'\s', '', content))
         return opened
 
@@ -2125,7 +2132,7 @@ class DocsHelper():
         is_present = self.controls.document_row(doc_name).name.is_displayed()
         if doc_content and is_present:
             is_present &= \
-                (re.sub(r'\s', '', self.controls.document_row(doc_name).content.get_text()) ==
+                (re.sub(r'\s', '', self.controls.document_row(doc_name).content.get_text()) == 
                 re.sub(r'\s', '', doc_content))
         return is_present
 
@@ -2137,8 +2144,8 @@ class DocsHelper():
 
     def search(self, doc):
         self.controls.lookup_input.type(doc.name)
-        self.tc.assertTrue(self.get_error() is None, "error appears: %s" \
-                         % self.get_error())
+        self.tc.assertTrue(self.get_error() is None, "error appears: %s"
+                           % self.get_error())
         self.controls.lookup_btn.click()
         self.wait.until(lambda fn:
                         self.controls.edit_document_screen(doc=doc.name).name.is_displayed(),
@@ -2148,7 +2155,7 @@ class SettingsHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = SettingsTestControls(tc.driver)
-        self.wait = WebDriverWait(tc.driver, timeout=250)
+        self.wait = WebDriverWait(tc.driver, timeout=25)
 
     def click_ro_tab(self):
         self.controls.security_tabs().ro_tab.click()
@@ -2176,7 +2183,7 @@ class SettingsHelper():
         self.controls.alerts_info().email_recipients.type(input.param("alerts_email_recipients", 'iryna@couchbase.com'))
         self.wait.until(lambda fn: self.controls.alerts_info().test_email_btn.is_displayed(),
                         "Test Mail btn is not displayed in %d sec" % (self.wait._timeout))
-        #self.controls.alerts_info().test_email_btn.click()
+        # self.controls.alerts_info().test_email_btn.click()
         #        self.wait.until(lambda fn: self.controls.alerts_info().sent_email_btn.is_displayed(),
         #           "Test Mail btn is not selected in %d sec" % (self.wait._timeout))
         self.tc.log.info("Test Mail btn is selected")
@@ -2184,7 +2191,7 @@ class SettingsHelper():
         self.wait.until(lambda fn: self.controls.alerts_info().save_btn.is_displayed(),
                         "Save btn is not displayed in %d sec" % (self.wait._timeout))
         self.controls.alerts_info().save_btn.click()
-        #self.wait.until(lambda fn: self.controls.alerts_info().done_btn.is_displayed() or
+        # self.wait.until(lambda fn: self.controls.alerts_info().done_btn.is_displayed() or
         #                (self.controls.alerts_info().save_btn.is_displayed() and\
         #                 self.controls.alerts_info().save_btn.get_attribute('disabled') == 'true'),
         #                "Save btn is not selected in %d sec" % (self.wait._timeout))
@@ -2199,7 +2206,7 @@ class SettingsHelper():
         self.wait.until(lambda fn: self.controls.auto_failover_info().save_btn.is_displayed(),
                         "Save tab is not displayed in %s sec" % (self.wait._timeout))
         self.controls.auto_failover_info().save_btn.click()
-        #self.wait.until(lambda fn: self.controls.auto_failover_info().done_btn.is_displayed() or
+        # self.wait.until(lambda fn: self.controls.auto_failover_info().done_btn.is_displayed() or
         #                (self.controls.auto_failover_info().save_btn.is_displayed() and\
         #                 self.controls.auto_failover_info().save_btn.get_attribute('disabled') == 'true'),
         #                "Save btn is not selected in %d sec" % (self.wait._timeout))
@@ -2268,7 +2275,7 @@ class SettingsHelper():
                         "Username is not displayed in %d sec" % (self.wait._timeout))
         self.tc.log.info("RO user is deleted")
 
-    def create_user(self, user, pwd, verify_pwd = None):
+    def create_user(self, user, pwd, verify_pwd=None):
         if verify_pwd is None:
             verify_pwd = pwd
         self.tc.log.info("Try to create user %s" % user)
@@ -2344,12 +2351,12 @@ Objects
 class Bucket():
     def __init__(self, name='default', type='Couchbase', ram_quota=None, sasl_pwd=None,
                  port=None, replica=None, index_replica=None, parse_bucket=None,
-                 meta_data = None, io_priority = None, frag_percent_cb = None,
-                 frag_percent = None, frag_mb_cb = None, frag_mb = None, view_frag_percent_cb = None, view_frag_percent = None,
-                 view_frag_mb = None, view_frag_mb_cb = None, comp_allowed_period_cb = None, comp_allowed_period_start_h = None,
-                 comp_allowed_period_start_min = None, comp_allowed_period_end_h = None,
-                 comp_allowed_period_end_min = None, abort_comp_cb = None, comp_in_parallel_cb = None,
-                 purge_interval = None):
+                 meta_data=None, io_priority=None, frag_percent_cb=None,
+                 frag_percent=None, frag_mb_cb=None, frag_mb=None, view_frag_percent_cb=None, view_frag_percent=None,
+                 view_frag_mb=None, view_frag_mb_cb=None, comp_allowed_period_cb=None, comp_allowed_period_start_h=None,
+                 comp_allowed_period_start_min=None, comp_allowed_period_end_h=None,
+                 comp_allowed_period_end_min=None, abort_comp_cb=None, comp_in_parallel_cb=None,
+                 purge_interval=None):
         self.name = name or 'default'
         self.type = type
         self.ram_quota = ram_quota
@@ -2378,10 +2385,12 @@ class Bucket():
         if parse_bucket:
             for param in parse_bucket.test_params:
                 if hasattr(self, str(param)):
-                    setattr(self, str(param),parse_bucket.test_params[param])
+                    setattr(self, str(param), parse_bucket.test_params[param])
+
     def __str__(self):
         return '<Bucket: name={0}, type={1}, ram_quota={2}, sasl_pwd={3} >'.format(self.name,
                                                                     self.type, self.ram_quota, self.sasl_password)
+
 
 class Document():
     def __init__(self, name, content=None, bucket='default'):

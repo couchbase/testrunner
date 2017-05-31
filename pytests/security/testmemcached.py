@@ -2,6 +2,8 @@ import logger
 from mc_bin_client import MemcachedClient
 
 log = logger.Logger.get_logger()
+from couchbase.bucket import Bucket
+import couchbase.subdocument as SD
 
 
 class TestMemcachedClient():
@@ -70,4 +72,42 @@ class TestMemcachedClient():
             return True
         except Exception as e:
             log.info( "Exception is from set_meta function {0}".format(e))
+            return False
+
+
+class TestSDK():
+    def connection(self, client_ip, bucket_name, user, password):
+        log.info(
+            "Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user, \
+                                                                                                    password))
+        result = False
+        connection_string = 'couchbase://' + client_ip + '/' + bucket_name + '?username=' + user + '&select_bucket=true'
+        log.info (" Value of connection string is - {0}".format(connection_string))
+        try:
+            cb = Bucket(connection_string, password=password)
+            if cb is not None:
+                result = True
+                return cb, result
+        except Exception, ex:
+            return result
+
+    def set_xattr(self, sdk_conn):
+        try:
+            k = "sdk_1"
+            sdk_conn.upsert(k, {})
+            sdk_conn.mutate_in(k, SD.upsert('my', {'value': 1}, xattr=True))
+            return True
+        except Exception as e:
+            log.info("Exception is from set_xattr function {0}".format(e))
+            return False
+
+    def get_xattr(self, client_ip, sdk_conn, bucket_name):
+        try:
+            temp_conn, result = self.connection(client_ip, bucket_name, 'Administrator', 'password')
+            self.set_xattr(temp_conn)
+            k = 'sdk_1'
+            rv = sdk_conn.lookup_in(k, SD.get('my', xattr=True))
+            return True
+        except Exception as e:
+            log.info("Exception is from get_xattr function {0}".format(e))
             return False

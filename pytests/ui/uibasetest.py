@@ -62,13 +62,13 @@ class BaseUITestCase(unittest.TestCase):
     def _start_selenium(self):
         host = self.machine.ip
         if host in ['localhost', '127.0.0.1']:
-            os.system("java -jar %sselenium-server-standalone*.jar "
-                      "-Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
-                      % (self.input.ui_conf['selenium_path'], \
-                         self.input.ui_conf['chrome_path']))
+            os.system("java -jar -Dwebdriver.chrome.driver=%s "
+                      "%sselenium-server-standalone*.jar > /tmp/selenium.log 2>&1"
+                      % (self.input.ui_conf['chrome_path'],
+                         self.input.ui_conf['selenium_path']))
         else:
             """ go to remote server with better video driver to display browser """
-            self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &' \
+            self.shell.execute_command('{0}start-selenium.bat > /tmp/selenium.log 2>&1 &' \
                                        .format(self.input.ui_conf['selenium_path']))
 
     def _kill_old_drivers(self):
@@ -81,7 +81,8 @@ class BaseUITestCase(unittest.TestCase):
             start_time = time.time()
             while (time.time() - start_time) < timeout:
                 log = open("/tmp/selenium.log")
-                if log.read().find('Started org.openqa.jetty.jetty.Server') > -1:
+                if log.read().find('Started org.openqa.jetty.jetty.Server') > -1 or \
+                    log.read().find('Selenium Server is up and running') > -1:
                     log.close()
                     if self._is_selenium_running():
                         time.sleep(1)
@@ -367,11 +368,20 @@ class BaseHelperControls():
         self._logout_btn = helper.find_control('login', 'logout_btn')
         self.error = helper.find_control('login', 'error')
 
+
 class BaseHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = BaseHelperControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=100)
+
+    def wait_ajax_loaded(self):
+        try:
+            pass
+            # self.wait.until_not(lambda fn: self.controls.ajax_spinner.is_displayed(),
+            #                     "Page is still loaded")
+        except StaleElementReferenceException:
+            pass
 
     def create_screenshot(self):
         path_screen = self.tc.input.ui_conf['screenshots'] or 'logs/screens'

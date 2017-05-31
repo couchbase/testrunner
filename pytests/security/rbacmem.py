@@ -3,6 +3,7 @@ from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
 from security.rbacmain import rbacmain
 from testmemcached import TestMemcachedClient
+from testmemcached import TestSDK
 
 
 class dataRoles():
@@ -11,14 +12,14 @@ class dataRoles():
     def _datareader_role_master():
         per_set = {
             "name": "Data Reader Role",
-            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False"}
+            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False,ReadXattr!True,WriteXattr!False"}
         return per_set
 
     @staticmethod
     def _datareaderwrite_role_master():
         per_set = {
             "name": "Data Reader Writer Role",
-            "permissionSet": "read!False,write!True,statsRead!False,ReadMeta!False,WriteMeta!False"}
+            "permissionSet": "read!False,write!True,statsRead!False,ReadMeta!False,WriteMeta!False,ReadXattr!False,WriteXattr!True"}
         return per_set
 
     @staticmethod
@@ -81,7 +82,7 @@ class dataRoles():
     def _data_backup_master():
         per_set = {
             "name": "Data Backup",
-            "permissionSet": "read!True,write!True,statsRead!False,ReadMeta!False,WriteMeta!False"}
+            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!False,WriteMeta!False"}
         return per_set
 
     @staticmethod
@@ -156,7 +157,7 @@ class RbacTestMemcached(BaseTestCase):
         self.user_id = self.input.param("user_id",None)
         self.user_role = self.input.param("user_role",None)
         self.bucket_name = self.input.param("bucket_name",None)
-        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
+        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100,lww=True)
         self.role_map = self.input.param("role_map",None)
         self.incorrect_bucket = self.input.param("incorrect_bucket",False)
         self.new_role = self.input.param("new_role",None)
@@ -166,7 +167,7 @@ class RbacTestMemcached(BaseTestCase):
         self.all_buckets = self.input.param("all_buckets",None)
         self.ldap_users = rbacmain().returnUserList(self.user_id)
         if self.no_bucket_access:
-            rest.create_bucket(bucket=self.no_access_bucket_name, ramQuotaMB=100)
+            rest.create_bucket(bucket=self.no_access_bucket_name, ramQuotaMB=100, lww=True)
         if self.auth_type == 'ldap':
             rbacmain(self.master, 'builtin')._delete_user('cbadminbucket')
         if self.auth_type == 'ldap':
@@ -225,6 +226,8 @@ class RbacTestMemcached(BaseTestCase):
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.no_access_bucket_name, users[0], users[1])
                     else:
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.bucket_name, users[0], users[1])
+                        sdk_conn, result = TestSDK().connection(self.master.ip, self.bucket_name, users[0],\
+                                                                      users[1])
                     if (result):
                         result_action = None
                         if temp_action[0] == 'write':
@@ -237,8 +240,23 @@ class RbacTestMemcached(BaseTestCase):
                             result_action = TestMemcachedClient().get_meta(self.master.ip, mc, self.bucket_name)
                         elif temp_action[0] == 'WriteMeta':
                             result_action = TestMemcachedClient().set_meta(self.master.ip, mc, self.bucket_name)
+                        elif temp_action[0] == 'WriteXattr':
+                            if self.no_bucket_access:
+                                self.log.info ("No access to bucket via SDK")
+                                result_action = True
+                            else:
+                                result_action = TestSDK().set_xattr(sdk_conn)
+                        elif temp_action[0] == 'ReadXattr':
+                            if self.no_bucket_access:
+                                self.log.info ("No access to bucket via SDK")
+                                result_action = True
+                            else:
+                                result_action = TestSDK().get_xattr(self.master.ip, sdk_conn, self.bucket_name)
                         self.log.info ("Result of action - {0} is {1}".format(action, result_action))
                         if temp_action[1] == 'False':
                             self.assertFalse(result_action)
                         else:
                             self.assertTrue(result_action)
+
+
+

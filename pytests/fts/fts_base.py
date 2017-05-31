@@ -3356,7 +3356,8 @@ class FTSBaseTest(unittest.TestCase):
 
     def wait_for_indexing_complete(self, item_count=None):
         """
-        Wait for index_count for any index to stabilize
+        Wait for index_count for any index to stabilize or reach the
+        index count specified by item_count
         """
         retry = self._input.param("index_retry", 20)
         for index in self._cb_cluster.get_indexes():
@@ -3476,19 +3477,21 @@ class FTSBaseTest(unittest.TestCase):
 
         # check 3 - distributed - pindex present on all fts nodes?
         count = 0
-        while len(nodes_partitions.keys()) != num_fts_nodes:
-            count += 10
-            if count == 60:
-                self.fail("Even after 60s of waiting, index is not properly"
-                          " distributed,pindexes spread across %s while "
-                          "fts nodes are %s" % (nodes_partitions.keys(),
-                                                self._cb_cluster.get_fts_nodes()))
-            self.sleep(10, "pIndexes not distributed across %s nodes yet"
-                       % num_fts_nodes)
-            nodes_partitions = self.populate_node_partition_map(index)
-        else:
-            self.log.info("Validated: pIndexes are distributed across %s "
-                          % nodes_partitions.keys())
+        nodes_with_pindexes = len(nodes_partitions.keys())
+        if nodes_with_pindexes > 1:
+            while nodes_with_pindexes != num_fts_nodes:
+                count += 10
+                if count == 60:
+                    self.fail("Even after 60s of waiting, index is not properly"
+                              " distributed,pindexes spread across %s while "
+                              "fts nodes are %s" % (nodes_partitions.keys(),
+                                                    self._cb_cluster.get_fts_nodes()))
+                self.sleep(10, "pIndexes not distributed across %s nodes yet"
+                           % num_fts_nodes)
+                nodes_partitions = self.populate_node_partition_map(index)
+            else:
+                self.log.info("Validated: pIndexes are distributed across %s "
+                              % nodes_partitions.keys())
 
         # check 4 - balance check(almost equal no of pindexes on all fts nodes)
         exp_partitions_per_node = self._num_vbuckets / num_fts_nodes
@@ -3907,30 +3910,58 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_test_dataset(self, server, docs):
         """
-        Creates documents using cbdocloader in the default bucket from a given
-        list of json data
+        Creates documents using MemcachedClient in the default bucket
+        from a given list of json data
         :param server: Server on which docs are to be loaded
         :param docs: List of json data
         :return: None
         """
-        remote = RemoteMachineShellConnection(server)
-        info = remote.extract_remote_info()
-        if info.type.lower() != 'windows':
-            self.log.info("Creating test dataset")
-            command = "cd /tmp; rm -rf dataset; mkdir -p dataset; cd dataset; mkdir docs; cd docs"
-            remote.execute_command(command)
-            i = 1
-            for doc in docs:
-                command = "cd /tmp/dataset/docs; echo \"%s\" > %s.json;" % (
-                doc, i)
-                i += 1
-                output, error = remote.execute_command(command)
-                for o in output:
-                    self.log.info(o)
-            command = "{0}/cbdocloader -c {1} -u {2} -p {3} -b default -d /tmp/dataset -m 100 -v".format(
-                self.cli_command_location,
-                server.ip, server.rest_username,
-                server.rest_password)
-            output, error = remote.execute_command(command)
-            for o in output:
-                self.log.info(o)
+        from memcached.helper.data_helper import KVStoreAwareSmartClient
+        memc_client  = KVStoreAwareSmartClient(RestConnection(server),
+                                               'default')
+        count = 1
+        for i, doc in enumerate(docs):
+            while True:
+                try:
+                    memc_client.set(key=str(i+1),
+                                    value=json.dumps(doc))
+                    break
+                except Exception as e:
+                    self.log.error(e)
+                    self.sleep(5)
+                    count += 1
+                    if count > 5:
+                        raise e
+
+    def wait_till_items_in_bucket_equal(self, items=None):
+        """
+        Waits till items in bucket is equal to the docs loaded
+        :param items: the item count that the test should wait to reach
+                      after loading
+        :return: Nothing
+        """
+        if not self._dgm_run:
+            counter = 0
+            if not items:
+                items = self._num_items/2
+            while True:
+                try:
+                    doc_count = self._cb_cluster.get_doc_count_in_bucket(
+                        self._cb_cluster.get_buckets()[0])
+                    break
+                except KeyError:
+                    self.log.info("bucket stats not ready yet...")
+                    self.sleep(2)
+            for bucket in self._cb_cluster.get_buckets():
+                while items > self._cb_cluster.get_doc_count_in_bucket(
+                        bucket):
+                    self.log.info("Docs in bucket {0} = {1}".
+                        format(
+                            bucket.name,
+                            self._cb_cluster.get_doc_count_in_bucket(
+                                bucket)))
+                    self.sleep(1, "sleeping 1s to allow for item loading")
+                    counter += 1
+                    if counter > 20:
+                        self.log.info("Exiting load sleep loop after 21s")
+                        return

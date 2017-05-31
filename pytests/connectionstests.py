@@ -1,13 +1,12 @@
-import logger
-
 import os
 
+from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
-from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from scripts.memcachetest_runner import MemcachetestRunner
 from testconstants import COUCHBASE_FROM_SPOCK
+
 
 class ConnectionTests(BaseTestCase):
 
@@ -16,7 +15,6 @@ class ConnectionTests(BaseTestCase):
 
     def tearDown(self):
         super(ConnectionTests, self).tearDown()
-
 
     def _run_moxi(self, server, port_listen, node_ip, bucket_name):
         command = ("nohup /opt/couchbase/bin/moxi -u root -Z usr=Administrator,pwd=password,port_listen={0}," +
@@ -59,13 +57,12 @@ class ConnectionTests(BaseTestCase):
         servers_in = self.input.param('servers_in', 0)
         process = self.input.param('process', 'beam.smp')
 
-        if servers_in:
-            servs_in = self.servers[1:servers_in + 1]
-            rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         shell = RemoteMachineShellConnection(self.master)
         initial_rate = shell.get_mem_usage_by_process(process)
         self.log.info("Usage of memory is %s" % initial_rate)
-        connections = []
+        if servers_in:
+            servs_in = self.servers[1:servers_in + 1]
+            rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         try:
             for i in xrange(num_connections):
                 rest = RestConnection(self.master)
@@ -91,8 +88,6 @@ class ConnectionTests(BaseTestCase):
                 self.log.info("Usage of memory is %s" % rate)
             except:
                 pass
-            for connection in connections:
-                connection.join()
 
     """ this test need to install autoconf and automake on master vm """
     def multiple_connections_using_memcachetest (self):
@@ -124,7 +119,6 @@ class ConnectionTests(BaseTestCase):
             self._stop_mcsoda_localy(moxi_port)
             if 'sd' in locals():
                 sd.stop_memcachetest()
-
 
     # CBQE-1245 implement verification tap client activity when the client is not using a TAP client
     def checks_tap_connections_tests(self):
@@ -180,4 +174,3 @@ class ConnectionTests(BaseTestCase):
         remote.start_couchbase()
         o_new, _ = remote.execute_command('ls /tmp | grep dump')
         self.assertTrue(len(o) == len(o_new), 'new core dump appeared: %s' % (set(o_new) - set(o)))
-        

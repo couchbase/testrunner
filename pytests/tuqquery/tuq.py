@@ -16,9 +16,8 @@ from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
-
 #from sdk_client import SDKClient
-
+from couchbase_helper.tuq_generators import TuqGenerators
 
 def ExplainPlanHelper(res):
     try:
@@ -66,6 +65,7 @@ class QueryTests(BaseTestCase):
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.index_type = self.input.param("index_type", 'GSI')
+        self.DGM = self.input.param("DGM",False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         self.covering_index = self.input.param("covering_index", False)
         self.named_prepare = self.input.param("named_prepare", None)
@@ -83,8 +83,10 @@ class QueryTests(BaseTestCase):
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
+        self.curl_path = "curl"
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
+            self.curl_path = "%scurl" % self.path
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
         if self.primary_indx_type.lower() == "gsi":
@@ -173,9 +175,11 @@ class QueryTests(BaseTestCase):
         data = 'use Default;'
         self.log.info("No. of buckets : %s", len(self.buckets))
         for bucket in self.buckets:
+            bucket_username = "cbadminbucket"
+            bucket_password = "password"
             data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow")
-            data +=  'connect bucket {0} ;'.format(bucket.name)
+            data += 'connect bucket {0} with {{"username":"{1}","password":"{2}"}};'.format(bucket.name, bucket_username, bucket_password)
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
@@ -185,6 +189,52 @@ class QueryTests(BaseTestCase):
         os.system(cmd)
         os.remove(filename)
 
+    def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
+        """
+        Internal Method to create OOM scenario
+        :return:
+        """
+        def validate_disk_writes(indexer_nodes=None):
+            if not indexer_nodes:
+                indexer_nodes = self.get_nodes_from_services_map(
+                    service_type="index", get_all_nodes=True)
+            for node in indexer_nodes:
+                indexer_rest = RestConnection(node)
+                indexer_rest.index_port = 9102
+                content = indexer_rest.get_index_storage_stats()
+                for index in content.values():
+                    for stats in index.values():
+                        if stats["MainStore"]["resident_ratio"] >= 1.00:
+                            return False
+            return True
+
+        def kv_mutations(self, docs=1):
+            if not docs:
+                docs = self.docs_per_day
+            gens_load = self.generate_docs(docs)
+            self.full_docs_list = self.generate_full_docs_list(gens_load)
+            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+            tasks = self.async_load(generators_load=gens_load, op_type="create",
+                                batch_size=self.batch_size)
+            return tasks
+
+        self.log.info("Trying to get all indexes in DGM...")
+        self.log.info("Setting indexer memory quota to {0} MB...".format(memory_quota))
+        node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(node)
+        rest.set_indexer_memoryQuota(indexMemoryQuota=memory_quota)
+        cnt = 0
+        docs = 50
+        while cnt < 100:
+            if validate_disk_writes(indexer_nodes):
+                self.log.info("========== DGM is achieved ==========")
+                return True
+            for task in kv_mutations(self, docs):
+                task.result()
+            self.sleep(30)
+            cnt += 1
+            docs += 20
+        return False
 
 
 ##############################################################################################
@@ -221,19 +271,50 @@ class QueryTests(BaseTestCase):
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.start_server()
-            time.sleep(20)
+            time.sleep(30)
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 result = remote.execute_command(
-                    "curl http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
+                    "%s http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
                     "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'"
-                    % (server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
+                    % (self.curl_path,server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
                 new_list = [string.strip() for string in result[0]]
                 concat_string = ''.join(new_list)
                 json_output = json.loads(concat_string)
+                self.log.info(json_output['metrics']['resultCount'])
                 self.assertTrue(json_output['metrics']['resultCount'] == result_count)
         finally:
             self.rest.delete_bucket("beer-sample")
+
+    '''MB-19887 and MB-24303: These queries were returning incorrect results with views.'''
+    def test_views(self):
+        created_indexes = []
+        try:
+            idx = "ix1"
+            self.query = "CREATE INDEX %s ON default(x,y) USING VIEW" % idx
+            self.run_cbq_query()
+            created_indexes.append(idx)
+            time.sleep(15)
+            self.run_cbq_query("insert into default values ('k01',{'x':10})")
+            result = self.run_cbq_query("select x,y from default where x > 3")
+            self.assertTrue(result['results'][0] == {"x":10})
+
+            self.run_cbq_query('insert into default values("k02", {"x": 20, "y": 20})')
+            self.run_cbq_query('insert into default values("k03", {"x": 30, "z": 30})')
+            self.run_cbq_query('insert into default values("k04", {"x": 40, "y": 40, "z": 40})')
+            idx2 = "iv1"
+            self.query = "CREATE INDEX %s ON default(x,y,z) USING VIEW" % idx2
+            self.run_cbq_query()
+            created_indexes.append(idx2)
+            expected_result = [{'x':10},{'x':20,'y':20},{'x':30,'z':30},{'x':40,'y':40,'z':40}]
+            result = self.run_cbq_query('select x,y,z from default use index (iv1 using view) '
+                                        'where x is not missing')
+            self.assertTrue(result['results'] == expected_result)
+
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX %s.%s USING VIEW" % ("default", idx)
+                self.run_cbq_query()
 
 ##############################################################################################
 #
@@ -3535,20 +3616,22 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "drop primary index on %s USING %s" % (bucket.name,self.primary_indx_type);
             self.run_cbq_query()
-        self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
-        actual_list = self.run_cbq_query()
-        bucket_names=[]
-        for bucket in self.buckets:
-            bucket_names.append(bucket.name)
-        count = 0
-        for bucket in self.buckets:
-            if((actual_list['results'][count]['keyspace_id']) in bucket_names):
-                count +=1
-            else:
-              self.log.error("Wrong keyspace id returned or empty keyspace id returned")
-        for bucket in self.buckets:
-            self.query = "create primary index on %s" % bucket.name;
-            self.run_cbq_query()
+        try:
+            self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
+            actual_list = self.run_cbq_query()
+            bucket_names=[]
+            for bucket in self.buckets:
+                bucket_names.append(bucket.name)
+            count = 0
+            for bucket in self.buckets:
+                if((actual_list['results'][count]['keyspace_id']) in bucket_names):
+                    count +=1
+                else:
+                  self.log.error("Wrong keyspace id returned or empty keyspace id returned")
+        finally:
+            for bucket in self.buckets:
+                self.query = "create primary index on %s" % bucket.name
+                self.run_cbq_query()
 
     def test_except(self):
         for bucket in self.buckets:

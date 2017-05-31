@@ -830,9 +830,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             gens_load = self.generate_docs(docs)
             self.full_docs_list = self.generate_full_docs_list(gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-            tasks = self.async_load(generators_load=gens_load, op_type="create",
-                                batch_size=self.batch_size)
-            return tasks
+            self.load(gens_load, buckets=self.buckets, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
         if self.gsi_type != "plasma":
             return
         if not self.plasma_dgm:
@@ -843,13 +842,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(node)
         rest.set_indexer_memoryQuota(indexMemoryQuota=memory_quota)
         cnt = 0
-        docs = 50
+        docs = 50 + self.docs_per_day
         while cnt < 100:
             if validate_disk_writes(indexer_nodes):
                 log.info("========== DGM is achieved ==========")
                 return True
-            for task in kv_mutations(self, docs):
-                task.result()
+            kv_mutations(self, docs)
             self.sleep(30)
             cnt += 1
             docs += 20

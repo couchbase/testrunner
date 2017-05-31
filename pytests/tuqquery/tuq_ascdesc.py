@@ -231,6 +231,8 @@ class AscDescTests(QueryTests):
             self.assertTrue("idx_cover_desc" in str(res['results'][0]))
             actual_result = self.run_cbq_query(query='ascdescquery2', is_prepared=True)
             self.assertTrue(actual_result['results'][0]['default']['name']==[{u'FirstName': u'employeefirstname-24'}, {u'MiddleName': u'employeemiddlename-24'}, {u'LastName': u'employeelastname-24'}])
+            self.query = "create primary index on default"
+            self.run_cbq_query()
             try:
                 self.run_cbq_query(query='ascdescquery1', is_prepared=True)
             except Exception, ex:
@@ -270,11 +272,12 @@ class AscDescTests(QueryTests):
                 self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx2 or plan['~children'][0]['~children'][0]['index']==idx)
                 self.query = 'select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id is not null and hobbies.hobby is not missing' \
                              ' order by meta().id asc'%(bucket.name)
-
+                actual_result =self.run_cbq_query()
                 self.assertTrue( actual_result['results'][0]['default']['_id']=="query-testemployee10317.9004497-0")
 
                 self.query = 'select * from %s where meta().id ="query-testemployee10317.9004497-0" and tasks is not null and hobbies.hobby is not missing' \
                              ' order by meta().id desc'%(bucket.name)
+                actual_result =self.run_cbq_query()
                 self.assertTrue( actual_result['results'][0]['default']['_id']=="query-testemployee10317.9004497-0")
 
                 self.query = "drop index default.idx"

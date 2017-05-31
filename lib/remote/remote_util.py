@@ -18,9 +18,9 @@ from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 from testconstants import CB_REPO
 from testconstants import CB_VERSION_NAME
-from testconstants import COUCHBASE_FROM_VERSION_3,\
+from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK
-from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import COUCHBASE_VERSIONS
 from testconstants import COUCHBASE_VERSION_2
@@ -223,6 +223,7 @@ class RemoteMachineShellConnection:
         """ self.info.distribution_type.lower() == "ubuntu" """
         self.cmd_ext = ""
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        self.msi = False
         if self.nonroot:
             self.bin_path = self.nr_home_path + self.bin_path
         self.extract_remote_info()
@@ -1781,10 +1782,8 @@ class RemoteMachineShellConnection:
 
         log.info('******start install_server_win ********')
         if windows_msi:
-            log.info("***** msi method ******")
-            msg = "There is a bug MB-22956 that blocks this installation method"
-            self.stop_current_python_running(msg)
-            output, error = self.execute_command("cd /cygdrive/c/tmp; msiexec /i {0}.msi /qn "\
+            output, error = self.execute_command("cd /cygdrive/c/tmp;"
+                                                 "msiexec /i {0}.msi /qn "\
                                                 .format(version))
             self.log_command_output(output, error)
             return len(error) == 0
@@ -2094,25 +2093,7 @@ class RemoteMachineShellConnection:
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         fv, sv, bn = self.get_cbversion(type)
-        if windows_msi and False:
-            log.info('{0} ***** MSI Uninstall'.format( self.ip))
-
-            # only one command?
-            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
-
-            # from Hari
-            f1 = open('/tmp/u.bat', 'w')
-            f1.write('"c:\\Program Files\\Couchbase\\Server\\uninstall.exe" /S')
-            f1.close()
-            self.copy_file_local_to_remote('/tmp/u.bat', '/cygdrive/c/automation/u.bat')
-
-            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
-            output, error = self.execute_command("chmod +x /cygdrive/c/automation/u.bat; /cygdrive/c/automation/u.bat")
-            self.sleep(30, 'waiting 30 seconds to complete the uninstallation')
-
-            self.log_command_output(output, error)
-            log.info('{0} ***** MSI Uninstall - complete'.format(self.ip))
-        elif type == 'windows':
+        if type == 'windows':
             product = "cb"
             query = BuildQuery()
             os_type = "exe"
@@ -2124,9 +2105,6 @@ class RemoteMachineShellConnection:
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
-            if self.file_exists(version_path, VERSION_FILE):
-                build_name, short_version, full_version = \
-                    self.find_build_version(version_path, VERSION_FILE, product)
             capture_iss_file = ""
             log.info("kill any in/uninstall process from version 3 in node %s"
                                                                         % self.ip)
@@ -2139,8 +2117,24 @@ class RemoteMachineShellConnection:
                                        "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1",
                                        "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
                                        "3.1.3", "3.1.5"]
+
                 build_name, short_version, full_version = \
                     self.find_build_version(version_path, VERSION_FILE, product)
+
+                if "-" in full_version:
+                    msi_build = full_version.split("-")
+                    if msi_build[0] in COUCHBASE_FROM_SPOCK and \
+                                    int(msi_build[1]) >= 2924:
+                        os_type = "msi"
+                        windows_msi = True
+                        self.info.deliverable_type = "msi"
+                else:
+                    mesg = " ***** ERROR: ***** \n" \
+                           " Couchbase Server version format is not correct. \n" \
+                           " It should be 0.0.0-DDDD format\n" \
+                           % (self.ip, os.getpid())
+                    self.stop_current_python_running(mesg)
+
                 build_repo = MV_LATESTBUILD_REPO
                 if full_version[:5] not in COUCHBASE_VERSION_2 and \
                    full_version[:5] not in COUCHBASE_VERSION_3:
@@ -2148,8 +2142,9 @@ class RemoteMachineShellConnection:
                         build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
                     else:
                         sys.exit("version is not support yet")
-                log.info("*****VERSION file exists.  Start to uninstall {0} on {1} server"\
-                                                           .format(product, self.ip))
+                log.info("*****VERSION file exists."
+                                   "Start to uninstall {0} on {1} server"
+                                   .format(product, self.ip))
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
@@ -2174,10 +2169,12 @@ class RemoteMachineShellConnection:
                             os_version=self.info.distribution_version.lower())
                     else:
                         builds, changes = query.get_all_builds(version=full_version,
-                                        deliverable_type=self.info.deliverable_type,
+                                      deliverable_type=self.info.deliverable_type,
                                       architecture_type=self.info.architecture_type,
-                                         edition_type=product_name, repo=build_repo,
-                            distribution_version=self.info.distribution_version.lower())
+                                      edition_type=product_name, repo=build_repo,
+                                      distribution_version=\
+                                            self.info.distribution_version.lower())
+
                         build = query.find_build(builds, product_name, os_type,
                                                    self.info.architecture_type,
                                                                   full_version,
@@ -2189,14 +2186,13 @@ class RemoteMachineShellConnection:
                                              .format(short_version, self.ip))
                     else:
                         log.error('Download {0}.exe failed'.format(short_version))
-                dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
-                self.create_multiple_dir(dir_paths)
-                self.copy_files_local_to_remote('resources/windows/automation',
-                                                      '/cygdrive/c/automation')
-                self.stop_couchbase()
-                # modify bat file to run uninstall schedule task
-                #self.create_windows_capture_file(task, product, full_version)
                 if not windows_msi:
+                    dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+                    self.create_multiple_dir(dir_paths)
+                    self.copy_files_local_to_remote('resources/windows/automation',
+                                                      '/cygdrive/c/automation')
+                    # modify bat file to run uninstall schedule task
+                    #self.create_windows_capture_file(task, product, full_version)
                     capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
                                         bat_file, product, short_version, task)
                     self.stop_schedule_tasks()
@@ -2209,22 +2205,17 @@ class RemoteMachineShellConnection:
                                     'schedule uninstall on {0}'.format(self.ip))
                 """ End remove this workaround when bug MB-14504 is fixed """
 
-                """ the code below need to remove when bug MB-11328
-                                                            is fixed in 3.0.1 """
-                output, error = self.kill_erlang(os="windows")
-                self.log_command_output(output, error)
-                """ end remove code """
-
+                self.stop_couchbase()
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
                 if windows_msi:
                     log.info("******** uninstall via msi method ***********")
-                    msg = "\nThere is a bug MB-22956 \nthat blocks this uninstallation method\n"
-                    self.stop_current_python_running(msg)
                     output, error = \
                         self.execute_command("cd /cygdrive/c/tmp; msiexec /x %s /qn"\
                                              % build_name)
                     self.log_command_output(output, error)
+                    var_dir = "/cygdrive/c/Program\ Files/Couchbase/Server/var"
+                    self.execute_command("rm -rf %s" % var_dir)
                 else:
                     output, error = \
                         self.execute_command("cmd /c schtasks /run /tn removeme")
@@ -2236,11 +2227,11 @@ class RemoteMachineShellConnection:
                     sys.exit()
                 if full_version[:3] != "2.5":
                     uninstall_process = full_version[:10]
-                    if windows_msi:
-                        uninstall_process = "msiexec"
-                    ended = self.wait_till_process_ended(uninstall_process)
-                    if not ended:
-                        sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
+                    if not windows_msi:
+                        ended = self.wait_till_process_ended(uninstall_process)
+                        if not ended:
+                            sys.exit("****  Node %s failed to uninstall  ****"
+                                                              % (self.ip))
                 if full_version[:3] == "2.5":
                     self.sleep(20, "next step is to install")
                 else:
@@ -3724,7 +3715,7 @@ class RemoteMachineShellConnection:
 
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [SUBCOMMAND] [OPTIONS]
-        cluster_param = " --cluster={0}".format(cluster_host)
+        cluster_param = " -c {0}".format(cluster_host)
         command = cb_client + " " + subcommand + " " + cluster_param + " " + options
 
         output, error = self.execute_command(command, use_channel=True)
@@ -3745,7 +3736,7 @@ class RemoteMachineShellConnection:
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        cluster_param = (" --cluster=http://{0}".format(cluster_host),
+        cluster_param = (" -c http://{0}".format(cluster_host),
                          "")[cluster_host is None]
         if cluster_param is not None:
             cluster_param += (":{0}".format(cluster_port), "")[cluster_port is None]

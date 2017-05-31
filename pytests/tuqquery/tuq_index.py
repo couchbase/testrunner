@@ -42,6 +42,8 @@ class QueriesViewsTests(QueryTests):
             self.log.info('Temp fix for create index failures MB-16888')
             self.sleep(30, 'sleep before create indexes .. ')
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     view_name = "my_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (
@@ -71,6 +73,8 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     view_name = "tuq_index_%s%s" % (bucket.name, ind)
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (view_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
@@ -311,7 +315,8 @@ class QueriesViewsTests(QueryTests):
 
     def test_push_limit_intersect_unionscan(self):
       created_indexes = []
-      try:
+      for bucket in self.buckets:
+       try:
         self.query = "create index ix1 on default(join_day,VMs[0].os)"
         self.run_cbq_query()
         created_indexes.append("ix1")
@@ -324,7 +329,8 @@ class QueriesViewsTests(QueryTests):
         self.query = "explain select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+        self.assertTrue("limit" in plan['~children'][0]['~children'][0])
+
         self.query = "explain select * from default where join_day > 10 AND VMs[0].memory > 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
@@ -338,6 +344,7 @@ class QueriesViewsTests(QueryTests):
         self.query = "create index ix4 on default(VMs[0].memory,join_day) where VMs[0].memory > 10"
         self.run_cbq_query()
         created_indexes.append("ix4")
+        self._wait_for_index_online(bucket, "ix4")
         self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
@@ -358,12 +365,11 @@ class QueriesViewsTests(QueryTests):
         self.query = "explain select join_day from default where join_day > 10 OR VMs[0].memory > 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertTrue("cover" in str(plan))
+        self.assertTrue("cover" not in str(plan))
         self.query = "explain select join_day from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
         self.assertTrue("cover" not  in str(plan))
-        #self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
         self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         self.assertTrue(res['metrics']['resultCount']==10)
@@ -374,12 +380,14 @@ class QueriesViewsTests(QueryTests):
         self.query = "select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
         self.assertTrue(res['metrics']['resultCount']==10)
-      finally:
+       finally:
         for idx in created_indexes:
             self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
             self.run_cbq_query()
 
     def test_meta_no_duplicate_results(self):
+        if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         self.query = 'insert into default values ("k01",{"name":"abc"})'
         self.run_cbq_query()
         self.query = 'select name,meta().id from default where meta().id IN ["k01",""]'
@@ -416,7 +424,7 @@ class QueriesViewsTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 result1 =plan['~children'][0]['scans'][0]['scan']['index']
-                self.assertTrue(result1==idx1)
+                self.assertTrue(result1==idx1 or result1==idx2)
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
@@ -460,6 +468,8 @@ class QueriesViewsTests(QueryTests):
             self.run_cbq_query()
 
     def test_create_arrays_ranging_over_object(self):
+        if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         self.query = 'select array j for i:j in {"a":1, "b":2} end'
         res = self.run_cbq_query()
         self.assertTrue(res['results']==[{u'$1': [1, 2]}])
@@ -467,6 +477,11 @@ class QueriesViewsTests(QueryTests):
         res = self.run_cbq_query()
         self.assertTrue(res['results']==[{u'$1': [1, 2, [2, 3], u'verbose', 2, {u'a': 1}]}])
 
+    '''MB-21011: Explain queries should not run the query that they generate the explain plan for'''
+    def test_explain_prepared(self):
+        self.run_cbq_query("EXPLAIN prepare a from select * from default")
+        prepareds = self.run_cbq_query("SELECT * from system:prepareds")
+        self.assertTrue(prepareds['metrics']['resultCount'] == 0)
 
     def test_explain_index_with_fn(self):
         for bucket in self.buckets:
@@ -872,12 +887,12 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for attr in ['join_day', 'join_day,join_mo']:
                     ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
                     self.query = "CREATE INDEX %s ON %s(%s) " % (ind_name,
                                                                     bucket.name, attr)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append(ind_name)
@@ -886,11 +901,9 @@ class QueriesViewsTests(QueryTests):
                     full_list = self.generate_full_docs_list(self.gens_load)
                     expected_result = [{"name" : doc['name'], "join_mo" : doc['join_mo'], "join_day" : doc["join_day"]}
                                        for doc in full_list if doc['join_day'] > 2 and doc['join_mo'] > 3]
-                    #import pdb;pdb.set_trace()
                     self.query = "select * from %s" % bucket.name
                     self.run_cbq_query()
                     self._verify_results(sorted(res['results']), sorted(expected_result))
-                    #self.assertTrue(len(res['results'])==0)
                     self.query = 'EXPLAIN SELECT name, join_day, join_mo FROM %s WHERE join_day>2 AND join_mo>3' % (bucket.name)
                     res = self.run_cbq_query()
 		    plan = ExplainPlanHelper(res)
@@ -909,6 +922,8 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for attr in ['join_day', 'join_mo']:
                     index_name = '%s_%s%s' % (index_name_prefix, attr, str(uuid.uuid4())[:4])
                     self.query = "CREATE INDEX %s ON %s(%s) " % (index_name,
@@ -973,6 +988,8 @@ class QueriesViewsTests(QueryTests):
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_field", '').split(';')
         index_name = "test"
+        if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         for bucket in self.buckets:
             try:
                 for field in index_fields:

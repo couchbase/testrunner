@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import random
+import re
 import string
 import time
 from threading import Thread
@@ -734,6 +735,105 @@ class CouchbaseCliTest(CliBaseTest):
         rest = RestConnection(server)
         rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
 
+    def test_set_cluster_name(self):
+        """
+        Test set and rename cluster name
+        1. Reset node back to initial setup
+        2. Set cluster-name by IP (if param is None)
+        3. Rename cluster-name
+        :return: nothing
+        """
+        cluster_name = self.input.param("cluster-name", None)
+        if cluster_name is None:
+            cluster_name = self.master.ip
+        self.log.info("Reset node back to initial page")
+        rest = RestConnection(self.master)
+        rest.force_eject_node()
+        options = "--cluster-username Administrator --cluster-password password " \
+                  "--cluster-port 8091 --cluster-name '%s' " % cluster_name
+        output, error = self.shell.couchbase_cli("cluster-init", self.master.ip,
+                                                                        options)
+        if "SUCCESS: Cluster initialized" not in output[0]:
+            self.fail("Failed to initialize node '%s' " % self.master.ip)
+
+        self.log.info("Verify hostname is set in cluster")
+        settings = rest.get_pools_default()
+        if cluster_name not in settings["clusterName"]:
+            self.fail("Fail to set hostname in cluster. "
+                      "Host name in cluster is '%s' " % settings["clusterName"])
+        else:
+            self.log.info("Cluster name is set to '%s' " % settings["clusterName"])
+
+        change_hostname = self.input.param("change-hostname", None)
+        if change_hostname is not None:
+            if change_hostname == "ip":
+                change_hostname = self.master.ip
+
+            self.log.info("Rename hostname in cluster.")
+            options = "-u Administrator -p password --cluster-name '%s' " \
+                                                        % change_hostname
+            output, error = self.shell.couchbase_cli("setting-cluster",
+                                                     self.master.ip, options)
+            settings = rest.get_pools_default()
+            if change_hostname not in settings["clusterName"]:
+                self.fail("Fail to set new hostname in cluster. "
+                          "Host name in cluster is '%s' " % settings["clusterName"])
+            else:
+                self.log.info("Cluster name is set to '%s' " % settings["clusterName"])
+
+    def test_rebalance_display_bar(self):
+        """
+            Test display bar when rebalance and stop/start rebalance
+        """
+        server = copy.deepcopy(self.servers[0])
+        add_server = self.servers[1]
+        stop_rebalance = self.input.param("stop-rebalance", False)
+        rest = RestConnection(server)
+        self.default_bucket = True
+        self._bucket_creation()
+        cli = CouchbaseCLI(server, "cbadminbucket", "password")
+        output_add, error, msg = cli.server_add(add_server.ip, "Administrator",
+                                                "password", None, "data", None)
+        if "SUCCESS: Server added" not in output_add[0]:
+            self.fail("Could not add node %s to cluster" % add_server.ip)
+
+        reb_result = ""
+        reb_bar = ""
+        ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
+
+        if not stop_rebalance:
+            output, error, msg = cli.rebalance(None)
+        else:
+            sts = rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+                                ejectedNodes=[])
+            for bucket in self.buckets:
+                if len(bucket.vbuckets) > 128:
+                    self.sleep(3, "wait for rebalance to run")
+                    break
+            if sts:
+                _, _, stop_status = cli.rebalance_stop()
+                if stop_status:
+                    output, error, msg = cli.rebalance(None)
+                else:
+                    self.fail("Fail sto stop rebalance")
+            else:
+                print "Fail to rebalance using rest call"
+        if output:
+            reb_result = output[-1]
+            """ remove ANSI code """
+            reb_bar = ansi_escape.sub('', output[-2])
+            if "SUCCESS: Rebalance complete" not in reb_result:
+                self.fail("Rebalance failed")
+
+            if "100.0%" not in reb_bar:
+                self.fail("Rebalance failed.  It not reach 100%")
+            reb_bar = reb_bar.replace(" 100.0%", "").strip(" ")
+            print "rebalance bar: %s" % reb_bar
+            if " " in reb_bar:
+                self.fail("rebalance bar did not display correctly")
+        else:
+            self.fail("output is empty %s " % output)
+
     def testRebalanceStop(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
@@ -1224,33 +1324,61 @@ class CouchbaseCliTest(CliBaseTest):
         initialized = self.input.param("initialized", True)
         expect_error = self.input.param("expect-error")
         error_msg = self.input.param("error-msg", "")
+        reset_node = self.input.param("reset-node", True)
 
         server = copy.deepcopy(self.servers[0])
 
-        rest = RestConnection(server)
-        rest.force_eject_node()
+        if reset_node:
+            rest = RestConnection(server)
+            rest.force_eject_node()
 
         cli = CouchbaseCLI(server, username, password)
-        if initialized:
-            _, _, success = cli.cluster_init(512, None, None, None, None, None, server.rest_username,
+        if initialized and reset_node:
+            _, _, success = cli.cluster_init(512, None, None, None, None, None,
+                                             server.rest_username,
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
-        stdout, _, _ = cli.bucket_create(bucket_name, bucket_type, memory_quota, eviction_policy,
-                                         replica_count, enable_index_replica, priority, enable_flush, wait)
+        stdout, _, _ = cli.bucket_create(bucket_name, bucket_type, memory_quota,
+                                         eviction_policy, replica_count,
+                                         enable_index_replica, priority,
+                                         enable_flush, wait)
 
         if not expect_error:
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket created"),
-                            "Expected command to succeed")
-            self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_type, memory_quota,
-                                                      eviction_policy, replica_count, enable_index_replica, priority,
-                                                      enable_flush),
-                            "Bucket settings not set properly")
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
+                                                     "Bucket created"),
+                                                     "Expected command to succeed")
+            self.assertTrue(self.verifyBucketSettings(server, bucket_name,
+                                                bucket_type, memory_quota,
+                                                eviction_policy, replica_count,
+                                                enable_index_replica, priority,
+                                                enable_flush),
+                                                "Bucket settings not set properly")
         else:
             self.assertTrue(not self.verifyContainsBucket(server, bucket_name),
                             "Bucket was created even though an error occurred")
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
-                            "Expected error message not found")
+            self.assertTrue(self.verifyCommandOutput(stdout,
+                                 expect_error, error_msg),
+                                 "Expected error message not found")
+
+    def testRecreateBucket(self):
+        """
+            Create a bucket name A
+            Delete bucket name A
+            Recreate bucket name A
+            :return: nothing
+        """
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+
+        server=copy.deepcopy(self.servers[0])
+
+        self.testBucketCreate()
+        cli = CouchbaseCLI(server, username, password)
+        cli.bucket_delete(bucket_name)
+        self.testBucketCreate()
+
 
     def testBucketEdit(self):
         username = self.input.param("username", None)
@@ -2421,6 +2549,85 @@ class XdcrCLITest(CliBaseTest):
 
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options
+
+    def __verify_bucket_config(self, server, bucket_name, bucket_type,
+                               memory_quota, eviction_policy, replica_count,
+                               enable_index_replica, priority, enable_flush,
+                               stdout, expect_error):
+        self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
+                                                 "Bucket created"),
+                                                 "Expected command to succeed")
+        self.assertTrue(self.verifyBucketSettings(server, bucket_name,
+                                                bucket_type, memory_quota,
+                                                eviction_policy, replica_count,
+                                                enable_index_replica, priority,
+                                                enable_flush),
+                                                "Bucket settings not set properly")
+    def test_xdcr_recreate_bucket(self):
+        """
+            Setup an XDCR cluster.
+            Create bucket at both remote and source
+            Delete bucket at both remote and source
+            Recreate bucket at both remote and source
+        :return:
+        """
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        bucket_name = self.input.param("bucket-name", None)
+        bucket_type = self.input.param("bucket-type", None)
+        memory_quota = self.input.param("memory-quota", None)
+        eviction_policy = self.input.param("eviction-policy", None)
+        replica_count = self.input.param("replica-count", None)
+        enable_index_replica = self.input.param("enable-replica-index", None)
+        priority = self.input.param("priority", None)
+        enable_flush = self.input.param("enable-flush", None)
+        wait = self.input.param("wait", False)
+        expect_error = self.input.param("expect-error")
+        error_msg = self.input.param("error-msg", "")
+
+        self.__xdcr_setup_create()
+        server_s = copy.deepcopy(self.servers[0])
+
+        cli_s = CouchbaseCLI(server_s, username, password)
+        stdout_s, _, _ = cli_s.bucket_create(bucket_name, bucket_type, memory_quota,
+                                         eviction_policy, replica_count,
+                                         enable_index_replica, priority,
+                                         enable_flush, wait)
+        self.__verify_bucket_config(server_s, bucket_name, bucket_type,
+                                    memory_quota, eviction_policy, replica_count,
+                                    enable_index_replica, priority, enable_flush,
+                                    stdout_s, expect_error)
+
+        cli_s.bucket_delete(bucket_name)
+        stdout_s, _, _ = cli_s.bucket_create(bucket_name, bucket_type, memory_quota,
+                                             eviction_policy, replica_count,
+                                             enable_index_replica, priority,
+                                             enable_flush, wait)
+        self.__verify_bucket_config(server_s, bucket_name, bucket_type,
+                                    memory_quota, eviction_policy, replica_count,
+                                    enable_index_replica, priority, enable_flush,
+                                    stdout_s, expect_error)
+
+        server_r = copy.deepcopy(self.dest_nodes[0])
+        cli_r = CouchbaseCLI(server_r, username, password)
+        stdout_r, _, _ = cli_r.bucket_create(bucket_name, bucket_type, memory_quota,
+                                         eviction_policy, replica_count,
+                                         enable_index_replica, priority,
+                                         enable_flush, wait)
+        self.__verify_bucket_config(server_r, bucket_name, bucket_type,
+                                   memory_quota, eviction_policy, replica_count,
+                                   enable_index_replica, priority, enable_flush,
+                                   stdout_r, expect_error)
+
+        cli_r.bucket_delete(bucket_name)
+        stdout_r, _, _ = cli_r.bucket_create(bucket_name, bucket_type, memory_quota,
+                                             eviction_policy, replica_count,
+                                             enable_index_replica, priority,
+                                             enable_flush, wait)
+        self.__verify_bucket_config(server_r, bucket_name, bucket_type,
+                                   memory_quota, eviction_policy, replica_count,
+                                   enable_index_replica, priority, enable_flush,
+                                   stdout_r, expect_error)
 
     def testXDCRSetup(self):
         error_expected_in_command = self.input.param("error-expected", None)

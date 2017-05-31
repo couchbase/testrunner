@@ -228,11 +228,13 @@ class EvictionKV(EvictionBase):
                                               " all -u Administrator -p password | grep ephemeral")
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
+                               ' ep_dcp_ephemeral_backfill_type:                        buffered',
                                ' ep_ephemeral_full_policy:                              fail_new_data',
                                ' ep_ephemeral_metadata_purge_age:                       259200',
                                ' ep_ephemeral_metadata_purge_interval:                  60'], output)
         else:
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
+                               ' ep_dcp_ephemeral_backfill_type:                        buffered',
                                ' ep_ephemeral_full_policy:                              auto_delete',
                                ' ep_ephemeral_metadata_purge_age:                       259200',
                                ' ep_ephemeral_metadata_purge_interval:                  60'], output)
@@ -298,7 +300,7 @@ class EvictionKV(EvictionBase):
                 self.fail("Views not allowed for ephemeral buckets")
             except DesignDocCreationException as e:
                 self.assertEquals(e._message,
-                                  'Error occured design document _design/ddoc1: {"error":"not_found","reason":"no_couchbase_bucket_exists"}\n')
+                                  'Error occured design document _design/ddoc1: {"error":"not_found","reason":"views are supported only on couchbase buckets"}\n')
 
 
 class EphemeralBackupRestoreTest(EvictionBase):

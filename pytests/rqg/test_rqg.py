@@ -1,6 +1,7 @@
 import Queue
 import json
 import os
+import random
 import threading
 import zipfile
 
@@ -942,6 +943,18 @@ class RQGTests(BaseTestCase):
             n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        if("NUMERIC_VALUE1" in n1ql_query):
+            limit = random.randint(1,30)
+            n1ql_query = n1ql_query.replace("NUMERIC_VALUE1",str(limit))
+            sql_query = sql_query.replace("NUMERIC_VALUE1",str(limit))
+            if (limit < 10):
+                offset = limit - 2
+            else:
+                offset = limit - 10
+            n1ql_query = n1ql_query.replace("NUMERIC_VALUE2",str(offset))
+            sql_query = sql_query.replace("NUMERIC_VALUE2",str(offset))
+            self.log.info(" SQL QUERY :: {0}".format(sql_query))
+            self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         result_run = {}
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)

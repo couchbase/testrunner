@@ -133,7 +133,7 @@ class QueriesIndexTests(QueryTests):
                self.query = "CREATE INDEX %s ON %s ( name )" %(idx,bucket.name)
                self.run_cbq_query()
                idx2 = "idx2"
-               self.query = "CREATE INDEX %s ON %s ( department )"%(idx2,bucket.name)
+               self.query = "CREATE INDEX %s ON %s ( join_mo )"%(idx2,bucket.name)
                self.run_cbq_query()
                idx3 = "idx3"
                self.query = "CREATE INDEX %s ON %s ( VMs[0].memory )"%(idx3,bucket.name)
@@ -141,74 +141,64 @@ class QueriesIndexTests(QueryTests):
                created_indexes.append(idx)
                created_indexes.append(idx2)
                created_indexes.append(idx3)
-               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               ' ] and meta().id = "query-testemployee10317.9004497-0"'
+               self.query = 'explain select count(1) from {0} where name =  '.format(bucket.name)+\
+               'employee-23 and meta().id = "query-testemployee10317.9004497-0"'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue("IndexCountScan2" not in plan)
-               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               '] and meta().id = "query-testemployee10317.9004497-0"'
+               self.query = 'select count(1) from default where name = "employee-23" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
                self.assertTrue(actual_result['results'] == ([{u'$1': 1}]))
-               self.query = 'explain select name from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               '] and meta().id like "query-testemployee%" limit 3'
+               self.query = 'explain select name from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and meta().id like "query-testemployee%" limit 3'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue("limit" not in plan['~children'][0])
-               self.query = 'select name from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               '] and meta().id like "query-testemployee%" order by meta().id limit 3'
+               self.query = 'select name from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and meta().id like "query-testemployee%" limit 3'
                actual_result = self.run_cbq_query()
-               self.assertTrue(actual_result['results'] == ([{u'name': [{u'FirstName': u'employeefirstname-23'}, {u'MiddleName': u'employeemiddlename-23'}, {u'LastName': u'employeelastname-23'}]}, {u'name': [{u'FirstName': u'employeefirstname-23'}, {u'MiddleName': u'employeemiddlename-23'}, {u'LastName': u'employeelastname-23'}]}, {u'name': [{u'FirstName': u'employeefirstname-23'}, {u'MiddleName': u'employeemiddlename-23'}, {u'LastName': u'employeelastname-23'}]}]))
-
-               self.query = 'explain select min(department) from {0} where department = "Support" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               self.assertTrue(actual_result['results'] == [{u'name': u'employee-23'}, {u'name': u'employee-23'}, {u'name': u'employee-23'}])
+               self.query = 'explain select min(join_day) from {0} where VMs[0].memory=12 and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue("limit" not in plan['~children'][0])
-               self.query = 'select min(VMs[0].memory) from {0} where department = "Support" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               self.query = 'select min(VMs[0].memory) from {0} where join_mo=12 and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
                self.assertTrue(actual_result['results'] ==  [{u'$1': 12}])
-
-               self.query = 'select min(department) from {0} where department = "Support" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
+               self.query = 'select min(join_mo) from {0} where  VMs[0].memory=12 and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
-               self.assertTrue(actual_result['results'] ==  [{u'$1': u'Support'}])
-               self.query = 'explain select count(1) from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}]'
+               self.assertTrue(actual_result['results'] ==  [{u'$1': 12}])
+               self.query = 'explain select count(1) from {0} where name = '.format(bucket.name)+\
+               '"employee-23"'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan2")
-               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}]'
+               self.query = 'select count(1) from {0} where name = '.format(bucket.name)+\
+               '"employee-23"'
                actual_result = self.run_cbq_query()
-               self.assertTrue(actual_result['results']==[{u'$1': 360}])
-               self.query = 'explain select count(1) from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}] and join_yr=2010'
+               self.assertTrue(actual_result['results']==[{u'$1': 432}])
+               self.query = 'explain select count(1) from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and join_yr=2010'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue(plan['~children'][0]['#operator']!="IndexCountScan2")
-               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}] and department="Support"'
+               self.query = 'select count(1) from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and join_mo=12'
                actual_result = self.run_cbq_query()
                self.assertTrue(actual_result['results'] == [{ "$1": 36}])
                self.query = 'drop index {0}.idx'.format(bucket.name)
                self.run_cbq_query()
                self.query = "CREATE INDEX %s ON %s ( name,meta().id )" %(idx,bucket.name)
                self.run_cbq_query()
-               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               ' ] and meta().id = "query-testemployee10317.9004497-0"'
+               self.query = 'explain select count(1) from {0} where name =  '.format(bucket.name)+\
+               ' "employee-23" and meta().id = "query-testemployee10317.9004497-0"'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan2")
-               self.query = 'select count(1) from {0} where name = ['.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               '] and meta().id = "query-testemployee10317.9004497-0"'
+               self.query = 'select count(1) from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and meta().id = "query-testemployee10317.9004497-0"'
                actual_result = self.run_cbq_query()
-               print actual_result['results']
-               #self.assertTrue(actual_result['results'] == ([{u'$1': 1}]))
+               self.assertTrue(actual_result['results'] == ([{u'$1': 1}]))
                self.query = 'drop index {0}.idx'.format(bucket.name)
                self.run_cbq_query()
                self.query = "CREATE INDEX %s ON %s ( meta().id )" %(idx,bucket.name)
@@ -229,59 +219,51 @@ class QueriesIndexTests(QueryTests):
                self.query = 'select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
                actual_result = self.run_cbq_query()
                self.assertTrue(actual_result['results']==[{u'$1': 1}])
-               self.query = 'CREATE INDEX idx ON {0}( join_yr[0] ) WHERE department = "Support"'.format(bucket.name)
+               self.query = 'CREATE INDEX idx ON {0}( join_yr ) WHERE join_mo = 12'.format(bucket.name)
                self.run_cbq_query()
-               self.query = 'explain select count(*) from {0} where join_yr[0]>2012 and department = "Support"'.format(bucket.name)
+               self.query = 'explain select count(*) from {0} where join_yr>2010 and join_mo = 12'.format(bucket.name)
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan2")
-               self.query = 'select count(*) from {0} where join_yr[0]>2012 and department = "Support"'.format(bucket.name)
+               self.query = 'select count(*) from {0} where join_yr>2010 and join_mo = 12'.format(bucket.name)
                actual_result = self.run_cbq_query()
-
+               self.assertTrue(actual_result['results']==[{u'$1': 504}])
                self.query = 'drop index {0}.idx'.format(bucket.name)
                self.run_cbq_query()
-               self.query = 'CREATE INDEX idx ON {0}( department ) WHERE join_yr[0]<2012'.format(bucket.name)
+               self.query = 'CREATE INDEX idx ON {0}( join_day ) WHERE join_yr<2012'.format(bucket.name)
                self.run_cbq_query()
-               self.query = 'explain select count(*) from {0} where department = "Support" and join_yr[0]<2010'.format(bucket.name)
+               self.query = 'explain select count(*) from {0} where join_day = 23 and join_yr<2010'.format(bucket.name)
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue(plan['~children'][0]['#operator']!="IndexCountScan2")
-               self.query = 'select count(*) from {0} where department = "Support" and join_yr[0]<2011'.format(bucket.name)
+               self.query = 'select count(*) from {0} where join_day = 23 and join_yr<2011'.format(bucket.name)
                actual_result = self.run_cbq_query()
-               self.query = 'explain select count(*) from {0} where department = "Support" and join_yr[0]<2012 limit 10'.format(bucket.name)
+               self.assertTrue(actual_result['results']==[{u'$1': 216}])
+               self.query = 'explain select count(*) from {0} where join_day = 23 and join_yr<2012 limit 10'.format(bucket.name)
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
-
                self.assertTrue("limit" not in plan['~children'][0])
-
                self.query = 'drop index {0}.idx'.format(bucket.name)
                self.run_cbq_query()
-               self.query = 'CREATE INDEX idx ON {0}( name,department,join_yr[0] )'.format(bucket.name)
+               self.query = 'CREATE INDEX idx ON {0}( name,join_day,join_yr )'.format(bucket.name)
                self.run_cbq_query()
-               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               ' ] and department = "Support"'
+               self.query = 'explain select count(1) from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and join_day = 23'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue(plan['~children'][0]['#operator']=="IndexCountScan2")
-
-               self.query = 'explain select count(1) from {0} where name = [ '.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               ' ] and join_yr[0] = 2010'
+               self.query = 'explain select count(1) from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and join_yr = 2010'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue(plan['~children'][0]['#operator']!="IndexCountScan2")
-
-               self.query = 'explain select tasks from {0} where name = [ '.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               ' ] and department = "Support" limit 5'
+               self.query = 'explain select tasks from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and join_day=23 limit 5'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue("limit" in plan['~children'][0]['~children'][0])
-
-               self.query = 'explain select department from {0} where name = [ '.format(bucket.name)+\
-               '{"FirstName": "employeefirstname-23"},{"MiddleName": "employeemiddlename-23"},{ "LastName": "employeelastname-23"}'+\
-               ' ] and join_yr[0] = 2010 limit 5'
+               self.query = 'explain select join_day from {0} where name = '.format(bucket.name)+\
+               '"employee-23" and join_yr = 2010 limit 5'
                actual_result = self.run_cbq_query()
                plan = ExplainPlanHelper(actual_result)
                self.assertTrue("limit"  not in plan['~children'][0])
@@ -449,19 +431,12 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-
+    
     def test_pairs(self):
         self.query = "select pairs(self) from default order by meta().id limit 1"
         actual_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results']==[{u'$1': [[u'name', [{u'FirstName': u'employeefirstname-9'}, {u'MiddleName': u'employeemiddlename-9'},
-                        {u'LastName': u'employeelastname-9'}]], [u'name', {u'FirstName': u'employeefirstname-9'}], [u'name', {u'MiddleName': u'employeemiddlename-9'}],
-                        [u'name', {u'LastName': u'employeelastname-9'}], [u'FirstName', u'employeefirstname-9'], [u'MiddleName', u'employeemiddlename-9'],
-                        [u'LastName', u'employeelastname-9'], [u'email', u'9-mail@couchbase.com'], [u'mutated', 0], [u'hobbies', {u'hobby': [{u'sports': [u'Badminton', u'Football',
-                        u'Basketball']}, {u'dance': [u'hip hop', u'bollywood', u'contemporary']}, u'art']}], [u'hobby', [{u'sports': [u'Badminton', u'Football', u'Basketball']},
-                        {u'dance': [u'hip hop', u'bollywood', u'contemporary']}, u'art']], [u'hobby', {u'sports': [u'Badminton', u'Football', u'Basketball']}],
-                        [u'hobby', {u'dance': [u'hip hop', u'bollywood', u'contemporary']}], [u'hobby', u'art'], [u'sports', [u'Badminton', u'Football', u'Basketball']],
-                        [u'sports', u'Badminton'], [u'sports', u'Football'], [u'sports', u'Basketball'], [u'dance', [u'hip hop', u'bollywood', u'contemporary']],
-                        [u'dance', u'hip hop'], [u'dance', u'bollywood'], [u'dance', u'contemporary'], [u'department', u'Support'], [u'join_yr', [2013, 2015, 2012]], [u'join_yr', 2013], [u'join_yr', 2015], [u'join_yr', 2012], [u'_id', u'query-testemployee10153.1877827-0'], [u'VMs', [{u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}, {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}, {u'RAM': 10, u'os': u'centos', u'name': u'vm_12', u'memory': 10}, {u'RAM': 10, u'os': u'macos', u'name': u'vm_13', u'memory': 10}]], [u'VMs', {u'RAM': 10, u'os': u'ubuntu', u'name': u'vm_10', u'memory': 10}], [u'VMs', {u'RAM': 10, u'os': u'windows', u'name': u'vm_11', u'memory': 10}], [u'VMs', {u'RAM': 10, u'os': u'centos', u'name': u'vm_12', u'memory': 10}], [u'VMs', {u'RAM': 10, u'os': u'macos', u'name': u'vm_13', u'memory': 10}], [u'RAM', 10], [u'os', u'ubuntu'], [u'name', u'vm_10'], [u'memory', 10], [u'RAM', 10], [u'os', u'windows'], [u'name', u'vm_11'], [u'memory', 10], [u'RAM', 10], [u'os', u'centos'], [u'name', u'vm_12'], [u'memory', 10], [u'RAM', 10], [u'os', u'macos'], [u'name', u'vm_13'], [u'memory', 10], [u'tasks', [{u'Marketing': [{u'region2': u'International', u'region1': u'South'}, {u'region2': u'South'}], u'Developer': [u'IOS', u'Indexing']}, u'Sales', u'QA']], [u'tasks', {u'Marketing': [{u'region2': u'International', u'region1': u'South'}, {u'region2': u'South'}], u'Developer': [u'IOS', u'Indexing']}], [u'tasks', u'Sales'], [u'tasks', u'QA'], [u'Marketing', [{u'region2': u'International', u'region1': u'South'}, {u'region2': u'South'}]], [u'Marketing', {u'region2': u'International', u'region1': u'South'}], [u'Marketing', {u'region2': u'South'}], [u'region2', u'International'], [u'region1', u'South'], [u'region2', u'South'], [u'Developer', [u'IOS', u'Indexing']], [u'Developer', u'IOS'], [u'Developer', u'Indexing'], [u'address', [[{u'city': u'Delhi'}, {u'street': u'12th street'}], [{u'country': u'EUROPE', u'apartment': 123}]]], [u'address', [{u'city': u'Delhi'}, {u'street': u'12th street'}]], [u'address', [{u'country': u'EUROPE', u'apartment': 123}]], [u'city', u'Delhi'], [u'street', u'12th street'], [u'country', u'EUROPE'], [u'apartment', 123]]}])
+        self.assertTrue( actual_result['metrics']['resultSize']==18317)
+        self.assertTrue( actual_result['metrics']['sortCount']==10078)
 
     def test_index_missing_null(self):
         for bucket in self.buckets:
@@ -857,6 +832,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['#operator']=='UnionScan')
+                print plan
                 self.assertTrue(plan['~children'][0]['scans'][0]['index']=='idx4')
                 self.query = 'explain SELECT meta().cas, meta().expiration,meta().id FROM default where meta().cas = 1487875768758304768 and meta().expiration > 0'
                 actual_result = self.run_cbq_query()
@@ -928,6 +904,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "idxjoin_yr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY v FOR v in %s END) USING %s" % (
                     idx, bucket.name, "join_yr", self.index_type)
@@ -1299,7 +1277,7 @@ class QueriesIndexTests(QueryTests):
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue("cover" in str(plan))
             self.assertTrue("IntersectScan" in str(plan))
-            self.assertTrue(plan['~children'][0]['scans'][0]['index']==idx2)
+            self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']==idx2)
             self.query = "select count(*) from default where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
             actual_result = self.run_cbq_query()
             self.query = "select count(*) from default use index(`#primary`) where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
@@ -1714,6 +1692,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+
                 idx = "nested_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END,tasks,department,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
@@ -1820,6 +1799,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
@@ -1831,8 +1812,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "idxtasks"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY x FOR x in %s END) USING %s" % (
                     idx2, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -1904,7 +1883,7 @@ class QueriesIndexTests(QueryTests):
                                for doc in self.full_list
                                if re.match(r'.*@.*\..*', doc['email']) and \
                                   doc['join_day'] > 10]
-                    self._verify_results(actual_result2['results'], expected_result)
+                    self._verify_results(sorted(actual_result2['results']), sorted(expected_result))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
@@ -2026,6 +2005,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "unnest_idx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( ALL array j for j in i end) FOR i in %s END,department,tasks,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
@@ -2119,27 +2100,11 @@ class QueriesIndexTests(QueryTests):
                 idx4 = "idxVM2"
                 self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within %s END) USING %s" % (
                     idx4, bucket.name, "VMs", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
                 self._verify_results(create_result['results'], [])
                 created_indexes.append(idx4)
-
                 self.assertTrue(self._is_index_in_list(bucket, idx4), "Index is not in list")
-
-                # idx5 = "idxVM3"
-                # self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.os FOR x within %s END) USING %s" % (
-                #     idx5, bucket.name, "VMs", self.index_type)
-                # # if self.gsi_type:
-                # #     self.query += " WITH {'index_type': 'memdb'}"
-                # create_result = self.run_cbq_query()
-                # self._wait_for_index_online(bucket, idx5)
-                # self._verify_results(create_result['results'], [])
-                # created_indexes.append(idx5)
-
-                #self.assertTrue(self._is_index_in_list(bucket, idx5), "Index is not in list")
-
                 self.query = "explain SELECT x FROM default emp1 USE INDEX(%s)  UNNEST emp1.VMs as x  JOIN default task ON KEYS meta(`emp1`).id where x.RAM > 1 and x.RAM < 5  ;" %(idx4)
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
@@ -2161,6 +2126,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes=[]
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx4 = "idxVM2"
                 self.query = "CREATE INDEX %s ON %s( aLL ARRAY x.RAM FOR x within %s END,VMs) USING %s" % (
                     idx4, bucket.name, "VMs", self.index_type)
@@ -2193,11 +2160,11 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_idx_attr_nest"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2243,8 +2210,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr_nest"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END,tasks,name) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2279,8 +2244,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2290,8 +2253,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "nested_idx_attr2"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( All array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx2, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -2301,8 +2262,6 @@ class QueriesIndexTests(QueryTests):
                 idx3 = "nested_idx_attr3"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END) USING %s" % (
                     idx3, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
                 self._verify_results(actual_result['results'], [])
@@ -2311,8 +2270,6 @@ class QueriesIndexTests(QueryTests):
                 idx4 = "nested_idx_attr4"
                 self.query = "CREATE INDEX %s ON %s(DISTINCT ARRAY ( DISTINCT array j.region1 for j in i.Marketing end) FOR i in %s END,name,tasks) USING %s" % (
                     idx4, bucket.name, "tasks", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
                 self._verify_results(actual_result['results'], [])
@@ -2404,8 +2361,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY i FOR i within %s END) USING %s" % (
                     idx, bucket.name, "hobbies", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2415,8 +2370,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "nested_idx_attr2"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY i FOR i within %s END) USING %s" % (
                     idx2, bucket.name, "hobbies", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -2479,8 +2432,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j for j in i.dance end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "hobbies.hobby", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2562,6 +2513,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_idx_attr"
                 self.query = "CREATE INDEX %s ON %s( ALL ARRAY ( all array j for j in i.dance end) FOR i in %s END,hobbies.hobby,department,name) USING %s" % (
                     idx, bucket.name, "hobbies.hobby", self.index_type)
@@ -2602,8 +2555,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "idx"
                 self.query = "CREATE INDEX %s ON %s( distinct array i FOR i in %s END) WHERE (department = 'Support')  USING %s" % (
                   idx, bucket.name, "hobbies.hobby", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2675,6 +2626,7 @@ class QueriesIndexTests(QueryTests):
 
     def test_indexcountscan(self):
         for bucket in self.buckets:
+            try:
                 created_indexes = []
                 idx = "idx"
                 self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'meta().id')+\
@@ -2692,48 +2644,48 @@ class QueriesIndexTests(QueryTests):
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
                 result1 = plan['~children'][0]['index']
-                self.assertTrue(result1 == '#primary')
+                self.assertTrue(result1 == idx)
+                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
+                self.sleep(15,'wait for index')
                 self.query = "select count(1) from %s use index(idx) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
-                self.assertTrue(actual_result['results']==[{u'$1': 12096}])
+                self.assertTrue(actual_result['results']==[{u'$1': self.docs_per_day*2016}])
                 self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexCountScan2',
                     "IndexCountScan is not being used")
-                self.query = "explain select a.cnt from (select count(1) from default where meta().id is not null) as a"
+                self.query = "explain select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result2)
                 self.assertTrue(
                     plan['~children'][0]['#operator'] != 'IndexCountScan2',
                     "IndexCountScan should not be used in subquery")
-                self.query = "select a.cnt from (select count(1) from default where meta().id is not null) as a"
+                self.query = "select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
+                self.query = "select a.cnt from (select count(1) as cnt from %s where _id is not null) as a " %(bucket.name)
+                result = self.run_cbq_query()
+                self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
+                self.assertTrue(actual_result2['results']==[{u'cnt': self.docs_per_day*2016}])
                 self.query = "select count(DISTINCT 1) from %s WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==[{u'$1': 1}])
-
                 self.query = "select count(DISTINCT meta().id) from %s use index(idx) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 actual_result = self.run_cbq_query()
                 self.query = "select count(DISTINCT meta().id) from %s use index(`#primary`) WHERE meta().id like '%s' " %(bucket.name,'query-test%')
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
-                self.assertTrue(actual_result['results']==[{u'$1': 12096}])
-
+                self.assertTrue(actual_result['results']==[{u'$1': self.docs_per_day*2016}])
+                self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s'  " %(bucket.name,'query-test%')
+                result = self.run_cbq_query()
+                self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
+            finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-                    self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-                    self.run_cbq_query()
-                    self.sleep(15,'wait for index')
-                    self.query = "select count(1) from %s use index(`#primary`) WHERE meta().id like '%s'  " %(bucket.name,'query-test%')
-                    result = self.run_cbq_query()
-                    self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
-                    self.query = "select a.cnt from (select count(1) from %s where _id is not null) as a " %(bucket.name)
-                    result = self.run_cbq_query()
-                    self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
                     self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                     self.run_cbq_query()
 
@@ -3056,9 +3008,8 @@ class QueriesIndexTests(QueryTests):
                 self.query = "explain select * from default where join_yr in [2011,2012]"
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['spans'][0]['range']=={u'High': [u'successor(2011)'], u'Low': [u'2011'], u'Inclusion': 1})
-                self.assertTrue(plan['~children'][0]['spans'][1]['range']=={u'High': [u'successor(2012)'], u'Low': [u'2012'], u'Inclusion': 1})
-
+                self.assertTrue(plan['~children'][0]['spans'][0]['range']==[{u'high': u'2011', u'low': u'2011', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['spans'][1]['range']==[{u'high': u'2012', u'low': u'2012', u'inclusion': 3}])
                 self.query = "select * from default where join_yr in [2011,2012] order by meta().id"
                 actual_result = self.run_cbq_query()
                 self.query = 'select * from default use index(`#primary`) where join_yr in [2011,2012] order by meta().id'
@@ -3067,12 +3018,12 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'explain select * from default where join_yr =2011 and join_day in [1,2,3,$1,$2,null,""]'
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['range']=={u'High': [u'2011', u'1'], u'Low': [u'2011', u'1'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'2'], u'Low': [u'2011', u'2'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == {u'High': [u'2011', u'3'], u'Low': [u'2011', u'3'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['range']=={u'High': [u'2011', u'$1'], u'Low': [u'2011', u'$1'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['range']=={u'High': [u'2011', u'$2'], u'Low': [u'2011', u'$2'], u'Inclusion': 3})
-                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['range']=={u'High': [u'2011', u'""'], u'Low': [u'2011', u'""'], u'Inclusion': 3})
+                self.assertTrue(plan['~children'][0]['scan']['spans'][0]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'1', u'low': u'1', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][1]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'2', u'low': u'2', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][2]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'3', u'low': u'3', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][3]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'$1', u'low': u'$1', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][4]['range'] == [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'$2', u'low': u'$2', u'inclusion': 3}])
+                self.assertTrue(plan['~children'][0]['scan']['spans'][5]['range']== [{u'high': u'2011', u'low': u'2011', u'inclusion': 3}, {u'high': u'""', u'low': u'""', u'inclusion': 3}])
                 self.query = 'select * from default where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
                 actual_result = self.run_cbq_query()
                 self.query = 'select * from default use index(`#primary`) where join_yr =2011 and join_day in [1,2,3,null,""] order by meta().id'
@@ -3213,6 +3164,8 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
 
     def test_between_spans(self):
+        if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         for bucket in self.buckets:
             self.query = 'create index ix5 on %s(x)' % bucket.name
             self.run_cbq_query()
@@ -3269,7 +3222,7 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
-            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['index']=='rec1-1_record_by_index_map')
+            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']=='rec1-1_record_by_index_map')
             self.query = 'insert into %s (KEY, VALUE) VALUES ("test1",{"type":"testType","indexMap":{"key1":"val1"},"data":{"foo":"bar"}})'%(bucket.name)
             self.run_cbq_query()
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE SOME AND EVERY i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND SOME AND EVERY i in object_pairs(data) satisfies i = { "name":"foo", "val":"bar"} end LIMIT 100'%(bucket.name)
@@ -3279,7 +3232,7 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
-            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['index'] == 'rec1-1_record_by_index_map')
+            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND any j in object_pairs(indexMap) satisfies j = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             self.assertTrue(sorted(actual_result['results'][0]['doc']) == ([u'data', u'indexMap', u'type']))
@@ -3287,7 +3240,7 @@ class QueriesIndexTests(QueryTests):
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
-            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['index'] == 'rec1-1_record_by_index_map')
+            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
             self.query = 'delete from %s use keys["test","test1"]'%bucket.name
             self.run_cbq_query()
 
@@ -3371,6 +3324,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
              created_indexes = []
              try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "nested_inner_join"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.city for j in i end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "address", self.index_type)
@@ -3564,6 +3519,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "iregex"
                 self.query = " CREATE INDEX %s ON %s( DISTINCT ARRAY REGEXP_LIKE(v.os,%s)  FOR v IN VMs END,VMs )  USING %s" % (
                   idx, bucket.name,"'ub%'", self.index_type)
@@ -4067,6 +4024,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     view_name = "my_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING GSI" % (
@@ -4087,6 +4046,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     view_name = "tuq_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s)  USING GSI" % (view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
@@ -4235,6 +4196,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 self.query = "CREATE INDEX %s ON %s(VMs, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
@@ -4254,6 +4217,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 self.query = "CREATE INDEX %s ON %s(VMs, join_yr)  USING %s" % (index_name, bucket.name,self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
@@ -4273,6 +4238,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_meta"
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 self.query = "CREATE INDEX %s ON %s(meta(%s).id, name)  USING %s" % (index_name, bucket.name, bucket.name,self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
@@ -4297,6 +4264,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindex%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
@@ -4334,6 +4303,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name)  USING %s" % (index_name, bucket.name,self.index_type)
@@ -4356,6 +4327,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithwhere%s" % ind
                     self.query = "CREATE INDEX %s ON %s(email, VMs, join_day) where join_day > 10 USING %s" % (index_name, bucket.name,self.index_type)
@@ -4395,6 +4368,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithlimit%s" % ind
                     self.query = "CREATE INDEX %s ON %s(skills[0], join_yr, VMs[0].os,name) where join_yr =2010 USING %s" % (index_name, bucket.name,self.index_type)
@@ -4459,8 +4434,6 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgroupbyhaving%s" % ind
                     self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate) USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -5064,6 +5037,7 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayprepend%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
             tasks=[]
@@ -5533,8 +5507,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayreplace%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -5576,8 +5548,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraysort%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -5621,8 +5591,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithpolylength%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,tasks_points,VMs,skills)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -5662,8 +5630,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithmaximumlimit%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,name,mutated,skills,join_day,email,test_rate,join_yr,_id,VMs[0].RAM,VMs[1].os,job_title)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -5756,6 +5722,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
+                if (self.DGM == True):
+                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name, project)  USING %s" % (index_name, bucket.name,self.index_type)
@@ -5797,8 +5765,6 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_child2"
             try:
                 self.query = "CREATE INDEX %s ON %s(distinct array vm.RAM for vm in VMs END)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT VMs[0].RAM FROM %s ' % (bucket.name) + \
@@ -5819,8 +5785,6 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_obj"
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
@@ -5836,27 +5800,6 @@ class QueriesIndexTests(QueryTests):
                 except:
                     pass
 
-    # def test_explain_childs_objects_element(self):
-    #     for bucket in self.buckets:
-    #         index_name = "my_index_obj_el"
-    #         try:
-    #             self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
-    #             if self.gsi_type:
-    #                 self.query += " WITH {'index_type': 'memdb'}"
-    #             self.run_cbq_query()
-    #             self._wait_for_index_online(bucket, index_name)
-    #             self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
-    #                          'WHERE task_points.task1 > 0 and join_mo>7'
-    #             res = self.run_cbq_query()
-    #		  plan = ExplainPlanHelper(res)
-    #             self.assertTrue(plan["~children"][0]["index"] == index_name,
-    #                             "Index should be %s, but is: %s" % (index_name, plan))
-    #         finally:
-    #             self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
-    #             try:
-    #                 self.run_cbq_query()
-    #             except:
-    #                 pass
 
     def _is_index_in_list(self, bucket, index_name):
         query = "SELECT * FROM system:indexes"
@@ -6139,8 +6082,6 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "indexwitharraysum%s" % ind
                     self.query = "CREATE INDEX %s ON %s(department, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in tokens(VMs) END ) where join_yr=2012 USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -6177,8 +6118,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in tokens(department) end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6222,8 +6161,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in tokens(department) end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6267,8 +6204,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "iregex"
                 self.query = " CREATE INDEX %s ON %s( DISTINCT ARRAY REGEXP_LIKE(v.os,%s)  FOR v IN tokens(VMs) END )  USING %s" % (
                   idx, bucket.name,"'ub%'", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6309,8 +6244,6 @@ class QueriesIndexTests(QueryTests):
                 idx = "outer_join"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.city for j in i end) FOR i in tokens(%s) END) USING %s" % (
                     idx, bucket.name, "address", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -6319,8 +6252,6 @@ class QueriesIndexTests(QueryTests):
                 idx2 = "outer_join_all"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( All array j.city for j in i end) FOR i in tokens(%s) END) USING %s" % (
                     idx2, bucket.name, "address", self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])

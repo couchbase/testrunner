@@ -627,10 +627,15 @@ class unidirectional(XDCRNewBaseTest):
 
         # check logs for traces of retry attempts
         for node in self.src_cluster.get_nodes():
-            count = NodeHelper.check_goxdcr_log(
+            count1 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
+            count2 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "Failed to set up connections to target cluster",
+                            goxdcr_log)
+            count = count1 + count2
             if count > 0:
                 self.log.info('SUCCESS: We tried to repair connections before'
                               ' restarting pipeline')

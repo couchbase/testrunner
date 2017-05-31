@@ -920,10 +920,13 @@ class RestConnection(object):
 
     def set_indexer_storage_mode(self, username='Administrator',
                                  password='password',
-                                 storageMode='forestdb'):
+                                 storageMode='plasma'):
+        """
+           From spock, we replace forestdb with plasma
+        """
         api = self.baseUrl + 'settings/indexes'
         params = urllib.urlencode({'storageMode': storageMode})
-        error_message = "storageMode must be one of forestdb, memory_optimized"
+        error_message = "storageMode must be one of plasma, memory_optimized"
         log.info('settings/indexes params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         if not status and error_message in content:
@@ -990,9 +993,10 @@ class RestConnection(object):
         elif str(header['status']) == '503':
             log.info("Request Rejected")
             raise Exception("Request Rejected")
-        elif str(header['status']) == '500':
+        elif str(header['status']) in ['500','400']:
             json_content = json.loads(content)
-            if "Job requirement capacity" in json_content['errors'][0]['msg']:
+            msg = json_content['errors'][0]['msg']
+            if "Job requirement" in  msg and "exceeds capacity" in msg:
                 raise Exception("Capacity cannot meet job requirement")
             else:
                 return content
@@ -1591,7 +1595,6 @@ class RestConnection(object):
         api = self.index_baseUrl + 'stats/storage'
         status, content, header = self._http_request(api, timeout=timeout)
         index_stats = dict()
-        stats = dict()
         data = content.split("\n")
         index = "unknown"
         store = "unknown"
@@ -1606,7 +1609,6 @@ class RestConnection(object):
                     index_stats[bucket] = {}
                 if index not in index_stats[bucket].keys():
                     index_stats[bucket][index] = dict()
-                stats = dict()
                 continue
             if "Store" in line:
                 store = re.findall("[a-zA-Z]+", line)[0]
@@ -1616,8 +1618,7 @@ class RestConnection(object):
             data = line.split("=")
             if len(data) == 2:
                 metric = data[0].strip()
-                stats[metric] = float(data[1].strip().replace("%", ""))
-            index_stats[bucket][index][store] = stats
+                index_stats[bucket][index][store][metric] = float(data[1].strip().replace("%", ""))
         return index_stats
 
     def get_indexer_stats(self, timeout=120, index_map=None):
@@ -1671,6 +1672,20 @@ class RestConnection(object):
             index_map = RestParser().parse_index_status_response(json_parsed)
         return index_map
 
+    def get_index_id_map(self, timeout=120):
+        api = self.baseUrl + 'indexStatus'
+        index_map = {}
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            for map in json_parsed["indexes"]:
+                bucket_name = map['bucket'].encode('ascii', 'ignore')
+                if bucket_name not in index_map.keys():
+                    index_map[bucket_name] = {}
+                index_name = map['index'].encode('ascii', 'ignore')
+                index_map[bucket_name][index_name] = {}
+                index_map[bucket_name][index_name]['id'] = map['id']
+        return index_map
     # returns node data for this host
     def get_nodes_self(self, timeout=120):
         node = None

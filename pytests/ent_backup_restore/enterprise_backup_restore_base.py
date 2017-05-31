@@ -4,6 +4,7 @@ import shutil
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
+from couchbase_helper.document import View
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -12,7 +13,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
-                          MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH
+                          MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
+                          WIN_TMP_PATH
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -31,6 +33,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         self.root_path = LINUX_ROOT_PATH
+        self.os_name = "linux"
+        self.tmp_path = "/tmp/"
         if info == 'linux':
             if self.nonroot:
                 base_path = "/home/%s" % self.master.ssh_username
@@ -39,10 +43,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.database_path = "%s%s" % (base_path, COUCHBASE_DATA_PATH)
                 self.root_path = "/home/%s/" % self.master.ssh_username
         elif info == 'windows':
+            self.os_name = "windows"
             self.cmd_ext = ".exe"
             self.database_path = WIN_COUCHBASE_DATA_PATH
             self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
             self.root_path = WIN_ROOT_PATH
+            self.tmp_path = WIN_TMP_PATH
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
             self.cli_command_location = MAC_COUCHBASE_BIN_PATH
@@ -56,8 +62,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.compact_backup = self.input.param("compact-backup", False)
         self.merged = self.input.param("merged", None)
         self.do_restore = self.input.param("do-restore", False)
+        self.do_verify = self.input.param("do-verify", False)
+        self.create_views = self.input.param("create-views", False)
+        self.create_fts_index = self.input.param("create-fts-index", False)
         self.cluster_new_user = self.input.param("new_user", None)
         self.cluster_new_role = self.input.param("new_role", None)
+        self.restore_only = self.input.param("restore-only", False)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
             self.backupset.cluster_host_username = self.servers[1].rest_username
@@ -283,6 +293,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.backup_validation_files_location)
 
     def backup_restore(self):
+        if self.restore_only:
+            if self.create_fts_index:
+                self.backups.append("2017-05-18T13_40_30.842368123-07_00")
+            else:
+                self.backups.append("2017-05-18T11_55_22.009680763-07_00")
         try:
             backup_start = self.backups[int(self.backupset.start) - 1]
         except IndexError:
@@ -570,7 +585,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         data_matched = True
         data_collector = DataCollector()
-        bk_file_data = data_collector.get_kv_dump_from_backup_file(server_host,
+        bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host,
                                       self.cli_command_location, self.cmd_ext,
                                       self.backupset.directory, master_key,
                                       self.buckets)
@@ -629,16 +644,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             count = 0
             key_count = 0
             for key in buckets_data[bucket.name]:
-                if buckets_data[bucket.name][key] != restore_file_data[bucket.name][key]["Value"]:
-                    if count < 20:
-                        self.log.error("Data does not match at key %s. bucket: %s != %s file"
+                if restore_file_data[bucket.name]:
+                    if buckets_data[bucket.name][key] != restore_file_data[bucket.name][key]["Value"]:
+                        if count < 20:
+                            self.log.error("Data does not match at key %s. bucket: %s != %s file"
                                            % (key, buckets_data[bucket.name][key],
                                               restore_file_data[bucket.name][key]["Value"]))
-                        data_matched = False
-                        count += 1
-                    else:
-                        raise Exception ("Data not match in backup bucket %s" % bucket.name)
-                key_count += 1
+                            data_matched = False
+                            count += 1
+                        else:
+                            raise Exception ("Data not match in backup bucket %s" % bucket.name)
+                    key_count += 1
+                else:
+                    raise Exception("Database file is empty")
             if len(restore_file_data[bucket.name]) != key_count:
                 raise Exception ("Total key counts do not match.  Backup %s != %s bucket"
                                   % (restore_file_data[bucket.name], key_count))
@@ -716,6 +734,35 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Failed to get CA certificate from cluster.")
         shell.disconnect()
         return cert_file_location
+
+    def _create_views(self):
+        default_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
+        default_view_name = "test"
+        default_ddoc_name = "ddoc_test"
+        prefix = "dev_"
+        query = {"full_set": "true", "stale": "false", "connection_timeout": 60000}
+        view = View(default_view_name, default_map_func)
+        task = self.cluster.async_create_view(self.backupset.cluster_host,
+                                              default_ddoc_name, view, "default")
+        task.result()
+
+    def validate_backup_views(self, server_host):
+        """
+            Verify view is backup
+        """
+        data_collector = DataCollector()
+        bk_views_def = data_collector.get_views_definition_from_backup_file(server_host,
+                                                               self.backupset.directory,
+                                                               self.buckets)
+        def_check = ['"id": "_design/dev_ddoc_test"',
+            '"json": { "views": { "test": { "map": "function (doc) {\\n  emit(doc._id, doc);\\n}" } } }']
+        if bk_views_def:
+            self.log.info("Validate views function")
+            for x in def_check:
+                if x not in bk_views_def:
+                    return False, "Missing %s in views definition" % x
+            return True, "Views function validated"
+
 
 class Backupset:
     def __init__(self):

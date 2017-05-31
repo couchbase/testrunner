@@ -25,7 +25,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_SPOCK
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
                           CB_RELEASE_BUILDS, COUCHBASE_VERSIONS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
@@ -227,8 +227,15 @@ class Installer(object):
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
-        if msi:
-            info.deliverable_type = "msi"
+        if info.type.lower() == "windows":
+            if "-" in version:
+                msi_build = version.split("-")
+                if msi_build[0] in COUCHBASE_FROM_SPOCK and \
+                     int(msi_build[1]) >= 2924:
+                    info.deliverable_type = "msi"
+            else:
+                print "Incorrect version format"
+                sys.exit()
         remote_client.disconnect()
         if ok and not linux_repo:
             timeout = 300
@@ -519,6 +526,8 @@ class CouchbaseServerInstaller(Installer):
                         rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
                                                         services=set_services)
+                    if "index" in set_services:
+                        rest.set_indexer_storage_mode()
                     rest.init_cluster(username=server.rest_username,
                                          password=server.rest_password)
 
@@ -629,10 +638,18 @@ class CouchbaseServerInstaller(Installer):
         if not linux_repo:
             if type == "windows":
                 log.info('***** Download Windows binary*****')
-                remote_client.download_binary_in_win(build.url, params["version"],msi_install=self.msi)
-                success = remote_client.install_server_win(build, \
-                        params["version"].replace("-rel", ""), vbuckets=vbuckets,
-                        fts_query_limit=fts_query_limit,windows_msi=self.msi )
+                if "-" in params["version"] and \
+                    params["version"].split("-")[0] in COUCHBASE_FROM_SPOCK and \
+                    int(params["version"].split("-")[1]) >= 2924:
+                    self.msi = True
+                    os_type = "msi"
+                remote_client.download_binary_in_win(build.url, params["version"],
+                                                             msi_install=self.msi)
+                success = remote_client.install_server_win(build,
+                                       params["version"].replace("-rel", ""),
+                                       vbuckets=vbuckets,
+                                       fts_query_limit=fts_query_limit,
+                                       windows_msi=self.msi )
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:

@@ -28,7 +28,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_default_index(self):
         plan_params = self.construct_plan_params()
         self.load_data()
-        self.sleep(10, "waiting 10s after batch_load...")
+        self.wait_till_items_in_bucket_equal(self._num_items/2)
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
             self.wait_for_indexing_complete()
@@ -894,6 +894,7 @@ class StableTopFTS(FTSBaseTest):
     def test_boost_query_type(self):
         # Create bucket, create index
         self.load_data()
+        self.wait_till_items_in_bucket_equal(items=self._num_items/2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -909,8 +910,7 @@ class StableTopFTS(FTSBaseTest):
 
         # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
         # emp10000042. Should be the same
-        query = {"disjuncts": [{"match": "Safiya", "field": "name"},
-                               {"match": "Palmer", "field": "name"}]}
+        query = {"match": "Marketing", "field": "dept"}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
@@ -923,27 +923,26 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
                 score_before_boosting_doc1 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000071')
+                    contents=contents, doc_id=u'emp10000021')
                 score_before_boosting_doc2 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000042')
+                    contents=contents, doc_id=u'emp10000086')
 
                 self.log.info("Scores before boosting:")
                 self.log.info("")
-                self.log.info("emp10000071: %s", score_before_boosting_doc1)
-                self.log.info("emp10000042: %s", score_before_boosting_doc2)
+                self.log.info("emp10000021: %s", score_before_boosting_doc1)
+                self.log.info("emp10000086: %s", score_before_boosting_doc2)
 
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
 
         if not score_before_boosting_doc1 == score_before_boosting_doc2:
-            self.fail("Testcase failed: Scores for emp10000071 & emp10000042 "
+            self.fail("Testcase failed: Scores for emp10000021 & emp10000086 "
                       "are not equal before boosting")
 
-        # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
-        # emp10000042. emp10000071 score should have improved w.r.t. emp10000042
-        query = {"disjuncts": [{"match": "Safiya^2", "field": "name"},
-                               {"match": "Palmer", "field": "name"}]}
+        # Run Query w/o Boosting and compare the scores for Docs emp10000021 &
+        # emp10000086. emp10000021 score should have improved w.r.t. emp10000086
+        query = {"match": "Marketing^2", "field": "dept"}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
@@ -956,20 +955,20 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
                 score_after_boosting_doc1 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000071')
+                    contents=contents, doc_id=u'emp10000021')
                 score_after_boosting_doc2 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000042')
+                    contents=contents, doc_id=u'emp10000086')
 
                 self.log.info("Scores after boosting:")
                 self.log.info("")
-                self.log.info("emp10000071: %s", score_after_boosting_doc1)
-                self.log.info("emp10000042: %s", score_after_boosting_doc2)
+                self.log.info("emp10000021: %s", score_after_boosting_doc1)
+                self.log.info("emp10000086: %s", score_after_boosting_doc2)
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
 
         if not score_after_boosting_doc1 > score_after_boosting_doc2:
-            self.fail("Testcase failed: Boosting didn't improve score for emp10000071 w.r.t emp10000042")
+            self.fail("Testcase failed: Boosting didn't improve score for emp10000021 w.r.t emp10000086")
 
     def test_doc_id_query_type(self):
         # Create bucket, create index
@@ -1045,6 +1044,7 @@ class StableTopFTS(FTSBaseTest):
 
     def test_sorting_of_results(self):
         self.load_data()
+        self.wait_till_items_in_bucket_equal(self._num_items/2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -1136,6 +1136,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1192,6 +1193,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy fox and a brown fox\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1237,6 +1239,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1293,6 +1296,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat and a brown cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1348,6 +1352,7 @@ class StableTopFTS(FTSBaseTest):
                      "{\\\"text\\\":\\\"a lazy cat\\\"}"]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         plan_params = self.construct_plan_params()
         index = self.create_index(plan_params=plan_params,
                                   bucket=self._cb_cluster.get_bucket_by_name(
@@ -1391,21 +1396,21 @@ class StableTopFTS(FTSBaseTest):
         """
         Test if fuzzy queries work fine
         """
-        test_data = ["{\\\"text\\\":\\\"simmer\\\"}",
-                     "{\\\"text\\\":\\\"dimmer\\\"}",
-                     "{\\\"text\\\":\\\"hammer\\\"}",
-                     "{\\\"text\\\":\\\"shimmer\\\"}",
-                     "{\\\"text\\\":\\\"rubber\\\"}",
-                     "{\\\"text\\\":\\\"jabber\\\"}",
-                     "{\\\"text\\\":\\\"kilmer\\\"}",
-                     "{\\\"text\\\":\\\"year\\\"}",
-                     "{\\\"text\\\":\\\"mumma\\\"}",
-                     "{\\\"text\\\":\\\"tool stemmer\\\"}",
-                     "{\\\"text\\\":\\\"he is weak at grammar\\\"}",
-                     "{\\\"text\\\":\\\"sum of all the rows\\\"}"
-                     ]
+        test_data = [{"text":"simmer"},
+                     {"text":"dimmer"},
+                     {"text":"hammer"},
+                     {"text":"shimmer"},
+                     {"text":"rubber"},
+                     {"text":"jabber"},
+                     {"text":"kilmer"},
+                     {"text":"year"},
+                     {"text":"mumma"},
+                     {"text":"tool stemmer"},
+                     {"text":"he is weak at grammar"},
+                     {"text":"sum of all the rows"}]
 
         self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
         index = self.create_index(bucket=self._cb_cluster.get_bucket_by_name(
                                       'default'),
                                   index_name="default_index")
@@ -1436,6 +1441,7 @@ class StableTopFTS(FTSBaseTest):
         max_matches = self._input.param("query_max_matches",10000000)
         show_results_from_item = self._input.param("show_results_from_item",0)
         self.load_data()
+        self.wait_till_items_in_bucket_equal(items = self._num_items/2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -1663,10 +1669,11 @@ class StableTopFTS(FTSBaseTest):
         the upper left and bottom right point of the bounding box.
         :return: Nothing
         """
-        lon1 = float(TestInputSingleton.input.param("lon1", 2.387075))
-        lat1 = float(TestInputSingleton.input.param("lat1", 49.873019))
-        lon2 = float(TestInputSingleton.input.param("lon2", 1.954764))
-        lat2 = float(TestInputSingleton.input.param("lat2", 50.962097))
+
+        lon1 = float(TestInputSingleton.input.param("lon1", 1.954764))
+        lat1 = float(TestInputSingleton.input.param("lat1", 50.962097))
+        lon2 = float(TestInputSingleton.input.param("lon2", 2.387075))
+        lat2 = float(TestInputSingleton.input.param("lat2", 49.873019))
 
         expected_hits = TestInputSingleton.input.param("expected_hits", None)
         dist_unit = TestInputSingleton.input.param("unit", "mi")
@@ -1703,3 +1710,72 @@ class StableTopFTS(FTSBaseTest):
                                                 expected_hits=expected_hits)
         self.log.info("Hits: {0}".format(hits))
         self.log.info("Doc_ids: {0}".format(doc_ids))
+
+    def test_xattr_support(self):
+        """
+        Tests if setting includeXAttrs in index definition
+        breaks anything
+        :return: Nothing
+        """
+        self.load_data()
+        index = self._cb_cluster.create_fts_index(
+            name='default_index',
+            source_name='default',
+            source_params={"authUser": 'default',
+                           "authPassword": '',
+                           "includeXAttrs": True})
+        self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        if self._update or self._delete:
+            self.async_perform_update_delete(self.upd_del_fields)
+            if self._update:
+                self.sleep(60, "Waiting for updates to get indexed...")
+            self.wait_for_indexing_complete()
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        self.run_query_and_compare(index)
+
+    def test_ssl(self):
+        """
+        Tests if we are able to create an index and query over ssl port
+        :return: Nothing
+        """
+        fts_ssl_port=18094
+        import json, subprocess
+        idx = {"sourceName": "default",
+               "sourceType": "couchbase",
+               "type": "fulltext-index",
+               "sourceParams": {"authUser": "default"}}
+
+        qry = {"indexName": "default_index_1",
+                 "query": {"field": "type", "match": "emp"},
+                 "size": 10000000}
+
+        self.load_data()
+        cert = RestConnection(self._master).get_cluster_ceritificate()
+        f = open('cert.pem', 'w')
+        f.write(cert)
+        f.close()
+
+        cmd = "curl -k -E cert.pem "+\
+              "-XPUT -H \"Content-Type: application/json\" "+\
+              "-u Administrator:password "+\
+              "https://{0}:{1}/api/index/default_idx -d ".\
+                  format(self._master.ip, fts_ssl_port) +\
+              "\'{0}\'".format(json.dumps(idx))
+
+        self.log.info("Running command : {0}".format(cmd))
+        output = subprocess.check_output(cmd, shell=True)
+        if json.loads(output) == {"status":"ok"}:
+            query = "curl -k -E cert.pem " + \
+                    "-XPOST -H \"Content-Type: application/json\" " + \
+                    "-u Administrator:password " + \
+                    "https://{0}:18094/api/index/default_idx/query -d ". \
+                        format(self._master.ip, fts_ssl_port) + \
+                    "\'{0}\'".format(json.dumps(qry))
+            self.sleep(20, "wait for indexing to complete")
+            output = subprocess.check_output(query, shell=True)
+            self.log.info("Hits: {0}".format(json.loads(output)["total_hits"]))
+            if int(json.loads(output)["total_hits"]) != 1000:
+                self.fail("Query over ssl failed!")
+        else:
+            self.fail("Index could not be created over ssl")

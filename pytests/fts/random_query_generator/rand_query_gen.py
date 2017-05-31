@@ -1,5 +1,6 @@
-import random
 import json
+import random
+
 #import sys
 #sys.path.append("/Users/apiravi/testrunner")
 from emp_querables import EmployeeQuerables
@@ -25,17 +26,18 @@ class QUERY_TYPE:
     VALUES = ["match", "bool", "match_phrase",
               "prefix", "fuzzy", "conjunction", "disjunction"
               "wildcard", "regexp",  "query_string",
-              "numeric_range", "date_range", "match_all", "match_none"]
+              "numeric_range", "date_range", "term_range",
+              "match_all", "match_none"]
 
     # to know what type of queries to generate for fields
     # returned by custom map_generator (only for custom map indexes)
     CUSTOM_QUERY_TYPES = {
         'text': ["match", "bool", "match_phrase",
                  "prefix", "wildcard", "query_string",
-                 "conjunction", "disjunction"],
+                 "conjunction", "disjunction", "term_range"],
         'str': ["match", "bool", "match_phrase",
                  "prefix", "wildcard", "query_string",
-                 "conjunction", "disjunction"],
+                 "conjunction", "disjunction", "term_range"],
         'num': ["numeric_range"],
         'date': ["date_range"]
     }
@@ -294,7 +296,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
     def construct_numeric_range_query(self):
         """
-        Generates a fts and es numeric range query
+        Generates an fts and es numeric range query
         """
         fts_numeric_query = {}
         es_numeric_query = self.construct_es_empty_filter_query()
@@ -324,6 +326,53 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             es_numeric_query['filtered']['filter']['range'][fieldname]['lt'] =\
                 high
         return fts_numeric_query, es_numeric_query
+
+    def get_term(self, fieldname=None):
+        """
+        Returns a queryable term for a given field
+        :param fieldname: the field we get a term for
+        :return:
+        """
+        if not fieldname:
+            fieldname = self.get_random_value(self.fields['str'] +
+                                          self.fields['text'])
+        str = eval("self.get_queryable_%s" % fieldname + "()")
+        terms = str.split(' ')
+        return terms[0]
+
+    def construct_term_range_query(self):
+        """
+        Generates an fts and es term range query
+        """
+        fts_term_range_query = {}
+        es_term_range_query = self.construct_es_empty_filter_query()
+
+        fieldname = self.get_random_value(self.fields['str'] +
+                                          self.fields['text'])
+        str1 = self.get_term(fieldname)
+        str2 = self.get_term(fieldname)
+
+        fts_term_range_query['field'] = fieldname
+        fts_term_range_query['min'] = str1
+        fts_term_range_query['max'] = str2
+
+        es_term_range_query['filtered']['filter']['range'] = {fieldname: {}}
+
+        if bool(random.getrandbits(1)):
+            fts_term_range_query['inclusive_min'] = True
+            fts_term_range_query['inclusive_max'] = True
+            es_term_range_query['filtered']['filter']['range'][fieldname]['gte'] = \
+                str1
+            es_term_range_query['filtered']['filter']['range'][fieldname]['lte'] = \
+                str2
+        else:
+            fts_term_range_query['inclusive_min'] = False
+            fts_term_range_query['inclusive_max'] = False
+            es_term_range_query['filtered']['filter']['range'][fieldname]['gt'] = \
+                str1
+            es_term_range_query['filtered']['filter']['range'][fieldname]['lt'] = \
+                str2
+        return fts_term_range_query, es_term_range_query
 
     def construct_es_empty_filter_query(self):
         return {'filtered': {'filter': {}}}
@@ -512,7 +561,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 if __name__ == "__main__":
     #query_type=['match_phrase', 'match', 'date_range', 'numeric_range', 'bool',
     #              'conjunction', 'disjunction', 'prefix']
-    query_type = ['query_string']
+    query_type = ['term_range']
     query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='all')
     for index, query in enumerate(query_gen.fts_queries):
         print json.dumps(query, ensure_ascii=False, indent=3)
