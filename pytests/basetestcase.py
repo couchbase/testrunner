@@ -424,7 +424,8 @@ class BaseTestCase(unittest.TestCase):
             self._log_finish(self)
 
     def get_index_map(self):
-        return RestConnection(self.master).get_index_status()
+        rest = RestConnection(self.master)
+        return rest.get_index_status()
 
     @staticmethod
     def change_max_buckets(self, total_buckets):
@@ -2170,12 +2171,13 @@ class BaseTestCase(unittest.TestCase):
         index_map = None
         for server in servers:
             key = "{0}:{1}".format(server.ip, server.port)
+            rest = RestConnection(server)
             if perNode:
                 if index_map == None:
                     index_map = {}
-                index_map[key] = RestConnection(server).get_index_stats(index_map=None)
+                index_map[key] = rest.get_index_stats(index_map=None)
             else:
-                index_map = RestConnection(server).get_index_stats(index_map=index_map)
+                index_map = rest.get_index_stats(index_map=index_map)
         return index_map
 
     def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False, servers=None, master=None):

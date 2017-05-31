@@ -173,6 +173,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
                     return
             self.dcp_rebalance_in_offline_upgrade_from_version2()
+            self._create_ephemeral_buckets()
             self.verification(self.servers[:self.nodes_init])
             if self.input.param('check_seqno', True):
                 self.check_seqno(seqno_expected)
@@ -2089,3 +2090,124 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # flushing buckets after upgrade
         if after_upgrade_buckets_flush is not False:
             self._all_buckets_flush()
+
+    def test_offline_upgrade_kv_index_with_index_swap_rebalance(self):
+        after_upgrade_services_in = self.input.param(
+            "after_upgrade_services_in", False)
+        after_upgrade_buckets_in = self.input.param("after_upgrade_buckets_in",
+                                                    False)
+        after_upgrade_buckets_out = self.input.param(
+            "after_upgrade_buckets_out", False)
+        after_upgrade_buckets_flush = self.input.param(
+            "after_upgrade_buckets_flush", False)
+
+        # Install initial version on the specified nodes
+        self._install(self.servers[:3])
+        # Configure the nodes with services
+        self.operations(self.servers[:3], services="kv,index,n1ql")
+        # get the n1ql node which will be used in pre,during and post upgrade for running n1ql commands
+        self.n1ql_server = self.get_nodes_from_services_map(
+            service_type="n1ql")
+        self.index_server = self.get_nodes_from_services_map(
+            service_type="index")
+        # Run the pre upgrade operations, typically creating index
+        self.pre_upgrade(self.servers[:3])
+        seqno_expected = 1
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+            if self.input.param('run_index', False):
+                self.verify_all_queries()
+        if not self.initial_version.startswith("1.") and self.input.param(
+                'check_seqno', True):
+            self.check_seqno(seqno_expected)
+        if self.during_ops:
+            for opn in self.during_ops:
+                if opn != 'add_back_failover':
+                    getattr(self, opn)()
+        # upgrade kv and index nodes to new version
+        upgrade_nodes = self.servers[:3]
+        for upgrade_version in self.upgrade_versions:
+            self.sleep(self.sleep_time,
+                       "Pre-setup of old version is done. Wait for upgrade to {0} version". \
+                       format(upgrade_version))
+            for server in upgrade_nodes:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                self.sleep(self.sleep_time)
+                if self.wait_expire:
+                    self.sleep(self.expire_time)
+                if self.input.param('remove_manifest_files', False):
+                    for file in ['manifest.txt', 'manifest.xml',
+                                 'VERSION.txt,']:
+                        output, error = remote.execute_command(
+                            "rm -rf /opt/couchbase/{0}".format(file))
+                        remote.log_command_output(output, error)
+                if self.input.param('remove_config_files', False):
+                    for file in ['config', 'couchbase-server.node', 'ip',
+                                 'couchbase-server.cookie']:
+                        output, error = remote.execute_command(
+                            "rm -rf /opt/couchbase/var/lib/couchbase/{0}".format(
+                                file))
+                        remote.log_command_output(output, error)
+                    self.buckets = []
+                remote.disconnect()
+
+            if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+                upgrade_threads = self._async_update(upgrade_version,
+                                                     upgrade_nodes,
+                                                     save_upgrade_config=True)
+            else:
+                upgrade_threads = self._async_update(upgrade_version,
+                                                     upgrade_nodes)
+            # wait upgrade statuses
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed. See logs above!")
+            self.sleep(self.expire_time)
+        self.dcp_rebalance_in_offline_upgrade_from_version2()
+        # Add new services after the upgrade
+        self.log.info("Indexer node : {}".format(self.index_server))
+        for upgrade_version in self.upgrade_versions:
+            rest = RestConnection(self.master)
+            versions = rest.get_nodes_versions()
+            for version in versions:
+                if "5" > version:
+                    self.log.info("Atleast one of the nodes in the cluster is "
+                                  "pre 5.0 version. Hence not performing "
+                                  "swap rebalance of indexer node")
+                    break
+            if "5" > upgrade_version:
+                break
+            if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+                upgrade_threads = self._async_update(upgrade_version,
+                                                     [self.servers[3]],
+                                                     save_upgrade_config=True)
+            else:
+                upgrade_threads = self._async_update(upgrade_version,
+                                                     [self.servers[3]])
+
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed. See logs above!")
+            self.sleep(self.expire_time)
+
+            self.sleep(180, "Sleep for check")
+            map_before_rebalance, stats_map_before_rebalance = \
+                self._return_maps()
+            self.cluster.rebalance(self.servers[:3], [self.servers[3]],
+                                   [self.servers[1]], services=["index"])
+            map_after_rebalance, stats_map_after_rebalance = \
+                self._return_maps()
+            self.n1ql_helper.verify_indexes_redistributed(
+                map_before_rebalance, map_after_rebalance,
+                stats_map_before_rebalance, stats_map_after_rebalance,
+                [self.servers[3]], [self.servers[1]], swap_rebalance=True)
+        self.post_upgrade(self.servers[:3])

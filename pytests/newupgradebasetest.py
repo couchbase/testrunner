@@ -1,4 +1,5 @@
 import Queue
+import copy
 import gc
 import re
 import sys
@@ -11,7 +12,7 @@ from builds.build_query import BuildQuery
 from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
@@ -26,6 +27,7 @@ from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_VERSION
+from testconstants import STANDARD_BUCKET_PORT
 
 
 class NewUpgradeBaseTest(QueryHelperTests):
@@ -191,7 +193,9 @@ class NewUpgradeBaseTest(QueryHelperTests):
         if self.input.param('extra_verification', False):
             self.total_buckets += 2
             print self.total_buckets
-        self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+        #self.bucket_size = self._get_bucket_size(self.quota,
+        # self.total_buckets)
+        self.bucket_size = 256
         self._bucket_creation()
         if self.stop_persistence:
             for server in servers:
@@ -613,3 +617,74 @@ class NewUpgradeBaseTest(QueryHelperTests):
         for task in kv_tasks:
             task.result()
         self.verification(servers,check_items=False)
+
+    def _create_ephemeral_buckets(self):
+        create_ephemeral_buckets = self.input.param(
+            "create_ephemeral_buckets", False)
+        if not create_ephemeral_buckets:
+            return
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        for version in versions:
+            if "5" > version:
+                self.log.info("Atleast one of the nodes in the cluster is "
+                              "pre 5.0 version. Hence not creating ephemeral"
+                              "bucket for the cluster.")
+                return
+        num_ephemeral_bucket = self.input.param("num_ephemeral_bucket", 1)
+        server = self.master
+        server_id = RestConnection(server).get_nodes_self().id
+        ram_size = RestConnection(server).get_nodes_self().memoryQuota
+        bucket_size = self._get_bucket_size(ram_size, self.bucket_size +
+                                                      num_ephemeral_bucket)
+        self.log.info("Creating ephemeral buckets")
+        self.log.info("Changing the existing buckets size to accomodate new "
+                      "buckets")
+        for bucket in self.buckets:
+            rest.change_bucket_props(bucket, ramQuotaMB=bucket_size)
+
+        bucket_tasks = []
+        bucket_params = copy.deepcopy(
+            self.bucket_base_params['membase']['non_ephemeral'])
+        bucket_params['size'] = bucket_size
+        bucket_params['bucket_type'] = 'ephemeral'
+        bucket_params['eviction_policy'] = 'noEviction'
+        ephemeral_buckets = []
+        self.log.info("Creating ephemeral buckets now")
+        for i in range(num_ephemeral_bucket):
+            name = 'ephemeral_bucket' + str(i)
+            port = STANDARD_BUCKET_PORT + i + 1
+            bucket_priority = None
+            if self.standard_bucket_priority is not None:
+                bucket_priority = self.get_bucket_priority(
+                    self.standard_bucket_priority[i])
+
+            bucket_params['bucket_priority'] = bucket_priority
+            bucket_tasks.append(
+                self.cluster.async_create_standard_bucket(name=name, port=port,
+                                                          bucket_params=bucket_params))
+            bucket = Bucket(name=name, authType=None, saslPassword=None,
+                            num_replicas=self.num_replicas,
+                            bucket_size=self.bucket_size,
+                            port=port, master_id=server_id,
+                            eviction_policy='noEviction', lww=self.lww)
+            self.buckets.append(bucket)
+            ephemeral_buckets.append(bucket)
+
+        for task in bucket_tasks:
+            task.result(self.wait_timeout * 10)
+
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets(
+                ['standard_bucket' + str(i) for i in range(
+                    num_ephemeral_bucket)])
+        load_gen = BlobGenerator('upgrade', 'upgrade-', self.value_size,
+                                 end=self.num_items)
+        for bucket in ephemeral_buckets:
+            self._load_bucket(bucket, self.master, load_gen, "create",
+                              self.expire_time)
+
+    def _return_maps(self):
+        index_map = self.get_index_map()
+        stats_map = self.get_index_stats(perNode=False)
+        return index_map, stats_map
