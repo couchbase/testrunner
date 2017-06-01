@@ -33,11 +33,13 @@ class NavigationTest(BaseUITestCase):
         self.helper.login()
         NavigationHelper(self).navigate(tab)
 
+
 class BucketTests(BaseUITestCase):
     def setUp(self):
         super(BucketTests, self).setUp()
         self.helper = BaseHelper(self)
         self.helper.login()
+        self.master =self.servers[0]
 
     def tearDown(self):
         super(BucketTests, self).tearDown()
@@ -98,7 +100,9 @@ class BucketTests(BaseUITestCase):
         conn_per_sec_st = BucketHelper(self).get_stat("port 8091 reqs/sec").replace(' port 8091 reqs/sec', '')
         idle_st = BucketHelper(self).get_stat("idle streaming requests").replace(' idle streaming requests', '')
         wakeups_st = BucketHelper(self).get_stat("streaming wakeups/sec").replace(' streaming wakeups/sec', '')
-
+        testuser = [{'id': self.bucket.name, 'name': self.bucket.name, 'password': 'password'}]
+        rolelist = [{'id': self.bucket.name, 'name': self.bucket.name, 'roles': 'admin'}]
+        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
         client = MemcachedClientHelper.direct_client(self.servers[0], self.bucket.name)
         conn_stat = int(client.stats()["curr_connections"])
         self.assertEquals(int(conn_st), conn_stat - 1,
@@ -212,6 +216,7 @@ class DocumentsTest(BaseUITestCase):
             else:
                 raise ex
         else:
+            NavigationHelper(self).navigate_breadcrumbs('Documents')
             DocsHelper(self).verify_doc_in_documents_screen(result_doc)
 
     def test_edit_doc_from_views_screen(self):
@@ -235,6 +240,7 @@ class DocumentsTest(BaseUITestCase):
         DdocViewHelper(self).open_view(view_name)
         DdocViewHelper(self).click_edit_doc()
         DocsHelper(self).fill_edit_doc_screen(new_doc)
+        NavigationHelper(self).navigate_breadcrumbs('Documents')
         DocsHelper(self).verify_doc_in_documents_screen(new_doc)
 
     def test_pagination_docs(self):
@@ -344,7 +350,7 @@ class ROuserTests(BaseUITestCase):
         password = self.input.param('password', 'myropass')
 
         NavigationHelper(self).navigate('Security')
-        SettingsHelper(self).click_ro_tab()
+        # SettingsHelper(self).click_ro_tab()
         SettingsHelper(self).create_user(username, password)
         self.log.info("Login with just created user")
         BaseHelper(self).logout()
@@ -356,9 +362,9 @@ class ROuserTests(BaseUITestCase):
         password = self.input.param('password', 'myropass')
         time.sleep(2)
         NavigationHelper(self).navigate('Security')
-        SettingsHelper(self).click_ro_tab()
+        # SettingsHelper(self).click_ro_tab()
         SettingsHelper(self).create_user(username, password)
-        SettingsHelper(self).delete_user()
+        SettingsHelper(self).delete_user(username)
 
         BaseHelper(self).logout()
         BaseHelper(self).login(user=username, password=password)
@@ -373,7 +379,7 @@ class ROuserTests(BaseUITestCase):
         error = self.input.param('error', '')
         time.sleep(2)
         NavigationHelper(self).navigate('Security')
-        SettingsHelper(self).click_ro_tab()
+        # SettingsHelper(self).click_ro_tab()
         try:
             SettingsHelper(self).create_user(username, password, verify_password)
         except Exception, ex:
@@ -384,7 +390,7 @@ class ROuserTests(BaseUITestCase):
     def verify_read_only(self, bucket, view):
         navigator = NavigationHelper(self)
         self.log.info("Servers check")
-        navigator.navigate('Server Nodes')
+        navigator.navigate('Servers')
         for btn in ServerHelper(self).controls.server_row_controls().failover_btns:
             self.assertFalse(btn.is_displayed(), "There is failover btn")
         for btn in ServerHelper(self).controls.server_row_controls().remove_btns:
@@ -399,9 +405,9 @@ class ROuserTests(BaseUITestCase):
         NavigationHelper(self).navigate('Indexes')
         DdocViewHelper(self).click_view_tab(text='Views')
         DdocViewHelper(self).open_view(view)
-        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().save_btn.get_attribute("class").find("dynamic_disabled") != -1,
+        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().save_btn.get_attribute("disabled") == 'true',
                         "Save button not disabled")
-        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().saveas_btn.get_attribute("class").find("dynamic_disabled") != -1,
+        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().saveas_btn.get_attribute("disabled") == 'true',
                         "Save as button not disabled")
 
 
@@ -424,7 +430,7 @@ class ExternalUserTests(BaseUITestCase):
         full_name = self.input.param('full_name', '')
         roles = self.input.param('roles', '')
         expected_error = self.input.param('expected_error', '')
-        mode = self.input.param('mode', 'enable')
+        # mode = self.input.param('mode', 'enable')
 
         if roles == "":
             roles = []
@@ -433,16 +439,17 @@ class ExternalUserTests(BaseUITestCase):
             roles = [role.replace("@", "*") for role in roles]
 
         NavigationHelper(self).navigate('Security')
-        SettingsHelper(self).click_external_user_tab()
-        if mode == 'enable':
-            SettingsHelper(self).enable_authentication()
-        else:
-            SettingsHelper(self).disable_authentication()
+        # SettingsHelper(self).click_external_user_tab()
+        # if mode == 'enable':
+        #     SettingsHelper(self).enable_authentication()
+        # else:
+        #     SettingsHelper(self).disable_authentication()
         SettingsHelper(self).create_external_user(username, full_name, roles, expected_error)
         if not expected_error:
             SettingsHelper(self).delete_external_user(username)
 
-class  RebalanceProgressTests(BaseUITestCase):
+
+class RebalanceProgressTests(BaseUITestCase):
     def setUp(self):
         super(RebalanceProgressTests, self).setUp()
         self.helper = ServerHelper(self)
@@ -477,7 +484,6 @@ class  RebalanceProgressTests(BaseUITestCase):
                         "total_transfer should be greater than estimated  in stats %s" % stats)
         self.assertTrue(re.match(r'.*Active#-.*Replica#-.*', str(stats["vbuckets"])),
                         "VBuckets in stats %s has incorrect format" % stats)
-
 
 
 class GracefullFailoverTests(BaseUITestCase):
@@ -693,6 +699,7 @@ class ViewsTests(BaseUITestCase):
             value = age_sum
         DdocViewHelper(self).verify_view_results(view_set, reduce_fn, value)
 
+
 '''
 Controls classes for tests
 '''
@@ -709,6 +716,17 @@ class NavigationTestControls():
         return self.helper.find_control('navigation', 'navigation_tab_link',
                                         parent_locator='navigation_bar',
                                         text=text)
+
+
+class BreadcrumbsTestControls():
+    def __init__(self, driver):
+        self.helper = ControlsHelper(driver)
+
+    def navigation_trace(self, text):
+        return self.helper.find_control('breadcrumbs', 'breadcrumbs_tab',
+                                        parent_locator='breadcrumbs_bar',
+                                        text=text)
+
 class ServerTestControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
@@ -894,7 +912,7 @@ class BucketTestsControls():
                                                    parent_locator=parent)
         self.comp_in_parallel_cb = self.helper.find_control('bucket', 'comp_in_parallel_cb',
                                                          parent_locator=parent)
-        self.purge_interval = self.helper.find_control('bucket', 'purge_interval',
+        self.purge_intervals = self.helper.find_controls('bucket', 'purge_interval',
                                                    parent_locator=parent)
         return self
 
@@ -906,15 +924,18 @@ class BucketTestsControls():
                                                text=bucket_name)
         self.name = self.helper.find_control('bucket_row', 'name', parent_locator='bucket_row',
                                               text=bucket_name)
-        self.nodes = self.helper.find_control('bucket_row', 'nodes', parent_locator='bucket_row',
-                                               text=bucket_name)
+        # self.nodes = self.helper.find_control('bucket_row', 'nodes', parent_locator='bucket_row',
+        #                                        text=bucket_name)
         self.items_count = self.helper.find_control('bucket_row', 'items_count',
                                                     parent_locator='bucket_row', text=bucket_name)
         self.documents = self.helper.find_control('bucket_row', 'documents',
                                                   parent_locator='bucket_row', text=bucket_name)
-        self.views = self.helper.find_control('bucket_row', 'views', parent_locator='bucket_row',
-                                               text=bucket_name)
-        self.health = self.helper.find_first_visible('bucket_row', 'health',
+        # self.views = self.helper.find_control('bucket_row', 'views', parent_locator='bucket_row',
+        #                                        text=bucket_name)
+        # self.health = self.helper.find_first_visible('bucket_row', 'health',
+        #                                              parent_locator='bucket_row',
+        #                                              text=bucket_name)
+        self.statistics = self.helper.find_first_visible('bucket_row', 'statistics',
                                                      parent_locator='bucket_row',
                                                      text=bucket_name)
         return self
@@ -939,10 +960,13 @@ class BucketTestsControls():
     def bucket_stat_from_view_block(self, stat):
         return self.helper.find_control('bucket_stats', 'value_stat', parent_locator='view_stats_block', text=stat)
 
+
 class NodeInitializeControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
         self.setup_btn = self.helper.find_control('initialize', 'setup_btn')
+        self.configure_dms = self.helper.find_control('initialize', 'configure_dms')
+        self.finish_with_defaults = self.helper.find_control('initialize', 'finish_with_defaults')
 
     def errors(self):
         self.error_inline = self.helper.find_controls('initialize', 'errors')
@@ -955,6 +979,7 @@ class NodeInitializeControls():
     def step_screen(self):
         self.current_step = self.helper.find_first_visible('initialize', 'current_step')
         self.next_btn = self.helper.find_first_visible('initialize', 'next_btn')
+        self.finish_btn = self.helper.find_first_visible('initialize', 'finish_btn')
         return self
 
     def step_1(self):
@@ -978,13 +1003,16 @@ class NodeInitializeControls():
         self.last_name = self.helper.find_control('step_4', 'last_name')
         self.company = self.helper.find_control('step_4', 'company')
         self.agree_terms = self.helper.find_control('step_4', 'agree_terms')
+        self.expand_registry = self.helper.find_control('step_4', 'expand_registry')
         return self
 
-    def step_5(self):
-        self.password_confirm = self.helper.find_control('step_5', 'password_confirm')
-        self.user = self.helper.find_control('step_5', 'user')
-        self.password = self.helper.find_control('step_5', 'pass')
+    def step_new_cluater(self):
+        self.cluster_name = self.helper.find_control('step_new_cluater', 'cluster_name')
+        self.password_confirm = self.helper.find_control('step_new_cluater', 'password_confirm')
+        self.user = self.helper.find_control('step_new_cluater', 'user')
+        self.password = self.helper.find_control('step_new_cluater', 'pass')
         return self
+
 
 class DdocViewControls():
     def __init__(self, driver):
@@ -1047,8 +1075,7 @@ class DdocViewControls():
                                                         parent_locator='random_doc')
         self.random_doc_meta = self.helper.find_control('edit_view_screen', 'random_doc_meta',
                                                         parent_locator='random_doc')
-        self.random_doc_edit_btn = self.helper.find_control('edit_view_screen', 'random_doc_edit_btn',
-                                                        parent_locator='random_doc')
+        self.random_doc_edit_btn = self.helper.find_control('edit_view_screen', 'random_doc_edit_btn')
         self.view_name_set = self.helper.find_control('edit_view_screen', 'view_name_set', text=view)
         return self
 
@@ -1070,6 +1097,7 @@ class DdocViewControls():
         self.doc_arrow = self.helper.find_control('view_results', 'doc_arrow')
         self.view_arrow = self.helper.find_control('view_results', 'view_arrow')
         return self
+
 
 class DocumentsControls():
     def __init__(self, driver):
@@ -1119,15 +1147,16 @@ class DocumentsControls():
     def edit_document_screen(self, parent='screen', doc=None):
         self.name = self.helper.find_control('edit_doc_screen', 'name', text=doc)
         self.content = self.helper.find_first_visible('edit_doc_screen', 'content',
-                                                      parent_locator='screen')
+                                                      parent_locator=parent)
         self.delete_btn = self.helper.find_control('edit_doc_screen', 'delete_btn',
-                                                    parent_locator='screen')
+                                                    parent_locator=parent)
         self.save_btn = self.helper.find_control('edit_doc_screen', 'save_btn',
-                                                  parent_locator='screen')
+                                                  parent_locator=parent)
         self.save_as_btn = self.helper.find_control('edit_doc_screen', 'save_as_btn',
-                                                     parent_locator='screen')
+                                                     parent_locator=parent)
         self.documents_link = self.helper.find_control('edit_doc_screen', 'documents_link')
         return self
+
 
 class SettingsTestControls():
     def __init__(self, driver):
@@ -1166,12 +1195,14 @@ class SettingsTestControls():
         self.done_btn = self.helper.find_control('settings', 'done_btn', parent_locator='auto_failover_screen')
         return self
 
-    def user_create_info(self):
+    def user_create_info(self, roles =[]):
         self.username = self.helper.find_control('user', 'username')
         self.password = self.helper.find_control('user', 'password')
         self.verify_password = self.helper.find_control('user', 'verify_password')
         self.create_btn = self.helper.find_control('user', 'create_btn')
-        self.delete_btn = self.helper.find_control('user', 'delete_btn')
+        self.roles_items = []
+        for role in roles:
+            self.roles_items.append(self.helper.find_control('user', 'roles_item', text=role))
         return self
 
     def user_error_msgs(self):
@@ -1204,6 +1235,7 @@ class SettingsTestControls():
         self.disable_link = self.helper.find_control('external_user', 'disable_link')
         self.label_disabled = self.helper.find_control('external_user', 'label_disabled')
         self.add_user = self.helper.find_control('external_user', 'add_user')
+        self.select_external = self.helper.find_control('external_user', 'select_external')
         self.name_inp = self.helper.find_control('external_user', 'name_inp')
         self.name_full_inp = self.helper.find_control('external_user', 'name_full_inp')
         self.roles_selector = self.helper.find_control('external_user', 'roles_selector')
@@ -1217,19 +1249,22 @@ class SettingsTestControls():
             self.roles_items.append(self.helper.find_control('external_user', 'roles_item', text=role))
         return self
 
+
 '''
 Helpers
 '''
-class NavigationHelper():
+
+
+class NavigationHelper:
     def __init__(self, tc):
         self.tc = tc
         self.controls = NavigationTestControls(tc.driver)
+        self.breadcrumbs = BreadcrumbsTestControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=25)
 
     def _is_tab_selected(self, text):
         return self.controls._navigation_tab(text).is_displayed() and\
-               self.controls._navigation_tab(text).get_attribute('class') \
-                                                    .find('currentNav') > -1
+               self.controls._navigation_tab(text).get_attribute('class').find('currentnav') > -1
 
     def navigate(self, tab):
         self.wait.until(lambda fn: self.controls._navigation_tab_link(tab).is_displayed(),
@@ -1241,6 +1276,11 @@ class NavigationHelper():
         self.wait.until(lambda fn: self._is_tab_selected(tab),
                         "tab '%s' is not selected in %d sec" % (tab, self.wait._timeout))
         self.tc.log.info("tab '%s' is selected" % tab)
+
+    def navigate_breadcrumbs(self, tab):
+        self.breadcrumbs.navigation_trace(tab).click()
+        self.tc.log.info("tab '%s' is selected via breadcrumb" % tab)
+
 
 class ServerHelper():
     def __init__(self, tc):
@@ -1622,7 +1662,7 @@ class BucketHelper():
             if bucket.comp_allowed_period_cb is not None or bucket.comp_allowed_period_start_h is not None or\
              bucket.comp_allowed_period_start_min is not None or bucket.comp_allowed_period_end_h is not None or\
              bucket.comp_allowed_period_end_min is not None:
-                self.controls.bucket_compaction(parent).comp_allowed_period_cb.check(setTrue=True)
+                self.controls.bucket_compaction(parent).comp_allowed_period_cb.click()
             if bucket.comp_allowed_period_start_h is not None:
                 self.controls.bucket_compaction(parent).comp_allowed_period_start_h.type(bucket.comp_allowed_period_start_h)
             if bucket.comp_allowed_period_start_min is not None:
@@ -1636,16 +1676,19 @@ class BucketHelper():
             if bucket.comp_in_parallel_cb is not None:
                 self.controls.bucket_compaction(parent).comp_in_parallel_cb.check(setTrue=bucket.comp_in_parallel_cb)
             if bucket.purge_interval is not None:
-                self.controls.bucket_compaction(parent).purge_interval.type(bucket.purge_interval)
+                purge_intervals = self.controls.bucket_compaction(parent).purge_intervals
+                for purge_interval in purge_intervals:
+                    if purge_interval.is_displayed():
+                        purge_interval.type(bucket.purge_interval)
 
     def is_bucket_present(self, bucket):
         try:
             bucket_present = self.controls.bucket_info(bucket.name).name.is_displayed()
-            bucket_present &= self.controls.bucket_info(bucket.name).nodes.is_displayed()
+            # bucket_present &= self.controls.bucket_info(bucket.name).nodes.is_displayed()
             bucket_present &= self.controls.bucket_info(bucket.name).items_count.is_displayed()
             bucket_present &= self.controls.bucket_info(bucket.name).documents.is_displayed()
-            bucket_present &= self.controls.bucket_info(bucket.name).views.is_displayed()
-            bucket_present &= self.controls.bucket_info(bucket.name).health.is_displayed()
+            # bucket_present &= self.controls.bucket_info(bucket.name).views.is_displayed()
+            bucket_present &= self.controls.bucket_info(bucket.name).statistics.is_displayed()
             return bucket_present
         except:
             time.sleep(1)
@@ -1684,9 +1727,9 @@ class BucketHelper():
                 pass
 
     def open_stats(self, bucket):
-        self.controls.bucket_info(bucket.name).name.click()
+        self.controls.bucket_info(bucket.name).statistics.click()
         self.tc.log.info("Stats page is opened")
-        # time.sleep(30)
+        time.sleep(10)
         # self.controls.bucket_stats(tab="Server Resources").arrow.click()
 
     def open_view_block_stats(self):
@@ -1737,27 +1780,30 @@ class NodeInitializeHelper():
         return error_text
 
     def _go_next_step(self, last_step=False):
-        step = self._get_current_step_num()
-        self.tc.log.info("try to open next step. Now you are on %s" % step)
-        self.controls.step_screen().next_btn.click()
+        # step = self._get_current_step_num()
+        # self.tc.log.info("try to open next step. Now you are on %s" % step)
         if last_step:
+            self.controls.step_screen().finish_btn.click()
             self.wait.until(lambda fn: NavigationHelper(self.tc)._is_tab_selected('Dashboard'),
                             "Main page is not opened")
         else:
-            self.wait.until(lambda fn: self._get_current_step_num() == step + 1 or
-                                       self._get_error() != '',
-                            "no reaction for clicking next btn")
+            self.controls.step_screen().next_btn.click()
+        # else:
+
+            # self.wait.until(lambda fn: self._get_current_step_num() == step + 1 or
+            #                            self._get_error() != '',
+            #                 "no reaction for clicking next btn")
         if self._get_error():
             raise Exception("error '%s' appears" % self._get_error())
         self.tc.log.info("Next step screen is opened")
 
-    def _get_current_step_num(self):
-        if self.controls.step_screen().current_step is None:
-            return 0
-        if self.controls.step_screen().current_step.get_text():
-            return int(re.match(r'Step (.*) of (.*)', self.controls.step_screen().current_step.get_text()).group(1))
-        else:
-            return 0
+    # def _get_current_step_num(self):
+    #     if self.controls.step_screen().current_step is None:
+    #         return 0
+    #     if self.controls.step_screen().current_step.get_text():
+    #         return int(re.match(r'Step (.*) of (.*)', self.controls.step_screen().current_step.get_text()).group(1))
+    #     else:
+    #         return 0
 
     '''
     Following params from test input will be processed:
@@ -1768,16 +1814,21 @@ class NodeInitializeHelper():
     password_cluster - password for user joining cluster
     ip_cluster - ip for joining cluster
     '''
-    def _fill_1_step(self, input):
+    def _fill_dms(self, input):
         if input.param("db_path", None):
             self.controls.step_1().db_path.type(input.param("db_path", None))
         if input.param("indeces_path", None):
             self.controls.step_1().indeces_path.type(input.param("indeces_path", None))
         if input.param("ram_quota_node", None):
-            if self.controls.step_1().new_cluster_cb.is_displayed():
-                self.controls.step_1().new_cluster_cb.click()
+            # if self.controls.step_1().new_cluster_cb.is_displayed():
+            # self.controls.step_1().new_cluster_cb.click()
             self.controls.step_1().ram_quota.type(input.param("ram_quota_node", None))
             self.controls.step_1().ram_quota.mouse_over()
+        # else:
+        #     self.controls.step_1().new_cluster_cb.click()
+        #     self.controls.step_1().ram_quota.type(input.param("ram_quota_node", None))
+        #     self.controls.step_1().ram_quota.mouse_over()
+
         if input.param("user_cluster", None) or input.param("password_cluster", None) \
                                             or input.param("ip_cluster", None):
             if self.controls.step_1().join_cluster.is_displayed():
@@ -1795,36 +1846,50 @@ class NodeInitializeHelper():
         BucketHelper(self.tc).fill_bucket_info(Bucket(parse_bucket=input),
                                                parent='initialize_step')
 
-    def _fill_4_step(self, input):
+    def _fill_accept_terms_step(self, input):
         if input.param("enable_updates", None) is not None:
             self.controls.step_4().enable_updates.check(setTrue=input.param("enable_updates", None))
+        if input.param("email", None) or input.param("last_name", None) or \
+                input.param("last_name", None) or input.param("company", None):
+            self.controls.step_4().expand_registry.click()
         self.controls.step_4().email.type(input.param("email", None))
         self.controls.step_4().first_name.type(input.param("first_name", None))
         self.controls.step_4().last_name.type(input.param("last_name", None))
         self.controls.step_4().company.type(input.param("company", None))
         if input.param("agree_terms", None) is not None:
             if self.controls.step_4().agree_terms.is_displayed():
-                self.controls.step_4().agree_terms.check(setTrue=input.param("agree_terms", None))
+                action = webdriver.common.action_chains.ActionChains(self.tc.driver)
+                action.move_to_element_with_offset(self.tc.driver.find_element_by_link_text('terms & conditions'), -100,
+                                                   0).click().perform()
             else:
                 self.tc.log.info("This version of application doesn't contain agree checkbox(step 4)")
 
-    def _fill_5_step(self, input):
-        self.controls.step_5().password_confirm.type(input.membase_settings.rest_password, is_pwd=True)
-        self.controls.step_5().user.type(input.membase_settings.rest_username)
-        self.controls.step_5().password.type(input.membase_settings.rest_password, is_pwd=True)
+    def _fill_new_cluster_step(self, input):
+        time.sleep(2)
+        self.controls.step_new_cluater().cluster_name.type("My Cluster", is_pwd=True)
+        self.controls.step_new_cluater().password_confirm.type(input.membase_settings.rest_password, is_pwd=True)
+        self.controls.step_new_cluater().user.type(input.membase_settings.rest_username)
+        self.controls.step_new_cluater().password.type(input.membase_settings.rest_password, is_pwd=True)
 
     def initialize(self, input):
         self.tc.log.info('Starting initializing node')
         self.controls.setup_btn.click()
-        self.wait.until(lambda fn: self._get_current_step_num() == 1, "first step screen is not opened")
-        for i in xrange(1, 6):
-            self.tc.log.info('Filling step %d ...' % i)
-            getattr(self, '_fill_{0}_step'.format(i))(input)
-            self.tc.log.info('Step %d filled in' % i)
-            if i == 5:
-                self._go_next_step(last_step=True)
-            else:
-                self._go_next_step()
+        self._fill_new_cluster_step(input)
+        self._go_next_step(last_step=False)
+        self._fill_accept_terms_step(input)
+        ControlsHelper(self.tc.driver).find_control('initialize', 'configure_dms').click_with_mouse_over()
+        self._fill_dms(input)
+        self._go_next_step(last_step=True)
+
+        # self.wait.until(lambda fn: self._get_current_step_num() == 1, "first step screen is not opened")
+        # for i in xrange(1, 6):
+        #     self.tc.log.info('Filling step %d ...' % i)
+        #     getattr(self, '_fill_{0}_step'.format(i))(input)
+        #     self.tc.log.info('Step %d filled in' % i)
+        #     if i == 5:
+        #         self._go_next_step(last_step=True)
+        #     else:
+        #         self._go_next_step()
 
 
 class DdocViewHelper():
@@ -1873,7 +1938,7 @@ class DdocViewHelper():
             return self.controls.view_row(view_name).row.is_displayed()
         except Exception as ex:
             print ex
-            return self.controls.view_row(view_name).row.is_displayed()
+            return False
 
     def is_new_view_present(self, view_name):
         try:
@@ -1906,6 +1971,7 @@ class DdocViewHelper():
 
     def click_edit_doc(self):
         self.controls.view_screen().random_doc_edit_btn.click()
+        time.sleep(3)
         self.wait.until(lambda fn:
                         self.controls.view_screen().screen.is_displayed(),
                         "edit screen wasn't opened")
@@ -2022,6 +2088,7 @@ class DdocViewHelper():
         else:
             return None
 
+
 class DocsHelper():
     def __init__(self, tc):
         self.tc = tc
@@ -2041,6 +2108,7 @@ class DocsHelper():
                         "edit doc screen didn't appeared")
         self.tc.log.info("edit doc screen appeared")
         self.fill_edit_doc_screen(doc)
+        NavigationHelper(self.tc).navigate_breadcrumbs('Documents')
         self.verify_doc_in_documents_screen(doc)
         self.tc.log.info('created doc')
 
@@ -2075,11 +2143,11 @@ class DocsHelper():
             if self.get_error():
                 raise Exception("Error '%s' appeared" % self.get_error())
         if action == 'save':
-            self.controls.edit_document_screen().save_btn.click()
-            self.wait.until(lambda fn:
-                            self.controls.edit_document_screen()\
-                            .save_btn.get_attribute('class').find('disabled') > -1,
-                            "Doc %s is not saved" % doc)
+            self.controls.edit_document_screen().save_btn.click(highlight=False)
+            # self.wait.until(lambda fn:
+            #                 self.controls.edit_document_screen()
+            #                 .save_btn.get_attribute('class').find('disabled') > -1,
+            #                 "Doc %s is not saved" % doc)
         if action == 'save_as':
             self.controls.edit_document_screen().save_as_btn.click()
             self.fill_create_doc_pop_up(doc.name)
@@ -2091,7 +2159,7 @@ class DocsHelper():
 
     def verify_doc_in_documents_screen(self, doc):
         self.tc.log.info("verify doc '%s' on documents page" % doc)
-        self.controls.edit_document_screen().documents_link.click()
+        # self.controls.edit_document_screen().documents_link.click()
         time.sleep(1)
         self.tc.driver.refresh()
         self.wait.until(lambda fn:
@@ -2161,7 +2229,8 @@ class DocsHelper():
                         self.controls.edit_document_screen(doc=doc.name).name.is_displayed(),
                         "Doc %s is not found" % doc.name)
 
-class SettingsHelper():
+
+class SettingsHelper:
     def __init__(self, tc):
         self.tc = tc
         self.controls = SettingsTestControls(tc.driver)
@@ -2244,61 +2313,69 @@ class SettingsHelper():
     def is_sample_bucket_installed(self, sample):
         return self.controls.samples_buckets(sample).installed_sample.is_displayed()
 
-    def is_user_created(self):
-        return self.controls.user_create_info().delete_btn.is_displayed()
+    def is_user_created(self, username):
+        return ControlsHelper(self.tc.driver). \
+            find_control('external_user', 'username_in_table', text=username).is_displayed()
 
-    def is_external_user_created(self):
-        return self.controls.external_user_create_info().delete_ext_user_btn.is_displayed()
+    def is_external_user_created(self, username):
+        return ControlsHelper(self.tc.driver).\
+            find_control('external_user', 'username_in_table', text=username).is_displayed()
 
-    def is_error_present(self):
-        if self.get_error_msg():
+    # def is_error_present(self):
+    #     if self.get_error_msg():
+    #         return True
+    #     return False
+
+    def is_user_error_present(self):
+        if self.get_user_error_msg():
             return True
         return False
 
-    def is_external_user_error_present(self):
-        if self.get_external_user_error_msg():
-            return True
-        return False
+    # def get_error_msg(self):
+    #     msgs = []
+    #     for control in self.controls.user_error_msgs():
+    #         if control.is_displayed() and control.get_text() != '':
+    #             msgs.append(control.get_text())
+    #     return msgs
 
-    def get_error_msg(self):
-        msgs = []
-        for control in self.controls.user_error_msgs():
-            if control.is_displayed() and control.get_text() != '':
-                msgs.append(control.get_text())
-        return msgs
-
-    def get_external_user_error_msg(self):
+    def get_user_error_msg(self):
         msgs = []
         for control in self.controls.external_user_error_msgs():
             if control.is_displayed() and control.get_text() != '':
                 msgs.append(control.get_text())
         return msgs
 
-    def delete_user(self):
+    def delete_user(self, user=''):
         self.tc.log.info("Delete RO user")
-        self.controls.user_create_info().delete_btn.click()
+        ControlsHelper(self.tc.driver).find_control('external_user', 'username_in_table', text=user).click()
+        ControlsHelper(self.tc.driver).find_control('external_user', 'delete_by_user', text=user).click()
+        # self.controls.user_create_info().delete_btn.click()
         self.wait.until(lambda fn: self.controls.confirmation_user_delete().delete_btn.is_displayed(),
-                        "Confirmation pop up didn't appear in %d sec" % (self.wait._timeout))
+                        "Confirmation pop up didn't appear in %d sec" % self.wait._timeout)
         self.controls.confirmation_user_delete().delete_btn.click()
         if self.controls.user_create_info().username.is_present():
             self.wait.until(lambda fn: self.controls.user_create_info().username.is_displayed(),
-                        "Username is not displayed in %d sec" % (self.wait._timeout))
+                            "Username is not displayed in %d sec" % self.wait._timeout)
         self.tc.log.info("RO user is deleted")
 
     def create_user(self, user, pwd, verify_pwd=None):
         if verify_pwd is None:
             verify_pwd = pwd
         self.tc.log.info("Try to create user %s" % user)
+        self.wait.until(lambda fn: self.controls.external_user_create_info().add_user.is_displayed(),
+                        "Add User button is not displayed in %d sec" % self.wait._timeout)
+        self.controls.external_user_create_info().add_user.click()
         self.wait.until(lambda fn: self.controls.user_create_info().username.is_displayed(),
-                        "Username is not displayed in %d sec" % (self.wait._timeout))
-        self.controls.user_create_info().username.type(user)
-        self.controls.user_create_info().password.type(pwd, is_pwd=True)
-        self.controls.user_create_info().verify_password.type(verify_pwd, is_pwd=True)
+                        "Username is not displayed in %d sec" % self.wait._timeout)
+        self.controls.user_create_info().username.type_native(user)
+        self.controls.user_create_info().password.type_native(pwd)
+        self.controls.user_create_info().verify_password.type_native(verify_pwd)
+        self.controls.external_user_create_info(['Read Only Admin']).roles_items[0].click()
         self.controls.user_create_info().create_btn.click()
-        self.wait.until(lambda fn: self.is_user_created() or self.is_error_present(),
-                        "No reaction for create btn in %d sec" % (self.wait._timeout))
-        if self.is_error_present():
-            error = self.get_error_msg()
+        self.wait.until(lambda fn: self.is_user_created(user) or self.is_user_error_present(),
+                        "No reaction for create btn in %d sec" % self.wait._timeout)
+        if self.is_user_error_present():
+            error = self.get_user_error_msg()
             self.tc.log.error("User %s not created. error %s" % (user, error))
             raise Exception("ERROR while creating user: %s" % error)
         self.tc.log.info("User %s created" % user)
@@ -2306,21 +2383,22 @@ class SettingsHelper():
     def create_external_user(self, user, fullname='', roles=[], expected_error=''):
         self.tc.log.info("Try to add external user %s" % user)
         self.wait.until(lambda fn: self.controls.external_user_create_info().add_user.is_displayed(),
-                    "Add User button is not displayed in %d sec" % (self.wait._timeout))
+                        "Add User button is not displayed in %d sec" % self.wait._timeout)
         self.controls.external_user_create_info().add_user.click()
         self.wait.until(lambda fn: self.controls.external_user_create_info().name_inp.is_displayed(),
-                        "Username is not displayed in %d sec" % (self.wait._timeout))
-        self.controls.external_user_create_info().name_inp.type(user)
-        self.controls.external_user_create_info().name_full_inp.type(fullname)
+                        "Username is not displayed in %d sec" % self.wait._timeout)
+        self.controls.external_user_create_info().select_external.click()
+        self.controls.external_user_create_info().name_inp.type_native(user)
+        self.controls.external_user_create_info().name_full_inp.type_native(fullname)
         if roles:
             for i in xrange(len(roles)):
-                self.controls.external_user_create_info().roles_selector.click()
+                # self.controls.external_user_create_info().roles_selector.click()
                 self.controls.external_user_create_info(roles[i:]).roles_items[0].click()
         self.controls.external_user_create_info().save_button.click()
-        self.wait.until(lambda fn: self.is_external_user_created() or self.is_external_user_error_present(),
-                    "No reaction for create btn in %d sec" % (self.wait._timeout))
-        if self.is_external_user_error_present():
-            error = self.get_external_user_error_msg()
+        self.wait.until(lambda fn: self.is_external_user_created(user) or self.is_user_error_present(),
+                        "No reaction for create btn in %d sec" % self.wait._timeout)
+        if self.is_user_error_present():
+            error = self.get_user_error_msg()
             self.tc.log.error("User %s not created. error %s" % (user, error))
             if expected_error:
                 if expected_error != error[0]:
@@ -2337,13 +2415,14 @@ class SettingsHelper():
 
     def delete_external_user(self, user):
         self.tc.log.info("Delete external user %s" % user)
-        self.controls.helper.find_control('external_user', 'delete_by_user', text=user).click()
+        ControlsHelper(self.tc.driver).find_control('external_user', 'username_in_table', text=user).click()
+        ControlsHelper(self.tc.driver).find_control('external_user', 'delete_by_user', text=user).click()
         self.wait.until(lambda fn: self.controls.confirmation_external_user_delete().delete_btn.is_displayed(),
                         "Confirmation pop up didn't appear in %d sec" % self.wait._timeout)
         self.controls.confirmation_external_user_delete().delete_btn.click()
         if self.controls.helper.find_control('external_user', 'delete_by_user', text=user).is_present():
             self.wait.until(lambda fn: not self.controls.helper.find_control('external_user', 'delete_by_user', text=user).is_displayed(),
-                "Username is not displayed in %d sec" % self.wait._timeout)
+                            "Username is not displayed in %d sec" % self.wait._timeout)
         self.tc.log.info("External user %s deleted" % user)
 
     def disable_authentication(self):
@@ -2355,10 +2434,8 @@ class SettingsHelper():
             self.controls.external_user_create_info().enable_link.click()
 
 
-'''
-Objects
-'''
-class Bucket():
+# Objects
+class Bucket:
     def __init__(self, name='default', type='Couchbase', ram_quota=None, sasl_pwd=None,
                  port=None, replica=None, index_replica=None, parse_bucket=None,
                  meta_data=None, io_priority=None, frag_percent_cb=None,

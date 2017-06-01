@@ -49,8 +49,8 @@ class XDCRTests(BaseUITestCase):
             rest = RestConnection(server)
             rest.remove_all_replications()
             rest.remove_all_remote_clusters()
-        self.log.info("Sleeping for 30 seconds after cleaning up replications and remote clusters")
-        time.sleep(30)
+        self.log.info("Sleeping for 10 seconds after cleaning up replications and remote clusters")
+        time.sleep(10)
         ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
 
     def _initialize_nodes(self):
@@ -143,11 +143,13 @@ class XDCRTests(BaseUITestCase):
                          'Replication should not appear')
         self.log.info('Test finished as expected')
 
+
 '''
 Controls classes for tests
 '''
 
-class XDCRControls():
+
+class XDCRControls:
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
         self.create_cluster_reference_btn = self.helper.find_control('xdcr', 'create_reference_btn')
@@ -206,7 +208,7 @@ class XDCRControls():
         return self.helper.find_controls('xdcr_advanced_settings', 'error')
 
 
-class XDCRHelper():
+class XDCRHelper:
     def __init__(self, tc):
         self.tc = tc
         self.wait = WebDriverWait(tc.driver, timeout=50)
@@ -233,7 +235,7 @@ class XDCRHelper():
             self.controls.create_reference_pop_up().create_btn.click()
         else:
             self.controls.create_reference_pop_up().cancel_btn.click()
-        time.sleep(2)
+        time.sleep(4)
         BaseHelper(self.tc).wait_ajax_loaded()
         self.wait.until(lambda fn: self._cluster_reference_pop_up_reaction(),
                         "there is no reaction in %d sec" % self.wait._timeout)
@@ -255,7 +257,7 @@ class XDCRHelper():
 
     def create_replication(self, remote_cluster, bucket, remote_bucket, cancel=False, advanced_settings={}):
         self.wait.until(lambda fn: self.controls.create_ongoing_replication_btn.is_displayed(),
-                        "create_cluster_reference_btn is not displayed in %d sec" % (self.wait._timeout))
+                        "create_cluster_reference_btn is not displayed in %d sec" % self.wait._timeout)
         self.tc.log.info("try to create cluster replication with cluster=%s, bucket=%s, remote_bucket=%s" % (remote_cluster, bucket, remote_bucket))
         self.controls.create_ongoing_replication_btn.click()
         self.wait.until(lambda fn: self.controls.create_replication_pop_up().pop_up.is_displayed(),
@@ -306,7 +308,7 @@ class XDCRHelper():
             self.controls.create_replication_pop_up().cancel_btn.click()
         BaseHelper(self.tc).wait_ajax_loaded()
         all_errors = self.controls.error_replica()
-        self.tc.log.info("Found errors on replication popup: ", str(all_errors))
+        self.tc.log.info("Found errors on replication popup: %s" % str(all_errors))
         try:
             if all_errors:
                 for error in all_errors:
