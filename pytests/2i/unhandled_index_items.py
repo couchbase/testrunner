@@ -76,10 +76,9 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         self.change_max_array_size(self.max_array_size)
         for bucket in self.buckets:
             self.rest.flush_bucket(bucket)
-        generators = self._upload_documents(num_items=self.num_docs,
+        self._upload_documents(num_items=self.num_docs,
                                             item_size=self.max_item_size,
                                             array_size=self.max_array_size)
-        self.full_docs_list = self.generate_full_docs_list(generators)
         query_definitions = self._create_indexes()
         rest = RestConnection(self.master)
         index_map = rest.get_index_id_map()
