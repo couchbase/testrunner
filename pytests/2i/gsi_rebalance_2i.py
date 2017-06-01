@@ -528,13 +528,13 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # start create index, build index and drop index
         t1 = threading.Thread(target=self._create_index_with_defer_build)
         t1.start()
-        self.sleep(2)
+        self.sleep(10)
         t2 = threading.Thread(target=self._build_index)
         t2.start()
-        self.sleep(2)
+        self.sleep(30)
         t3 = threading.Thread(target=self.run_async_index_operations, args=("drop_index"))
         t3.start()
-        self.sleep(2)
+        self.sleep(30)
         # while create index is running ,rebalance out a indexer node
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [index_server])
@@ -1114,6 +1114,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
             self.fail("rebalance did not fail after erl crash")
+        self.sleep(180)
         self.run_operation(phase="after")
 
     def test_erl_crash_on_kv_node_during_gsi_rebalance(self):
@@ -1862,8 +1863,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             output, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes,
                                                expect_failure=True)
             if not filter(lambda x: 'Client.Timeout exceeded while awaiting headers' in x, error):
-                self.fail("cbindex move did not fail during network partition with expected error message : {0}".format(
-                    error))
+                if not filter(lambda x: 'i/o timeout' in x, error):
+                    self.fail("cbindex move did not fail during network partition with expected error message : {0}".format(
+                        error))
         except Exception, ex:
             self.fail(str(ex))
         finally:
@@ -2103,22 +2105,13 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.run_async_index_operations(operation_type="drop_index")
 
     def _drop_index(self, query_definition, bucket):
-        try:
-            query = query_definition.generate_index_drop_query(
-                bucket=bucket,
-                use_gsi_for_secondary=self.use_gsi_for_secondary,
-                use_gsi_for_primary=self.use_gsi_for_primary)
-            log.info(query)
-            actual_result = self.n1ql_helper.run_cbq_query(query=query,
-                                                           server=self.n1ql_server)
-        except Exception, ex:
-            log.info(ex)
-            query = "select * from system:indexes"
-            actual_result = self.n1ql_helper.run_cbq_query(query=query,
-                                                           server=self.n1ql_server)
-            log.info(actual_result)
-        finally:
-            return actual_result
+        query = query_definition.generate_index_drop_query(
+            bucket=bucket,
+            use_gsi_for_secondary=self.use_gsi_for_secondary,
+            use_gsi_for_primary=self.use_gsi_for_primary)
+        log.info(query)
+        actual_result = self.n1ql_helper.run_cbq_query(query=query,
+                                                       server=self.n1ql_server)
 
     def _create_index_with_defer_build(self, defer_build=True):
         for bucket in self.buckets:
