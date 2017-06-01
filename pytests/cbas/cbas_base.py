@@ -170,6 +170,27 @@ class CBASBaseTest(BaseTestCase):
             else:
                 return True
 
+    def wait_for_ingestion_complete(self, cbas_dataset_names, num_items, timeout=300):
+        
+        total_items = 0
+        for ds_name in cbas_dataset_names:
+            total_items += self.get_num_items_in_cbas_dataset(ds_name)[0]
+        
+        counter = 0
+        while (timeout > counter):
+            self.log.info("Total items in CB Bucket to be ingested in CBAS datasets %s"%num_items)
+            if num_items <= total_items:
+                self.log.info("Data ingestion completed in %s seconds."%counter)
+                return True
+            else:
+                self.sleep(2)
+                total_items = 0
+                for ds_name in cbas_dataset_names:
+                    total_items += self.get_num_items_in_cbas_dataset(ds_name)[0]
+                counter += 2
+                
+        return False
+    
     def execute_statement_on_cbas(self, statement, server, mode=None):
         """
         Executes a statement on CBAS using the REST API through curl command
