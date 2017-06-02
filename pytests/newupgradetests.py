@@ -2202,8 +2202,36 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.sleep(180, "Sleep for check")
             map_before_rebalance, stats_map_before_rebalance = \
                 self._return_maps()
-            self.cluster.rebalance(self.servers[:3], [self.servers[3]],
-                                   [self.servers[1]], services=["index"])
+            index_node = self.get_nodes_from_services_map(service_type="index")
+            to_add_nodes = [self.servers[3]]
+            to_remove_nodes = [index_node]
+            services_in = ["index"]
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init], to_add_nodes, [],
+                services=services_in)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached,
+                            "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init + 1], [], to_remove_nodes)
+            index_server = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=False)
+            for i in xrange(20):
+                output = self.rest.list_indexer_rebalance_tokens(
+                    server=index_server)
+                if "rebalancetoken" in output:
+                    self.log.info(output)
+                    break
+                self.sleep(2)
+            if i == 19 and "rebalancetoken" not in output:
+                self.log.warn(
+                    "rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached,
+                            "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            self.sleep(30)
             map_after_rebalance, stats_map_after_rebalance = \
                 self._return_maps()
             self.n1ql_helper.verify_indexes_redistributed(
