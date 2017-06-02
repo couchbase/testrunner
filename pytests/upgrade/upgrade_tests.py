@@ -130,6 +130,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.generate_map_nodes_out_dist_upgrade(\
                                       self.after_upgrade_services_out_dist)
             self.log.info("*** Start operations after upgrade is done ***")
+            self.add_built_in_server_user()
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
             self.finish_events(self.after_event_threads)
