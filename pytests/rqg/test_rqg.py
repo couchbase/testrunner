@@ -1405,9 +1405,9 @@ class RQGTests(BaseTestCase):
         build_index_list = []
         batch_index_definitions = {}
         batch_index_definitions = index_map
-        table_field_map = self.client._get_field_list_map_for_tables()
-        fields = table_field_map['simple_table']
         if self.pushdown:
+           table_field_map = self.client._get_field_list_map_for_tables()
+           fields = table_field_map['simple_table']
            combination_fields = sum([map(list, combinations(fields, i)) for i in range(len(fields) + 1)], [])
            for x in xrange(1,len(combination_fields)):
                input = combination_fields[x]
