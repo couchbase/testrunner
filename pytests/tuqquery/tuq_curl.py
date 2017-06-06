@@ -502,6 +502,58 @@ class QueryCurlTests(QueryTests):
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['results'][0]['$1']['given_cipher_suites'] == cipher_list)
 
+    '''Curl is limited in the amount of data each call can pull between 20MB and 64MB, test values
+       under 20MB and over 64MB as well as values between 20 and 64 MB'''
+    def test_max_data(self):
+        for i in range(5):
+            self.run_cbq_query("INSERT INTO default (key UUID(), VALUE results)"
+                               "SELECT * FROM default results")
+        # Test default value (20 MB)
+        error_msg= "Errorevaluatingprojection.-cause:ResponseSizehasbeenexceeded." \
+                   "Themaxresponsecapacityis20971520"
+        n1ql_query = 'select * from default'
+        query = "select curl("+ self.query_service_url +\
+                ", {'data' : 'statement=%s','user':'%s:%s'})" % (n1ql_query,self.username,self.password)
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+        # Test less than 20 MB (should default back to 20 MB)
+        query = "select curl("+ self.query_service_url +\
+                ", {'data' : 'statement=%s','user':'%s:%s','result-cap':10040})" \
+                % (n1ql_query,self.username,self.password)
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+        # Test a negative number (should default back to 20 MB)
+        query = "select curl("+ self.query_service_url +\
+                ", {'data' : 'statement=%s','user':'%s:%s','result-cap':-10040})" \
+                % (n1ql_query,self.username,self.password)
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+        # Test a valid change between 20 MB and 64 MB
+        error_msg = "Errorevaluatingprojection.-cause:ResponseSizehasbeenexceeded." \
+                    "Themaxresponsecapacityis31457280"
+        query = "select curl("+ self.query_service_url +\
+                ", {'data' : 'statement=%s','user':'%s:%s','result-cap':31457280})" \
+                % (n1ql_query,self.username,self.password)
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
+        # Test a number higher than the max of 64 MB (should become 64 MB)
+        error_msg= "Errorevaluatingprojection.-cause:ResponseSizehasbeenexceeded." \
+                   "Themaxresponsecapacityis67108864"
+        query = "select curl("+ self.query_service_url +\
+                ", {'data' : 'statement=%s','user':'%s:%s','result-cap':68108864})"\
+                % (n1ql_query,self.username,self.password)
+        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+
 ##############################################################################################
 #
 #   Options Tests
@@ -592,6 +644,36 @@ class QueryCurlTests(QueryTests):
         result = self.run_cbq_query(query)
         self.assertTrue(result['results'][0]['$1']['user-agent'] == "ikandaswamy,ajay"
                         and json_curl['results'][0]['$1']['user-agent'] == "ikandaswamy,ajay")
+
+    '''Basic test for the data-urlencode option'''
+    def test_url_encode(self):
+        curl_output = self.shell.execute_command(
+            "{0} https://query.yahooapis.com/v1/public/yql --data 'q=select%20*%20from%20yahoo."
+            "finance.quotes%20where%20symbol%20in%20(%22HDP%22)&format=json&diagnostics=true&env="
+            "store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback='".format(self.curl_path))
+        expected_curl = self.convert_list_to_json(curl_output[0])
+        url = "'https://query.yahooapis.com/v1/public/yql'"
+        query="select temp.query.results from curl("+ url + ", "
+        options = "{'data-urlencode': ['q=select * from yahoo.finance.quotes where symbol in (\\\"HDP\\\")'," \
+                  "'format=json','diagnostics=true','env=store://datatables.org/alltableswithkeys'," \
+                  "'callback=']})temp"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query+options,'', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        import pdb;
+        pdb.set_trace()
+        self.assertTrue(actual_curl['results'][0]['results'] == expected_curl['query']['results'])
+
+        curl_output2 = self.shell.execute_command(
+            "{0} https://query.yahooapis.com/v1/public/yql --data 'q=select%20*%20from%20yahoo."
+            "finance.quotes%20where%20symbol%20in%20(%22HDP%22)%20AND%20YearLow=%226.42%22&format="
+            "json&diagnostics=true&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback='".format(self.curl_path))
+        expected_curl2 = self.convert_list_to_json(curl_output2[0])
+        options = "{'data-urlencode':['q=select * from yahoo.finance.quotes where symbol in " \
+                  "(\\\"HDP\\\") AND YearLow=\"6.42\"','format=json','diagnostics=true'," \
+                  "'env=store://datatables.org/alltableswithkeys','callback=']})temp"
+        curl = self.shell.execute_commands_inside(self.cbqpath,query+options,'', '', '', '', '')
+        actual_curl2 = self.convert_to_json(curl)
+        self.assertTrue(actual_curl2['results'][0]['results'] == expected_curl2['query']['results'])
 
     '''Tests the different ways to specify which method to use'''
     def test_conflicting_method_options(self):
