@@ -527,7 +527,7 @@ class XDCRRemoteClusterRef:
     """Class keep the information related to Remote Cluster References.
     """
 
-    def __init__(self, src_cluster, dest_cluster, name, encryption=False):
+    def __init__(self, src_cluster, dest_cluster, name, encryption=False, replicator_target_role=False):
         """
         @param src_cluster: source couchbase cluster object.
         @param dest_cluster: destination couchbase cluster object:
@@ -540,6 +540,7 @@ class XDCRRemoteClusterRef:
         self.__name = name
         self.__encryption = encryption
         self.__rest_info = {}
+        self.__replicator_target_role = replicator_target_role
 
         # List of XDCReplication objects
         self.__replications = []
@@ -596,10 +597,18 @@ class XDCRRemoteClusterRef:
         if self.__encryption:
             rest_conn_dest = RestConnection(dest_master)
             certificate = rest_conn_dest.get_cluster_ceritificate()
+
+        if self.__replicator_target_role:
+            self.dest_user = "replicator_user"
+            self.dest_pass = "password"
+        else:
+            self.dest_user = dest_master.rest_username
+            self.dest_pass = dest_master.rest_password
+
         self.__rest_info = rest_conn_src.add_remote_cluster(
             dest_master.ip, dest_master.port,
-            dest_master.rest_username,
-            dest_master.rest_password, self.__name,
+            self.dest_user,
+            self.dest_pass, self.__name,
             demandEncryption=self.__encryption,
             certificate=certificate)
 
@@ -623,8 +632,8 @@ class XDCRRemoteClusterRef:
             certificate = rest_conn_dest.get_cluster_ceritificate()
             self.__rest_info = rest_conn_src.modify_remote_cluster(
                 dest_master.ip, dest_master.port,
-                dest_master.rest_username,
-                dest_master.rest_password, self.__name,
+                self.dest_user,
+                self.dest_pass, self.__name,
                 demandEncryption=encryption,
                 certificate=certificate)
         self.__encryption = encryption
@@ -2139,7 +2148,7 @@ class CouchbaseCluster:
             value)
         task.result()
 
-    def add_remote_cluster(self, dest_cluster, name, encryption=False):
+    def add_remote_cluster(self, dest_cluster, name, encryption=False, replicator_target_role=False):
         """Create remote cluster reference or add remote cluster for xdcr.
         @param dest_cluster: Destination cb cluster object.
         @param name: name of remote cluster reference
@@ -2149,7 +2158,8 @@ class CouchbaseCluster:
             self,
             dest_cluster,
             name,
-            encryption
+            encryption,
+            replicator_target_role
         )
         remote_cluster.add()
         self.__remote_clusters.append(remote_cluster)
@@ -2480,6 +2490,10 @@ class XDCRNewBaseTest(unittest.TestCase):
             # Remove rbac users in teardown
             role_del = ['cbadminbucket']
             RbacBase().remove_user_role(role_del, RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
+            if self._replicator_role:
+                role_del = ['replicator_user']
+                RbacBase().remove_user_role(role_del,
+                                            RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
 
         try:
             if self.__is_cleanup_needed() or self._input.param("skip_cleanup", False):
@@ -2530,18 +2544,39 @@ class XDCRNewBaseTest(unittest.TestCase):
         for i in range(1, len(self.__cb_clusters) + 1):
             # Add built-in user to C1
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
-            RbacBase().create_user_source(testuser, 'builtin', self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
+            RbacBase().create_user_source(testuser, 'builtin',
+                                          self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
+
             time.sleep(10)
 
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
-            RbacBase().add_user_role(role_list, RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()), 'builtin')
+            RbacBase().add_user_role(role_list,
+                                     RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
+                                     'builtin')
+
             time.sleep(10)
 
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
                 and str(self.__class__).find('capiXDCR') == -1:
             self.__create_buckets()
+
+        if self._replicator_role:
+            for i in range(1, len(self.__cb_clusters) + 1):
+                testuser_replicator = [{'id': 'replicator_user', 'name': 'replicator_user', 'password': 'password'}]
+                RbacBase().create_user_source(testuser_replicator, 'builtin',
+                                              self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
+
+                if self._replicator_role and self._replicator_all_buckets:
+                    role = 'replication_target[*]'
+                else:
+                    role = 'replication_target[default]'
+                role_list_replicator = [
+                        {'id': 'replicator_user', 'name': 'replicator_user', 'roles': role}]
+                RbacBase().add_user_role(role_list_replicator,
+                                             RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
+                                             'builtin')
 
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
@@ -2618,6 +2653,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
         self._evict_with_compactor = self._input.param("evict_with_compactor", False)
+        self._replicator_role = self._input.param("replicator_role",False)
+        self._replicator_all_buckets = self._input.param("replicator_all_buckets",False)
 
     def __initialize_error_count_dict(self):
         """
@@ -2804,7 +2841,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 Utility.get_rc_name(
                     cb_cluster.get_name(),
                     self.__cb_clusters[i + 1].get_name()),
-                self._demand_encryption
+                self._demand_encryption,
+                self._replicator_role
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 self.__cb_clusters[i + 1].add_remote_cluster(
@@ -2812,7 +2850,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     Utility.get_rc_name(
                         self.__cb_clusters[i + 1].get_name(),
                         cb_cluster.get_name()),
-                    self._demand_encryption
+                    self._demand_encryption,
+                    self._replicator_role
                 )
 
     def __set_topology_star(self):
@@ -2823,13 +2862,15 @@ class XDCRNewBaseTest(unittest.TestCase):
             hub.add_remote_cluster(
                 cb_cluster,
                 Utility.get_rc_name(hub.get_name(), cb_cluster.get_name()),
-                self._demand_encryption
+                self._demand_encryption,
+                self._replicator_role
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 cb_cluster.add_remote_cluster(
                     hub,
                     Utility.get_rc_name(cb_cluster.get_name(), hub.get_name()),
-                    self._demand_encryption
+                    self._demand_encryption,
+                    self._replicator_role
                 )
 
     def __set_topology_ring(self):
@@ -2842,7 +2883,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             Utility.get_rc_name(
                 self.__cb_clusters[-1].get_name(),
                 self.__cb_clusters[0].get_name()),
-            self._demand_encryption
+            self._demand_encryption,
+            self._replicator_role
         )
         if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
             self.__cb_clusters[0].add_remote_cluster(
@@ -2850,7 +2892,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 Utility.get_rc_name(
                     self.__cb_clusters[0].get_name(),
                     self.__cb_clusters[-1].get_name()),
-                self._demand_encryption
+                self._demand_encryption,
+                self._replicator_role
             )
 
     def set_xdcr_topology(self):
