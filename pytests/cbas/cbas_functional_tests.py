@@ -229,9 +229,7 @@ class CBASFunctionalTests(CBASBaseTest):
 
     def test_or_predicate_evaluation(self):
         ds_name = "filtered_travel_ds"
-        predicates = self.input.param("predicates", None).replace("&eq",
-                                                                  "=").replace(
-            "&qt", "\"")
+        predicates = self.input.param("predicates", None).replace("&eq","=").replace("&qt", "\"")
         self.log.info("predicates = %s", predicates)
 
         # Create bucket on CBAS
@@ -251,8 +249,11 @@ class CBASFunctionalTests(CBASBaseTest):
         else:
             statement_create_dataset += ";"
 
-        status, metrics, errors, results = self.execute_statement_on_cbas(
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas(
             statement_create_dataset, self.master)
+        
+        self.log.info("Executing Statement on CBAS: %s", statement_create_dataset)
+        
         if errors:
             self.log.info("Statement = %s", statement_create_dataset)
             self.log.info(errors)

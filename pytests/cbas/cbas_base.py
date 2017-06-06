@@ -57,6 +57,7 @@ class CBASBaseTest(BaseTestCase):
         Load the specified sample bucket in Couchbase
         """
         self.rest.load_sample(bucketName)
+        self.sleep(60)
         return BucketOperationHelper.wait_for_memcached(self.master, bucketName)
 
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
