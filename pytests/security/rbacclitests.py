@@ -69,13 +69,13 @@ class rbacclitests(BaseTestCase):
         super(rbacclitests, self).tearDown()
 
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
         '''
         status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
+        '''
 
     def setupLDAPSettings (self,rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'

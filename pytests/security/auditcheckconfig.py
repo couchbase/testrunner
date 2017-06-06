@@ -535,7 +535,7 @@ class auditCLITest(CliBaseTest):
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+        content = rest.set_user_roles(user_id=username, payload=payload)
 
     def setupLDAPSettings (self,rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'

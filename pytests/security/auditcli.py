@@ -236,7 +236,7 @@ class auditcli(BaseTestCase):
                             'auth_type':'none', "autocompaction":'false', "purge_interval":"undefined", \
                             "flush_enabled":True, "num_threads":3, "source":self.source, \
                             "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'',
-                            'auth_type':self.auth_type}
+                            'auth_type':self.source, 'storage_mode': 'couchstore'}
         self.checkConfig(8202, self.master, expectedResults)
 
         cli_command = "bucket-flush --force"
@@ -385,7 +385,7 @@ class auditcli(BaseTestCase):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             output = self.del_runCmd_value(output)
-            self.assertEqual(output[1], ["SUCCESS: group created group"])
+            self.assertEqual(output[1], "SUCCESS: Server group created")
             expectedResults = {'group_name':'group2', 'source':source, 'user':user, 'ip':'127.0.0.1', 'port':1234}
             tempStr = rest.get_zone_uri()[expectedResults['group_name']]
             tempStr = (tempStr.split("/"))[4]
