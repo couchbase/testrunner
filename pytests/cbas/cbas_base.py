@@ -15,6 +15,8 @@ class CBASBaseTest(BaseTestCase):
         self.cbas_node = self.input.cbas
         self.analytics_helper = AnalyticsHelper()
         self._cb_cluster = self.cluster
+        self.travel_sample_docs_count = 31591
+        self.beer_sample_docs_count = 7303
         invalid_ip = '10.111.151.109'
         self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
         self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
@@ -52,13 +54,30 @@ class CBASBaseTest(BaseTestCase):
     def tearDown(self):
         super(CBASBaseTest, self).tearDown()
 
-    def load_sample_buckets(self, server, bucketName):
+    def load_sample_buckets(self, server, bucketName, total_items=None):
         """
         Load the specified sample bucket in Couchbase
         """
         self.rest.load_sample(bucketName)
-        self.sleep(60)
-        return BucketOperationHelper.wait_for_memcached(self.master, bucketName)
+        BucketOperationHelper.wait_for_memcached(self.master, bucketName)
+        
+        """ check for load data into travel-sample bucket """
+        if total_items:
+            import time
+            end_time = time.time() + 300
+            while time.time() < end_time:
+                self.sleep(10)
+                num_actual = self.get_item_count(self.master,bucketName)
+                if int(num_actual) == total_items:
+                    self.log.info("%s items are loaded in the %s bucket" %(num_actual,bucketName))
+                    break
+                
+            if int(num_actual) != total_items:
+                return False
+        else:
+            self.sleep(120)
+
+        return True
 
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
                               cb_server_ip,

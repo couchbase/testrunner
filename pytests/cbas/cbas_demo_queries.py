@@ -125,10 +125,11 @@ class CBASDemoQueries(CBASBaseTest):
         query_details = QueryDetails(self.query_id)
         query_record, dataset_record = query_details.get_query_and_dataset_details()
 
-        # Delete Default bucket and load travel-sample bucket
+        # Delete Default bucket and load beer-sample bucket
         self.cluster.bucket_delete(server=self.master, bucket="default")
         self.load_sample_buckets(server=self.master,
-                                 bucketName=dataset_record['cb_bucket_name'])
+                                 bucketName=dataset_record['cb_bucket_name'],
+                                 total_items=self.beer_sample_docs_count)
 
         # Create bucket on CBAS
         self.create_bucket_on_cbas(

@@ -12,7 +12,7 @@ class CBASFunctionalTests(CBASBaseTest):
         if self.expected_error:
             self.validate_error = True
         
-        result = self.load_sample_buckets(server=self.master, bucketName="travel-sample")
+        result = self.load_sample_buckets(server=self.master, bucketName="travel-sample", total_items=self.travel_sample_docs_count)
         self.assertTrue(result, msg="wait_for_memcached failed while loading sample bucket: travel-sample")
         
     def tearDown(self):
