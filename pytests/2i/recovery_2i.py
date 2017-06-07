@@ -243,7 +243,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 remote.stop_server()
             mid_recovery_tasks = self.async_run_operations(phase="in_between")
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
-            self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception, ex:
