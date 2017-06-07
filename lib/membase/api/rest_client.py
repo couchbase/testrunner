@@ -3642,9 +3642,9 @@ class RestConnection(object):
         else:
             return status, json.loads(content)
 
-    def create_index_with_rest(self, create_info):
+    def create_index_with_rest(self, create_info, username="Administrator", password="password"):
         log.info("CREATE INDEX USING REST WITH PARAMETERS: " + str(create_info))
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = base64.encodestring('%s:%s' % (username, password))
         api = self.index_baseUrl + 'api/indexes?create=true'
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(create_info).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
@@ -3654,8 +3654,8 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def build_index_with_rest(self, id):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def build_index_with_rest(self, id, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         api = self.index_baseUrl + 'api/indexes?build=true'
         build_info = {'ids': [id]}
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3665,8 +3665,8 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def drop_index_with_rest(self, id):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def drop_index_with_rest(self, id, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3674,8 +3674,8 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
 
-    def get_all_indexes_with_rest(self):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def get_all_indexes_with_rest(self, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/indexes'
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3684,8 +3684,8 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def lookup_gsi_index_with_rest(self, id, body):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def lookup_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?lookup=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3696,10 +3696,10 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def full_table_scan_gsi_index_with_rest(self, id, body):
+    def full_table_scan_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
         if "limit" not in body.keys():
             body["limit"] = 900000
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?scanall=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3713,11 +3713,10 @@ class RestConnection(object):
         chunkless_content = content.replace("][", ", \n")
         return json.loads(chunkless_content)
 
-    def range_scan_gsi_index_with_rest(self, id, body):
+    def range_scan_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
         if "limit" not in body.keys():
             body["limit"] = 300000
-        authorization = base64.encodestring('%s:%s' % (self.username,
-                                                       self.password))
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?range=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json',
@@ -3735,8 +3734,8 @@ class RestConnection(object):
         chunkless_content = content.replace("][", ", \n")
         return json.loads(chunkless_content)
 
-    def multiscan_for_gsi_index_with_rest(self, id, body):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def multiscan_for_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?multiscan=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3758,8 +3757,8 @@ class RestConnection(object):
         else:
             return content
 
-    def multiscan_count_for_gsi_index_with_rest(self, id, body):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def multiscan_count_for_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?multiscancount=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
