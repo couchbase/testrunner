@@ -2941,7 +2941,7 @@ class FTSBaseTest(unittest.TestCase):
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
         if self.__fail_on_errors:
-            self.__report_error_list = []
+            self.__report_error_list = ["panic:"]
 
         # for format {ip1: {"panic": 2}}
         self.__error_count_dict = {}

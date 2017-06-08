@@ -907,11 +907,11 @@ class StableTopFTS(FTSBaseTest):
         self.sleep(15)
         self.wait_for_indexing_complete()
         zero_results_ok = False
-        expected_hits = 3
+        expected_hits = 5
 
-        # Run Query w/o Boosting and compare the scores for Docs emp10000071 &
-        # emp10000042. Should be the same
-        query = {"match": "Marketing", "field": "dept"}
+        # Run Query w/o Boosting and compare the scores for Docs emp10000086 &
+        # emp10000021. Should be the same
+        query = {"query": "dept:Marketing name:Safiya"}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
@@ -943,33 +943,30 @@ class StableTopFTS(FTSBaseTest):
 
         # Run Query w/o Boosting and compare the scores for Docs emp10000021 &
         # emp10000086. emp10000021 score should have improved w.r.t. emp10000086
-        query = {"match": "Marketing^2", "field": "dept"}
+        query = {"query": "dept:Marketing^5 name:Safiya"}
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
-        try:
-            for index in self._cb_cluster.get_indexes():
-                hits, contents, _, _ = index.execute_query(query,
-                                                           zero_results_ok=zero_results_ok,
-                                                           expected_hits=expected_hits,
-                                                           return_raw_hits=True)
-                self.log.info("Hits: %s" % hits)
-                self.log.info("Contents: %s" % contents)
-                score_after_boosting_doc1 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000021')
-                score_after_boosting_doc2 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000086')
+        for index in self._cb_cluster.get_indexes():
+            hits, contents, _, _ = index.execute_query(query,
+                                                       zero_results_ok=zero_results_ok,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True)
+            self.log.info("Hits: %s" % hits)
+            self.log.info("Contents: %s" % contents)
+            score_after_boosting_doc1 = index.get_score_from_query_result_content(
+                contents=contents, doc_id=u'emp10000021')
+            score_after_boosting_doc2 = index.get_score_from_query_result_content(
+                contents=contents, doc_id=u'emp10000086')
 
-                self.log.info("Scores after boosting:")
-                self.log.info("")
-                self.log.info("emp10000021: %s", score_after_boosting_doc1)
-                self.log.info("emp10000086: %s", score_after_boosting_doc2)
-        except Exception as err:
-            self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.log.info("Scores after boosting:")
+            self.log.info("")
+            self.log.info("emp10000021: %s", score_after_boosting_doc1)
+            self.log.info("emp10000086: %s", score_after_boosting_doc2)
+            assert score_after_boosting_doc1 == score_after_boosting_doc2
+            assert score_before_boosting_doc1 < score_after_boosting_doc1
+            assert score_before_boosting_doc2 < score_after_boosting_doc2
 
-        if not score_after_boosting_doc1 > score_after_boosting_doc2:
-            self.fail("Testcase failed: Boosting didn't improve score for emp10000021 w.r.t emp10000086")
 
     def test_doc_id_query_type(self):
         # Create bucket, create index
