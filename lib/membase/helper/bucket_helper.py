@@ -42,7 +42,9 @@ class BucketOperationHelper():
         return ratio
 
     @staticmethod
-    def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0), howmany=3, sasl=True, saslPassword='password'):
+    def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0),
+                                howmany=3, sasl=True, saslPassword='password',
+                                bucketType='membase', evictionPolicy='valueOnly'):
         success = True
         log = logger.Logger.get_logger()
         rest = RestConnection(server)
@@ -66,7 +68,9 @@ class BucketOperationHelper():
                                        replicaNumber=replica,
                                        authType="sasl",
                                        saslPassword=saslPassword,
-                                       proxyPort=port)
+                                       proxyPort=port,
+                                       bucketType=bucketType,
+                                       evictionPolicy=evictionPolicy)
                 else:
                     rest.create_bucket(bucket=name,
                                        ramQuotaMB=bucket_ram,
@@ -329,9 +333,8 @@ class BucketOperationHelper():
                 client.close()
         return len(ready_vbuckets) == vbucket_count
 
-
-    #try to insert key in all vbuckets before returning from this function
-    #bucket { 'name' : 90,'password':,'port':1211'}
+    # try to insert key in all vbuckets before returning from this function
+    # bucket { 'name' : 90,'password':,'port':1211'}
     @staticmethod
     def wait_for_memcached(node, bucket, timeout_in_seconds=300, log_msg=''):
         log = logger.Logger.get_logger()
@@ -339,17 +342,17 @@ class BucketOperationHelper():
         log.info(msg.format(bucket, node.ip))
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
                                                                                  bucket, timeout_in_seconds, log_msg)
-        #return (counter == vbucket_count) and all_vbuckets_ready
+        # return (counter == vbucket_count) and all_vbuckets_ready
         return all_vbuckets_ready
 
     @staticmethod
     def verify_data(server, keys, value_equal_to_key, verify_flags, test, debug=False, bucket="default"):
         log = logger.Logger.get_logger()
         log_error_count = 0
-        #verify all the keys
+        # verify all the keys
         client = MemcachedClientHelper.direct_client(server, bucket)
         vbucket_count = len(RestConnection(server).get_vbuckets(bucket))
-        #populate key
+        # populate key
         index = 0
         all_verified = True
         keys_failed = []
@@ -435,11 +438,11 @@ class BucketOperationHelper():
 
     @staticmethod
     def keys_exist_or_assert(keys, server, bucket_name, test, queue=None):
-        #we should try out at least three times
+        # we should try out at least three times
         log = logger.Logger.get_logger()
-        #verify all the keys
+        # verify all the keys
         client = MemcachedClientHelper.proxy_client(server, bucket_name)
-        #populate key
+        # populate key
         retry = 1
 
         keys_left_to_verify = []
@@ -469,6 +472,7 @@ class BucketOperationHelper():
             msg = "unable to verify {0} keys".format(len(keys_left_to_verify))
             log.error(msg)
             if test:
+                queue.put(False)
                 test.fail(msg=msg)
             if queue is None:
                 return False

@@ -2288,8 +2288,40 @@ class RestConnection(object):
                          wget --user=Administrator --password=asdasd --post-data='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
         return status
 
+    # return AutoReprovisionSettings
+    def get_autoreprovision_settings(self):
+        settings = None
+        api = self.baseUrl + 'settings/autoReprovision'
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        if status:
+            settings = AutoReprovisionSettings()
+            settings.enabled = json_parsed["enabled"]
+            settings.count = json_parsed["count"]
+            settings.max_nodes = json_parsed["max_nodes"]
+        return settings
+
+    def update_autoreprovision_settings(self, enabled, maxNodes=1):
+        if enabled:
+            params = urllib.urlencode({'enabled': 'true',
+                                       'maxNodes': maxNodes})
+        else:
+            params = urllib.urlencode({'enabled': 'false',
+                                       'maxNodes': maxNodes})
+        api = self.baseUrl + 'settings/autoReprovision'
+        log.info('settings/autoReprovision params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status:
+            log.error('failed to change autoReprovision_settings!')
+        return status
+
     def reset_autofailover(self):
         api = self.baseUrl + 'settings/autoFailover/resetCount'
+        status, content, header = self._http_request(api, 'POST', '')
+        return status
+
+    def reset_autoreprovision(self):
+        api = self.baseUrl + 'settings/autoReprovision/resetCount'
         status, content, header = self._http_request(api, 'POST', '')
         return status
 
@@ -3619,9 +3651,9 @@ class RestConnection(object):
         else:
             return status, json.loads(content)
 
-    def create_index_with_rest(self, create_info):
+    def create_index_with_rest(self, create_info, username="Administrator", password="password"):
         log.info("CREATE INDEX USING REST WITH PARAMETERS: " + str(create_info))
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = base64.encodestring('%s:%s' % (username, password))
         api = self.index_baseUrl + 'api/indexes?create=true'
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(create_info).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
@@ -3631,8 +3663,8 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def build_index_with_rest(self, id):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def build_index_with_rest(self, id, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         api = self.index_baseUrl + 'api/indexes?build=true'
         build_info = {'ids': [id]}
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3642,8 +3674,8 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def drop_index_with_rest(self, id):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def drop_index_with_rest(self, id, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3651,8 +3683,8 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
 
-    def get_all_indexes_with_rest(self):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def get_all_indexes_with_rest(self, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/indexes'
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3661,8 +3693,8 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def lookup_gsi_index_with_rest(self, id, body):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def lookup_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?lookup=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3673,10 +3705,10 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def full_table_scan_gsi_index_with_rest(self, id, body):
+    def full_table_scan_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
         if "limit" not in body.keys():
             body["limit"] = 900000
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?scanall=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3690,11 +3722,10 @@ class RestConnection(object):
         chunkless_content = content.replace("][", ", \n")
         return json.loads(chunkless_content)
 
-    def range_scan_gsi_index_with_rest(self, id, body):
+    def range_scan_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
         if "limit" not in body.keys():
             body["limit"] = 300000
-        authorization = base64.encodestring('%s:%s' % (self.username,
-                                                       self.password))
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?range=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json',
@@ -3712,8 +3743,8 @@ class RestConnection(object):
         chunkless_content = content.replace("][", ", \n")
         return json.loads(chunkless_content)
 
-    def multiscan_for_gsi_index_with_rest(self, id, body):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def multiscan_for_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?multiscan=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3735,8 +3766,8 @@ class RestConnection(object):
         else:
             return content
 
-    def multiscan_count_for_gsi_index_with_rest(self, id, body):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+    def multiscan_count_for_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
         url = 'api/index/{0}?multiscancount=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
@@ -3971,6 +4002,13 @@ class AutoFailoverSettings(object):
     def __init__(self):
         self.enabled = True
         self.timeout = 0
+        self.count = 0
+
+
+class AutoReprovisionSettings(object):
+    def __init__(self):
+        self.enabled = True
+        self.max_nodes = 0
         self.count = 0
 
 

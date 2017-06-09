@@ -435,8 +435,8 @@ class QueriesIndexTests(QueryTests):
     def test_pairs(self):
         self.query = "select pairs(self) from default order by meta().id limit 1"
         actual_result = self.run_cbq_query()
-        self.assertTrue( actual_result['metrics']['resultSize']==18317)
-        self.assertTrue( actual_result['metrics']['sortCount']==10078)
+        self.assertTrue( actual_result['metrics']['resultSize'] == 3608)
+        self.assertTrue( actual_result['metrics']['sortCount'] == 10080)
 
     def test_index_missing_null(self):
         for bucket in self.buckets:

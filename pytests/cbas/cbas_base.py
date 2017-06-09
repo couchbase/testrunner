@@ -11,6 +11,8 @@ class CBASBaseTest(BaseTestCase):
         self.cbas_node = self.input.cbas
         self.analytics_helper = AnalyticsHelper()
         self._cb_cluster = self.cluster
+        self.travel_sample_docs_count = 31591
+        self.beer_sample_docs_count = 7303
         invalid_ip = '10.111.151.109'
         self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
         self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
@@ -48,12 +50,30 @@ class CBASBaseTest(BaseTestCase):
     def tearDown(self):
         super(CBASBaseTest, self).tearDown()
 
-    def load_sample_buckets(self, server, bucketName):
+    def load_sample_buckets(self, server, bucketName, total_items=None):
         """
         Load the specified sample bucket in Couchbase
         """
         self.rest.load_sample(bucketName)
-        return BucketOperationHelper.wait_for_memcached(self.master, bucketName)
+        BucketOperationHelper.wait_for_memcached(self.master, bucketName)
+        
+        """ check for load data into travel-sample bucket """
+        if total_items:
+            import time
+            end_time = time.time() + 300
+            while time.time() < end_time:
+                self.sleep(10)
+                num_actual = self.get_item_count(self.master,bucketName)
+                if int(num_actual) == total_items:
+                    self.log.info("%s items are loaded in the %s bucket" %(num_actual,bucketName))
+                    break
+                
+            if int(num_actual) != total_items:
+                return False
+        else:
+            self.sleep(120)
+
+        return True
 
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
                               cb_server_ip,
@@ -166,6 +186,27 @@ class CBASBaseTest(BaseTestCase):
             else:
                 return True
 
+    def wait_for_ingestion_complete(self, cbas_dataset_names, num_items, timeout=300):
+        
+        total_items = 0
+        for ds_name in cbas_dataset_names:
+            total_items += self.get_num_items_in_cbas_dataset(ds_name)[0]
+        
+        counter = 0
+        while (timeout > counter):
+            self.log.info("Total items in CB Bucket to be ingested in CBAS datasets %s"%num_items)
+            if num_items <= total_items:
+                self.log.info("Data ingestion completed in %s seconds."%counter)
+                return True
+            else:
+                self.sleep(2)
+                total_items = 0
+                for ds_name in cbas_dataset_names:
+                    total_items += self.get_num_items_in_cbas_dataset(ds_name)[0]
+                counter += 2
+                
+        return False
+    
     def execute_statement_on_cbas(self, statement, server, mode=None):
         """
         Executes a statement on CBAS using the REST API through curl command

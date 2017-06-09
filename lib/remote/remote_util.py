@@ -1786,6 +1786,11 @@ class RemoteMachineShellConnection:
                                                  "msiexec /i {0}.msi /qn "\
                                                 .format(version))
             self.log_command_output(output, error)
+            if fts_query_limit:
+                self.set_fts_query_limit_win(
+                    name="CBFT_ENV_OPTIONS",
+                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
+                )
             return len(error) == 0
         remote_path = None
         success = True

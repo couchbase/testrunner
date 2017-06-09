@@ -455,6 +455,22 @@ class CliBaseTest(BaseTestCase):
 
         return True
 
+    def verifyAutoreprovisionSettings(self, server, enabled, max_nodes):
+        rest = RestConnection(server)
+        settings = rest.get_autoreprovision_settings()
+
+        if enabled and not ((str(enabled) == "1" and settings.enabled) or (
+                str(enabled) == "0" and not settings.enabled)):
+            log.info("Enabled does not match (%s vs. %s)", str(max_nodes),
+                     str(settings.enabled))
+            return False
+        if max_nodes and str(settings.max_nodes) != str(max_nodes):
+            log.info("max_nodes does not match (%s vs. %s)", str(max_nodes),
+                     str(settings.max_nodes))
+            return False
+
+        return True
+
     def verifyAuditSettings(self, server, enabled, log_path, rotate_interval):
         rest = RestConnection(server)
         settings = rest.getAuditSettings()

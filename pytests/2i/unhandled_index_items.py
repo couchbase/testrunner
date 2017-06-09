@@ -30,18 +30,22 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         pre_set_allow_large_keys = index_settings["indexer.settings.allow_large_keys"]
         pre_set_array_size = index_settings["indexer.settings.max_array_seckey_size"]
         pre_set_item_size = index_settings["indexer.settings.max_seckey_size"]
-        invalid_values = ["abc123", "4565", [1, 2, 3], 34.65, 0, -4000]
+        invalid_values = ["abc123", "4565", [1, 2, 3], 34.65, -4000]
         for val in invalid_values:
             self.set_allow_large_keys(val)
             self.change_max_item_size(val)
             self.change_max_array_size(val)
             index_settings = self.rest.get_index_settings()
             post_set_allow_large_keys = index_settings["indexer.settings.allow_large_keys"]
-            post_set_array_size = index_settings["indexer.settings.max_array_seckey_size"]
-            post_set_item_size = index_settings["indexer.settings.max_seckey_size"]
-            self.assertEqual(pre_set_allow_large_keys, post_set_allow_large_keys, "allow_large_kays is set to {0}".format(val))
-            self.assertEqual(pre_set_array_size, post_set_array_size, "max_array_size is set to {0}".format(val))
-            self.assertEqual(pre_set_item_size, post_set_item_size, "max_item_size is set to {0}".format(val))
+            if not isinstance(val, float):
+                post_set_array_size = index_settings["indexer.settings.max_array_seckey_size"]
+                post_set_item_size = index_settings["indexer.settings.max_seckey_size"]
+            else:
+                post_set_item_size = int(val)
+                post_set_array_size = int(val)
+            self.assertEqual(pre_set_allow_large_keys, post_set_allow_large_keys, "allow_large_kays is set to {0}".format(post_set_allow_large_keys))
+            self.assertEqual(pre_set_array_size, post_set_array_size, "max_array_size is set to {0}".format(post_set_array_size))
+            self.assertEqual(pre_set_item_size, post_set_item_size, "max_item_size is set to {0}".format(post_set_item_size))
 
     def test_max_limits(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -49,10 +53,9 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         self.change_max_array_size(self.max_array_size)
         for bucket in self.buckets:
             self.rest.flush_bucket(bucket)
-        generators = self._upload_documents(num_items=self.num_docs,
+        self._upload_documents(num_items=self.num_docs,
                                             item_size=self.max_item_size,
                                             array_size=self.max_array_size)
-        self.full_docs_list = self.generate_full_docs_list(generators)
         query_definitions = self._create_indexes()
         rest = RestConnection(self.master)
         index_map = rest.get_index_id_map()
@@ -73,10 +76,9 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         self.change_max_array_size(self.max_array_size)
         for bucket in self.buckets:
             self.rest.flush_bucket(bucket)
-        generators = self._upload_documents(num_items=self.num_docs,
+        self._upload_documents(num_items=self.num_docs,
                                             item_size=self.max_item_size,
                                             array_size=self.max_array_size)
-        self.full_docs_list = self.generate_full_docs_list(generators)
         query_definitions = self._create_indexes()
         rest = RestConnection(self.master)
         index_map = rest.get_index_id_map()
@@ -526,7 +528,7 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                   verify_data=False, batch_size=self.batch_size)
         self.full_docs_list = self.generate_full_docs_list(generators)
 
-    def _get_expected_results_for_scan(self, query, array_size, item_size):
+    def _get_expected_results_for_scan1(self, query, array_size, item_size):
         index_settings = self.rest.get_index_settings()
         allow_large_keys = index_settings["indexer.settings.allow_large_keys"]
         log.info(allow_large_keys)
@@ -573,6 +575,50 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         if not allow_large_keys:
             expected_result = [doc for doc in expected_result if doc["docid"] not in docid_list]
             expected_result = [doc for doc in expected_result if self._get_size_of_array(doc["key"]) > item_size]
+        return expected_result
+
+    def _get_expected_results_for_scan(self, query, array_size, item_size):
+        index_settings = self.rest.get_index_settings()
+        allow_large_keys = index_settings["indexer.settings.allow_large_keys"]
+        array_size = index_settings["indexer.settings.max_array_seckey_size"]
+        item_size = index_settings["indexer.settings.max_seckey_size"]
+        index_fields = []
+        for index_field in query.index_fields:
+            temp = index_field.split("`")
+            if len(temp) > 1:
+                index_fields.append(temp[1])
+            else:
+                index_fields.append(temp[0])
+        expected_result = []
+        for doc in self.full_docs_list:
+            doc_list = []
+            for field in index_fields:
+                if isinstance(doc[field], list):
+                    actual_array_size = self._get_size_of_array(doc[field])
+                    if not allow_large_keys and (actual_array_size > array_size):
+                        doc_list = []
+                        break
+                    else:
+                        if not doc_list:
+                            for arr_item in doc[field]:
+                                entry = {"docid": doc["_id"], "key": [arr_item]}
+                                doc_list.append(entry)
+                        else:
+                            for arr_item in doc[field]:
+                                for item in doc_list:
+                                    item["key"].append(arr_item)
+                else:
+                    entry = {"docid": doc["_id"], "key": [doc[field]]}
+                    if not doc_list:
+                        doc_list.append(entry)
+                    else:
+                        for item in doc_list:
+                            item["key"].append(doc[field])
+            for doc_items in doc_list:
+                if not allow_large_keys and self._get_size_of_array(doc_items["key"]) > item_size:
+                    doc_list = []
+                else:
+                    expected_result.extend(doc_list)
         return expected_result
 
     def _get_size_of_array(self, array):

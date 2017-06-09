@@ -18,8 +18,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         super(CBASAsyncResultDeliveryTests, self).tearDown()
 
     def setupForTest(self):
-        self.load_sample_buckets(server=self.master,
-                                 bucketName="travel-sample")
+        self.load_sample_buckets(server=self.master, bucketName="travel-sample", total_items=self.travel_sample_docs_count)
 
         # Create bucket on CBAS
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
@@ -145,11 +144,16 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
         # Wait while ingestion is completed
         total_items, _ = self.get_num_items_in_cbas_dataset(
             self.cbas_dataset_name)
-        while (self.num_items > total_items):
-            self.sleep(5)
-            total_items, _ = self.get_num_items_in_cbas_dataset(
-                self.cbas_dataset_name)
-
+        
+        timeout = 300
+        while (timeout > 0):
+            if self.num_items == total_items:
+                break
+            else:
+                self.sleep(5)
+                total_items, _ = self.get_num_items_in_cbas_dataset(self.cbas_dataset_name)
+                timeout -= 5
+                
         # Execute query (with sleep induced) and use the handle immediately to fetch the results
         statement = "select sleep(count(*),{0}) from {1} where mutated=0;".format(
             delay, self.cbas_dataset_name)
