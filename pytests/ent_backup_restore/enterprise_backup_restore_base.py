@@ -5,6 +5,7 @@ import shutil
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
 from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import BlobGenerator
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -804,3 +805,131 @@ class Backupset:
         self.bucket_backup = ''
         self.backup_to_compact = ''
         self.map_buckets = None
+
+class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
+    def setUp(self):
+        super(EnterpriseBackupMergeBase, self).setUp()
+        self.actions = self.input.param("actions", None)
+        self.create_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                        self.value_size, start=self.num_items,
+                                        end=self.num_items + self.num_items
+                                                             * 0.5)
+        self.update_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                        self.value_size,
+                                        end=self.num_items * 0.9)
+
+        self.delete_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                        self.value_size,
+                                        start=self.num_items / 10,
+                                        end=self.num_items)
+
+    def tearDown(self):
+        super(EnterpriseBackupMergeBase, self).tearDown()
+
+    def async_ops_on_buckets(self):
+        tasks = []
+        create_tasks = self._async_load_all_buckets(self.master,
+                                                    self.create_gen,
+                                                    "create", self.expires)
+        update_tasks = self._async_load_all_buckets(self.master,
+                                                    self.update_gen,
+                                                    "update", self.expires)
+        delete_tasks = self._async_load_all_buckets(self.master,
+                                                    self.delete_gen,
+                                                    "delete", self.expires)
+        tasks.extend(create_tasks)
+        tasks.extend(update_tasks)
+        tasks.extend(delete_tasks)
+        return tasks
+
+    def backup(self):
+        self.backup_cluster_validate()
+
+    def backup_with_ops(self):
+        ops_tasks = self.async_ops_on_buckets()
+        self.backup()
+        self.log.info(ops_tasks)
+        for task in ops_tasks:
+            task.result()
+
+    def merge(self):
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_merge()
+
+    def merge_with_ops(self):
+        update_tasks = self._async_load_all_buckets(self.master,
+                                                    self.update_gen,
+                                                    "update", self.expires)
+        delete_tasks = self._async_load_all_buckets(self.master,
+                                                    self.delete_gen,
+                                                    "delete", self.expires)
+        self.merge()
+        for task in update_tasks:
+            task.result()
+        for task in delete_tasks:
+            task.result()
+
+    def async_rebalance(self):
+        serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        serv_out = self.servers[
+                   self.nodes_init - self.nodes_out:self.nodes_init]
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup,
+                                                 serv_in, serv_out)
+        return rebalance
+
+    def rebalance(self):
+        rebalance = self.async_rebalance()
+        rebalance.result()
+
+    def rebalance_with_ops(self):
+        update_tasks = self._async_load_all_buckets(self.master,
+                                                    self.update_gen,
+                                                    "update", self.expires)
+        delete_tasks = self._async_load_all_buckets(self.master,
+                                                    self.delete_gen,
+                                                    "delete", self.expires)
+        self.rebalance()
+        for task in update_tasks:
+            task.result()
+        for task in delete_tasks:
+            task.result()
+
+    def failover(self):
+        self.failover()
+
+    def failover_with_ops(self):
+        update_tasks = self._async_load_all_buckets(self.master,
+                                                    self.update_gen,
+                                                    "update", self.expires)
+
+        delete_tasks = self._async_load_all_buckets(self.master,
+                                                    self.delete_gen,
+                                                    "delete", self.expires)
+        self.failover()
+        for task in update_tasks:
+            task.result()
+        for task in delete_tasks:
+            task.result()
+
+    def do_backup_merge_actions(self):
+        self.backupset.number_of_backups = 0
+        actions = self.actions.split(",")
+        for action in actions:
+            if ":" in action:
+                action = action.split(':')
+                iterations = int(action[1])
+                self.backupset.number_of_backups += iterations
+                action = action[0]
+            else:
+                iterations = 1
+            for i in range(0, iterations):
+                self.backup_merge_actions[action](self)
+
+    backup_merge_actions = {
+        "backup": backup,
+        "merge": merge,
+        "rebalance": rebalance,
+        "backup_with_ops": backup_with_ops,
+        "merge_with_ops": merge_with_ops
+    }
