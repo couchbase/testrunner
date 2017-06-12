@@ -153,7 +153,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._verify_es_results()
 
     def test_capi_with_checkpointing(self):
-        repl_id = self._start_es_replication()
+        repl_id = self._start_es_replication(xdcr_params={"checkpointInterval":60})
 
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
@@ -165,7 +165,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self._wait_for_es_replication_to_catchup()
 
-        self.sleep(300)
+        self.sleep(120)
 
         vb0_node = None
         nodes = self.src_cluster.get_nodes()

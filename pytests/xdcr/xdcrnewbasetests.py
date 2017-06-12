@@ -2514,7 +2514,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 "====  XDCRNewbasetests cleanup is started for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
             for cb_cluster in self.__cb_clusters:
-                cb_cluster.cleanup_cluster(self)
+                cb_cluster.cleanup_cluster(self,from_rest=True)
             self.log.info(
                 "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
