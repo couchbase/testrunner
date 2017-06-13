@@ -190,3 +190,59 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 return math.ceil(float(result)) / 1000
             else:
                 return float(result) / 1000
+
+    def validate_merge(self, backup_validation_path):
+        for bucket in self.buckets:
+            start_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", self.backupset.start)
+            start_file_path = os.path.join(self.backup_validation_path, start_file_name)
+            start_json = {}
+            if os.path.exists(start_file_path):
+                try:
+                    with open(start_file_path, 'r') as f:
+                        start_json = json.load(f)
+                        start_json = json.loads(start_json)
+                except Exception, e:
+                    raise e
+            end_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", self.backupset.end)
+            end_file_path = os.path.join(self.backup_validation_path, end_file_name)
+            end_json = {}
+            if os.path.exists(end_file_path):
+                try:
+                    with open(end_file_path, 'r') as f:
+                        end_json = json.load(f)
+                        end_json = json.loads(end_json)
+                except Exception, e:
+                    raise e
+            merge_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", "merge")
+            merge_file_path = os.path.join(self.backup_validation_path, merge_file_name)
+            merge_json = {}
+            if os.path.exists(merge_file_path):
+                try:
+                    with open(merge_file_path, 'r') as f:
+                        merge_json_str = json.load(f)
+                        merge_json = json.loads(merge_json_str)
+                except Exception, e:
+                    raise e
+
+            for i in range(0, 1024):
+                start_seqno = start_json['{0}'.format(i)]['last']['log']['log'][0]['seqno']
+                start_uuid =  start_json['{0}'.format(i)]['last']['log']['log'][0]['uuid']
+                end_seqno = end_json['{0}'.format(i)]['current']['log']['log'][0]['seqno']
+                end_uuid =  end_json['{0}'.format(i)]['current']['log']['log'][0]['uuid']
+                merge_last_seqno = merge_json['{0}'.format(i)]['last']['log']['log'][0]['seqno']
+                merge_last_uuid = merge_json['{0}'.format(i)]['last']['log']['log'][0]['uuid']
+                merge_current_seqno = merge_json['{0}'.format(i)]['current']['log']['log'][0]['seqno']
+                merge_current_uuid = merge_json['{0}'.format(i)]['current']['log']['log'][0]['uuid']
+                if not merge_last_seqno >= start_seqno:
+                    raise("merge_last_seqno is not >= start_seqno for vbucket {0}".format(i))
+                if not start_uuid == merge_last_uuid:
+                    raise("start_uuid did not match merge_last_uuid for vbucket {0}".format(i))
+                if not merge_current_seqno >= end_seqno:
+                    raise ("merge_current_seqno is not >= end_seqno for vbucket {0}".format(i))
+                if not end_uuid == merge_current_uuid:
+                    raise("end_uuid did not match merge_current_uuid for vbucket {0}".format(i))
+
+            with open(start_file_path, 'w') as f:
+                json.dump(merge_json_str, f)
+
+        self.log.info("Merge validation completed successfully")

@@ -1,14 +1,19 @@
+import copy
 import os
 import shutil
-import testconstants
 
 from basetestcase import BaseTestCase
+from couchbase_helper.documentgenerator import BlobGenerator,DocumentGenerator
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, RestHelper
-from testconstants import COUCHBASE_FROM_4DOT6
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
+from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
+                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
+                          WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
+                          MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
+                          WIN_TMP_PATH, STANDARD_BUCKET_PORT
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -20,17 +25,32 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.cluster_flag = "--cluster"
         self.backupset = Backupset()
         self.cmd_ext = ""
+        self.database_path = COUCHBASE_DATA_PATH
+        self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+        self.debug_logs = self.input.param("debug_logs", False)
+        self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
+        self.root_path = LINUX_ROOT_PATH
+        self.os_name = "linux"
+        self.tmp_path = "/tmp/"
         if info == 'linux':
-            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
-            self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
+            if self.nonroot:
+                base_path = "/home/%s" % self.master.ssh_username
+                self.cli_command_location = "%s%s" % (base_path,
+                                                      LINUX_COUCHBASE_BIN_PATH)
+                self.database_path = "%s%s" % (base_path, COUCHBASE_DATA_PATH)
+                self.root_path = "/home/%s/" % self.master.ssh_username
         elif info == 'windows':
+            self.os_name = "windows"
             self.cmd_ext = ".exe"
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
-            self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH_RAW + "entbackup")
+            self.database_path = WIN_COUCHBASE_DATA_PATH
+            self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
+            self.root_path = WIN_ROOT_PATH
+            self.tmp_path = WIN_TMP_PATH
+            self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
-            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+            self.cli_command_location = MAC_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
@@ -39,6 +59,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
         self.compact_backup = self.input.param("compact-backup", False)
+        self.merged = self.input.param("merged", None)
+        self.do_restore = self.input.param("do-restore", False)
+        self.do_verify = self.input.param("do-verify", False)
+        self.create_views = self.input.param("create-views", False)
+        self.create_fts_index = self.input.param("create-fts-index", False)
+        self.cluster_new_user = self.input.param("new_user", None)
+        self.cluster_new_role = self.input.param("new_role", None)
+        self.restore_only = self.input.param("restore-only", False)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
             self.backupset.cluster_host_username = self.servers[1].rest_username
@@ -50,6 +78,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.same_cluster = self.input.param("same-cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
         self.no_progress_bar = self.input.param("no-progress-bar", True)
+        self.multi_threads = self.input.param("multi_threads", False)
+        self.threads_count = self.input.param("threads_count", 1)
+        self.bucket_delete = self.input.param("bucket_delete", False)
+        self.bucket_flush = self.input.param("bucket_flush", False)
         if self.same_cluster:
             self.backupset.restore_cluster_host = self.servers[0]
             self.backupset.restore_cluster_host_username = self.servers[0].rest_username
@@ -58,6 +90,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backupset.restore_cluster_host = self.input.clusters[0][0]
             self.backupset.restore_cluster_host_username = self.input.clusters[0][0].rest_username
             self.backupset.restore_cluster_host_password = self.input.clusters[0][0].rest_password
+        """ new user to test RBAC """
+        if self.cluster_new_user:
+            self.backupset.cluster_host_username = self.cluster_new_user
+            self.backupset.restore_cluster_host_username = self.cluster_new_user
         self.backupset.exclude_buckets = self.input.param("exclude-buckets", "")
         self.backupset.include_buckets = self.input.param("include-buckets", "")
         self.backupset.disable_bucket_config = self.input.param("disable-bucket-config", False)
@@ -74,11 +110,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.end = self.input.param("stop", 1)
         self.backupset.number_of_backups = self.input.param("number_of_backups", 1)
         self.backupset.filter_keys = self.input.param("filter-keys", "")
+        self.backupset.random_keys = self.input.param("random_keys", False)
         self.backupset.filter_values = self.input.param("filter-values", "")
         self.backupset.backup_list_name = self.input.param("list-names", None)
         self.backupset.backup_incr_backup = self.input.param("incr-backup", None)
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
+        self.backupset.map_buckets = self.input.param("map-buckets", None)
         self.backups = []
         self.validation_helper = BackupRestoreValidations(self.backupset, self.cluster_to_backup, self.cluster_to_restore,
                                                           self.buckets, self.backup_validation_files_location, self.backups,
@@ -105,7 +143,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if info == 'linux' or info == 'mac':
                 backup_directory = "/tmp/entbackup"
             elif info == 'windows':
-                backup_directory = testconstants.WIN_TMP_PATH_RAW + "entbackup"
+                backup_directory = WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
             validation_files_location = "/tmp/backuprestore"
@@ -203,11 +241,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --purge"
         if self.no_progress_bar:
             args += " --no-progress-bar"
+        if self.multi_threads:
+            args += " --threads %s " % threads_count
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Backup successfully completed" not in output[0]:
+
+        if error or (output and "Backup successfully completed" not in output[0]):
             return output, error
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -217,10 +258,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Finished taking backup  with args: {0}".format(args))
         return output, error
 
-    def backup_cluster_validate(self):
-        output, error = self.backup_cluster()
-        if error or "Backup successfully completed" not in output[-1]:
-            self.fail("Taking cluster backup failed.")
+    def backup_cluster_validate(self, skip_backup=False):
+        if not skip_backup:
+            output, error = self.backup_cluster()
+            if error or "Backup successfully completed" not in output[-1]:
+                self.fail("Taking cluster backup failed.")
         status, msg = self.validation_helper.validate_backup()
         if not status:
             self.fail(msg)
@@ -230,6 +272,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                           self.backup_validation_files_location)
         self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                             self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
 
     def backup_restore(self):
         try:
@@ -266,9 +310,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-conf-res-restriction {0}".format(
                 self.backupset.disable_conf_res_restriction)
         if self.backupset.filter_keys:
-            args += " --filter_keys {0}".format(self.backupset.filter_keys)
+            args += " --filter-keys '{0}'".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
-            args += " --filter_values {0}".format(self.backupset.filter_values)
+            args += " --filter-values '{0}'".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
         if self.no_progress_bar:
@@ -276,19 +320,36 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             rest_helper = RestHelper(rest_conn)
+            count = 0
+            buckets = []
             for bucket in self.buckets:
-                if not rest_helper.bucket_exists(bucket.name):
-                    self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
-                                                                                   self.backupset.restore_cluster_host.ip))
-                    rest_conn.create_bucket(bucket=bucket.name,
-                                            ramQuotaMB=512,
-                                            authType=bucket.authType if bucket.authType else 'none',
-                                            proxyPort=bucket.port,
-                                            saslPassword=bucket.saslPassword,
-                                            lww=self.lww_new)
-                    bucket_ready = rest_helper.vbucket_map_ready(bucket.name)
+                bucket_name = bucket.name
+                if not rest_helper.bucket_exists(bucket_name):
+                    if self.backupset.map_buckets is None:
+                        self.log.info("Creating bucket {0} in restore host {1}"
+                                                .format(bucket_name,
+                                                 self.backupset.restore_cluster_host.ip))
+                    elif self.backupset.map_buckets:
+                        self.log.info("Create new bucket name to restore to this bucket")
+                        bucket_maps = ""
+                        bucket_name = bucket.name + "_" + str(count)
+                    self.log.info("Creating bucket {0} in restore host {1}"
+                                                .format(bucket_name,
+                                                 self.backupset.restore_cluster_host.ip))
+                    rest_conn.create_bucket(bucket=bucket_name,
+                                    ramQuotaMB=512,
+                                    authType=bucket.authType if bucket.authType else 'none',
+                                    proxyPort=bucket.port,
+                                    saslPassword=bucket.saslPassword,
+                                    lww=self.lww_new)
+                    bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
-                        self.fail("Bucket %s not created after 120 seconds." % bucket.name)
+                        self.fail("Bucket %s not created after 120 seconds." % bucket_name)
+                buckets.append("%s=%s" % (bucket.name, bucket_name))
+                count +=1
+            bucket_maps = ",".join(buckets)
+        if self.backupset.map_buckets:
+            args += " --map-buckets %s " % bucket_maps
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -330,6 +391,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Restoring backup failed.")
 
         self.log.info("Finished restoring backup")
+        self.log.info("Get current vseqno on node %s " % self.cluster_to_restore[0].ip )
 
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets, self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
@@ -421,7 +483,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                          self.backupset.directory)
             dump_output, error = conn.execute_command(cmd)
             if dump_output:
-                key_ids =        [x.split(":")[1].strip(' ') for x in dump_output[0::8]]
+                key_ids = [x.split(":")[1].strip(' ') for x in dump_output[0::8]]
                 miss_keys = [x for x in delete_keys if x not in key_ids]
                 if miss_keys:
                     raise Exception("Lost some keys %s ", miss_keys)
@@ -455,8 +517,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Merge completed successfully" not in output[0]:
+        if error:
             return False, error, "Merging backup failed"
+        elif output and "Merge completed successfully" not in output[0]:
+            return False, output, "Merging backup failed"
+        elif not output:
+            self.log.info("process cbbackupmge may be killed")
+            return False, [] , "cbbackupmgr may be killed"
         del self.backups[self.backupset.start - 1:self.backupset.end]
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -467,6 +534,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         return True, output, "Merging backup succeeded"
+
+    def backup_merge_validate(self):
+        status, output, message = self.backup_merge()
+        if not status:
+            self.fail(message)
+
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location, merge=True)
+
+        self.validation_helper.validate_merge(self.backup_validation_files_location)
+
 
 class Backupset:
     def __init__(self):
@@ -500,3 +582,485 @@ class Backupset:
         self.backup_incr_backup = ''
         self.bucket_backup = ''
         self.backup_to_compact = ''
+        self.map_buckets = None
+
+
+class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
+    def setUp(self):
+        super(EnterpriseBackupMergeBase, self).setUp()
+        self.actions = self.input.param("actions", None)
+        self.document_type = self.input.param("document_type", "json")
+        if self.document_type == "binary":
+            self.initial_load_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                                  self.value_size,
+                                                  start=0,
+                                                  end=self.num_items)
+            self.create_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                            self.value_size, start=self.num_items,
+                                            end=self.num_items + self.num_items
+                                                                 * 0.5)
+            self.update_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                            self.value_size,
+                                            end=self.num_items * 0.9)
+
+            self.delete_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                            self.value_size,
+                                            start=self.num_items / 10,
+                                            end=self.num_items)
+        elif self.document_type == "json":
+            age = range(5)
+            first = ['james', 'sharon']
+            template = '{{ "age": {0}, "first_name": "{1}" }}'
+            gen = DocumentGenerator('test_docs', template, age, first, start=0,
+                                    end=5)
+            self.initial_load_gen = DocumentGenerator('test_docs', template,
+                                                      age, first, start=0,
+                                                      end=self.num_items)
+            self.create_gen = DocumentGenerator('test_docs', template,
+                                                age, first,
+                                                start=self.num_items,
+                                                end=self.num_items +
+                                                    self.num_items * 0.5)
+            self.update_gen = DocumentGenerator('test_docs', template,
+                                                age, first,
+                                                end=self.num_items * 0.9)
+
+            self.delete_gen = DocumentGenerator('test_docs', template,
+                                                age, first,
+                                                start=self.num_items / 10,
+                                                end=self.num_items)
+        self.new_buckets = 1
+        self.deleted_bucket = []
+        self.bucket_to_flush = 1
+        self.ephemeral = False
+        self.recreate_bucket = False
+        self.graceful = True
+        self.recoveryType = 'full'
+
+    def tearDown(self):
+        super(EnterpriseBackupMergeBase, self).tearDown()
+
+    def async_ops_on_buckets(self):
+        """
+        Performs async operations on all the buckets in the cluster.
+        The operations are: creates, updates and deletes
+        :return: List of tasks running the load operations.
+        """
+        tasks = []
+        create_tasks = self._async_load_all_buckets(self.master,
+                                                    self.create_gen,
+                                                    "create", self.expires)
+        update_tasks = self._async_load_all_buckets(self.master,
+                                                    self.update_gen,
+                                                    "update", self.expires)
+        delete_tasks = self._async_load_all_buckets(self.master,
+                                                    self.delete_gen,
+                                                    "delete", self.expires)
+        tasks.extend(create_tasks)
+        tasks.extend(update_tasks)
+        tasks.extend(delete_tasks)
+        return tasks
+
+    def ops_on_buckets(self):
+        ops_tasks = self.async_ops_on_buckets()
+        for task in ops_tasks:
+            task.result()
+
+    def backup(self):
+        """
+        Backup the cluster and validate the backupset.
+        :return: Nothing
+        """
+        self.backup_cluster_validate()
+
+    def backup_with_ops(self):
+        """
+        Backup the data while loading the buckets in parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.backup()
+        self.log.info(ops_tasks)
+        for task in ops_tasks:
+            task.result()
+
+    def merge(self):
+        """
+        Merge all the existing backups in the backupset.
+        :return: Nothing
+        """
+        self.backup_merge_validate()
+
+    def merge_with_ops(self):
+        """
+        Merge all the existing backups in the backupset while loading the
+        buckets in parallel
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.merge()
+        for task in ops_tasks:
+            task.result()
+
+    def compact_backup(self):
+        """
+        Compact the given backup and validate that the compaction resulted
+        in reduction of backup size.
+        :return:
+        """
+        self.backup_compact_validate()
+
+    def async_rebalance(self):
+        """
+        Asynchronously rebalance the cluster.
+        :return: The task that is rebalancing the nodes.
+        """
+        serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        serv_out = self.servers[
+                   self.nodes_init - self.nodes_out:self.nodes_init]
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup,
+                                                 serv_in, serv_out)
+        return rebalance
+
+    def rebalance(self):
+        """
+        Rebalance the cluster
+        :return: Nothing
+        """
+        rebalance = self.async_rebalance()
+        rebalance.result()
+
+    def rebalance_with_ops(self):
+        """
+        Rebalance the cluster while running bucket operations in parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.rebalance()
+        for task in ops_tasks:
+            task.result()
+
+    def async_failover(self):
+        """
+        Asynchronously failover a node
+        :return: Nothing
+        """
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+
+    def async_failover_and_recover(self):
+        """
+            Asynchronously failover a node and add back the node after 30 sec
+            :return: Task that is running the rebalance at end.
+        """
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                self.sleep(30)
+                rest.set_recovery_type(otpNode=node.id,
+                                       recoveryType=self.recoveryType)
+                rest.add_back_node(otpNode=node.id)
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        return rebalance
+
+    def async_recover_node(self):
+        """
+            Asynchronously add back the node after failover.
+            :return: Task that is running the rebalance at end.
+        """
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.set_recovery_type(otpNode=node.id,
+                                       recoveryType=self.recoveryType)
+                rest.add_back_node(otpNode=node.id)
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        return rebalance
+
+    def async_remove_failed_node(self):
+        """
+            Asynchronously remove a failed over node by performing a
+            rebalance of cluster
+        :return: Task that is running the rebalance.
+        """
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        return rebalance
+
+    def failover(self):
+        """
+        Failover a node and add back the node.
+        :return: Nothing
+        """
+        self.async_failover()
+
+    def failover_with_ops(self):
+        """
+        Failover a node while bucket operations are running in parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.failover()
+        for task in ops_tasks:
+            task.result()
+
+    def failover_and_recover(self):
+        """
+        Failover a node and add back the node after 30 sec.
+        :return: Nothing
+        """
+        task = self.async_failover_and_recover()
+        task.result()
+
+    def failover_and_recover_with_ops(self):
+        """
+        Failover a node and add back the node after 30 sec while bucket
+        operations are running in parallel
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.failover_and_recover()
+        for task in ops_tasks:
+            task.result()
+
+    def recover_node(self):
+        """
+        Recover a failedover node.
+        :return: Nothing
+        """
+        task = self.async_recover_node()
+        task.result()
+
+    def recover_node_with_ops(self):
+        """
+        Recover a failedover node while bucket operations are running in
+        parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.recover_node()
+        for task in ops_tasks:
+            task.result()
+
+    def remove_failed_node(self):
+        """
+        Remove a failed over node from the cluster
+        :return: Nothing
+        """
+        task = self.async_remove_failed_node()
+        task.result()
+
+    def _reconfigure_bucket_memory(self, num_new_buckets):
+        """
+        Reconfigure bucket memories in the cluster to accommodate adding new
+        buckets
+        :param num_new_buckets:
+        :return: The new bucket size.
+        """
+        rest = RestConnection(self.master)
+        ram_size = rest.get_nodes_self().memoryQuota
+        bucket_size = self._get_bucket_size(ram_size, self.bucket_size +
+                                            num_new_buckets)
+        self.log.info("Changing the existing buckets size to accomodate new "
+                      "buckets")
+        for bucket in self.buckets:
+            rest.change_bucket_props(bucket, ramQuotaMB=bucket_size)
+        return bucket_size
+
+    def create_new_bucket_and_populate(self):
+        """
+        Create new buckets and populate the bucket with items.
+        :return: Nothing
+        """
+        bucket_size = self._reconfigure_bucket_memory(self.new_buckets)
+        rest = RestConnection(self.master)
+        server_id = rest.get_nodes_self().id
+        bucket_tasks = []
+        bucket_params = copy.deepcopy(
+            self.bucket_base_params['membase']['non_ephemeral'])
+        bucket_params['size'] = bucket_size
+        if self.ephemeral:
+            bucket_params['bucket_type'] = 'ephemeral'
+            bucket_params['eviction_policy'] = 'noEviction'
+        standard_buckets = []
+        for i in range(0, self.new_buckets):
+            if self.recreate_bucket:
+                name = self.deleted_bucket[i]
+            else:
+                name = 'bucket' + str(i)
+            port = STANDARD_BUCKET_PORT + i + 1
+            bucket_priority = None
+            if self.standard_bucket_priority is not None:
+                bucket_priority = self.get_bucket_priority(
+                    self.standard_bucket_priority[i])
+
+            bucket_params['bucket_priority'] = bucket_priority
+            bucket_tasks.append(
+                self.cluster.async_create_standard_bucket(name=name, port=port,
+                                                          bucket_params=bucket_params))
+            bucket = Bucket(name=name, authType=None, saslPassword=None,
+                            num_replicas=self.num_replicas,
+                            bucket_size=self.bucket_size,
+                            port=port, master_id=server_id,
+                            eviction_policy='noEviction', lww=self.lww)
+            self.buckets.append(bucket)
+            standard_buckets.append(bucket)
+        for task in bucket_tasks:
+            task.result(self.wait_timeout * 10)
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets(
+                ['bucket' + str(i) for i in range(
+                    self.new_buckets)])
+        for bucket in standard_buckets:
+            self._load_bucket(bucket, self.master, self.initial_load_gen,
+                              "create", self.expires)
+
+    def delete_bucket(self):
+        """
+        Delete a bucket from the cluster
+        :return: Nothing
+        """
+        self.log.info("Deleting a bucket")
+        bucket_to_delete = self.buckets[-1].name
+        self.deleted_bucket.append(bucket_to_delete)
+        BucketOperationHelper.delete_bucket_or_assert(self.master,
+                                                      bucket_to_delete,
+                                                      self)
+        self.buckets.pop()
+
+    def _flush_bucket(self, bucket_to_flush):
+        """
+        Flush a bucket from the cluster.
+        :param bucket_to_flush:
+        :return: Nothing
+        """
+        self.log.info("Flushing {} buckets")
+        rest = RestConnection(self.master)
+        bucket_name = self.buckets[bucket_to_flush].name
+        rest.flush_bucket(bucket_name)
+
+    def flush_buckets(self):
+        """
+        Flush buckets from the cluster
+        :return: Nothing
+        """
+        self.log.info("Flushing {} buckets".format(self.bucket_to_flush))
+        for i in range(self.buckets.__len__() - self.bucket_to_flush,
+                       self.buckets.__len__()):
+            self._flush_bucket(i)
+
+    def load_flushed_buckets(self):
+        """
+        Reload the flushed buckets in the cluster.
+        :return: Nothing
+        """
+        self.log.info("Loading data into buckets that were flushed")
+        tasks = []
+        for i in range(self.buckets.__len__() - self.bucket_to_flush,
+                       self.buckets.__len__()):
+            self._load_bucket(self.buckets[i], self.master,
+                              self.initial_load_gen, "create", self.expires)
+
+    def compact_buckets(self):
+        """
+        Compact all the buckets in the cluster
+        :return: Nothing
+        """
+        self._run_compaction(number_of_times=1)
+
+    def do_backup_merge_actions(self):
+        """
+        Perform the actions mentioned the self.actions param.
+        :return: Nothing
+        """
+        self.backupset.number_of_backups = 0
+        # running testrunner with conf file takes in the quotes " too into
+        # the parameter. Below step removes the quotes from the parameter.
+        self.actions = self.actions.replace('"', '')
+        actions = self.actions.split(",")
+        for action in actions:
+            iterations = 1
+            if ":" in action:
+                action = action.split(':')
+                params = action[1].split('&')
+                action = action[0]
+                if "backup" in action:
+                    iterations = params[0]
+                    self.backupset.number_of_backups += int(iterations)
+                elif "failover" in action or "recover" in action:
+                    if 'hard' in params:
+                        self.graceful = False
+                    else:
+                        self.graceful = True
+                    if 'delta' in params:
+                        self.recoveryType = 'delta'
+                    else:
+                        self.recoveryType = 'full'
+                elif "merge" in action:
+                    if params.__len__() == 0:
+                        iterations = 1
+                        self.backupset.start = 1
+                        self.backupset.end = len(self.backups)
+                    if params.__len__() == 2:
+                        iterations = 1
+                        self.backupset.start = int(params[0])
+                        self.backupset.end = int(params[1])
+                    if params.__len__() == 3:
+                        iterations = params[0]
+                        self.backupset.start = int(params[1])
+                        self.backupset.end = int(params[2])
+                elif "compact_backup" in action:
+                    self.backupset.backup_to_compact = int(params[0])
+                elif "flush" in action:
+                    self.bucket_to_flush = int(params[0])
+                elif "create_buckets" in action:
+                    self.new_buckets = int(params[0])
+                    if params.__len__() == 2:
+                        if params[1] == "ephemeral":
+                            self.ephemeral = True
+                elif "recreate_buckets" in action:
+                    self.new_buckets = int(params[0])
+                    self.recreate_bucket = True
+                    if params.__len__() == 2:
+                        if params[1] == "ephemeral":
+                            self.ephemeral = True
+                else:
+                    if params[0].isdigit():
+                        iterations = int(params[0])
+            else:
+                iterations = 1
+            for i in range(0, int(iterations)):
+                self.log.info("Performing {} action for {}th time".format(
+                    action, i + 1))
+                self.backup_merge_actions[action](self)
+                self.log.info("Finished {} action for {}th time.".format(
+                    action, i + 1))
+
+    backup_merge_actions = {
+        "bucket_ops": ops_on_buckets,
+        "backup": backup,
+        "merge": merge,
+        "compact_backup": compact_backup,
+        "rebalance": rebalance,
+        "failover": failover,
+        "recover": recover_node,
+        "remove_node": remove_failed_node,
+        "failover_and_recover": failover_and_recover,
+        "backup_with_ops": backup_with_ops,
+        "merge_with_ops": merge_with_ops,
+        "rebalance_with_ops": rebalance_with_ops,
+        "failover_with_ops": failover_with_ops,
+        "recover_with_ops": recover_node_with_ops,
+        "failover_and_recover_with_ops": failover_and_recover_with_ops,
+        "create_buckets": create_new_bucket_and_populate,
+        "recreate_buckets": create_new_bucket_and_populate,
+        "flush_buckets": flush_buckets,
+        "load_flushed_buckets": load_flushed_buckets,
+        "delete_buckets": delete_bucket,
+        "compact_buckets": compact_buckets
+    }
