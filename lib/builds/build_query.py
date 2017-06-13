@@ -593,7 +593,7 @@ class BuildQuery(object):
             if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
                 deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
                              "ubuntu16.04", "windows", "macos"]
-                if "centos" not in build_info:
+                if "centos" not in build_info and "suse" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
                     product_version = "-".join([i for i in product_version \
@@ -603,13 +603,13 @@ class BuildQuery(object):
                     product_version = product_version[3] + "-" + product_version[4]
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
-                    if "centos" not in build_info:
+                    if "centos" not in build_info and "suse" not in build_info:
                         build_info = build_info.replace("_" + product_version,"")
                     else:
                         build_info = build_info.replace("-" + product_version,"")
                 if "x86_64" in build_info:
                     build.architecture_type = "x86_64"
-                    if "centos" in build_info:
+                    if "centos" in build_info or "suse" in build_info:
                         build_info = build_info.replace(".x86_64", "")
                     elif "macos" in build_info:
                         build_info = build_info.replace("_x86_64", "")
@@ -624,7 +624,7 @@ class BuildQuery(object):
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "debian8", "ubuntu12.04",
                              "ubuntu14.04", "ubuntu16.04", "windows", "macos",
-                             "centos7"]
+                             "centos7", "suse11"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
