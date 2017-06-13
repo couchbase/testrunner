@@ -958,7 +958,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "backup": backup,
         "merge": merge,
         "rebalance": rebalance,
+        "failover": failover,
         "backup_with_ops": backup_with_ops,
         "merge_with_ops": merge_with_ops,
-        "failover": failover
+        "rebalance_with_ops": rebalance_with_ops,
+        "failover_with_ops": failover_with_ops
     }
