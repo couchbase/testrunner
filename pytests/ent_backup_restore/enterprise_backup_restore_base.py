@@ -895,8 +895,22 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for task in delete_tasks:
             task.result()
 
+    def async_failover(self):
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                self.sleep(30)
+                rest.set_recovery_type(otpNode=node.id,
+                                       recoveryType=self.recoveryType)
+                rest.add_back_node(otpNode=node.id)
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        return rebalance
+
     def failover(self):
-        self.failover()
+        task = self.async_failover()
+        task.result()
 
     def failover_with_ops(self):
         update_tasks = self._async_load_all_buckets(self.master,
@@ -918,9 +932,23 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for action in actions:
             if ":" in action:
                 action = action.split(':')
-                iterations = int(action[1])
-                self.backupset.number_of_backups += iterations
-                action = action[0]
+                if action[1].isdigit():
+                    iterations = int(action[1])
+                    self.backupset.number_of_backups += iterations
+                    action = action[0]
+                else:
+                    iterations = 1
+                    params = action[1].split('&')
+                    action = action[0]
+                    if "failover" in action:
+                        if 'hard' in params:
+                            self.graceful = False
+                        else:
+                            self.graceful = True
+                        if 'delta' in params:
+                            self.recoveryType = 'delta'
+                        else:
+                            self.recoveryType = 'full'
             else:
                 iterations = 1
             for i in range(0, iterations):
@@ -931,5 +959,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "merge": merge,
         "rebalance": rebalance,
         "backup_with_ops": backup_with_ops,
-        "merge_with_ops": merge_with_ops
+        "merge_with_ops": merge_with_ops,
+        "failover": failover
     }
