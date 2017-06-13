@@ -1618,7 +1618,11 @@ class RestConnection(object):
             data = line.split("=")
             if len(data) == 2:
                 metric = data[0].strip()
-                index_stats[bucket][index][store][metric] = float(data[1].strip().replace("%", ""))
+                if "true" == data[1].strip().replace("%", "").lower() or \
+                                "false" == data[1].strip().replace("%", "").lower():
+                    index_stats[bucket][index][store][metric] = bool(data[1].strip().replace("%", ""))
+                else:
+                    index_stats[bucket][index][store][metric] = float(data[1].strip().replace("%", ""))
         return index_stats
 
     def get_indexer_stats(self, timeout=120, index_map=None):
