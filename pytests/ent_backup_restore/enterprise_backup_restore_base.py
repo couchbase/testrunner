@@ -3,6 +3,7 @@ import shutil
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
+from couchbase_helper.documentgenerator import BlobGenerator
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -803,3 +804,196 @@ class Backupset:
         self.bucket_backup = ''
         self.backup_to_compact = ''
         self.map_buckets = None
+
+
+class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
+    def setUp(self):
+        super(EnterpriseBackupMergeBase, self).setUp()
+        self.actions = self.input.param("actions", None)
+        self.create_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                        self.value_size, start=self.num_items,
+                                        end=self.num_items + self.num_items
+                                                             * 0.5)
+        self.update_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                        self.value_size,
+                                        end=self.num_items * 0.9)
+
+        self.delete_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                        self.value_size,
+                                        start=self.num_items / 10,
+                                        end=self.num_items)
+
+    def tearDown(self):
+        super(EnterpriseBackupMergeBase, self).tearDown()
+
+    def async_ops_on_buckets(self):
+        """
+        Performs async operations on all the buckets in the cluster.
+        The operations are: creates, updates and deletes
+        :return: List of tasks running the load operations.
+        """
+        tasks = []
+        create_tasks = self._async_load_all_buckets(self.master,
+                                                    self.create_gen,
+                                                    "create", self.expires)
+        update_tasks = self._async_load_all_buckets(self.master,
+                                                    self.update_gen,
+                                                    "update", self.expires)
+        delete_tasks = self._async_load_all_buckets(self.master,
+                                                    self.delete_gen,
+                                                    "delete", self.expires)
+        tasks.extend(create_tasks)
+        tasks.extend(update_tasks)
+        tasks.extend(delete_tasks)
+        return tasks
+
+    def backup(self):
+        """
+        Backup the cluster and validate the backupset.
+        :return: Nothing
+        """
+        self.backup_cluster_validate()
+
+    def backup_with_ops(self):
+        """
+        Backup the data while loading the buckets in parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.backup()
+        self.log.info(ops_tasks)
+        for task in ops_tasks:
+            task.result()
+
+    def merge(self):
+        """
+        Merge all the existing backups in the backupset.
+        :return: Nothing
+        """
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_merge()
+
+    def merge_with_ops(self):
+        """
+        Merge all the existing backups in the backupset while loading the
+        buckets in parallel
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.merge()
+        for task in ops_tasks:
+            task.result()
+
+    def async_rebalance(self):
+        """
+        Asynchronously rebalance the cluster.
+        :return: The task that is rebalancing the nodes.
+        """
+        serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        serv_out = self.servers[
+                   self.nodes_init - self.nodes_out:self.nodes_init]
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup,
+                                                 serv_in, serv_out)
+        return rebalance
+
+    def rebalance(self):
+        """
+        Rebalance the cluster
+        :return: Nothing
+        """
+        rebalance = self.async_rebalance()
+        rebalance.result()
+
+    def rebalance_with_ops(self):
+        """
+        Rebalance the cluster while running bucket operations in parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.rebalance()
+        for task in ops_tasks:
+            task.result()
+
+    def async_failover(self):
+        """
+        Asynchronously failover a node and add back the node after 30 sec
+        :return: Task that is running the rebalance at end.
+        """
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                self.sleep(30)
+                rest.set_recovery_type(otpNode=node.id,
+                                       recoveryType=self.recoveryType)
+                rest.add_back_node(otpNode=node.id)
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        return rebalance
+
+    def failover(self):
+        """
+        Failover a node and add back the node.
+        :return: Nothing
+        """
+        task = self.async_failover()
+        task.result()
+
+    def failover_with_ops(self):
+        """
+        Failover a node and add back the node while bucket operations are
+        running in parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.failover()
+        for task in ops_tasks:
+            task.result()
+
+    def do_backup_merge_actions(self):
+        """
+        Perform the actions mentioned the self.actions param.
+        :return: Nothing
+        """
+        self.backupset.number_of_backups = 0
+        actions = self.actions.split(",")
+        for action in actions:
+            if ":" in action:
+                action = action.split(':')
+                if action[1].isdigit():
+                    iterations = int(action[1])
+                    self.backupset.number_of_backups += iterations
+                    action = action[0]
+                else:
+                    iterations = 1
+                    params = action[1].split('&')
+                    action = action[0]
+                    if "failover" in action:
+                        if 'hard' in params:
+                            self.graceful = False
+                        else:
+                            self.graceful = True
+                        if 'delta' in params:
+                            self.recoveryType = 'delta'
+                        else:
+                            self.recoveryType = 'full'
+            else:
+                iterations = 1
+            for i in range(0, iterations):
+                self.log.info("Performing {} action for {}th time".format(
+                    action, i + 1))
+                self.backup_merge_actions[action](self)
+                self.log.info("Finished {} action for {}th time.".format(
+                    action, i + 1))
+
+    backup_merge_actions = {
+        "backup": backup,
+        "merge": merge,
+        "rebalance": rebalance,
+        "failover": failover,
+        "backup_with_ops": backup_with_ops,
+        "merge_with_ops": merge_with_ops,
+        "rebalance_with_ops": rebalance_with_ops,
+        "failover_with_ops": failover_with_ops
+    }
