@@ -257,7 +257,7 @@ class XDCRHelper:
 
     def create_replication(self, remote_cluster, bucket, remote_bucket, cancel=False, advanced_settings={}):
         self.wait.until(lambda fn: self.controls.create_ongoing_replication_btn.is_displayed(),
-                        "create_cluster_reference_btn is not displayed in %d sec" % self.wait._timeout)
+                        "create_ongoing_replication_btn is not displayed in %d sec" % self.wait._timeout)
         self.tc.log.info("try to create cluster replication with cluster=%s, bucket=%s, remote_bucket=%s" % (remote_cluster, bucket, remote_bucket))
         self.controls.create_ongoing_replication_btn.click()
         self.wait.until(lambda fn: self.controls.create_replication_pop_up().pop_up.is_displayed(),
