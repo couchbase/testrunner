@@ -191,6 +191,38 @@ class QueryTests(BaseTestCase):
         os.system(cmd)
         os.remove(filename)
 
+    def get_index_storage_stats(self,  node,timeout=120):
+        url = 'http://{0}:9102/'.format(self.master.ip)
+        api = url + 'stats/storage'
+        rest = RestConnection(node)
+        status, content, header = rest._http_request(api, timeout=timeout)
+        index_stats = dict()
+        data = content.split("\n")
+        index = "unknown"
+        store = "unknown"
+        for line in data:
+            if "Index Instance" in line:
+                index_data = re.findall(":.*", line)
+                bucket_data = re.findall(".*:", line)
+                index = index_data[0].split()[0][1:]
+                bucket = bucket_data[0].split("Index Instance")[1][:-1].strip()
+                self.log.info("Bucket Name: {0}".format(bucket))
+                if bucket not in index_stats.keys():
+                    index_stats[bucket] = {}
+                if index not in index_stats[bucket].keys():
+                    index_stats[bucket][index] = dict()
+                continue
+            if "Store" in line:
+                store = re.findall("[a-zA-Z]+", line)[0]
+                if store not in index_stats[bucket][index].keys():
+                    index_stats[bucket][index][store] = {}
+                continue
+            data = line.split("=")
+            if len(data) == 2:
+                metric = data[0].strip()
+                index_stats[bucket][index][store][metric] = float(data[1].strip().replace("%", ""))
+        return index_stats
+
     def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
         """
         Internal Method to create OOM scenario
@@ -201,9 +233,7 @@ class QueryTests(BaseTestCase):
                 indexer_nodes = self.get_nodes_from_services_map(
                     service_type="index", get_all_nodes=True)
             for node in indexer_nodes:
-                indexer_rest = RestConnection(node)
-                indexer_rest.index_port = 9102
-                content = indexer_rest.get_index_storage_stats()
+                content = self.get_index_storage_stats(node =node)
                 for index in content.values():
                     for stats in index.values():
                         if stats["MainStore"]["resident_ratio"] >= 1.00:
@@ -217,7 +247,7 @@ class QueryTests(BaseTestCase):
             self.full_docs_list = self.generate_full_docs_list(gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
             tasks = self.async_load(generators_load=gens_load, op_type="create",
-                                batch_size=self.batch_size)
+                                batch_size=100)
             return tasks
 
         self.log.info("Trying to get all indexes in DGM...")
