@@ -187,6 +187,8 @@ class JoinTests(QueryTests):
             actual_result=self.run_cbq_query()
             self.assertTrue(actual_result['results']==[{u'b1id': u'w001', u'b2': {u'phones': [u'123-456-7890', u'123-456-7891'], u'type': u'pdoc', u'docid': u'w001', u'name': u'pdoc', u'altid': u'w001'}}])
             self.query='SELECT meta(b1).id b1id FROM default b1 JOIN default b2 ON KEY b2.altid FOR b1 WHERE meta(b1).id > ""'
+            actual_result=self.run_cbq_query()
+            print actual_result['results']
             #enhancement
             #actual_result=self.run_cbq_query()
             #print actual_result
@@ -198,6 +200,7 @@ class JoinTests(QueryTests):
             self.assertTrue("(`b2`.`docid`)" in str(actual_result))
             self.query = 'SELECT meta(b1).id b1id from default b1 NEST default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
             actual_result=self.run_cbq_query()
+            print actual_result['results']
             self.query = 'explain SELECT meta(b1).id b1id, b2 from default b1 NEST default b2 ON KEY b2.docid FOR b1 WHERE meta(b1).id > ""'
             actual_result=self.run_cbq_query()
             self.assertTrue("covers" in str(actual_result))
