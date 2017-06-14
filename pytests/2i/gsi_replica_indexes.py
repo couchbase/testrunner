@@ -656,8 +656,16 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info("Index building failed as expected")
 
         finally:
+            # Heal network partition and wait for some time to allow indexes
+            # to get built automatically on that node
             self.stop_firewall_on_node(node_out)
-            self.sleep(10)
+            self.sleep(180)
+
+            index_map = self.get_index_map()
+            self.n1ql_helper.verify_replica_indexes_build_status(index_map,
+                                                                 len(nodes) - 1,
+                                                                 defer_build=False)
+
 
     def test_build_index_while_another_index_building(self):
         index_name_age = "age_index_" + str(
@@ -985,8 +993,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info("Drop index failed as expected")
 
         finally:
+            # Heal network partition and wait for some time to allow indexes
+            # on the node to get dropped automatically
             self.stop_firewall_on_node(node_out)
-            self.sleep(10)
+            self.sleep(180)
+
+            index_map = self.get_index_map()
+            self.log.info("Index map after drop index: %s", index_map)
+            if not index_map == {}:
+                self.fail("Indexes not dropped correctly")
 
     def test_replica_movement_with_rebalance_out(self):
         nodes = self._get_node_list()
@@ -2880,6 +2895,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 expected_num_recommended_nodes = self.num_index_replicas + 1
                 if self.eq_index_node:
                     expected_num_recommended_nodes += 1
+                    if expected_node_list:
+                        expected_node_list.append(self.servers[
+                                        int(self.eq_index_node)].ip + ":" + \
+                                    self.servers[int(self.eq_index_node)].port)
 
                 self.assertEqual(expected_num_recommended_nodes, num_recommended_nodes, "cbindexplan doesnt give recommendations for all replicas" )
 
