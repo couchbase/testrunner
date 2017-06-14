@@ -957,6 +957,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         :return: Nothing
         """
         self.backupset.number_of_backups = 0
+        # running testrunner with conf file takes in the quotes " too into
+        # the parameter. Below step removes the quotes from the parameter.
+        self.actions = self.actions.replace('"', '')
         actions = self.actions.split(",")
         for action in actions:
             if ":" in action:
