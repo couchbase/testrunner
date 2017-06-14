@@ -2106,6 +2106,104 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         self.run_operation(phase="after")
 
+    def test_gsi_rebalance_in_indexer_node_with_node_eject_only_as_false(self):
+        self.run_operation(phase="before")
+        self.sleep(30)
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for indexer_node in indexer_nodes:
+            rest = RestConnection(indexer_node)
+            rest.set_index_settings({"indexer.rebalance.node_eject_only": False})
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        # rebalance in a node
+        services_in = ["index"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results, indexes should be redistributed even in case of rebalance in
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [self.servers[self.nodes_init]], [], swap_rebalance=True)
+        self.run_operation(phase="after")
+
+    def test_gsi_rebalance_with_disable_index_move_as_true(self):
+        self.run_operation(phase="before")
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for indexer_node in indexer_nodes:
+            rest = RestConnection(indexer_node)
+            rest.set_index_settings({"indexer.rebalance.disable_index_move": True})
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        to_remove_nodes = [nodes_out_list]
+        services_in = ["index"]
+        log.info(self.servers[:self.nodes_init])
+        # do a swap rebalance
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
+        self.run_async_index_operations(operation_type="query")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results, Indexes should not be redistributed as disable_index_move was set as True
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                        stats_map_before_rebalance, stats_map_after_rebalance,
+                                                        to_add_nodes, to_remove_nodes, swap_rebalance=True)
+        except Exception, ex:
+            if "some indexes are missing after rebalance" not in str(ex):
+                self.fail("gsi rebalance failed with unexpected error: {0}".format(str(ex)))
+        else:
+            self.fail("gsi rebalance distributed indexes even after disable_index_move is set as true")
+        self.run_operation(phase="after")
+
+    def test_nest_and_intersect_queries_after_gsi_rebalance(self):
+        self.run_operation(phase="before")
+        intersect_query = "select name from {0} intersect select name from {0} s where s.age>20".format(self.buckets[0],
+                                                                                                        self.buckets[0])
+        nest_query = "select * from {0} b1 nest `default` b2 on keys b1._id where b1._id like 'airline_record%' limit 5".format(
+            self.buckets[0])
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        # rebalance out a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        for i in range(0, 2):
+            try:
+                self.n1ql_helper.run_cbq_query(query=intersect_query, server=self.n1ql_node)
+                self.n1ql_helper.run_cbq_query(query=nest_query, server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+                raise Exception("query with nest and intersect failed")
+        self.run_operation(phase="during")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance, [],
+                                                      [nodes_out_list])
+        # Run intesect/nest queries post index redistribution
+        for i in range(0, 10):
+            try:
+                self.n1ql_helper.run_cbq_query(query=intersect_query, server=self.n1ql_node)
+                self.n1ql_helper.run_cbq_query(query=nest_query, server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+                raise Exception("query with nest and intersect failed")
+        self.run_operation(phase="after")
+
     def _return_maps(self):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
