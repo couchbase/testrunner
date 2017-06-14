@@ -311,52 +311,18 @@ class SubdocXattrSdkTest(SubdocBaseTest):
             pass
 
     # https://issues.couchbase.com/browse/MB-24104
-    # TODO extend scenarious when the issue resolve
-    # TODO and then add cases for MB-23888 Ability to include xattr data for deleted documents in view results
     def test_delete_doc_with_xattr_access_deleted(self):
         k = 'xattrs'
 
         self.client.upsert(k, {})
 
         # Try to upsert a single xattr
-        rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
+        try:
+            rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
                                                 xattr=True,
-                                                create_parents=True, _access_deleted=True))
-        self.assertTrue(rv.success)
-
-        rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True, _access_deleted=True))
-        self.assertTrue(rv.exists('my_attr'))
-
-        # trying get before delete
-        rv = self.client.get(k)
-        self.assertTrue(rv.success)
-        self.assertEquals({}, rv.value)
-        self.assertEquals(0, rv.rc)
-        self.assertTrue(rv.cas != 0)
-        self.assertTrue(rv.flags != 0)
-
-        # delete
-        body = self.client.delete(k)
-        self.assertEquals(None, body.value)
-
-        # trying get after delete
-        try:
-            self.client.get(k)
-            self.fail("get should throw NotFoundError when doc deleted")
-        except NotFoundError:
-            pass
-
-        try:
-            self.client.retrieve_in(k, 'my_attr')
-            self.fail("retrieve_in should throw NotFoundError when doc deleted")
-        except NotFoundError:
-            pass
-
-        try:
-            self.client.lookup_in(k, SD.get('my_attr', xattr=True, _access_deleted=True))
-            self.fail("lookup_in should throw NotFoundError when doc deleted")
-        except NotFoundError:
-            pass
+                                                create_parents=True),  _access_deleted=True)
+        except Exception as e:
+            self.assertEquals("couldn't parse arguments", e.message)
 
     def test_delete_doc_without_xattr(self):
         k = 'xattrs'
@@ -445,55 +411,6 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         self.assertEquals(flags_before, rv.flags)
 
         rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
-        self.assertFalse(rv.success)
-        self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
-        self.assertEquals(73, rv.rc)
-
-    # https://issues.couchbase.com/browse/MB-24104
-    def test_delete_xattr_access_deleted(self):
-        k = 'xattrs'
-
-        self.client.upsert(k, {})
-
-        # trying get non-existing xattr
-        rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True, _access_deleted=True))
-        self.assertFalse(rv.success)
-        self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
-        self.assertEquals(73, rv.rc)
-
-        # Try to upsert a single xattr
-        rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
-                                                xattr=True,
-                                                create_parents=True, _access_deleted=True))
-        self.assertTrue(rv.success)
-
-        rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
-        self.assertTrue(rv.exists('my_attr'))
-
-        rv = self.client.get(k)
-        self.assertTrue(rv.success)
-        self.assertEquals({}, rv.value)
-        self.assertEquals(0, rv.rc)
-        cas_before = rv.cas
-        flags_before = rv.flags
-
-        # delete xattr
-        rv = self.client.lookup_in(k, SD.remove('my_attr', xattr=True, _access_deleted=True))
-        self.assertTrue(rv.success)
-        self.assertEquals(1, rv.result_count)
-        self.assertTrue(rv.exists('my_attr'))
-
-        # trying get doc after xattr deleted
-        rv = self.client.get(k)
-        self.assertTrue(rv.success)
-        self.assertEquals({}, rv.value)
-        self.assertEquals(0, rv.rc)
-        self.assertTrue(rv.cas != 0)
-        self.assertTrue(rv.cas != cas_before)
-        self.assertTrue(rv.flags != 0)
-        self.assertEquals(flags_before, rv.flags)
-
-        rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True, _access_deleted=True))
         self.assertFalse(rv.success)
         self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
         self.assertEquals(73, rv.rc)
@@ -1451,7 +1368,7 @@ class XattrImportExportTests(ImportExportTests, SubdocBaseTest):
     def _load_all_buckets(self):
         for bucket in self.buckets:
             self.client = SDKClient(scheme="couchbase", hosts=[self.master.ip],
-                                    bucket=bucket.name).cb
+                                    bucket=bucket.name, uhm_options='timeout=3').cb
             for i in xrange(self._num_items):
                 key = 'k_%s_%s' % (i, str(self.master.ip))
                 value = {'xattr_%s' % i: 'value%s' % i}
