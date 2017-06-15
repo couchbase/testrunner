@@ -5,6 +5,10 @@ from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
 from couchbase_helper.documentgenerator import BlobGenerator
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
+from ent_backup_restore.validation_helpers.backup_restore_validations \
+                                                 import BackupRestoreValidations
+from ent_backup_restore.validation_helpers.directory_structure_validations \
+                                            import DirectoryStructureValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -30,6 +34,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
         self.debug_logs = self.input.param("debug_logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
+        self.backupset.passwd_env = self.input.param("passwd-env", False)
+        self.backupset.passwd_env_with_prompt = \
+                        self.input.param("passwd-env-with-prompt", False)
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         self.root_path = LINUX_ROOT_PATH
@@ -122,10 +129,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
         self.backupset.map_buckets = self.input.param("map-buckets", None)
+        self.backupset.backup_compressed = \
+                                      self.input.param("backup-conpressed", False)
         self.backups = []
-        self.validation_helper = BackupRestoreValidations(self.backupset, self.cluster_to_backup, self.cluster_to_restore,
-                                                          self.buckets, self.backup_validation_files_location, self.backups,
-                                                          self.num_items)
+        self.validation_helper = BackupRestoreValidations(self.backupset,
+                                                          self.cluster_to_backup,
+                                                          self.cluster_to_restore,
+                                            self.buckets,
+                                            self.backup_validation_files_location,
+                                            self.backups,
+                                            self.num_items)
         self.number_of_backups_taken = 0
         self.vbucket_seqno = []
         self.expires = self.input.param("expires", 0)
@@ -243,11 +256,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.cluster_host)
             secure_port = "1"
             url_format = "s"
-        args = "backup -a {0} -r {1} {6} http{7}://{2}:{8}{3} -u {4} -p {5}". \
+        password_input = "-p %s " % self.backupset.cluster_host_password
+        if self.backupset.passwd_env:
+            password_input = ""
+        elif self.backupset.passwd_env_with_prompt:
+            password_input = "-p "
+
+        args = "backup -a {0} -r {1} {6} http{7}://{2}:{8}{3} -u {4} {5}". \
             format(self.backupset.directory, self.backupset.name,
                    self.backupset.cluster_host.ip,
-                   self.backupset.cluster_host.port, self.backupset.cluster_host_username,
-                   self.backupset.cluster_host_password, self.cluster_flag, url_format,
+                   self.backupset.cluster_host.port,
+                   self.backupset.cluster_host_username,
+                   password_input,
+                   self.cluster_flag, url_format,
                    secure_port)
         if self.backupset.no_ssl_verify:
             args += " --no-ssl-verify"
@@ -262,8 +283,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --no-progress-bar"
         if self.multi_threads:
             args += " --threads %s " % threads_count
+        if self.backupset.backup_compressed:
+            args += " --value-compression compressed"
+        password_env = ""
+        if self.backupset.passwd_env:
+            self.log.info("set password env to password")
+            password_env = "export CB_PASSWORD=password; "
+        if self.backupset.passwd_env_with_prompt:
+            self.log.info("set password env to prompt")
+            password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        command = "{2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                   password_env)
+
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
 
@@ -313,15 +345,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.restore_cluster_host)
             url_format = "s"
             secure_port = "1"
-        args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} -u {5} "\
-               "--password {6} --start {7} --end {8}" \
+        password_input = "-p %s " % self.backupset.restore_cluster_host_password
+        if self.backupset.passwd_env:
+            password_input = ""
+        elif self.backupset.passwd_env_with_prompt:
+            password_input = "-p "
+
+        args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4}"\
+               " -u {5} {6} --start {7} --end {8}" \
                                .format(self.backupset.directory,
                                        self.backupset.name,
                                        self.cluster_flag,
                                        self.backupset.restore_cluster_host.ip,
                                        self.backupset.restore_cluster_host.port,
                                        self.backupset.restore_cluster_host_username,
-                                       self.backupset.restore_cluster_host_password,
+                                       password_input,
                                        backup_start, backup_end, url_format, secure_port)
         if self.backupset.no_ssl_verify:
             args += " --no-ssl-verify"
@@ -363,46 +401,60 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if not rest_helper.bucket_exists(bucket_name):
                     if self.backupset.map_buckets is None:
                         self.log.info("Creating bucket {0} in restore host {1}"
-                                                .format(bucket_name,
-                                                 self.backupset.restore_cluster_host.ip))
+                                            .format(bucket_name,
+                                            self.backupset.restore_cluster_host.ip))
                     elif self.backupset.map_buckets:
                         self.log.info("Create new bucket name to restore to this bucket")
                         bucket_maps = ""
                         bucket_name = bucket.name + "_" + str(count)
                     self.log.info("Creating bucket {0} in restore host {1}"
-                                                .format(bucket_name,
-                                                 self.backupset.restore_cluster_host.ip))
+                                            .format(bucket_name,
+                                             self.backupset.restore_cluster_host.ip))
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=512,
                                     authType=bucket.authType if bucket.authType else 'none',
+                                    bucketType=self.bucket_type,
                                     proxyPort=bucket.port,
                                     saslPassword=bucket.saslPassword,
                                     lww=self.lww_new)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
-                        self.fail("Bucket %s not created after 120 seconds." % bucket_name)
+                        self.fail("Bucket %s not created after 120 seconds."
+                                                              % bucket_name)
                 buckets.append("%s=%s" % (bucket.name, bucket_name))
                 count +=1
             bucket_maps = ",".join(buckets)
         if self.backupset.map_buckets:
             args += " --map-buckets %s " % bucket_maps
+        password_env = ""
+        if self.backupset.passwd_env:
+            self.log.info("set password env to password")
+            password_env = "export CB_PASSWORD=password; "
+        if self.backupset.passwd_env_with_prompt:
+            self.log.info("set password env to prompt")
+            password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        command = "{2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                   password_env)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         res = output
         res.extend(error)
-        error_str = "Error restoring cluster: Transfer failed. Check the logs for more information."
+        error_str = "Error restoring cluster: Transfer failed. "\
+                    "Check the logs for more information."
         if error_str in res:
-            command = "cat " + self.backupset.directory + "/logs/backup.log | grep '" + error_str + "' -A 10 -B 100"
+            command = "cat " + self.backupset.directory + \
+                      "/logs/backup.log | grep '" + error_str + "' -A 10 -B 100"
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
         if 'Required Flags:' in res:
             self.fail("Command line failed. Please check test params.")
         return output, error
 
-    def backup_restore_validate(self, compare_uuid=False, seqno_compare_function="==",
-                                replicas=False, mode="memory", expected_error=None):
+    def backup_restore_validate(self, compare_uuid=False,
+                                seqno_compare_function="==",
+                                replicas=False, mode="memory",
+                                expected_error=None):
         output, error =self.backup_restore()
         if expected_error:
             output.extend(error)
@@ -763,6 +815,49 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     return False, "Missing %s in views definition" % x
             return True, "Views function validated"
 
+    def get_database_file_info(self):
+        """
+           Extract database file size and items from backup repo
+           :return: Datebase file information
+        """
+        status, output, message = self.backup_list()
+        file_info = {}
+        unit_size = ["MB", "GB"]
+        if status:
+            if output:
+                for x in output:
+                    if "shard_0.fdb" in x:
+                        if x.strip().split()[0][-2:] in unit_size:
+                            file_info["file_size"] = \
+                                      int(x.strip().split()[0][:-2].split(".")[0])
+
+                            file_info["items"] = int(x.strip().split()[1])
+                        print "output content   ", file_info
+            return file_info
+        else:
+            print message
+
+    def validate_backup_compressed_file(self, no_compression, with_compression):
+        """
+            Compare before and after using flag --value-compression compressed
+        :return: None
+        """
+        compressed = False
+        if no_compression["items"] == with_compression["items"]:
+            if no_compression["file_size"] > with_compression["file_size"]:
+                compressed = True
+                self.log.info("no compressed: %d, with compressed: %d"
+                                      % (no_compression["file_size"],
+                                         with_compression["file_size"]))
+            else:
+                self.log.info("no compressed: %d, with compressed: %d"
+                              % (no_compression["file_size"],
+                                 with_compression["file_size"]))
+                self.fail("cbbackupmgr failed to compress database")
+
+        else:
+            self.fail("Item miss match on 2 backup files")
+
 
 class Backupset:
     def __init__(self):
@@ -804,6 +899,9 @@ class Backupset:
         self.bucket_backup = ''
         self.backup_to_compact = ''
         self.map_buckets = None
+        self.backup_compressed = False
+        self.passwd_env = False
+        self.passwd_env_with_prompt = False
 
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):

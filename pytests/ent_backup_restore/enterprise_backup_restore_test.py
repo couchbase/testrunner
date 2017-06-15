@@ -405,6 +405,46 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_compact()
         self.backup_restore_validate()
 
+    def test_backup_with_compress_flag(self):
+        """
+            1. Load docs into bucket
+            2. Backup without compress flag
+            3. Get backup data size
+            4. Delete backup repo
+            5. Do backup again with compress flag
+            6. Compare those data if it flag works
+            :return: None
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                            end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backupset.backup_compress = False
+        self.backup_cluster()
+        no_compression = self.get_database_file_info()
+        self.log.info("\nDelete old backup and do backup again with compress flag")
+        self.backup_create()
+        self.backupset.backup_compress = self.input.param("backup-compressed", False)
+        self.backup_cluster()
+        with_compression = self.get_database_file_info()
+        self.validate_backup_compressed_file(no_compression, with_compression)
+
+    def test_backup_restore_with_password_env(self):
+        """
+            password will pass as in env variable
+            :return: None
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                                                      end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        output, error = self.backup_cluster()
+        if output and  "Backup successfully completed" not in output[0]:
+            self.fail("Failed to run with password env %s " % output)
+        self.backup_cluster_validate(skip_backup=True)
+        self.backup_list()
+        self.backup_restore_validate()
+
     def test_restore_with_invalid_bucket_config_json(self):
         """
             When bucket-config.json in latest backup corrupted,
@@ -1301,13 +1341,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def test_backup_and_restore_with_map_buckets(self):
         """
-        1. Creates specified buckets on the cluster and loads it with given number of items- memcached bucket has to
-           be created for this test (memcached_buckets=1)
+        1. Creates specified buckets on the cluster and loads it with given number
+           of items - memcached bucket has to be created for this test
+            (memcached_buckets=1)
         2. Creates a backupset, takes backup of the cluster host and validates
-        3. Executes list command on the backup and validates that memcached bucket has been skipped
+        3. Executes list command on the backup and validates that memcached bucket
+           has been skipped
         4. Restores the backup and validates
         """
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                             end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
@@ -1322,9 +1365,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def test_backup_with_erlang_crash_and_restart(self):
         """
-        1. Creates specified bucket on the cluster and loads it with given number of items
+        1. Creates specified bucket on the cluster and loads it with given number
+           of items
         2. Creates a backupset on the backup host
-        3. Initiates a backup - while backup is going on kills and restarts erlang process
+        3. Initiates a backup - while backup is going on kills and restarts
+           erlang process
         4. Validates backup output
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)

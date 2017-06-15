@@ -89,19 +89,26 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 except Exception, e:
                     raise e
             data_collector = DataCollector()
-            info, restored_data = data_collector.collect_data(self.restore_cluster, [bucket],
-                                                              userId=self.restore_cluster[0].rest_username,
-                                                              password=self.restore_cluster[0].rest_password,
-                                                              perNode=False,
-                                                              getReplica=get_replica, mode=mode)
+            info, restored_data = data_collector.collect_data(self.restore_cluster,
+                                     [bucket],
+                                     userId=self.restore_cluster[0].rest_username,
+                                     password=self.restore_cluster[0].rest_password,
+                                     perNode=False,
+                                     getReplica=get_replica,
+                                     mode=mode)
             data = restored_data[bucket.name]
             for key in data:
                 value = data[key]
                 value = ",".join(value.split(',')[4:5])
                 data[key] = value
-            is_equal, not_equal, extra, not_present = self.compare_dictionary(backedup_kv, data)
-            status, msg = self.compare_dictionary_result_analyser(is_equal, not_equal, extra, not_present,
-                                                                  "{0} Data".format(bucket.name))
+
+            is_equal, not_equal, extra, not_present = \
+                                        self.compare_dictionary(backedup_kv, data)
+            status, msg = self.compare_dictionary_result_analyser(is_equal,
+                                                                  not_equal,
+                                                                  extra,
+                                                                  not_present,
+                                                "{0} Data".format(bucket.name))
             if not status:
                 return status, msg
             success_msg += "{0}\n".format(msg)
