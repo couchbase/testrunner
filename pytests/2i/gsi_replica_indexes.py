@@ -2737,6 +2737,19 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info(str(ex))
         self.run_operation(phase="after")
 
+    def test_create_replica_index_with_num_replica_using_cbindex_create(self):
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        self._cbindex_create(index_server, index_name_prefix, "name", num_replica=2)
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    2)
+
     def _get_node_list(self, node_list=None):
         # 1. Parse node string
         if node_list:
@@ -2838,6 +2851,20 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         else:
             self.log.info(
                 "cbindex move started successfully : {0}".format(output))
+        return output, error
+
+    def _cbindex_create(self, node, index_name, fields,bucket="default", username="Administrator", password="password",num_replica=1):
+        cmd = """cbindex -type=create -auth '{0}:{1}' -bucket {2}  -index {3} -fields={4} -with '{{"num_replica":{5}}}'""".format(
+            username, password, bucket, index_name, fields, num_replica)
+        self.log.info(cmd)
+        remote_client = RemoteMachineShellConnection(node)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error:
+            self.fail("cbindex create failed")
+        else:
+            self.log.info("cbindex create started successfully : {0}".format(output))
         return output, error
 
     def _cbindexplan_plan(self, src_node, num_replica, field, bucket="default",
