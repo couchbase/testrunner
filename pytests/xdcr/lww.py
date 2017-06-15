@@ -173,7 +173,7 @@ class Lww(XDCRNewBaseTest):
     def _get_max_cas(self, node, bucket, vbucket_id=0):
         max_cas = 0
         conn = RemoteMachineShellConnection(node)
-        command = "/opt/couchbase/bin/cbstats " + node.ip + ":11210 vbucket-details " + str(vbucket_id) + " -b " + bucket
+        command = "/opt/couchbase/bin/cbstats -u cbadminbucket -p password " + node.ip + ":11210 vbucket-details " + str(vbucket_id) + " -b " + bucket
         output, error = conn.execute_command(command)
         conn.log_command_output(output, error)
         for line in output:
@@ -184,7 +184,7 @@ class Lww(XDCRNewBaseTest):
 
     def _get_vbucket_id(self, node, bucket, key):
         conn = RemoteMachineShellConnection(node)
-        command = "curl -s http://" + node.ip + ":8091/pools/default/buckets/" + bucket + " | /opt/couchbase/bin/tools/vbuckettool - " + key
+        command = "curl -u cbadminbucket:password -s http://" + node.ip + ":8091/pools/default/buckets/" + bucket + " | /opt/couchbase/bin/tools/vbuckettool - " + key
         output, error = conn.execute_command(command)
         conn.log_command_output(output, error)
         return output[0].split()[5]
@@ -1108,8 +1108,9 @@ class Lww(XDCRNewBaseTest):
 
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn.stop_couchbase()
+        self.sleep(5)
         conn.start_couchbase()
-
+        self.sleep(5)
         self.verify_results()
 
     def test_lww_with_erlang_restart_at_master(self):
@@ -1137,7 +1138,7 @@ class Lww(XDCRNewBaseTest):
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn.kill_erlang()
         conn.start_couchbase()
-
+        self.sleep(10)
         self.verify_results()
 
     def test_lww_with_memcached_restart_at_master(self):
