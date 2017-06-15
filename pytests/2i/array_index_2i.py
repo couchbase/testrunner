@@ -1,3 +1,4 @@
+import copy
 import logging
 import random
 
@@ -23,6 +24,12 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         self.restServer = self.get_nodes_from_services_map(service_type="index")
         self.rest = RestConnection(self.restServer)
         self.index_id_map = {}
+        testuser = []
+        rolelist = []
+        for bucket in self.buckets:
+            testuser.append({'id': bucket.name, 'name': bucket.name, 'password': 'password'})
+            rolelist.append({'id': bucket.name, 'name': bucket.name, 'roles': 'admin'})
+        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
 
     def tearDown(self):
         super(SecondaryIndexArrayIndexTests, self).tearDown()
@@ -39,27 +46,35 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             buckets=self.buckets, query_definitions=self.query_definitions)
 
     def test_simple_indexes_mutation(self):
-        self.multi_create_index_using_rest(
-            buckets=self.buckets,
-            query_definitions=self.query_definitions)
+        query_definitions = []
+        query_definition = QueryDefinition(
+            index_name="index_name_travel_history",
+            index_fields=["ALL `travel_history`"],
+            query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+            groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+        query_definitions.append(query_definition)
+        self.multi_create_index_using_rest(buckets=self.buckets,
+                                           query_definitions=query_definitions)
+        self.sleep(20)
+        index_map = self.rest.get_index_id_map()
         doc_list = self.full_docs_list[:len(self.full_docs_list)/2]
-        for query_definition in self.query_definitions:
-            index_field, data_type = self._find_datatype(query_definition)
-            if index_field:
-                for bucket in self.buckets:
-                    for data in DATATYPES:
-                        if data_type is data:
-                            continue
-                        else:
-                            log.info("Changing datatype of {0} to {1}".format(index_field, data))
-                            self.change_index_field_type(
-                                bucket.name, index_field, doc_list,
-                                data, query_definition)
-                            #self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-                            self.query_using_index(bucket, query_definition, verify_results=False)
-                            self.full_docs_list = self.generate_full_docs_list(self.gens_load)
+        for bucket in self.buckets:
+            index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
+            for data in DATATYPES:
+                self.change_index_field_type(bucket.name,
+                                             "travel_history",
+                                             doc_list, data, query_definition)
+                actual_result = self.rest.full_table_scan_gsi_index_with_rest(
+                        index_id, body={"stale": "false"})
+                expected_result = self._get_expected_results_for_full_table_scan(
+                        query_definition)
+                msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
+                self.assertEqual(sorted(actual_result), sorted(expected_result),
+                             msg.format(query_definition.index_name,
+                                        actual_result, expected_result))
+                self.full_docs_list = self.generate_full_docs_list(self.gens_load)
         self.multi_drop_index_using_rest(buckets=self.buckets,
-                                         query_definitions=self.query_definitions)
+                                         query_definitions=query_definitions)
 
     def test_composite_indexes_mutation(self):
         definitions_list = []
@@ -67,34 +82,39 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             pass
         else:
             query_definition = QueryDefinition(index_name="index_name_travel_history_leading",
-                                                index_fields=["DISTINCT ARRAY t FOR t in `travel_history` END, name, age"],
+                                                index_fields=["ALL `travel_history` END", "name", "age"],
                                                 query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
                                                 groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_end",
-                                                index_fields=["name, age, DISTINCT ARRAY t FOR t in `travel_history` END"],
+                                                index_fields=["name", "age", "ALL `travel_history` END"],
                                                 query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
                                                 groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_middle",
-                                                index_fields=["name, DISTINCT ARRAY t FOR t in `travel_history` END", "age"],
+                                                index_fields=["name", "ALL `travel_history` END", "age"],
                                                 query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
                                                 groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
+            self.sleep(20)
+            index_map = self.rest.get_index_id_map()
             for query_definition in definitions_list:
-                index_field, data_type = self._find_datatype(query_definition)
-                if index_field:
-                    for bucket in self.buckets:
-                        for data in DATATYPES:
-                            if data_type is data:
-                                continue
-                            else:
-                                log.info("Changing datatype of {0} to {1}".format(index_field, data))
-                                doc_list = self.full_docs_list[:len(self.full_docs_list)/2]
-                                self.change_index_field_type(bucket.name, index_field, doc_list, data)
-                                self.run_full_table_scan_using_rest(bucket, query_definition, verify_result=True)
-                                self.full_docs_list = self.generate_full_docs_list(self.gens_load)
+                for bucket in self.buckets:
+                    doc_list = self.full_docs_list[:len(self.full_docs_list)/2]
+                    index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
+                    for data in DATATYPES:
+                        self.change_index_field_type(bucket.name, "travel_history",
+                                                     doc_list, data, query_definition)
+                        actual_result = self.rest.full_table_scan_gsi_index_with_rest(
+                        index_id, body={"stale": "false"})
+                        expected_result = self._get_expected_results_for_full_table_scan(
+                            query_definition)
+                        msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
+                        self.assertEqual(sorted(actual_result), sorted(expected_result),
+                                         msg.format(query_definition.index_name,
+                                                    actual_result, expected_result))
+                        self.full_docs_list = self.generate_full_docs_list(self.gens_load)
             self.multi_drop_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
 
     def test_create_query_drop_index_on_missing_empty_null_field(self):
@@ -102,15 +122,9 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         index_field, data_type = self._find_datatype(self.query_definitions[0])
         doc_list = self.full_docs_list[:len(self.full_docs_list)/2]
         for data_type in data_types:
-            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
             definitions_list = []
-            query_definition =  QueryDefinition(index_name="index_name_{0}_distinct".format(data_type),
-                                                index_fields=["DISTINCT ARRAY t FOR t in `{0}` END".format(index_field)],
-                                                query_template="SELECT {0} FROM %s WHERE `{0}` IS NOT NULL".format(index_field),
-                                                groups=["array"], index_where_clause=" `{0}` IS NOT NULL ".format(index_field))
-            definitions_list.append(query_definition)
             query_definition =  QueryDefinition(index_name="index_name_{0}_duplicate".format(data_type),
-                                                index_fields=["ALL ARRAY t FOR t in `{0}` END".format(index_field)],
+                                                index_fields=["ALL `{0}`".format(index_field)],
                                                 query_template="SELECT {0} FROM %s WHERE `{0}` IS NOT NULL".format(index_field),
                                                 groups=["array"], index_where_clause=" `{0}` IS NOT NULL ".format(index_field))
             definitions_list.append(query_definition)
@@ -118,16 +132,26 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                 for query_definition in definitions_list:
                     self.change_index_field_type(bucket.name, index_field, doc_list, data_type, query_definition)
             self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
+            self.sleep(10)
+            index_map = self.rest.get_index_id_map()
             for bucket in self.buckets:
                 for query_definition in definitions_list:
-                    self.run_full_table_scan_using_rest(bucket, query_definition)
+                    index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
+                    actual_result = self.rest.full_table_scan_gsi_index_with_rest(
+                        index_id, body={"stale": "false"})
+                    expected_result = self._get_expected_results_for_full_table_scan(
+                        query_definition)
+                    msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
+                    self.assertEqual(sorted(actual_result), sorted(expected_result),
+                                 msg.format(query_definition.index_name,
+                                            len(actual_result), len(expected_result)))
             self.multi_drop_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
             self.full_docs_list = self.generate_full_docs_list(self.gens_load)
 
     def test_create_query_drop_index_on_mixed_datatypes(self):
         query_definition = QueryDefinition(
             index_name="index_name_travel_history",
-            index_fields=["DISTINCT ARRAY t FOR t in `travel_history` END"],
+            index_fields=["ALL `travel_history`"],
             query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
             groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
         end = 0
@@ -141,9 +165,18 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                              doc_list, data, query_definition)
         self.multi_create_index_using_rest(buckets=self.buckets,
                                            query_definitions=[query_definition])
-        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+        self.sleep(10)
+        index_map = self.rest.get_index_id_map()
         for bucket in self.buckets:
-            self.run_full_table_scan_using_rest(bucket, query_definition)
+            index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
+            actual_result = self.rest.full_table_scan_gsi_index_with_rest(
+                        index_id, body={"stale": "false"})
+            expected_result = self._get_expected_results_for_full_table_scan(
+                        query_definition)
+            msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
+            self.assertEqual(sorted(actual_result), sorted(expected_result),
+                             msg.format(query_definition.index_name,
+                                        actual_result, expected_result))
         self.multi_drop_index_using_rest(buckets=self.buckets,
                                          query_definitions=[query_definition])
 
@@ -161,102 +194,21 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=self.query_definitions)
         log.info("Flushing bucket {0}...".format(self.buckets[0]))
         self.rest.flush_bucket(self.buckets[0])
+        self.sleep(60)
         log.info("Performing Full Table Scan...")
         for query_definition in self.query_definitions:
             self.run_full_table_scan_using_rest(self.buckets[0], query_definition)
-        self.sleep(60)
-        self.multi_drop_index_using_rest(buckets=self.buckets,
-                                         query_definitions=self.query_definitions)
 
     def test_create_query_drop_bucket(self):
         self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=self.query_definitions)
         log.info("Deleting bucket {0}...".format(self.buckets[0]))
         BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.restServer, bucket=self.buckets[0].name)
         log.info("Performing Full Table Scan...")
-        # for query_definition in self.query_definitions:
-        #     self.run_full_table_scan_using_rest(self.buckets[1], query_definition)
         buckets = self.buckets[1:]
         if buckets:
-            self.multi_drop_index_using_rest(buckets=buckets,
-                                             query_definitions=self.query_definitions)
-
-    def test_increase_array_size(self):
-        query_definition =  QueryDefinition(
-            index_name="index_name_big_values",
-            index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
-            query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
-            groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
-        for bucket in self.buckets:
-            self.rest.flush_bucket(bucket.name)
-        sec_key_size = 1000
-        self._change_array_size(sec_key_size)
-        generators = []
-        template = '{{"name":"{0}", "age":{1}, "bigValues":{2} }}'
-        for i in range(10):
-            name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-            id = "{0}-{1}".format(name, str(i))
-            age = random.choice(range(4, 19))
-            bigValues = []
-            arrLen = random.choice(range(10, 15))
-            indiSize = (sec_key_size * 4 / arrLen) + 50
-            for j in range(arrLen):
-                longStr = "".join(random.choice(lowercase) for k in range(indiSize))
-                bigValues.append(longStr)
-            generators.append(DocumentGenerator(id, template, [name], [age], [bigValues],
-                                                start=0, end=1))
-        self.load(generators, flag=self.item_flag, verify_data=False, batch_size=self.batch_size)
-        self.full_docs_list = self.generate_full_docs_list(generators)
-        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-        self.multi_create_index_using_rest(buckets=self.buckets,
-                                           query_definitions=[query_definition])
-        for bucket in self.buckets:
-            self.run_full_table_scan_using_rest(bucket, query_definition)
-        sec_key_size = 4000
-        self._change_array_size(sec_key_size)
-        self.sleep(15)
-        self.load(generators, flag=self.item_flag, verify_data=False, batch_size=self.batch_size)
-        for bucket in self.buckets:
-            self.run_full_table_scan_using_rest(bucket, query_definition)
-        self.multi_drop_index_using_rest(buckets=self.buckets,
-                                         query_definitions=[query_definition])
-
-    def test_decrease_array_size(self):
-        query_definition =  QueryDefinition(
-            index_name="index_name_big_values",
-            index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
-            query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
-            groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
-        for bucket in self.buckets:
-            self.rest.flush_bucket(bucket.name)
-        sec_key_size = 4000
-        self._change_array_size(sec_key_size)
-        generators = []
-        template = '{{"name":"{0}", "age":{1}, "bigValues":{2} }}'
-        for i in range(10):
-            name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-            id = "{0}-{1}".format(name, str(i))
-            age = random.choice(range(4, 19))
-            bigValues = []
-            arrLen = random.choice(range(10, 15))
-            indiSize = (sec_key_size * 4 / arrLen) + 50
-            for j in range(arrLen):
-                longStr = "".join(random.choice(lowercase) for k in range(indiSize))
-                bigValues.append(longStr)
-            generators.append(DocumentGenerator(id, template, [name], [age], [bigValues],
-                                                start=0, end=1))
-        self.load(generators, flag=self.item_flag, verify_data=False, batch_size=self.batch_size)
-        self.full_docs_list = self.generate_full_docs_list(generators)
-        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-        self.multi_create_index_using_rest(buckets=self.buckets,
-                                           query_definitions=[query_definition])
-        self.run_full_table_scan_using_rest(self.buckets[0], query_definition)
-        sec_key_size = 1000
-        self._change_array_size(sec_key_size)
-        self.sleep(15)
-        self.load(generators, flag=self.item_flag, verify_data=False, batch_size=self.batch_size)
-        self.run_full_table_scan_using_rest(self.buckets[0], query_definition)
-        self.multi_drop_index_using_rest(buckets=self.buckets,
-                                         query_definitions=[query_definition])
+            for bucket in buckets:
+                for query_definition in self.query_definitions:
+                    self.run_full_table_scan_using_rest(bucket, query_definition)
 
     def test_array_item_limit(self):
         query_definition =  QueryDefinition(index_name="index_name_big_values",
@@ -289,7 +241,8 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                          query_definitions=[query_definition])
 
     def _update_document(self, bucket_name, key, document):
-        bucket = Bucket('couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name))
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
+        bucket = Bucket(url, username=bucket_name, password="password")
         bucket.upsert(key, document)
 
     def _find_datatype(self, query_definition):
@@ -379,3 +332,61 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
     def _change_array_size(self, array_size):
         doc = {"indexer.settings.max_array_seckey_size": array_size}
         self.rest.set_index_settings(doc)
+
+    def _get_expected_results_for_full_table_scan(self, query):
+        index_settings = self.rest.get_index_settings()
+        allow_large_keys = index_settings["indexer.settings.allow_large_keys"]
+        array_size = index_settings["indexer.settings.max_array_seckey_size"] * 3
+        item_size = index_settings["indexer.settings.max_seckey_size"] * 3
+        index_fields = []
+        for index_field in query.index_fields:
+            temp = index_field.split("`")
+            if len(temp) > 1:
+                index_fields.append(temp[1])
+            else:
+                index_fields.append(temp[0])
+        expected_result = []
+        for doc in self.full_docs_list:
+            doc_list = []
+            list_param = False
+            for field in index_fields:
+                if field not in doc.keys():
+                    continue
+                if isinstance(doc[field], list):
+                    list_param = True
+                    if not doc_list:
+                        doc_list = [[arr_item] for arr_item in doc[field]]
+                    else:
+                        temp_doc_list = []
+                        for item in doc_list:
+                            for arr_item in doc[field]:
+                                temp_list = copy.deepcopy(item)
+                                temp_list.append(arr_item)
+                                temp_doc_list.append(temp_list)
+                        doc_list = temp_doc_list
+                else:
+                    if not doc_list:
+                        doc_list.append([doc[field]])
+                    else:
+                        for item in doc_list:
+                            item.append(doc[field])
+            if not allow_large_keys:
+                if list_param:
+                    actual_array_size = self._get_size_of_array(doc_list)
+                    if actual_array_size > array_size:
+                        doc_list = []
+                for doc_items in doc_list:
+                    if self._get_size_of_array(doc_items) > item_size:
+                        doc_list = []
+                        break
+            for doc_items in doc_list:
+                entry = {"docid": doc["_id"], "key": doc_items}
+                expected_result.append(entry)
+        if "DISTINCT" in query.index_fields:
+            temp_list = []
+            for doc in expected_result:
+                for temp_doc in temp_list:
+                    if doc != temp_doc:
+                        temp_list.append(doc)
+            return temp_list
+        return expected_result
