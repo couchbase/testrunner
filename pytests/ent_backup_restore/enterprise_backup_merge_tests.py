@@ -1,5 +1,5 @@
 from couchbase_helper.cluster import Cluster
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator,DocumentGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupMergeBase
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -18,8 +18,13 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
         super(EnterpriseBackupMergeTest, self).tearDown()
 
     def test_multiple_backups_merges(self):
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                            end=self.num_items)
+        if self.data_type == "binary":
+            gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                                end=self.num_items)
+        elif self.data_type == "json":
+            gen = DocumentGenerator("ent-backup", '{{"key":"value"}}', xrange(100),
+                                    start=0,
+                                    end=self.num_items)
         self.log.info("*** start to load items to all buckets")
         self.expected_error = self.input.param("expected_error", None)
         self._load_all_buckets(self.master, gen, "create", self.expires)

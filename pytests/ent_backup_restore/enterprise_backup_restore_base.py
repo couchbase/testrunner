@@ -3,7 +3,7 @@ import shutil
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator,DocumentGenerator
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from ent_backup_restore.validation_helpers.backup_restore_validations \
                                                  import BackupRestoreValidations
@@ -626,6 +626,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.number_of_backups_taken += 1
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
         return True, output, "Merging backup succeeded"
 
     def validate_backup_data(self, server_host, server_bucket, master_key,
@@ -908,18 +912,28 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     def setUp(self):
         super(EnterpriseBackupMergeBase, self).setUp()
         self.actions = self.input.param("actions", None)
-        self.create_gen = BlobGenerator("ent-backup", "ent-backup-",
+        self.data_type = self.input.param("data_type", "binary")
+        if self.data_type == "binary":
+            self.create_gen = BlobGenerator("ent-backup", "ent-backup-",
                                         self.value_size, start=self.num_items,
-                                        end=self.num_items + self.num_items
-                                                             * 0.5)
-        self.update_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                        end=self.num_items + self.num_items * 0.5)
+            self.update_gen = BlobGenerator("ent-backup", "ent-backup-",
                                         self.value_size,
                                         end=self.num_items * 0.9)
-
-        self.delete_gen = BlobGenerator("ent-backup", "ent-backup-",
+            self.delete_gen = BlobGenerator("ent-backup", "ent-backup-",
                                         self.value_size,
                                         start=self.num_items / 10,
                                         end=self.num_items)
+        elif self.data_type == "json":
+            self.create_gen = DocumentGenerator("ent-backup", '{{"key":"value"}}', xrange(100),
+                                                start=self.num_items,
+                                                end=self.num_items + self.num_items * 0.5)
+            self.update_gen = DocumentGenerator("ent-backup", '{{"key":"value"}}', xrange(100),
+                                                start = 0,
+                                                end=self.num_items * 0.9)
+            self.delete_gen = DocumentGenerator("ent-backup", '{{"key":"value"}}', xrange(100),
+                                                start=self.num_items / 10,
+                                                end=self.num_items)
 
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
