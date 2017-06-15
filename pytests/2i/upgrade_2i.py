@@ -3,6 +3,7 @@ from datetime import datetime
 from threading import Thread
 
 from base_2i import BaseSecondaryIndexingTests
+from couchbase_helper.query_definitions import QueryDefinition
 from membase.helper.bucket_helper import BucketOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
@@ -15,12 +16,23 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def setUp(self):
         super(UpgradeSecondaryIndex, self).setUp()
         self.num_plasma_buckets = self.input.param("standard_buckets", 1)
-        self.use_replica = True
         self.initial_version = self.input.param('initial_version', '4.6.0-3653')
         self.post_upgrade_gsi_type = self.input.param('post_upgrade_gsi_type', 'memory_optimized')
         self.upgrade_to = self.input.param("upgrade_to")
         self.use_replica = self.input.param("use_replica", True)
-        self.lost_indexes = {}
+        query_template = QUERY_TEMPLATE
+        query_template = query_template.format("job_title")
+        self.whereCondition= self.input.param("whereCondition"," job_title != \"Sales\" ")
+        query_template += " WHERE {0}".format(self.whereCondition)
+        self.load_query_definitions = []
+        self.initial_index_number = self.input.param("initial_index_number", 3)
+        for x in range(self.initial_index_number):
+            index_name = "index_name_"+str(x)
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
+                                query_template=query_template, groups=["simple"])
+            self.load_query_definitions.append(query_definition)
+        self.multi_create_index(buckets = self.buckets,
+                query_definitions = self.load_query_definitions)
 
     def tearDown(self):
         self.upgrade_servers = self.servers
@@ -45,6 +57,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
+        self.sleep(20)
+        self.add_built_in_server_user()
         kv_ops = self.kv_mutations()
         for kv_op in kv_ops:
             kv_op.result()
@@ -406,10 +420,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             log.info(actual_result)
             old_api = False
             for node, vals in node_map.iteritems():
-                if "index" in vals["services"] or "n1ql" in vals["services"]:
-                    if vals["version"] < "5":
-                        old_api = True
-                        break
+                if vals["version"] < "5":
+                    old_api = True
+                    break
             if not old_api:
                 msg = "IndexScan2"
                 self.assertIn(msg, str(actual_result), "IndexScan2 is not used for Spock Nodes")
@@ -425,12 +438,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             node_map = self._get_nodes_with_version()
             log.info(node_map)
             for node, vals in node_map.iteritems():
-                if "index" in vals["services"] or "n1ql" in vals["services"]:
-                    if vals["version"] < "5":
-                        old_api = True
-                        msg = "Fails to create index with replica"
-                        if msg in str(ex):
-                            break
+                if vals["version"] < "5":
+                    old_api = True
+                    msg = "Fails to create index with replica"
+                    if msg in str(ex):
+                        break
             if not old_api:
                 log.info(str(ex))
                 raise

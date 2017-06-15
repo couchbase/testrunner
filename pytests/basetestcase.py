@@ -2016,6 +2016,8 @@ class BaseTestCase(unittest.TestCase):
         """
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
+        if not versions:
+            return
         for version in versions:
             if "5" > version:
                 self.log.info("Atleast one of the nodes in the cluster is "
