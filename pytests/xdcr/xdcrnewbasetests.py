@@ -838,6 +838,9 @@ class XDCReplication:
             toBucket=self.__to_bucket,
             xdcr_params=self.__convert_test_to_xdcr_params())
         self.__validate_start_audit_event()
+        #if within this 10s for pipeline updater if we try to create another replication, it doesn't work until the previous pipeline is updated.
+        # but better to have this 10s sleep between replications.
+        time.sleep(10)
 
     def __verify_pause(self):
         """Verify if replication is paused"""
