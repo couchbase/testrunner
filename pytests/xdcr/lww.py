@@ -1092,8 +1092,9 @@ class Lww(XDCRNewBaseTest):
 
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn.stop_couchbase()
+        self.sleep(5)
         conn.start_couchbase()
-
+        self.sleep(10)
         self.verify_results()
 
     def test_lww_with_erlang_restart_at_master(self):
@@ -1121,7 +1122,7 @@ class Lww(XDCRNewBaseTest):
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn.kill_erlang()
         conn.start_couchbase()
-
+        self.sleep(10)
         self.verify_results()
 
     def test_lww_with_memcached_restart_at_master(self):
