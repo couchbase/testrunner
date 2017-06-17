@@ -1594,36 +1594,19 @@ class RestConnection(object):
     def get_index_storage_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats/storage'
         status, content, header = self._http_request(api, timeout=timeout)
-        index_stats = dict()
-        data = content.split("\n")
-        index = "unknown"
-        store = "unknown"
-        for line in data:
-            if "Index Instance" in line:
-                index_data = re.findall(":.*", line)
-                bucket_data = re.findall(".*:", line)
-                index = index_data[0].split()[0][1:]
-                bucket = bucket_data[0].split("Index Instance")[1][:-1].strip()
-                log.info("Bucket Name: {0}".format(bucket))
-                if bucket not in index_stats.keys():
-                    index_stats[bucket] = {}
-                if index not in index_stats[bucket].keys():
-                    index_stats[bucket][index] = dict()
-                continue
-            if "Store" in line:
-                store = re.findall("[a-zA-Z]+", line)[0]
-                if store not in index_stats[bucket][index].keys():
-                    index_stats[bucket][index][store] = {}
-                continue
-            data = line.split("=")
-            if len(data) == 2:
-                metric = data[0].strip()
-                if "true" == data[1].strip().replace("%", "").lower() or \
-                                "false" == data[1].strip().replace("%", "").lower():
-                    index_stats[bucket][index][store][metric] = bool(data[1].strip().replace("%", ""))
-                else:
-                    index_stats[bucket][index][store][metric] = float(data[1].strip().replace("%", ""))
-        return index_stats
+        if not status:
+            raise Exception(content)
+        json_parsed = json.loads(content)
+        index_storage_stats = {}
+        import pdb
+        pdb.set_trace()
+        for index_stats in json_parsed:
+            bucket = index_stats["Index"].split(":")[0]
+            index_name = index_stats["Index"].split(":")[1]
+            if not bucket in index_storage_stats.keys():
+                index_storage_stats[bucket] = {}
+            index_storage_stats[bucket][index_name] = index_stats["Stats"]
+        return index_storage_stats
 
     def get_indexer_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats'
