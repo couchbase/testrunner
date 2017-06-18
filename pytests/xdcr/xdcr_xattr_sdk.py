@@ -1,12 +1,14 @@
 import json
 import re
 from threading import Thread
+import httplib2
 
 import couchbase.subdocument as SD
 import crc32
 from sdk_client import SDKClient
 
 from lib.membase.api.exception import XDCRException
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_DIRECTION, TOPOLOGY
 
 
@@ -26,6 +28,11 @@ class XDCRXattr(XDCRNewBaseTest):
                 testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
                 rolelist = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
                 self.add_built_in_server_user(testuser=testuser, rolelist=rolelist, node=cluster.get_master_node())
+        for cluster in self.get_cb_clusters():
+            for node in cluster.get_nodes():
+                shell = RemoteMachineShellConnection(node)
+                # TODO: works for Centos6 only now
+                shell.execute_command('initctl stop sync_gateway')
 
     def tearDown(self):
         super(XDCRXattr, self).tearDown()
@@ -43,8 +50,9 @@ class XDCRXattr(XDCRNewBaseTest):
                     client = SDKClient(scheme="couchbase", hosts=[cluster.get_master_node().ip],
                                             bucket=bucket.name).cb
                     for i in xrange(start_num, start_num + self._num_items):
-                        key = 'k_%s_%s' % (i, str(cluster))
-                        value = {'xattr_%s' % i: 'value%s' % i}
+                        key = 'k_%s_%s' % (i, str(cluster).replace(' ','_').
+                                           replace('.','_').replace(',','_').replace(':','_'))
+                        value = {'xattr_%s' % i:'value%s' % i}
                         client.upsert(key, value)
                         client.mutate_in(key, SD.upsert('xattr_%s' % i, 'value%s' % i,
                                                              xattr=True,
@@ -159,7 +167,7 @@ class XDCRXattr(XDCRNewBaseTest):
                         kvs_num=1,
                         filter_exp=repl.get_filter_exp())
 
-    def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
+    def verify_results(self, skip_verify_data=[], skip_verify_revid=[], sg_run=False):
         """Verify data between each couchbase and remote clusters.
         Run below steps for each source and destination cluster..
             1. Run expiry pager.
@@ -200,10 +208,11 @@ class XDCRXattr(XDCRNewBaseTest):
                     self.log.error(e)
                 if not skip_key_validation:
                     try:
-                        src_active_passed, src_replica_passed = \
-                            src_cluster.verify_items_count(timeout=self._item_count_timeout)
-                        dest_active_passed, dest_replica_passed = \
-                            dest_cluster.verify_items_count(timeout=self._item_count_timeout)
+                        if not sg_run:
+                            src_active_passed, src_replica_passed = \
+                                src_cluster.verify_items_count(timeout=self._item_count_timeout)
+                            dest_active_passed, dest_replica_passed = \
+                                dest_cluster.verify_items_count(timeout=self._item_count_timeout)
 
                         src_cluster.verify_data(max_verify=self._max_verify, skip=skip_verify_data,
                                                 only_store_hash=self.only_store_hash)
@@ -211,33 +220,43 @@ class XDCRXattr(XDCRNewBaseTest):
                                                  only_store_hash=self.only_store_hash)
                         for _, cluster in enumerate(self.get_cb_clusters()):
                             for bucket in cluster.get_buckets():
+                                h = httplib2.Http(".cache")
+                                resp, content = h.request(
+                                    "http://{0}:4984/db/_all_docs".format(cluster.get_master_node().ip))
+                                self.assertEqual(json.loads(content)['total_rows'], self._num_items)
                                 client = SDKClient(scheme="couchbase", hosts=[cluster.get_master_node().ip],
                                                         bucket=bucket.name).cb
                                 for i in xrange(self._num_items):
-                                    key = 'k_%s' % i
+                                    key = 'k_%s_%s' % (i, str(cluster).replace(' ', '_').
+                                                      replace('.', '_').replace(',', '_').replace(':', '_'))
                                     res = client.get(key)
                                     for xk, xv in res.value.iteritems():
                                         rv = client.mutate_in(key, SD.get(xk, xattr=True))
                                         self.assertTrue(rv.exists(xk))
                                         self.assertEqual(xv, rv[xk])
-
+                                    if sg_run:
+                                        resp, content = h.request("http://{0}:4984/db/{1}".format(cluster.get_master_node().ip, key))
+                                        self.assertEqual(json.loads(content)['_id'], key)
+                                        self.assertEqual(json.loads(content)[xk], xv)
+                                        self.assertTrue('2-' in json.loads(content)['_rev'])
                     except Exception as e:
                         self.log.error(e)
                     finally:
-                        rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications(),
+                        if not sg_run:
+                            rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications(),
                                                             skip=skip_verify_revid)
-                        # we're done with the test, now report specific errors
-                        if (not (src_active_passed and dest_active_passed)) and \
-                                (not (src_dcp_queue_drained and dest_dcp_queue_drained)):
-                            self.fail("Incomplete replication: Keys stuck in dcp queue")
-                        if not (src_active_passed and dest_active_passed):
-                            self.fail("Incomplete replication: Active key count is incorrect")
-                        if not (src_replica_passed and dest_replica_passed):
-                            self.fail("Incomplete intra-cluster replication: "
-                                      "replica count did not match active count")
-                        if rev_err_count > 0:
-                            self.fail("RevID verification failed for remote-cluster: {0}".
-                                      format(remote_cluster_ref))
+                            # we're done with the test, now report specific errors
+                            if (not (src_active_passed and dest_active_passed)) and \
+                                    (not (src_dcp_queue_drained and dest_dcp_queue_drained)):
+                                self.fail("Incomplete replication: Keys stuck in dcp queue")
+                            if not (src_active_passed and dest_active_passed):
+                                self.fail("Incomplete replication: Active key count is incorrect")
+                            if not (src_replica_passed and dest_replica_passed):
+                                self.fail("Incomplete intra-cluster replication: "
+                                          "replica count did not match active count")
+                            if rev_err_count > 0:
+                                self.fail("RevID verification failed for remote-cluster: {0}".
+                                          format(remote_cluster_ref))
 
         # treat errors in self.__report_error_list as failures
         if len(self.get_report_error_list()) > 0:
@@ -300,3 +319,24 @@ class XDCRXattr(XDCRNewBaseTest):
         thread_load.join()
         thread_load2.join()
         self.verify_results()
+
+
+class XDCRXattrSG(XDCRXattr):
+    def setUp(self):
+        super(XDCRXattrSG, self).setUp()
+
+    def tearDown(self):
+        super(XDCRXattr, self).tearDown()
+
+    def load_with_ops(self):
+        self.setup_xdcr()
+        for cluster in self.get_cb_clusters():
+            for node in cluster.get_nodes():
+                shell = RemoteMachineShellConnection(node)
+                shell.copy_file_local_to_remote("pytests/sg/resources/sg_localhost_default_xattrs.conf",
+                                                "/home/sync_gateway/sync_gateway.json")
+                # TODO: works for Centos6 only now
+                shell.execute_command('initctl stop sync_gateway')
+                shell.execute_command('initctl start sync_gateway')
+        self.load_data_topology()
+        self.verify_results(sg_run=True)
