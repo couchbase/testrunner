@@ -1598,8 +1598,6 @@ class RestConnection(object):
             raise Exception(content)
         json_parsed = json.loads(content)
         index_storage_stats = {}
-        import pdb
-        pdb.set_trace()
         for index_stats in json_parsed:
             bucket = index_stats["Index"].split(":")[0]
             index_name = index_stats["Index"].split(":")[1]
