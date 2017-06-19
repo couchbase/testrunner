@@ -407,15 +407,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.log.info("Create new bucket name to restore to this bucket")
                         bucket_maps = ""
                         bucket_name = bucket.name + "_" + str(count)
-                    self.log.info("Creating bucket {0} in restore host {1}"
-                                            .format(bucket_name,
-                                             self.backupset.restore_cluster_host.ip))
+                    if self.bucket_type == "ephemeral":
+                        self.eviction_policy = "noEviction"
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=512,
                                     authType=bucket.authType if bucket.authType else 'none',
                                     bucketType=self.bucket_type,
                                     proxyPort=bucket.port,
                                     saslPassword=bucket.saslPassword,
+                                    evictionPolicy=self.eviction_policy,
                                     lww=self.lww_new)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
