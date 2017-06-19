@@ -323,6 +323,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                           self.backup_validation_files_location)
         self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                             self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
 
     def backup_restore(self):
         if self.restore_only:
@@ -626,11 +628,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.number_of_backups_taken += 1
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        return True, output, "Merging backup succeeded"
+
+    def backup_merge_validate(self):
+        status, output, message = self.backup_merge()
+        if not status:
+            self.fail(message)
+
         self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                           self.backup_validation_files_location)
         self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                             self.backup_validation_files_location)
-        return True, output, "Merging backup succeeded"
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location, merge=True)
+
+        self.validation_helper.validate_merge(self.backup_validation_files_location)
 
     def validate_backup_data(self, server_host, server_bucket, master_key,
                                    perNode, getReplica, mode, items, key_check,
@@ -984,7 +996,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         """
         self.backupset.start = 1
         self.backupset.end = len(self.backups)
-        self.backup_merge()
+        self.backup_merge_validate()
 
     def merge_with_ops(self):
         """

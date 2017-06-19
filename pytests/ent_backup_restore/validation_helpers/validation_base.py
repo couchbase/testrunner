@@ -3,6 +3,8 @@ import os
 import logger
 
 from couchbase_helper.data_analysis_helper import DataAnalyzer, DataAnalysisResultAnalyzer, DataCollector
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class BackupRestoreValidationBase:
@@ -167,3 +169,23 @@ class BackupRestoreValidationBase:
             keys = complete_map[bucket].keys()
             with open(file_path, 'w') as f:
                 json.dump({"keys": keys}, f)
+
+    def store_range_json(self, buckets, backup_num, backup_validation_path, merge=False):
+        rest_conn = RestConnection(self.backupset.cluster_host)
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        for bucket in buckets:
+            bucket_stats = rest_conn.get_bucket_json(bucket)
+            bucket_uuid = bucket_stats["uuid"]
+            from_file_name = self.backupset.directory + "/" + self.backupset.name + "/" + \
+                             self.backups[backup_num - 1] + "/" + bucket.name + "-" + bucket_uuid + "/" + "range.json"
+            if merge:
+                to_file_name = "{0}-{1}-{2}.json".format(bucket, "range", "merge")
+            else:
+                to_file_name = "{0}-{1}-{2}.json".format(bucket, "range", backup_num)
+            to_file_path = os.path.join(backup_validation_path, to_file_name)
+            output, error = shell.execute_command("cat " + from_file_name)
+            output = [x.strip(' ') for x in output]
+            if output:
+                output = " ".join(output)
+            with open(to_file_path, 'w') as f:
+                json.dump(output, f)
