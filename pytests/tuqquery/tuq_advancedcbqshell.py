@@ -234,6 +234,16 @@ class AdvancedQueryTests(QueryTests):
             o = self.execute_commands_inside('%s/cbq -s="\HELP VERSION"' % (self.path),'','','','','','' )
             print o
 
+    def test_exit_on_error(self):
+        for bucket in self.buckets:
+            try:
+                o = self.shell.execute_command('%s/cbq  -q -u %s -p %s -exit-on-error -s="\set 1" '
+                                         '-s="select * from default limit 1"'
+                                         % (self.path, self.username, self.password))
+                self.assertTrue("Exitingonfirsterrorencountered")
+            finally:
+                self.shell.disconnect()
+
     def test_pretty_false(self):
         shell = RemoteMachineShellConnection(self.master)
         queries = ['\SET -pretty true;',

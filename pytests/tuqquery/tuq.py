@@ -86,9 +86,11 @@ class QueryTests(BaseTestCase):
         shell.disconnect()
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
         self.curl_path = "curl"
+        self.n1ql_certs_path = "/opt/couchbase/var/lib/couchbase/n1qlcerts"
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
             self.curl_path = "%scurl" % self.path
+            self.n1ql_certs_path = "/cygdrive/c/Program\ Files/Couchbase/server/var/lib/couchbase/n1qlcerts"
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
         if self.primary_indx_type.lower() == "gsi":
