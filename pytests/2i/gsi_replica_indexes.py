@@ -2750,6 +2750,136 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     index_map,
                                                     2)
 
+    def test_load_balancing_amongst_replicas_drop_replica_and_add_back(self):
+        node_out = self.servers[self.node_out]
+        hash = {}
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        select_query = "SELECT count(age) from default"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+        # Run select query 100 times
+        for i in range(0, 100):
+            self.n1ql_helper.run_cbq_query(query=select_query,
+                                           server=self.n1ql_node)
+
+        index_stats = self.get_index_stats(perNode=True)
+
+        load_balanced = True
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_request_served = index_stats[hostname]['default'][index_name][
+                "num_completed_requests"]
+            self.log.info("# Requests served by %s = %s" % (
+                index_name, num_request_served))
+            hash["index_name"] = num_request_served
+            if num_request_served == 0:
+                load_balanced = False
+
+        if not load_balanced:
+            self.fail("Load is not balanced amongst index replicas")
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        # Run select query 100 times
+        for i in range(0, 100):
+            self.n1ql_helper.run_cbq_query(query=select_query,
+                                           server=self.n1ql_node)
+
+        index_stats = self.get_index_stats(perNode=True)
+        index_map = self.get_index_map()
+
+        load_balanced = True
+        count = 0
+        for i in range(0, self.num_index_replicas + 1):
+            try:
+                if i == 0:
+                    index_name = index_name_prefix
+                else:
+                    index_name = index_name_prefix + " (replica {0})".format(str(i))
+                hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                    index_name, index_map)
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+                self.log.info("# Requests served by %s = %s" % (
+                    index_name, num_request_served))
+                if num_request_served > hash["index_name"]:
+                    count+=1
+                hash["index_name"] = num_request_served
+                if num_request_served == 0:
+                    load_balanced = False
+            except Exception as e:
+                self.log.info("snapshot doesn't exist")
+        if not load_balanced and count != 2:
+            self.fail("Load is not balanced amongst index replicas")
+
+        self.sleep(30)
+        self.servers[:self.nodes_init].pop(self.node_out)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [node_out], [], services=["index"])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(100)
+        # Run select query 100 times
+        for i in range(0, 100):
+            self.n1ql_helper.run_cbq_query(query=select_query,
+                                           server=self.n1ql_node)
+
+        index_stats = self.get_index_stats(perNode=True)
+        index_map = self.get_index_map()
+
+        load_balanced = True
+        count = 0
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_request_served = index_stats[hostname]['default'][index_name][
+                "num_completed_requests"]
+            self.log.info("# Requests served by %s = %s" % (
+                index_name, num_request_served))
+            if num_request_served > hash["index_name"]:
+                count += 1
+            hash["index_name"] = num_request_served
+            if num_request_served == 0:
+                load_balanced = False
+
+        if not load_balanced and count != 3:
+            self.fail("Load is not balanced amongst index replicas")
+
     def _get_node_list(self, node_list=None):
         # 1. Parse node string
         if node_list:
