@@ -1,3 +1,4 @@
+import copy
 import os, re
 import shutil
 
@@ -12,13 +13,13 @@ from ent_backup_restore.validation_helpers.directory_structure_validations \
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from couchbase_helper.document import View
 from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
-                          WIN_TMP_PATH
+                          WIN_TMP_PATH, STANDARD_BUCKET_PORT
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -924,28 +925,53 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     def setUp(self):
         super(EnterpriseBackupMergeBase, self).setUp()
         self.actions = self.input.param("actions", None)
-        self.data_type = self.input.param("data_type", "binary")
-        if self.data_type == "binary":
+        self.document_type = self.input.param("document_type", "json")
+        if self.document_type == "binary":
+            self.initial_load_gen = BlobGenerator("ent-backup", "ent-backup-",
+                                                  self.value_size,
+                                                  start=0,
+                                                  end=self.num_items)
             self.create_gen = BlobGenerator("ent-backup", "ent-backup-",
-                                        self.value_size, start=self.num_items,
-                                        end=self.num_items + self.num_items * 0.5)
+                                            self.value_size, start=self.num_items,
+                                            end=self.num_items + self.num_items
+                                                                 * 0.5)
             self.update_gen = BlobGenerator("ent-backup", "ent-backup-",
-                                        self.value_size,
-                                        end=self.num_items * 0.9)
+                                            self.value_size,
+                                            end=self.num_items * 0.9)
+
             self.delete_gen = BlobGenerator("ent-backup", "ent-backup-",
-                                        self.value_size,
-                                        start=self.num_items / 10,
-                                        end=self.num_items)
-        elif self.data_type == "json":
-            self.create_gen = DocumentGenerator("ent-backup", '{{"key":"value"}}', xrange(100),
+                                            self.value_size,
+                                            start=self.num_items / 10,
+                                            end=self.num_items)
+        elif self.document_type == "json":
+            age = range(5)
+            first = ['james', 'sharon']
+            template = '{{ "age": {0}, "first_name": "{1}" }}'
+            gen = DocumentGenerator('test_docs', template, age, first, start=0,
+                                    end=5)
+            self.initial_load_gen = DocumentGenerator('test_docs', template,
+                                                      age, first, start=0,
+                                                      end=self.num_items)
+            self.create_gen = DocumentGenerator('test_docs', template,
+                                                age, first,
                                                 start=self.num_items,
-                                                end=self.num_items + self.num_items * 0.5)
-            self.update_gen = DocumentGenerator("ent-backup", '{{"key":"value"}}', xrange(100),
-                                                start = 0,
+                                                end=self.num_items +
+                                                    self.num_items * 0.5)
+            self.update_gen = DocumentGenerator('test_docs', template,
+                                                age, first,
                                                 end=self.num_items * 0.9)
-            self.delete_gen = DocumentGenerator("ent-backup", '{{"key":"value"}}', xrange(100),
+
+            self.delete_gen = DocumentGenerator('test_docs', template,
+                                                age, first,
                                                 start=self.num_items / 10,
                                                 end=self.num_items)
+        self.new_buckets = 1
+        self.deleted_bucket = []
+        self.bucket_to_flush = 1
+        self.ephemeral = False
+        self.recreate_bucket = False
+        self.graceful = True
+        self.recoveryType = 'full'
 
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
@@ -971,6 +997,11 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         tasks.extend(delete_tasks)
         return tasks
 
+    def ops_on_buckets(self):
+        ops_tasks = self.async_ops_on_buckets()
+        for task in ops_tasks:
+            task.result()
+
     def backup(self):
         """
         Backup the cluster and validate the backupset.
@@ -994,8 +1025,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Merge all the existing backups in the backupset.
         :return: Nothing
         """
-        self.backupset.start = 1
-        self.backupset.end = len(self.backups)
         self.backup_merge_validate()
 
     def merge_with_ops(self):
@@ -1041,8 +1070,19 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
     def async_failover(self):
         """
-        Asynchronously failover a node and add back the node after 30 sec
-        :return: Task that is running the rebalance at end.
+        Asynchronously failover a node
+        :return: Nothing
+        """
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+
+    def async_failover_and_recover(self):
+        """
+            Asynchronously failover a node and add back the node after 30 sec
+            :return: Task that is running the rebalance at end.
         """
         rest = RestConnection(self.backupset.cluster_host)
         nodes_all = rest.node_statuses()
@@ -1056,24 +1096,186 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         rebalance = self.cluster.async_rebalance(self.servers, [], [])
         return rebalance
 
+    def async_recover_node(self):
+        """
+            Asynchronously add back the node after failover.
+            :return: Task that is running the rebalance at end.
+        """
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.set_recovery_type(otpNode=node.id,
+                                       recoveryType=self.recoveryType)
+                rest.add_back_node(otpNode=node.id)
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        return rebalance
+
     def failover(self):
         """
         Failover a node and add back the node.
         :return: Nothing
         """
-        task = self.async_failover()
-        task.result()
+        self.async_failover()
 
     def failover_with_ops(self):
         """
-        Failover a node and add back the node while bucket operations are
-        running in parallel.
+        Failover a node while bucket operations are running in parallel.
         :return: Nothing
         """
         ops_tasks = self.async_ops_on_buckets()
         self.failover()
         for task in ops_tasks:
             task.result()
+
+    def failover_and_recover(self):
+        """
+        Failover a node and add back the node after 30 sec.
+        :return: Nothing
+        """
+        task = self.async_failover_and_recover()
+        task.result()
+
+    def failover_and_recover_with_ops(self):
+        """
+        Failover a node and add back the node after 30 sec while bucket
+        operations are running in parallel
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.failover_and_recover()
+        for task in ops_tasks:
+            task.result()
+
+    def recover_node(self):
+        """
+        Recover a failedover node.
+        :return: Nothing
+        """
+        task = self.async_recover_node()
+        task.result()
+
+    def recover_node_with_ops(self):
+        """
+        Recover a failedover node while bucket operations are running in
+        parallel.
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.recover_node()
+        for task in ops_tasks:
+            task.result()
+
+    def _reconfigure_bucket_memory(self, num_new_buckets):
+        """
+        Reconfigure bucket memories in the cluster to accommodate adding new
+        buckets
+        :param num_new_buckets:
+        :return: The new bucket size.
+        """
+        rest = RestConnection(self.master)
+        ram_size = rest.get_nodes_self().memoryQuota
+        bucket_size = self._get_bucket_size(ram_size, self.bucket_size +
+                                            num_new_buckets)
+        self.log.info("Changing the existing buckets size to accomodate new "
+                      "buckets")
+        for bucket in self.buckets:
+            rest.change_bucket_props(bucket, ramQuotaMB=bucket_size)
+        return bucket_size
+
+    def create_new_bucket_and_populate(self):
+        """
+        Create new buckets and populate the bucket with items.
+        :return: Nothing
+        """
+        bucket_size = self._reconfigure_bucket_memory(self.new_buckets)
+        rest = RestConnection(self.master)
+        server_id = rest.get_nodes_self().id
+        bucket_tasks = []
+        bucket_params = copy.deepcopy(
+            self.bucket_base_params['membase']['non_ephemeral'])
+        bucket_params['size'] = bucket_size
+        if self.ephemeral:
+            bucket_params['bucket_type'] = 'ephemeral'
+            bucket_params['eviction_policy'] = 'noEviction'
+        standard_buckets = []
+        for i in range(0, self.new_buckets):
+            if self.recreate_bucket:
+                name = self.deleted_bucket[i]
+            else:
+                name = 'bucket' + str(i)
+            port = STANDARD_BUCKET_PORT + i + 1
+            bucket_priority = None
+            if self.standard_bucket_priority is not None:
+                bucket_priority = self.get_bucket_priority(
+                    self.standard_bucket_priority[i])
+
+            bucket_params['bucket_priority'] = bucket_priority
+            bucket_tasks.append(
+                self.cluster.async_create_standard_bucket(name=name, port=port,
+                                                          bucket_params=bucket_params))
+            bucket = Bucket(name=name, authType=None, saslPassword=None,
+                            num_replicas=self.num_replicas,
+                            bucket_size=self.bucket_size,
+                            port=port, master_id=server_id,
+                            eviction_policy='noEviction', lww=self.lww)
+            self.buckets.append(bucket)
+            standard_buckets.append(bucket)
+        for task in bucket_tasks:
+            task.result(self.wait_timeout * 10)
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets(
+                ['bucket' + str(i) for i in range(
+                    self.new_buckets)])
+        for bucket in standard_buckets:
+            self._load_bucket(bucket, self.master, self.initial_load_gen,
+                              "create", self.expires)
+
+    def delete_bucket(self):
+        """
+        Delete a bucket from the cluster
+        :return: Nothing
+        """
+        self.log.info("Deleting a bucket")
+        bucket_to_delete = self.buckets[-1].name
+        self.deleted_bucket.append(bucket_to_delete)
+        BucketOperationHelper.delete_bucket_or_assert(self.master,
+                                                      bucket_to_delete,
+                                                      self)
+        self.buckets.pop()
+
+    def _flush_bucket(self, bucket_to_flush):
+        """
+        Flush a bucket from the cluster.
+        :param bucket_to_flush:
+        :return: Nothing
+        """
+        self.log.info("Flushing {} buckets")
+        rest = RestConnection(self.master)
+        bucket_name = self.buckets[bucket_to_flush].name
+        rest.flush_bucket(bucket_name)
+
+    def flush_buckets(self):
+        """
+        Flush buckets from the cluster
+        :return: Nothing
+        """
+        self.log.info("Flushing {} buckets".format(self.bucket_to_flush))
+        for i in range(self.buckets.__len__() - self.bucket_to_flush,
+                       self.buckets.__len__()):
+            self._flush_bucket(i)
+
+    def load_flushed_buckets(self):
+        """
+        Reload the flushed buckets in the cluster.
+        :return: Nothing
+        """
+        self.log.info("Loading data into buckets that were flushed")
+        tasks = []
+        for i in range(self.buckets.__len__() - self.bucket_to_flush,
+                       self.buckets.__len__()):
+            self._load_bucket(self.buckets[i], self.master,
+                              self.initial_load_gen, "create", self.expires)
 
     def do_backup_merge_actions(self):
         """
@@ -1086,28 +1288,55 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.actions = self.actions.replace('"', '')
         actions = self.actions.split(",")
         for action in actions:
+            iterations = 1
             if ":" in action:
                 action = action.split(':')
-                if action[1].isdigit():
-                    iterations = int(action[1])
-                    self.backupset.number_of_backups += iterations
-                    action = action[0]
+                params = action[1].split('&')
+                action = action[0]
+                if "backup" in action:
+                    iterations = params[0]
+                    self.backupset.number_of_backups += int(iterations)
+                elif "failover" in action or "recover" in action:
+                    if 'hard' in params:
+                        self.graceful = False
+                    else:
+                        self.graceful = True
+                    if 'delta' in params:
+                        self.recoveryType = 'delta'
+                    else:
+                        self.recoveryType = 'full'
+                elif "merge" in action:
+                    if params.__len__() == 0:
+                        iterations = 1
+                        self.backupset.start = 1
+                        self.backupset.end = len(self.backups)
+                    if params.__len__() == 2:
+                        iterations = 1
+                        self.backupset.start = int(params[0])
+                        self.backupset.end = int(params[1])
+                    if params.__len__() == 3:
+                        iterations = params[0]
+                        self.backupset.start = int(params[1])
+                        self.backupset.end = int(params[2])
+                elif "flush_buckets" in action:
+                    self.bucket_to_flush = int(params[0])
+                elif "create_buckets" in action:
+                    self.new_buckets = int(params[0])
+                    if params.__len__() == 2:
+                        if params[1] == "ephemeral":
+                            self.ephemeral = True
+                elif "recreate_buckets" in action:
+                    self.new_buckets = int(params[0])
+                    self.recreate_bucket = True
+                    if params.__len__() == 2:
+                        if params[1] == "ephemeral":
+                            self.ephemeral = True
                 else:
-                    iterations = 1
-                    params = action[1].split('&')
-                    action = action[0]
-                    if "failover" in action:
-                        if 'hard' in params:
-                            self.graceful = False
-                        else:
-                            self.graceful = True
-                        if 'delta' in params:
-                            self.recoveryType = 'delta'
-                        else:
-                            self.recoveryType = 'full'
+                    if params[0].isdigit():
+                        iterations = int(params[0])
             else:
                 iterations = 1
-            for i in range(0, iterations):
+            for i in range(0, int(iterations)):
                 self.log.info("Performing {} action for {}th time".format(
                     action, i + 1))
                 self.backup_merge_actions[action](self)
@@ -1115,12 +1344,21 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     action, i + 1))
 
     backup_merge_actions = {
+        "bucket_ops": ops_on_buckets,
         "backup": backup,
         "merge": merge,
         "rebalance": rebalance,
         "failover": failover,
+        "recover": recover_node,
+        "failover_and_recover": failover_and_recover,
         "backup_with_ops": backup_with_ops,
         "merge_with_ops": merge_with_ops,
         "rebalance_with_ops": rebalance_with_ops,
-        "failover_with_ops": failover_with_ops
+        "failover_with_ops": failover_with_ops,
+        "recover_with_ops": recover_node_with_ops,
+        "failover_and_recover_with_ops": failover_and_recover_with_ops,
+        "create_buckets": create_new_bucket_and_populate,
+        "recreate_buckets": create_new_bucket_and_populate,
+        "flush_buckets": flush_buckets,
+        "delete_buckets": delete_bucket
     }
