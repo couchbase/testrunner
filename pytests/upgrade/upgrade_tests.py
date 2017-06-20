@@ -736,31 +736,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             raise
 
     def offline_upgrade(self):
-        try:
-            self.log.info("offline_upgrade")
-            stoped_nodes = self.servers[:self.nodes_init]
-            for upgrade_version in self.upgrade_versions:
-                self.sleep(self.sleep_time, "Pre-setup of old version is done. "
-                        " Wait for upgrade to {0} version".format(upgrade_version))
-                for server in stoped_nodes:
-                    remote = RemoteMachineShellConnection(server)
-                    remote.stop_server()
-                    remote.disconnect()
-                self.sleep(self.sleep_time)
-                upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
-                for upgrade_thread in upgrade_threads:
-                    upgrade_thread.join()
-                success_upgrade = True
-                while not self.queue.empty():
-                    success_upgrade &= self.queue.get()
-                if not success_upgrade:
-                    self.fail("Upgrade failed!")
-                self.dcp_rebalance_in_offline_upgrade_from_version2()
-            """ set install cb version to upgrade version after done upgrade """
-            self.initial_version = self.upgrade_versions[0]
-        except Exception, ex:
-            self.log.info(ex)
-            raise
+        self._offline_upgrade()
 
     def failover_add_back(self):
         try:
