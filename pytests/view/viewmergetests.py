@@ -10,7 +10,6 @@ from TestInput import TestInputSingleton
 from couchbase_helper.document import View
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.cluster_helper import ClusterOperationHelper
-from mc_bin_client import MemcachedClient
 from memcached.helper.data_helper import MemcachedClientHelper
 from basetestcase import BaseTestCase
 from membase.api.exception import QueryViewException
@@ -363,6 +362,13 @@ class ViewMergingTests(BaseTestCase):
         self.cluster.create_view(self.master, 'test3', keysview)
         RebalanceHelper.wait_for_persistence(self.master, self.bucket, 0)
 
+    def _get_server(self, port):
+        ''' Return server from cluster matching port '''
+        for server in self.servers:
+            if server.port == port:
+                return server
+        return None
+
     def init_clients(self):
         """Initialise clients for all servers there are vBuckets on
 
@@ -371,11 +377,11 @@ class ViewMergingTests(BaseTestCase):
         the MemcachedClient as the value
         """
         clients = {}
-
         for vbucket in self.bucket.vbuckets:
             if vbucket.master not in clients:
                 ip, port = vbucket.master.split(':')
-                clients[vbucket.master] = MemcachedClient(ip, int(port))
+                sport = str((int(port[-2:]))/2 + int(self.master.port))
+                clients[vbucket.master] = MemcachedClientHelper.direct_client(self._get_server(sport), self.default_bucket_name)
         return clients
 
     def populate_alternated(self, num_vbuckets, docs):
