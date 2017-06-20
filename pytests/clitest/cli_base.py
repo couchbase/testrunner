@@ -30,17 +30,6 @@ class CliBaseTest(BaseTestCase):
         self.r = random.Random()
         self.vbucket_count = 1024
         self.cluster = Cluster()
-
-        """ Add built-in user cbadminbucket to second cluster """
-        self.log.info("add built-in user cbadminbucket to master cluster.")
-        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
-        RbacBase().create_user_source(testuser, 'builtin', self.master)
-        self.sleep(10)
-        """ Assign user to role """
-        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
-        RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
-        self.sleep(10)
-
         self.clusters_dic = self.input.clusters
         if self.clusters_dic:
             if len(self.clusters_dic) > 1:
@@ -51,7 +40,15 @@ class CliBaseTest(BaseTestCase):
         else:
             self.log.error("**** Cluster config is setup in ini file. ****")
         self.shell = RemoteMachineShellConnection(self.master)
-        self.rest = RestConnection(self.master)
+        if not self.skip_init_check_cbserver:
+            self.rest = RestConnection(self.master)
+            self.cb_version = self.rest.get_nodes_version()
+            """ cli output message """
+            self.cli_bucket_create_msg = "SUCCESS: Bucket created"
+            self.cli_rebalance_msg = "SUCCESS: Rebalance complete"
+            if self.cb_version[:3] == "4.6":
+                self.cli_bucket_create_msg = "SUCCESS: bucket-create"
+                self.cli_rebalance_msg = "SUCCESS: rebalanced cluster"
         self.import_back = self.input.param("import_back", False)
         if self.import_back:
             if len(self.servers) < 3:
@@ -61,7 +58,6 @@ class CliBaseTest(BaseTestCase):
         self.imex_type = self.input.param("imex_type", "json")
         self.format_type = self.input.param("format_type", None)
         self.import_method = self.input.param("import_method", "file://")
-        self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
         self.skip_docs = self.input.param("skip-docs", None)
         self.limit_docs = self.input.param("limit-docs", None)
@@ -72,13 +68,6 @@ class CliBaseTest(BaseTestCase):
         info = self.shell.extract_remote_info()
         type = info.type.lower()
         self.excluded_commands = self.input.param("excluded_commands", None)
-        """ cli output message """
-        self.cli_bucket_create_msg = "SUCCESS: Bucket created"
-        self.cli_rebalance_msg = "SUCCESS: Rebalance complete"
-        self.cb_version = self.rest.get_nodes_version()
-        if self.cb_version[:3] == "4.6":
-            self.cli_bucket_create_msg = "SUCCESS: bucket-create"
-            self.cli_rebalance_msg = "SUCCESS: rebalanced cluster"
         self.os = 'linux'
         self.full_v = None
         self.short_v = None
@@ -869,7 +858,8 @@ class CliBaseTest(BaseTestCase):
     def verify_gsi_compact_settings(self, compact_mode, compact_percent,
                                     compact_interval,
                                     from_period, to_period, enable_abort):
-        settings = self.rest.get_auto_compaction_settings()
+        rest = RestConnection(self.master)
+        settings = rest.get_auto_compaction_settings()
         ac = settings["autoCompactionSettings"]["indexFragmentationThreshold"]
         cc = settings["autoCompactionSettings"]["indexCircularCompaction"]
         if compact_mode is not None:

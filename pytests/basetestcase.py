@@ -207,11 +207,13 @@ class BaseTestCase(unittest.TestCase):
             memcached_params['bucket_type'] = 'memcached'
             self.bucket_base_params['memcached'] = memcached_params
 
-            # avoid any cluster operations in setup for new upgrade & upgradeXDCR tests
+            # avoid any cluster operations in setup for new upgrade
+            #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
                             str(self.__class__).find('upgradeXDCR') != -1 or \
                             str(self.__class__).find('Upgrade_EpTests') != -1 or \
-                            hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
+                            hasattr(self, 'skip_buckets_handle') and\
+                            self.skip_buckets_handle:
                 self.log.info("any cluster operation in setup will be skipped")
                 self.primary_index_created = True
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
@@ -223,7 +225,8 @@ class BaseTestCase(unittest.TestCase):
                     self.log.warn("teardDown for previous test failed. will retry..")
                     self.case_number -= 1000
                 self.cleanup = True
-                self.tearDown()
+                if not self.skip_init_check_cbserver:
+                    self.tearDown()
                 self.cluster = Cluster()
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
@@ -248,7 +251,8 @@ class BaseTestCase(unittest.TestCase):
                 self.change_checkpoint_params()
 
                 # Add built-in user
-                self.add_built_in_server_user(node=self.master)
+                if not self.skip_init_check_cbserver:
+                    self.add_built_in_server_user(node=self.master)
                 self.log.info("done initializing cluster")
             else:
                 self.quota = ""

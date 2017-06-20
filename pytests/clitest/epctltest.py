@@ -15,7 +15,6 @@ class epctlTests(CliBaseTest):
         self.param_value = self.input.param("param_value", 1000000)
         self.server = self.master
         self.rest = RestConnection(self.server)
-        self.node_version = self.rest.get_nodes_version()
 
     def tearDown(self):
         super(epctlTests, self).tearDown()
@@ -25,7 +24,7 @@ class epctlTests(CliBaseTest):
         verify the result by checking the command output"""
 
         for bucket in self.buckets:
-            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+            if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
                 if self.param == "item_num_based_new_chk":
                     self.param_value = "true"
                 """ from Watson, there is not tap_throttle_threshold param """

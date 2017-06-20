@@ -37,7 +37,11 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
                                   "2.5.2", "3.0.0", "3.0.1",
                                   "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
-                                  "3.1.0", "3.1.1", "3.1.2", "3.1.3"]
+                                  "3.1.0", "3.1.0-1776", "3.1.1", "3.1.1-1807",
+                                  "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823",
+                                  "4.0.0", "4.0.0-4051", "4.1.0", "4.1.0-5005",
+                                  "4.5.0", "4.5.0-2601", "4.5.1", "4.5.1-2817",
+                                  "4.6.0", "4.6.0-3573", '4.6.2', "4.6.2-3905"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
