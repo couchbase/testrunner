@@ -1038,6 +1038,14 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for task in ops_tasks:
             task.result()
 
+    def compact_backup(self):
+        """
+        Compact the given backup and validate that the compaction resulted
+        in reduction of backup size.
+        :return:
+        """
+        self.backup_compact_validate()
+
     def async_rebalance(self):
         """
         Asynchronously rebalance the cluster.
@@ -1111,6 +1119,15 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         rebalance = self.cluster.async_rebalance(self.servers, [], [])
         return rebalance
 
+    def async_remove_failed_node(self):
+        """
+            Asynchronously remove a failed over node by performing a
+            rebalance of cluster
+        :return: Task that is running the rebalance.
+        """
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        return rebalance
+
     def failover(self):
         """
         Failover a node and add back the node.
@@ -1165,6 +1182,14 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.recover_node()
         for task in ops_tasks:
             task.result()
+
+    def remove_failed_node(self):
+        """
+        Remove a failed over node from the cluster
+        :return: Nothing
+        """
+        task = self.async_remove_failed_node()
+        task.result()
 
     def _reconfigure_bucket_memory(self, num_new_buckets):
         """
@@ -1277,6 +1302,13 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self._load_bucket(self.buckets[i], self.master,
                               self.initial_load_gen, "create", self.expires)
 
+    def compact_buckets(self):
+        """
+        Compact all the buckets in the cluster
+        :return: Nothing
+        """
+        self._run_compaction(number_of_times=1)
+
     def do_backup_merge_actions(self):
         """
         Perform the actions mentioned the self.actions param.
@@ -1318,7 +1350,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                         iterations = params[0]
                         self.backupset.start = int(params[1])
                         self.backupset.end = int(params[2])
-                elif "flush_buckets" in action:
+                elif "compact_backup" in action:
+                    self.backupset.backup_to_compact = int(params[0])
+                elif "flush" in action:
                     self.bucket_to_flush = int(params[0])
                 elif "create_buckets" in action:
                     self.new_buckets = int(params[0])
@@ -1347,9 +1381,11 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "bucket_ops": ops_on_buckets,
         "backup": backup,
         "merge": merge,
+        "compact_backup": compact_backup,
         "rebalance": rebalance,
         "failover": failover,
         "recover": recover_node,
+        "remove_node": remove_failed_node,
         "failover_and_recover": failover_and_recover,
         "backup_with_ops": backup_with_ops,
         "merge_with_ops": merge_with_ops,
@@ -1360,5 +1396,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "create_buckets": create_new_bucket_and_populate,
         "recreate_buckets": create_new_bucket_and_populate,
         "flush_buckets": flush_buckets,
-        "delete_buckets": delete_bucket
+        "load_flushed_buckets": load_flushed_buckets,
+        "delete_buckets": delete_bucket,
+        "compact_buckets": compact_buckets
     }
