@@ -19,7 +19,13 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
     def test_multiple_backups_merges(self):
         self.log.info("*** start to load items to all buckets")
         self.expected_error = self.input.param("expected_error", None)
-        self._load_all_buckets(self.master, self.initial_load_gen,
+        if self.expires:
+            for bucket in self.buckets:
+                cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+                for i in range(1, self.num_items + 1):
+                    cb.upsert("doc" + str(i), {"key":"value"})
+        else:
+            self._load_all_buckets(self.master, self.initial_load_gen,
                                "create", self.expires)
         self.log.info("*** done to load items to all buckets")
         self.backup_create_validate()

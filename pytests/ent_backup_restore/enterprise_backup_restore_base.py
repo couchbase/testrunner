@@ -20,7 +20,9 @@ from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT
-
+from membase.api.rest_client import RestConnection
+from security.rbac_base import RbacBase
+from couchbase.bucket import Bucket
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
     def setUp(self):
@@ -976,6 +978,32 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
 
+    def _get_python_sdk_client(self, ip, bucket, cluster_host):
+        try:
+            role_del = [bucket.name]
+            RbacBase().remove_user_role(role_del, RestConnection(cluster_host))
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.assertTrue(str(ex) == '"User was not found."', str(ex))
+
+        testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', cluster_host)
+        self.sleep(10)
+
+        role_list = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(cluster_host), 'builtin')
+        self.sleep(10)
+
+        try:
+            cb = Bucket('couchbase://' + ip + '/' + bucket.name, password='password')
+            if cb is not None:
+                self.log.info("Established connection to bucket " + bucket.name + " on " + ip + " using python SDK")
+            else:
+                self.fail("Failed to connect to bucket " + bucket.name + " on " + ip + " using python SDK")
+            return cb
+        except Exception, ex:
+            self.fail(str(ex))
+
     def async_ops_on_buckets(self):
         """
         Performs async operations on all the buckets in the cluster.
@@ -1007,6 +1035,30 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Backup the cluster and validate the backupset.
         :return: Nothing
         """
+        self.backup_cluster_validate()
+
+    def backup_with_expiry(self):
+        """
+        Backup the cluster and validate the backupset with expiry items before they expire.
+        :return: Nothing
+        """
+        for bucket in self.buckets:
+            cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+            for i in range(int(self.num_items * 0.7) + 1, self.num_items + 1):
+                cb.upsert("doc" + str(i), {"key":"value"}, ttl=self.expires)
+        self.backup_cluster_validate()
+        self.sleep(self.expires)
+
+    def backup_after_expiry(self):
+        """
+        Backup the cluster and validate the backupset with expiry items after they expire.
+        :return: Nothing
+        """
+        for bucket in self.buckets:
+            cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+            for i in range(int(self.num_items * 0.7) + 1, self.num_items + 1):
+                cb.upsert("doc" + str(i), {"key":"value"}, ttl=self.expires)
+        self.sleep(self.expires)
         self.backup_cluster_validate()
 
     def backup_with_ops(self):
@@ -1328,6 +1380,12 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 if "backup" in action:
                     iterations = params[0]
                     self.backupset.number_of_backups += int(iterations)
+                elif "backup_with_expiry" in action:
+                    iterations = params[0]
+                    self.backupset.number_of_backups += int(iterations)
+                elif "backup_after_expiry" in action:
+                    iterations = params[0]
+                    self.backupset.number_of_backups += int(iterations)
                 elif "failover" in action or "recover" in action:
                     if 'hard' in params:
                         self.graceful = False
@@ -1380,6 +1438,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     backup_merge_actions = {
         "bucket_ops": ops_on_buckets,
         "backup": backup,
+        "backup_with_expiry": backup_with_expiry,
+        "backup_after_expiry": backup_after_expiry,
         "merge": merge,
         "compact_backup": compact_backup,
         "rebalance": rebalance,
