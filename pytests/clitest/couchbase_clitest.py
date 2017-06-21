@@ -2503,6 +2503,14 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         ops_during_upgrade = self.input.param("ops-during-upgrade", False)
         ops_after_upgrade = self.input.param("ops-after-upgrade", False)
 
+        self.log.info("Check OS if it is supported in old cb version")
+        if "centos 7" in self.os_version:
+            if self.initial_version[:5] not in COUCHBASE_FROM_SHERLOCK:
+                print "\n%s is not supported in %s\n"\
+                      "you need to get server with os supported!\n"\
+                                                 % (self.initial_version,
+                                                    self.os_version)
+                raise Exception("Not support OS")
 
         """
             Start install old version with param initial_version
