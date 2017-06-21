@@ -59,9 +59,11 @@ class QueryTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.array_indexing = self.input.param("array_indexing", False)
+        self.dataset = self.input.param("dataset", "default")
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
+        self.plasma_dgm = self.input.param("plasma_dgm", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         #self.analytics = self.input.param("analytics",False)
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
@@ -193,37 +195,20 @@ class QueryTests(BaseTestCase):
         os.system(cmd)
         os.remove(filename)
 
-    def get_index_storage_stats(self,  node,timeout=120):
-        url = 'http://{0}:9102/'.format(self.master.ip)
-        api = url + 'stats/storage'
-        rest = RestConnection(node)
-        status, content, header = rest._http_request(api, timeout=timeout)
-        index_stats = dict()
-        data = content.split("\n")
-        index = "unknown"
-        store = "unknown"
-        for line in data:
-            if "Index Instance" in line:
-                index_data = re.findall(":.*", line)
-                bucket_data = re.findall(".*:", line)
-                index = index_data[0].split()[0][1:]
-                bucket = bucket_data[0].split("Index Instance")[1][:-1].strip()
-                self.log.info("Bucket Name: {0}".format(bucket))
-                if bucket not in index_stats.keys():
-                    index_stats[bucket] = {}
-                if index not in index_stats[bucket].keys():
-                    index_stats[bucket][index] = dict()
-                continue
-            if "Store" in line:
-                store = re.findall("[a-zA-Z]+", line)[0]
-                if store not in index_stats[bucket][index].keys():
-                    index_stats[bucket][index][store] = {}
-                continue
-            data = line.split("=")
-            if len(data) == 2:
-                metric = data[0].strip()
-                index_stats[bucket][index][store][metric] = float(data[1].strip().replace("%", ""))
-        return index_stats
+    def get_index_storage_stats(self, timeout=120, index_map=None):
+        api = self.index_baseUrl + 'stats/storage'
+        status, content, header = self._http_request(api, timeout=timeout)
+        if not status:
+            raise Exception(content)
+        json_parsed = json.loads(content)
+        index_storage_stats = {}
+        for index_stats in json_parsed:
+            bucket = index_stats["Index"].split(":")[0]
+            index_name = index_stats["Index"].split(":")[1]
+            if not bucket in index_storage_stats.keys():
+                index_storage_stats[bucket] = {}
+            index_storage_stats[bucket][index_name] = index_stats["Stats"]
+        return index_storage_stats
 
     def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
         """
@@ -235,7 +220,8 @@ class QueryTests(BaseTestCase):
                 indexer_nodes = self.get_nodes_from_services_map(
                     service_type="index", get_all_nodes=True)
             for node in indexer_nodes:
-                content = self.get_index_storage_stats(node =node)
+                indexer_rest = RestConnection(node)
+                content = self.get_index_storage_stats()
                 for index in content.values():
                     for stats in index.values():
                         if stats["MainStore"]["resident_ratio"] >= 1.00:
@@ -248,23 +234,24 @@ class QueryTests(BaseTestCase):
             gens_load = self.generate_docs(docs)
             self.full_docs_list = self.generate_full_docs_list(gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-            tasks = self.async_load(generators_load=gens_load, op_type="create",
-                                batch_size=100)
-            return tasks
-
+            self.load(gens_load, buckets=self.buckets, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
+        if self.gsi_type != "plasma":
+            return
+        if not self.plasma_dgm:
+            return
         self.log.info("Trying to get all indexes in DGM...")
         self.log.info("Setting indexer memory quota to {0} MB...".format(memory_quota))
         node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(node)
         rest.set_indexer_memoryQuota(indexMemoryQuota=memory_quota)
         cnt = 0
-        docs = 50
+        docs = 50 + self.docs_per_day
         while cnt < 100:
             if validate_disk_writes(indexer_nodes):
                 self.log.info("========== DGM is achieved ==========")
                 return True
-            for task in kv_mutations(self, docs):
-                task.result()
+            kv_mutations(self, docs)
             self.sleep(30)
             cnt += 1
             docs += 20
