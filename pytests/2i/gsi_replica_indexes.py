@@ -600,7 +600,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
-        self.sleep(30)
+        self.sleep(180)
 
         index_map = self.get_index_map()
         self.n1ql_helper.verify_replica_indexes_build_status(index_map,
@@ -719,7 +719,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         for thread in threads:
             thread.join()
 
-        self.sleep(120)
+        self.sleep(240)
 
         try:
             index_map = self.get_index_map()
