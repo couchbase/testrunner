@@ -79,7 +79,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         bucket_size = self._get_bucket_size(cluster.get_mem_quota(), len(buckets))
 
         if "default" in buckets:
-            bucket_params = XDCRNewBaseTest._create_bucket_params(self, size=bucket_size,
+            bucket_params = cluster._create_bucket_params(self, size=bucket_size,
                                                               replicas=self.num_replicas)
             cluster.create_default_bucket(bucket_params)
 
