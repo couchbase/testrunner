@@ -636,7 +636,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
     def _get_python_sdk_client(self, ip, bucket):
         try:
-            cb = Bucket('couchbase://' + ip + '/' + bucket.name, password='password')
+            cb = Bucket('couchbase://' + ip + '/' + bucket.name)
             if cb is not None:
                 self.log.info("Established connection to bucket " + bucket.name + " on " + ip + " using python SDK")
             else:
@@ -684,7 +684,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         :return: Nothing
         """
         for bucket in self.buckets:
-            cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+            cb = self._get_python_sdk_client(self.master.ip, bucket)
             for i in range(int(self.num_items * 0.7) + 1, self.num_items + 1):
                 cb.upsert("doc" + str(i), {"key":"value"}, ttl=self.expires)
         self.backup_cluster_validate()
@@ -696,7 +696,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         :return: Nothing
         """
         for bucket in self.buckets:
-            cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+            cb = self._get_python_sdk_client(self.master.ip, bucket)
             for i in range(int(self.num_items * 0.7) + 1, self.num_items + 1):
                 cb.upsert("doc" + str(i), {"key":"value"}, ttl=self.expires)
         self.sleep(self.expires)
@@ -1073,6 +1073,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     backup_merge_actions = {
         "bucket_ops": ops_on_buckets,
         "backup": backup,
+        "backup_with_expiry": backup_with_expiry,
+        "backup_after_expiry": backup_after_expiry,
         "merge": merge,
         "compact_backup": compact_backup,
         "rebalance": rebalance,
