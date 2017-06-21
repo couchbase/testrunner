@@ -14,6 +14,8 @@ from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT
+from membase.api.rest_client import RestConnection
+from couchbase.bucket import Bucket
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -35,19 +37,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.os_name = "linux"
         self.tmp_path = "/tmp/"
         if info == 'linux':
-            if self.nonroot:
-                base_path = "/home/%s" % self.master.ssh_username
-                self.cli_command_location = "%s%s" % (base_path,
-                                                      LINUX_COUCHBASE_BIN_PATH)
-                self.database_path = "%s%s" % (base_path, COUCHBASE_DATA_PATH)
-                self.root_path = "/home/%s/" % self.master.ssh_username
+            self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+            self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         elif info == 'windows':
-            self.os_name = "windows"
             self.cmd_ext = ".exe"
-            self.database_path = WIN_COUCHBASE_DATA_PATH
             self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
-            self.root_path = WIN_ROOT_PATH
-            self.tmp_path = WIN_TMP_PATH
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
             self.cli_command_location = MAC_COUCHBASE_BIN_PATH
@@ -640,6 +634,17 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
 
+    def _get_python_sdk_client(self, ip, bucket):
+        try:
+            cb = Bucket('couchbase://' + ip + '/' + bucket.name, password='password')
+            if cb is not None:
+                self.log.info("Established connection to bucket " + bucket.name + " on " + ip + " using python SDK")
+            else:
+                self.fail("Failed to connect to bucket " + bucket.name + " on " + ip + " using python SDK")
+            return cb
+        except Exception, ex:
+            self.fail(str(ex))
+
     def async_ops_on_buckets(self):
         """
         Performs async operations on all the buckets in the cluster.
@@ -671,6 +676,30 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Backup the cluster and validate the backupset.
         :return: Nothing
         """
+        self.backup_cluster_validate()
+
+    def backup_with_expiry(self):
+        """
+        Backup the cluster and validate the backupset with expiry items before they expire.
+        :return: Nothing
+        """
+        for bucket in self.buckets:
+            cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+            for i in range(int(self.num_items * 0.7) + 1, self.num_items + 1):
+                cb.upsert("doc" + str(i), {"key":"value"}, ttl=self.expires)
+        self.backup_cluster_validate()
+        self.sleep(self.expires)
+
+    def backup_after_expiry(self):
+        """
+        Backup the cluster and validate the backupset with expiry items after they expire.
+        :return: Nothing
+        """
+        for bucket in self.buckets:
+            cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+            for i in range(int(self.num_items * 0.7) + 1, self.num_items + 1):
+                cb.upsert("doc" + str(i), {"key":"value"}, ttl=self.expires)
+        self.sleep(self.expires)
         self.backup_cluster_validate()
 
     def backup_with_ops(self):
