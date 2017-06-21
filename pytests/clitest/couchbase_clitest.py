@@ -9,11 +9,12 @@ from threading import Thread
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from couchbase_cli import CouchbaseCLI
+from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_SPOCK, \
-                          COUCHBASE_FROM_SHERLOCK,\
+                          COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_4DOT6
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
@@ -219,13 +220,14 @@ help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index
  'usage': ' couchbase-cli COMMAND CLUSTER [OPTIONS]'}
 
 
-class CouchbaseCliTest(CliBaseTest):
+class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
     REBALANCE_RUNNING = "Rebalance is running"
     REBALANCE_NOT_RUN = "Rebalance is not running"
 
     def setUp(self):
         TestInputSingleton.input.test_params["default_bucket"] = False
         super(CouchbaseCliTest, self).setUp()
+
 
     def tearDown(self):
         super(CouchbaseCliTest, self).tearDown()
@@ -2474,6 +2476,133 @@ class CouchbaseCliTest(CliBaseTest):
             remote_client.execute_couchbase_cli(
                 cli_command=cli_command, options=options, cluster_host="127.0.0.1",
                 cluster_port=8091, user="Administrator", password="password")
+
+    def test_cli_with_offline_upgrade(self):
+        """
+           Install a node with watson
+           Create users with roles
+           Upgrade to spock
+           Verify users still in cluster.
+           Add more users with different roles
+           parameters in conf file:
+               conf/couchbase-cli/py-offline-upgrade-rbac.conf
+        """
+        username = self.input.param("username", None)
+        new_users = self.input.param("new-users", None)
+        password = self.input.param("password", None)
+        new_password = self.input.param("new-password", None)
+        command = self.input.param("command", None)
+        sub_command = self.input.param("sub-command", None)
+        new_users = self.input.param("new-users", None)
+        new_roles = self.input.param("new-roles", None)
+        admins = self.input.param("admins", None)
+        ro_admins = self.input.param("ro-admins", None)
+        enabled = self.input.param("enabled", False)
+        default = self.input.param("default", None)
+        ops_before_upgrade = self.input.param("ops-before-upgrade", False)
+        ops_during_upgrade = self.input.param("ops-during-upgrade", False)
+        ops_after_upgrade = self.input.param("ops-after-upgrade", False)
+
+
+        """
+            Start install old version with param initial_version
+        """
+        self._install(self.servers)
+
+        """
+            Before upgrade operations
+        """
+        cmd = "%s%s%s " % (self.cli_command_path, command, self.cmd_ext)
+        if sub_command:
+            cmd += "%s --cluster %s --user %s --password %s " \
+                     % (sub_command, self.master.ip, username, password)
+        if command and sub_command:
+            self.shell.execute_command(cmd)
+        if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+            cli = CouchbaseCLI(self.master, username, password)
+            output, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled)
+            if self.debug_logs:
+                print "output from exe command  ", output
+
+        """
+            During upgrade operations
+        """
+        self._offline_upgrade(skip_init=True)
+
+        """
+            After upgrade operations
+        """
+        if new_users and new_roles:
+            self.log.info("Add new users with roles after upgrade to version %s"
+                                % )
+            testuser = [{"id": "%s" % new_users,
+                         "name": "%s" % new_users,
+                         "password": "password"}]
+            rolelist = [{"id": "%s" % new_users,
+                         "name": "%s" % new_users,
+                         "roles": "%s" % new_roles}]
+            try:
+                status = self.add_built_in_server_user(testuser, rolelist)
+                if not status:
+                    self.fail("Failed to add user: %s with role: %s "
+                                                 % (new_users, new_roles))
+                self.log.info("Verify rbac user added after upgrade ")
+                found = self._verify_rbac_users(self.master, username, password,
+                                                            new_users, new_roles)
+                if not found:
+                    self.fail("Failed to add rbac user in")
+
+            except Exception as e:
+                if e:
+                    print "Exception error:   ", e
+            finally:
+                self.log.info("Delete new create user: %s " % new_users)
+                shell = RemoteMachineShellConnection(self.master)
+                curl_path = ""
+                if self.os == "windows":
+                    curl_path = self.cli_command_location
+                cmd = "%scurl%s -X %s -u %s:%s "\
+                        "http://%s:8091/settings/rbac/users/local/%s" \
+                                  % (curl_path,
+                                     self.cmd_ext,
+                                     "DELETE",
+                                     self.master.rest_username,
+                                     self.master.rest_password,
+                                     self.master.ip,
+                                     new_users)
+                output, error = shell.execute_command(cmd)
+                if self.debug_logs:
+                    print "output from delete users command\n ", output
+                shell.disconnect()
+            self.shell.disconnect()
+
+
+    def _verify_rbac_users(self, server, login_user, login_password, users, roles):
+        cmd = "%scouchbase-cli%s user-manage " % (self.cli_command_path,
+                                                  self.cmd_ext)
+        cmd += "-c %s -u %s -p %s --list" % (server.ip, login_user, login_password)
+        shell = RemoteMachineShellConnection(server)
+
+        users_found = False
+        roles_found = False
+        found = False
+        output, _ = shell.execute_command(cmd)
+        shell.disconnect()
+
+        output = map(lambda x: x.strip(), output)
+        output = map(lambda x: x.strip(","), output)
+        if self.debug_logs:
+            print "output from verify rbac users:\n", output
+        for x in output:
+            if users in x:
+                users_found = True
+            if roles in x:
+                roles_found = True
+        if users_found and roles_found:
+            self.log.info("Users '%s' and roles '%s' found in cluster"
+                                                       % ( users, roles))
+            found = True
+        return found
 
 
 class XdcrCLITest(CliBaseTest):

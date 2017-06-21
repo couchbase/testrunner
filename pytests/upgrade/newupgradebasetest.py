@@ -587,7 +587,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.rest_helper = RestHelper(self.rest)
             self.log.info("No need to do DCP rebalance upgrade")
 
-    def _offline_upgrade(self):
+    def _offline_upgrade(self, skip_init=False):
         try:
             self.log.info("offline_upgrade")
             stoped_nodes = self.servers[:self.nodes_init]
@@ -599,7 +599,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                     remote.stop_server()
                     remote.disconnect()
                 self.sleep(self.sleep_time)
-                upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
+                upgrade_threads = self._async_update(upgrade_version, stoped_nodes,
+                                                     None, skip_init)
                 for upgrade_thread in upgrade_threads:
                     upgrade_thread.join()
                 success_upgrade = True
