@@ -2518,12 +2518,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                      % (sub_command, self.master.ip, username, password)
         if command and sub_command:
             self.shell.execute_command(cmd)
-        if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+        rest = RestConnection(self.master)
+        cb_version = rest.get_nodes_version()
+        if cb_version[:5] in COUCHBASE_FROM_WATSON:
             cli = CouchbaseCLI(self.master, username, password)
             output, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled)
             if self.debug_logs:
                 print "output from exe command  ", output
-
         """
             During upgrade operations
         """
@@ -2534,7 +2535,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         """
         if new_users and new_roles:
             self.log.info("Add new users with roles after upgrade to version %s"
-                                % )
+                                % self.upgrade_versions)
             testuser = [{"id": "%s" % new_users,
                          "name": "%s" % new_users,
                          "password": "password"}]
