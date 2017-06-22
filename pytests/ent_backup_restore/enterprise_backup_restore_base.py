@@ -630,6 +630,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.recreate_bucket = False
         self.graceful = True
         self.recoveryType = 'full'
+        self.nodes_in = self.input.param("nodes_in", 0)
+        self.nodes_out = self.input.param("nodes_out", 0)
 
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
@@ -744,9 +746,21 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Asynchronously rebalance the cluster.
         :return: The task that is rebalancing the nodes.
         """
-        serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
-        serv_out = self.servers[
-                   self.nodes_init - self.nodes_out:self.nodes_init]
+        rest = RestConnection(self.master)
+        # Get the nodes already in the backup cluster
+        nodes_in_cluster = rest.node_statuses()
+        # Get the nodes available for the backup_custer
+        backup_cluster = [server for server in self.servers if (server not in
+                          self.input.clusters[0] and server not in
+                          self.input.clusters[1])]
+        # Get the potential servers that can be added to the cluster
+        serv_in = [server for server in backup_cluster if server.ip not in [
+            node.ip for node in nodes_in_cluster]]
+        # Get the potential servers that can be removed from the cluster
+        serv_out = [server for server in backup_cluster if server.ip in [
+            node.ip for node in nodes_in_cluster]]
+        serv_in = serv_in[:self.nodes_in]
+        serv_out = serv_out[serv_out.__len__() - self.nodes_out:]
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup,
                                                  serv_in, serv_out)
         return rebalance
