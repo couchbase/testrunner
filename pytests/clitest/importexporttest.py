@@ -662,6 +662,7 @@ class ImportExportTests(CliBaseTest):
 
     def test_import_json_generate_keys(self):
         options = {"load_doc": False, "docs":"1000"}
+        self.field_substitutions = self.input.param("field-substitutions", None)
         return self._common_imex_test("import", options)
 
     def test_import_json_with_limit_n_docs(self):
@@ -854,6 +855,9 @@ class ImportExportTests(CliBaseTest):
                                                             % self.field_separator
                 for bucket in self.buckets:
                     key_gen = "key::%index%"
+                    if self.field_substitutions:
+                        key_gen = "key::%{0}%".format(self.field_substitutions)
+                        options["field_substitutions"] = key_gen
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
                         -b default -d file:///tmp/export/default -f list -g key::%index%
                     """
@@ -925,6 +929,21 @@ class ImportExportTests(CliBaseTest):
                 self.fail("Import failed to limit %s rows" % self.limit_rows)
 
         if self.verify_data:
+            if self.field_substitutions:
+                self.log.info("Check key format %s ")
+                self.keys_check = []
+                for i in range(10):
+                    self.keys_check.append(self.rest.get_random_key("default"))
+                if self.debug_logs:
+                    print "keys:   ", self.keys_check
+                for x in self.keys_check:
+                    if self.field_substitutions == "age":
+                      if not x["key"].split("::")[1].isdigit():
+                          self.fail("Field substitutions failed to work")
+                    if self.field_substitutions == "name":
+                        if not x["key"].split("::")[1].startswith("pymc"):
+                            self.fail("Field substitutions failed to work")
+
             if self.imex_type != "json":
                 self.log.info("Does not support export data with csv format ")
                 return
