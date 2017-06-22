@@ -16,6 +16,7 @@ from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT
 from membase.api.rest_client import RestConnection
 from couchbase.bucket import Bucket
+from lib.memcached.helper.data_helper import MemcachedClientHelper
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -783,15 +784,19 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for task in ops_tasks:
             task.result()
 
-    def async_failover(self):
+    def async_failover(self, ip=None):
         """
         Asynchronously failover a node
         :return: Nothing
         """
         rest = RestConnection(self.backupset.cluster_host)
         nodes_all = rest.node_statuses()
+        if ip:
+            ip_to_failover = ip
+        else:
+            ip_to_failover = self.servers[1].ip
         for node in nodes_all:
-            if node.ip == self.servers[1].ip:
+            if node.ip == ip_to_failover:
                 rest.fail_over(otpNode=node.id, graceful=self.graceful)
 
     def async_failover_and_recover(self):
@@ -1016,6 +1021,39 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         """
         self._run_compaction(number_of_times=1)
 
+    def rollback(self):
+        buckets = self.buckets
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes = rest.get_nodes()
+
+        for bucket in buckets:
+            # Stop Persistence on Node A & Node B
+            for node in nodes:
+                mem_client = MemcachedClientHelper.direct_client(node, bucket)
+                mem_client.stop_persistence()
+
+            # Perform mutations on the bucket
+            self.ops_on_buckets()
+
+            # Kill memcached on Node A so that Node B becomes master
+            shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+            shell.kill_memcached()
+
+            # Start persistence on Node B
+            mem_client = MemcachedClientHelper.direct_client(nodes[1], bucket)
+            mem_client.start_persistence()
+
+            # Failover Node B
+            self.async_failover(nodes[1].ip)
+
+            # Wait for Failover & rollback to complete
+            self.sleep(60)
+
+            shell.stop_couchbase()
+            shell.start_couchbase()
+
+            self.sleep(60)
+
     def do_backup_merge_actions(self):
         """
         Perform the actions mentioned the self.actions param.
@@ -1033,6 +1071,12 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 params = action[1].split('&')
                 action = action[0]
                 if "backup" in action:
+                    iterations = params[0]
+                    self.backupset.number_of_backups += int(iterations)
+                elif "backup_with_expiry" in action:
+                    iterations = params[0]
+                    self.backupset.number_of_backups += int(iterations)
+                elif "backup_after_expiry" in action:
                     iterations = params[0]
                     self.backupset.number_of_backups += int(iterations)
                 elif "failover" in action or "recover" in action:
@@ -1107,5 +1151,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "flush_buckets": flush_buckets,
         "load_flushed_buckets": load_flushed_buckets,
         "delete_buckets": delete_bucket,
-        "compact_buckets": compact_buckets
+        "compact_buckets": compact_buckets,
+        "rollback": rollback
     }
