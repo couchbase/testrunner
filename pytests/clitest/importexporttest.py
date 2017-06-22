@@ -576,6 +576,9 @@ class ImportExportTests(CliBaseTest):
                         self.fail("failed to run optional flags")
         elif self.test_type == "export":
             cmd = "cbexport"
+            include_flag = ""
+            if self.include_key_flag:
+                include_flag = " --include-key"
             self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
             if self.imex_type == "json":
@@ -588,17 +591,31 @@ class ImportExportTests(CliBaseTest):
                     self.shell.execute_command(load_cmd)
                     export_file = self.ex_path + bucket.name
                     cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
-                                    "  -f %s %s %s %s %s %s %s "\
+                                    "  -f %s %s %s %s %s %s %s %s %s"\
                                      % (self.cli_command_path, cmd, self.cmd_ext,
                                           self.imex_type, server.ip, bucket.name,
                                  self.format_type, self.output_flag, export_file,
-                           threads_flag, self.threads_flag, logs_flag, logs_path)
+                                 threads_flag, self.threads_flag,
+                                 logs_flag, logs_path,
+                                 include_flag, self.include_key_flag)
                     output, error = self.shell.execute_command(cmd_str)
                     self.log.info("Output from execute command %s " % output)
                     error_check = self._check_output_option_flags(output,
                                                               errors_path, logs_path)
                     if error_check and not self._check_output("successfully", output):
                         self.fail("failed to run optional flags")
+                    if self.include_key_flag:
+                        self.log.info("Verify export with --include-key flag")
+                        output, _ = self.shell.execute_command("cat %s" % export_file)
+                        if output:
+                            for x in output:
+                                eval_x = ast.literal_eval(x)
+                                if not eval_x[self.include_key_flag].startswith("pymc"):
+                                    self.fail("Flag %s failed to include key "
+                                              % include_flag)
+                                else:
+                                    self.log.info("Data for %s flag is verified"
+                                                  % include_flag)
 
     def test_import_invalid_folder_structure(self):
         """ not in 4.6 """
