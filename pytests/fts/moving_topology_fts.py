@@ -1159,6 +1159,12 @@ class MovingTopFTS(FTSBaseTest):
          continuously till rebalance finishes.
         :return:
         """
+        count = 0
+
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.wait_for_indexing_complete()
 
         from lib.membase.api.rest_client import RestConnection, RestHelper
         rest = RestConnection(self._cb_cluster.get_master_node())
@@ -1172,17 +1178,73 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info(
             "removing node(s) {0} from cluster".format(ejected_nodes))
 
-        while True:
+        while count<5:
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=ejected_nodes)
-            self.sleep(10)
+            self.sleep(30)
             stopped = rest.stop_rebalance()
             self.assertTrue(stopped, msg="unable to stop rebalance")
+            count += 1
 
-            if RestHelper(rest).is_cluster_rebalanced():
-                self.log.info("Rebalance is finished already.")
-                break
+        if RestHelper(rest).is_cluster_rebalanced():
+            self.log.info("Rebalance is finished already.")
+        else:
+            rest.rebalance(otpNodes=[node.id for node in nodes],
+                           ejectedNodes=ejected_nodes)
 
+    def test_rebalance_cancel_new_rebalance(self):
+        """
+            Load bucket, do not create index
+            From a 3 kv+fts node cluster, rebalance out master + one node
+            Immediately (after few secs), stop rebalance
+            Rebalance out other nodes than master.
+            After rebalance completes, create an index
+        :return:
+        """
+        self.load_data()
 
+        non_master_nodes = list(set(self._cb_cluster.get_nodes())-
+                           set([self._master]))
 
+        from lib.membase.api.rest_client import RestConnection, RestHelper
+        rest = RestConnection(self._master)
+        nodes = rest.node_statuses()
+        ejected_nodes = []
 
+        # first eject a master + non-master node
+        eject_nodes = [self._master] + [non_master_nodes[0]]
+
+        for eject in eject_nodes:
+            for node in nodes:
+                if eject.ip == node.ip:
+                    ejected_nodes.append(node.id)
+                    break
+
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=ejected_nodes)
+        self.sleep(3)
+        rest._rebalance_progress()
+        stopped = rest.stop_rebalance()
+        self.assertTrue(stopped, msg="unable to stop rebalance")
+
+        eject_nodes = non_master_nodes[:2]
+        ejected_nodes = []
+
+        for eject in eject_nodes:
+            for node in nodes:
+                if eject.ip == node.ip:
+                    ejected_nodes.append(node.id)
+                    break
+
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=ejected_nodes)
+        rest.monitorRebalance()
+
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
