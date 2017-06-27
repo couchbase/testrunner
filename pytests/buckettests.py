@@ -219,8 +219,6 @@ class CreateBucketTests(BaseTestCase):
             use rest to reset node to set services correctly: index,kv,n1ql """
         self.rest.force_eject_node()
 
-        self.log.info("Add new user after reset node! ")
-        self.add_built_in_server_user(node=self.master)
         shell = RemoteMachineShellConnection(self.master)
         set_index_storage_type = ""
         if self.node_version[:5] in COUCHBASE_FROM_WATSON:
@@ -235,6 +233,8 @@ class CreateBucketTests(BaseTestCase):
         else:
             self.assertEqual(o[0], "SUCCESS: init/edit localhost")
 
+        self.log.info("Add new user after reset node! ")
+        self.add_built_in_server_user(node=self.master)
         shell = RemoteMachineShellConnection(self.master)
         cluster_flag = "-n"
         bucket_quota_flag = "-s"
