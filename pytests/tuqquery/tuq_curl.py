@@ -57,6 +57,8 @@ class QueryCurlTests(QueryTests):
         self.create_users = self.input.param("create_users", False)
         self.full_access = self.input.param("full_access", True)
         self.run_cbq_query('delete from system:prepareds')
+        if self.full_access:
+            self.shell.create_whitelist(self.n1ql_certs_path, True)
 
     def suite_setUp(self):
         super(QueryCurlTests, self).suite_setUp()
@@ -95,8 +97,6 @@ class QueryCurlTests(QueryTests):
                           {'id': 'curl_no_insert', 'name': 'curl_no_insert',
                            'roles': '%s' % curl_noinsert_permissions}]
             temp = RbacBase().add_user_role(role_list, self.rest, 'builtin')
-        if self.full_access:
-            self.shell.create_whitelist(self.n1ql_certs_path,True)
 
     def tearDown(self):
         super(QueryCurlTests, self).tearDown()
