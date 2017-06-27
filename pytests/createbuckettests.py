@@ -6,6 +6,7 @@ import datetime
 import time
 from membase.api.exception import BucketCreationException
 from membase.api.rest_client import RestConnection
+from security.rbac_base import RbacBase
 from membase.helper.bucket_helper import BucketOperationHelper
 
 class CreateMembaseBucketsTests(unittest.TestCase):
@@ -21,6 +22,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         self.assertTrue(self.input, msg="input parameters missing...")
         self.servers = self.input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
+        self.master = self.servers[0]
         self._log_start()
 
     def tearDown(self):
@@ -358,6 +360,14 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         bucket_num = rest.get_internalSettings("maxBucketCount")
         bucket_ram = 100
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                'password': 'password'}]
+        rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                      'roles': 'admin'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
+
+
 
         for i in range(bucket_num):
             bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
