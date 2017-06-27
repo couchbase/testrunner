@@ -149,6 +149,7 @@ class CreateBucketTests(BaseTestCase):
         except Exception, e:
             if e:
                 print e
+        self.sleep(10)
         self.log.info("Add new user after reset node! ")
         self.add_built_in_server_user(node=self.master)
         if status:
