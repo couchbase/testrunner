@@ -65,6 +65,7 @@ class CliBaseTest(BaseTestCase):
         self.fx_generator = self.input.param("fx-generator", None)
         self.fx_gen_start = self.input.param("fx-gen-start", None)
         self.verify_data = self.input.param("verify-data", False)
+        self.field_substitutions = self.input.param("field-substitutions", None)
         self.debug_logs = self.input.param("debug-logs", False)
         info = self.shell.extract_remote_info()
         self.os_version = info.distribution_version.lower()
