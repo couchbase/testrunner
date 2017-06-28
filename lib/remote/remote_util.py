@@ -26,7 +26,7 @@ from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_FROM_VERSION_3,\
-                          COUCHBASE_FROM_SPOCK
+                          COUCHBASE_FROM_SPOCK, SYSTEMD_SERVER
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
@@ -393,11 +393,11 @@ class RemoteMachineShellConnection:
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
-                    if "centos 7" in self.info.distribution_version.lower() \
-                       and sv in COUCHBASE_FROM_WATSON:
-                        """from watson, systemd is used in centos 7 """
-                        log.info("this node is centos 7.x")
-                        o, r = self.execute_command("service couchbase-server start")
+                    if self.info.distribution_version.lower() in SYSTEMD_SERVER \
+                                                 and sv in COUCHBASE_FROM_WATSON:
+                        """from watson, systemd is used in centos 7, suse 12 """
+                        log.info("Running systemd command on this server")
+                        o, r = self.execute_command("systemctl start couchbase-server")
                         self.log_command_output(o, r)
                     else:
                         o, r = self.execute_command("/etc/init.d/couchbase-server start")
@@ -425,11 +425,11 @@ class RemoteMachineShellConnection:
                     self.log_command_output(o, r)
                 else:
                     fv, sv, bn = self.get_cbversion("linux")
-                    if "centos 7" in self.info.distribution_version.lower() \
-                       and sv in COUCHBASE_FROM_WATSON:
-                        """from watson, systemd is used in centos 7 """
-                        log.info("this node is centos 7.x")
-                        o, r = self.execute_command("service couchbase-server stop")
+                    if self.info.distribution_version.lower() in SYSTEMD_SERVER \
+                                                 and sv in COUCHBASE_FROM_WATSON:
+                        """from watson, systemd is used in centos 7, suse 12 """
+                        log.info("Running systemd command on this server")
+                        o, r = self.execute_command("systemctl stop couchbase-server")
                         self.log_command_output(o, r)
                     else:
                         o, r = self.execute_command("/etc/init.d/couchbase-server stop"\
@@ -2922,6 +2922,9 @@ class RemoteMachineShellConnection:
                     elif etc_issue.lower().find('suse linux') != -1:
                         os_distro = 'SUSE'
                         os_version = etc_issue
+                        tmp_str = etc_issue.split()
+                        if tmp_str and tmp_str[6].isdigit():
+                            os_version = "SUSE %s" % tmp_str[6]
                         is_linux_distro = True
                     elif etc_issue.lower().find('oracle linux') != -1:
                         os_distro = 'Oracle Linux'
@@ -3162,11 +3165,11 @@ class RemoteMachineShellConnection:
                 self.log_command_output(o, r)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
-                if "centos 7" in self.info.distribution_version.lower() \
-                       and sv in COUCHBASE_FROM_WATSON:
-                    """from watson, systemd is used in centos 7 """
-                    log.info("this node is centos 7.x")
-                    o, r = self.execute_command("service couchbase-server stop")
+                if self.info.distribution_version.lower() in SYSTEMD_SERVER \
+                                             and sv in COUCHBASE_FROM_WATSON:
+                    """from watson, systemd is used in centos 7, suse 12 """
+                    log.info("Running systemd command on this server")
+                    o, r = self.execute_command("systemctl stop couchbase-server")
                     self.log_command_output(o, r)
                 else:
                     o, r = self.execute_command("/etc/init.d/couchbase-server stop",\
@@ -3193,11 +3196,11 @@ class RemoteMachineShellConnection:
                 self.log_command_output(o, r)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
-                if "centos 7" in self.info.distribution_version.lower() \
+                if self.info.distribution_version.lower() in SYSTEMD_SERVER \
                        and sv in COUCHBASE_FROM_WATSON:
-                    """from watson, systemd is used in centos 7 """
-                    log.info("this node is centos 7.x")
-                    o, r = self.execute_command("service couchbase-server start")
+                    """from watson, systemd is used in centos 7, suse 12 """
+                    log.info("Running systemd command on this server")
+                    o, r = self.execute_command("systemctl start couchbase-server")
                     self.log_command_output(o, r)
                 else:
                     o, r = self.execute_command("/etc/init.d/couchbase-server start")

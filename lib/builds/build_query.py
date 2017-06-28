@@ -17,7 +17,7 @@ from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
 from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3
-from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
 from testconstants import CE_EE_ON_SAME_FOLDER
@@ -624,7 +624,7 @@ class BuildQuery(object):
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "debian8", "ubuntu12.04",
                              "ubuntu14.04", "ubuntu16.04", "windows", "macos",
-                             "centos7", "suse11"]
+                             "centos7", "suse11", "suse12"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -776,9 +776,13 @@ class BuildQuery(object):
                    "-" + centos_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "suse" in distribution_version:
-                if "suse linux enterprise server 12" in distribution_version:
-                    suse_version="suse12"
-                    build.distribution_version = "suse12"
+                if "suse 12" in distribution_version:
+                    if version[:5] in COUCHBASE_FROM_SPOCK:
+                        suse_version="suse12"
+                        build.distribution_version = "suse12"
+                    else:
+                        self.fail("suse 12 does not support on this version %s "
+                                                                  % version[:5])
                 else:
                     suse_version="suse11"
                     build.distribution_version = "suse11"

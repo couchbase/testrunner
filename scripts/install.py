@@ -206,29 +206,43 @@ class Installer(object):
             moxi_alias = ["moxi", "moxi-server"]
 
             if params["product"] in mb_alias:
-                names = ['membase-server-enterprise', 'membase-server-community']
+                names = ['membase-server-enterprise',
+                         'membase-server-community']
             elif params["product"] in cb_alias:
-                if "type" in params and params["type"].lower() in "couchbase-server-community":
+                if "type" in params and params["type"].lower() in \
+                                      "couchbase-server-community":
                     names = ['couchbase-server-community']
-                elif "type" in params and params["type"].lower() in "couchbase-server-enterprise":
+                elif "type" in params and params["type"].lower() in \
+                                       "couchbase-server-enterprise":
                     names = ['couchbase-server-enterprise']
                 else:
-                    names = ['couchbase-server-enterprise', 'couchbase-server-community']
+                    names = ['couchbase-server-enterprise',
+                             'couchbase-server-community']
             elif params["product"] in css_alias:
-                names = ['couchbase-single-server-enterprise', 'couchbase-single-server-community']
+                names = ['couchbase-single-server-enterprise',
+                         'couchbase-single-server-community']
             elif params["product"] in moxi_alias:
                 names = ['moxi-server']
             else:
                 ok = False
                 _errors.append(errors["INVALID-PARAMS"])
             if "1" in openssl:
-                names = ['couchbase-server-enterprise_centos6', 'couchbase-server-community_centos6', \
-                         'couchbase-server-enterprise_ubuntu_1204', 'couchbase-server-community_ubuntu_1204']
+                names = ['couchbase-server-enterprise_centos6',
+                         'couchbase-server-community_centos6',
+                         'couchbase-server-enterprise_ubuntu_1204',
+                         'couchbase-server-community_ubuntu_1204']
             if "toy" in params:
                 names = ['couchbase-server-enterprise']
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
+        print "\n*** OS version of this server %s is %s ***" % (remote_client.ip,
+                                                       info.distribution_version)
+        if info.distribution_version.lower() == "suse 12":
+            if version[:5] not in COUCHBASE_FROM_SPOCK:
+                mesg = "%s does not support cb version %s \n" % \
+                         (info.distribution_version, version[:5])
+                remote_client.stop_current_python_running(mesg)
         if info.type.lower() == "windows":
             if "-" in version:
                 msi_build = version.split("-")
