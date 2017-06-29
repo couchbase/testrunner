@@ -1,6 +1,7 @@
 import copy
 import os
 import shutil
+import urllib
 
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import BlobGenerator,DocumentGenerator
@@ -89,8 +90,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.cluster_new_user:
             self.backupset.cluster_host_username = self.cluster_new_user
             self.backupset.restore_cluster_host_username = self.cluster_new_user
-        self.backupset.exclude_buckets = self.input.param("exclude-buckets", "")
-        self.backupset.include_buckets = self.input.param("include-buckets", "")
+        include_buckets = self.input.param("include-buckets", "")
+        include_buckets = include_buckets.split(",") if include_buckets else []
+        exclude_buckets = self.input.param("exclude-buckets", "")
+        exclude_buckets = exclude_buckets.split(",") if exclude_buckets else []
+        self.backupset.exclude_buckets = exclude_buckets
+        self.backupset.include_buckets = include_buckets
         self.backupset.disable_bucket_config = self.input.param("disable-bucket-config", False)
         self.backupset.disable_views = self.input.param("disable-views", False)
         self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
@@ -929,12 +934,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         rest = RestConnection(self.master)
         server_id = rest.get_nodes_self().id
         bucket_tasks = []
-        bucket_params = copy.deepcopy(
-            self.bucket_base_params['membase']['non_ephemeral'])
-        bucket_params['size'] = bucket_size
-        if self.ephemeral:
-            bucket_params['bucket_type'] = 'ephemeral'
-            bucket_params['eviction_policy'] = 'noEviction'
         standard_buckets = []
         for i in range(0, self.new_buckets):
             if self.recreate_bucket:
@@ -946,11 +945,15 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             if self.standard_bucket_priority is not None:
                 bucket_priority = self.get_bucket_priority(
                     self.standard_bucket_priority[i])
-
-            bucket_params['bucket_priority'] = bucket_priority
             bucket_tasks.append(
-                self.cluster.async_create_standard_bucket(name=name, port=port,
-                                                          bucket_params=bucket_params))
+                self.cluster.async_create_standard_bucket(self.master, name,
+                                                          port,
+                                                          bucket_size,
+                                                          self.num_replicas,
+                                                          enable_replica_index=self.enable_replica_index,
+                                                          eviction_policy=self.eviction_policy,
+                                                          bucket_priority=bucket_priority,
+                                                          lww=self.lww))
             bucket = Bucket(name=name, authType=None, saslPassword=None,
                             num_replicas=self.num_replicas,
                             bucket_size=self.bucket_size,
@@ -1127,6 +1130,14 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 self.backup_merge_actions[action](self)
                 self.log.info("Finished {} action for {}th time.".format(
                     action, i + 1))
+
+    def set_meta_purge_interval(self):
+        rest = RestConnection(self.master)
+        params = {}
+        api = rest.baseUrl + "controller/setAutoCompaction"
+        params["purgeInterval"] = 0.003
+        params = urllib.urlencode(params)
+        return rest._http_request(api, "POST", params)
 
     backup_merge_actions = {
         "bucket_ops": ops_on_buckets,
