@@ -1,5 +1,5 @@
 import copy
-import json, filecmp
+import json, filecmp, itertools
 import os, shutil, ast
 from threading import Thread
 
@@ -662,7 +662,6 @@ class ImportExportTests(CliBaseTest):
 
     def test_import_json_generate_keys(self):
         options = {"load_doc": False, "docs":"1000"}
-        self.field_substitutions = self.input.param("field-substitutions", None)
         return self._common_imex_test("import", options)
 
     def test_import_json_with_limit_n_docs(self):
@@ -674,6 +673,14 @@ class ImportExportTests(CliBaseTest):
            import docs with option to skip n docs
            flag --skip-docs
            :return: None
+        """
+        options = {"load_doc": False, "docs": "1000"}
+        return self._common_imex_test("import", options)
+
+    def test_import_json_with_skip_limit_n_docs(self):
+        """
+           import docs with option skip n docs and
+           limit n docs to be imported
         """
         options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
@@ -964,7 +971,15 @@ class ImportExportTests(CliBaseTest):
                     format_type = "csv_tab"
             with open("resources/imex/%s_%s_lines" % (format_type,
                                                       options["docs"])) as f:
-                if self.skip_docs:
+                if self.skip_docs and self.limit_docs:
+                    self.log.info("Skip %s docs and import only %s docs after that"
+                                               % (self.skip_docs, self.limit_docs))
+                    src_data = list(itertools.islice(f, self.skip_docs,
+                                                        int(skip_docs) +
+                                                        int(self.limit_docs)))
+                    src_data = map(lambda s: s.strip(), src_data)
+                    src_data = [x.replace(" ", "") for x in src_data]
+                elif self.skip_docs:
                     self.log.info("Get data from %dth line" % skip_docs)
                     src_data = f.read().splitlines()[skip_docs:]
                 elif self.limit_docs or self.limit_rows:
