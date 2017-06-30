@@ -2894,6 +2894,9 @@ class RemoteMachineShellConnection:
                     if etc_issue.lower().find('ubuntu') != -1:
                         os_distro = 'Ubuntu'
                         os_version = etc_issue
+                        tmp_str = etc_issue.split()
+                        if tmp_str and tmp_str[1][:2].isdigit():
+                            os_version = "Ubuntu %s" % tmp_str[1][:5]
                         is_linux_distro = True
                     elif etc_issue.lower().find('debian') != -1:
                         os_distro = 'Ubuntu'
