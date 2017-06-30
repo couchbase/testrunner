@@ -1,3 +1,4 @@
+import copy
 import logging
 import random
 
@@ -142,51 +143,50 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                               query_definitions=[query_definition])
 
     def test_change_doc_size(self):
-        self.iterations = self.input.param("num_iterations", 5)
+        self.iterations = self.input.param("num_iterations", 1)
         buckets = self._create_plasma_buckets()
         if self.plasma_dgm:
             self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer])
-        query_definition =  QueryDefinition(
-            index_name="index_name_big_values",
-            index_fields=["bigValues"],
-            query_template="SELECT * FROM %s WHERE bigValues IS NOT NULL",
-            groups=["simple"], index_where_clause=" bigValues IS NOT NULL ")
-        self.multi_create_index(buckets=buckets,
-                                query_definitions=[query_definition])
-        template = '{{"name":"{0}", "age":{1}, "bigValues": "{2}" }}'
-        generators = []
+        query_definitions = self._create_indexes(buckets)
+        self.sleep(20)
+        array_size = random.choice(range(10, 15))
+        item_size = random.choice(range(10, 15))
+        self.upload_documents(num_items=1000, item_size=item_size, array_size=array_size, buckets=buckets)
+        rest = RestConnection(self.master)
+        index_map = rest.get_index_id_map()
         for j in range(self.iterations):
-            for i in range(10):
-                name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id = "{0}-{1}".format(name, str(i))
-                age = random.choice(range(4, 19))
-                bigValue_size = random.choice(range(10, 15))
-                bigValues = "".join(random.choice(lowercase) for k in range(bigValue_size))
-                generators.append(DocumentGenerator(
-                    id, template, [name], [age], [bigValues], start=0, end=10))
-            self.load(generators, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size)
-            self.full_docs_list = self.generate_full_docs_list(generators)
-            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-            self.multi_query_using_index(buckets=buckets,
-                                         query_definitions=[query_definition])
-            for i in range(10):
-                name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id = "{0}-{1}".format(name, str(i))
-                age = random.choice(range(4, 19))
-                bigValue_size = random.choice(range(1000, 5000))
-                bigValues = "".join(random.choice(lowercase) for k in range(bigValue_size))
-                generators.append(DocumentGenerator(
-                    id, template, [name], [age], [bigValues], start=0, end=10))
-            self.load(generators, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size)
-            self.full_docs_list = self.generate_full_docs_list(generators)
-            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-            self.multi_query_using_index(buckets=buckets,
-                                         query_definitions=[query_definition])
-        self.sleep(30)
-        self.multi_drop_index(buckets=buckets,
-                              query_definitions=[query_definition])
+            log.info("Iteration: {0}".format(j))
+            array_size = random.choice(range(10, 15))
+            item_size = random.choice(range(10, 15))
+            self.upload_documents(num_items=1000, item_size=item_size,
+                                  array_size=array_size, buckets=buckets, update_docs=True)
+            for bucket in buckets:
+                for query_definition in query_definitions:
+                    index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
+                    actual_result = self.rest.full_table_scan_gsi_index_with_rest(
+                        index_id, body={"stale": "false"})
+                    expected_result = self._get_expected_results_for_scan(
+                    query_definition)
+                    msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
+                    self.assertEqual(sorted(actual_result), sorted(expected_result),
+                             msg.format(query_definition.index_name,
+                                        actual_result, expected_result))
+            self.sleep(20)
+            array_size = random.choice(range(1000, 5000))
+            item_size = random.choice(range(1000, 5000))
+            self.upload_documents(num_items=1000, item_size=item_size,
+                                  array_size=array_size, buckets=buckets, update_docs=True)
+            for bucket in buckets:
+                for query_definition in query_definitions:
+                    index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
+                    actual_result = self.rest.full_table_scan_gsi_index_with_rest(
+                        index_id, body={"stale": "false"})
+                    expected_result = self._get_expected_results_for_scan(
+                    query_definition)
+                    msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
+                    self.assertEqual(sorted(actual_result), sorted(expected_result),
+                             msg.format(query_definition.index_name,
+                                        actual_result, expected_result))
 
     def test_change_key_size(self):
         self.iterations = self.input.param("num_iterations", 5)
@@ -220,7 +220,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                          query_definitions=[query_definition])
             for i in range(10):
                 name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id_size = random.choice(range(100, 5000))
+                id_size = random.choice(range(100, 200))
                 long_str = "".join(random.choice(lowercase) for k in range(id_size))
                 id = "{0}-{1}".format(name, long_str)
                 age = random.choice(range(4, 19))
@@ -254,7 +254,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         for j in range(self.iterations):
             for i in range(10):
                 name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id_size = random.choice(range(5, 5000))
+                id_size = random.choice(range(5, 200))
                 short_str = "".join(random.choice(lowercase) for k in range(id_size))
                 id = "{0}-{1}".format(name, short_str)
                 age = random.choice(range(4, 19))
@@ -311,3 +311,116 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             if bucket.name.startswith("plasma_dgm"):
                 buckets.append(bucket)
         return buckets
+
+    def _update_document(self, bucket_name, key, document):
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
+        bucket = Bucket(url, username=bucket_name, password="password")
+        bucket.upsert(key, document)
+
+    def _get_expected_results_for_scan(self, query):
+        index_settings = self.rest.get_index_settings()
+        allow_large_keys = index_settings["indexer.settings.allow_large_keys"]
+        array_size = index_settings["indexer.settings.max_array_seckey_size"] * 3
+        item_size = index_settings["indexer.settings.max_seckey_size"] * 3
+        index_fields = []
+        for index_field in query.index_fields:
+            temp = index_field.split("`")
+            if len(temp) > 1:
+                index_fields.append(temp[1])
+            else:
+                index_fields.append(temp[0])
+        expected_result = []
+        for doc in self.full_docs_list:
+            doc_list = []
+            list_param = False
+            for field in index_fields:
+                if isinstance(doc[field], list):
+                    list_param = True
+                    if not doc_list:
+                        doc_list = [[arr_item] for arr_item in doc[field]]
+                    else:
+                        temp_doc_list = []
+                        for item in doc_list:
+                            for arr_item in doc[field]:
+                                temp_list = copy.deepcopy(item)
+                                temp_list.append(arr_item)
+                                temp_doc_list.append(temp_list)
+                        doc_list = temp_doc_list
+                else:
+                    if not doc_list:
+                        doc_list.append([doc[field]])
+                    else:
+                        for item in doc_list:
+                            item.append(doc[field])
+            if not allow_large_keys:
+                if list_param:
+                    actual_array_size = self._get_size_of_array(doc_list)
+                    if actual_array_size > array_size:
+                        doc_list = []
+                for doc_items in doc_list:
+                    if self._get_size_of_array(doc_items) > item_size:
+                        doc_list = []
+                        break
+            for doc_items in doc_list:
+                entry = {"docid": doc["_id"], "key": doc_items}
+                expected_result.append(entry)
+        return expected_result
+
+    def _create_indexes(self, buckets):
+        query_definitions = []
+        query_definitions.append(QueryDefinition(index_name="index_long_name",
+                            index_fields=["name"]))
+        query_definitions.append(QueryDefinition(index_name="index_array_encoded",
+                            index_fields=["ALL ARRAY t FOR t in `encoded_array` END"]))
+        query_definitions.append(QueryDefinition(index_name="index_array_encoded_bigValue",
+                            index_fields=["ALL ARRAY t FOR t in `encoded_big_value_array` END"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_name_age",
+                            index_fields=["name", "age"]))
+        query_definitions.append(QueryDefinition(
+            index_name="index_long_endoded_age",
+            index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "age"]))
+        query_definitions.append(QueryDefinition(
+            index_name="index_long_endoded_name",
+            index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "name"]))
+        query_definitions.append(QueryDefinition(
+            index_name="index_long_name_encoded_age",
+            index_fields=["name", "ALL ARRAY t FOR t in `encoded_array` END", "age"]))
+        self.multi_create_index(buckets=buckets, query_definitions=query_definitions)
+        return query_definitions
+
+    def upload_documents(self, num_items, item_size, array_size, buckets=None, update_docs=False, array_elements=3):
+        if not buckets:
+            buckets = self.buckets
+        if not update_docs:
+            for bucket in buckets:
+                self.rest.flush_bucket(bucket)
+            self.sleep(30)
+        generators = []
+        template = '{{"name":"{0}", "age":{1}, "encoded_array": {2}, "encoded_big_value_array": {3}}}'
+        item_length = item_size * 4
+        array_element_size = (array_size * 4)/array_elements
+        if update_docs:
+            num_items = len(self.full_docs_list)
+        for i in range(num_items):
+            if update_docs:
+                index_id = str(self.full_docs_list[i]["_id"].split("-")[0])
+            else:
+                index_id = "unhandled_items_" + str(random.random()*100000)
+            encoded_array = []
+            name = "".join(random.choice(lowercase) for k in range(item_length))
+            age = random.choice(range(4, 59))
+            big_value_array = [name]
+            for j in range(array_elements):
+                element = "".join(random.choice(lowercase) for k in range(array_element_size))
+                encoded_array.append(element)
+            generators.append(DocumentGenerator(
+                index_id, template, [name], [age], [encoded_array],
+                [big_value_array], start=0, end=1))
+        self.full_docs_list = self.generate_full_docs_list(generators)
+        if not update_docs:
+            self.load(generators, buckets=buckets, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
+        else:
+            for bucket in buckets:
+                for doc in self.full_docs_list:
+                    self._update_document(bucket.name, doc["_id"], doc)
