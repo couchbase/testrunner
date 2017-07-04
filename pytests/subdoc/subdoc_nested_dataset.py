@@ -3,8 +3,8 @@ import copy, json
 import yaml
 import random
 
-from couchbase.bucket import Bucket as SDK_Bucket
 import couchbase.subdocument as SD
+from sdk_client import SDKClient
 from threading import Thread
 
 class SubdocNestedDataset(SubdocBaseTest):
@@ -400,16 +400,18 @@ class SubdocNestedDataset(SubdocBaseTest):
 # Test some concurrent operations as seen in MB-21597
     def test_add_concurrent(self):
         DOCID = 'subdoc_doc_id'
-        CONNSTR = 'couchbase://' + self.servers[0].ip + ':11210'
+        SERVER_IP = self.servers[0].ip
         ITERATIONS = 200
         THREADS = 20
 
-        main_bucket = SDK_Bucket(CONNSTR)
+        main_bucket = SDKClient(scheme="couchbase", hosts=[self.servers[0].ip],
+                  bucket='default').cb
         main_bucket.upsert(DOCID, {'recs':[]})
 
         class Runner(Thread):
             def run(self, *args, **kw):
-                cb = SDK_Bucket(CONNSTR)
+                cb = SDKClient(scheme="couchbase", hosts=[SERVER_IP],
+                  bucket='default').cb
                 for x in range(ITERATIONS):
                     cb.mutate_in(DOCID, SD.array_append('recs', 1))
 
@@ -421,13 +423,13 @@ class SubdocNestedDataset(SubdocBaseTest):
 
         array_entry_count = len(obj.value['recs'])
 
-        self.assertTrue( array_entry_count ==  ITERATIONS * THREADS,
+        self.assertTrue(array_entry_count == ITERATIONS * THREADS,
                          'Incorrect number of array entries. Expected {0} actual {1}'.format(ITERATIONS * THREADS,
                                                                            array_entry_count))
 
 # SD_ADD
     def test_add_numbers(self):
-        self.json =  self.generate_simple_data_array_of_numbers()
+        self.json = self.generate_simple_data_array_of_numbers()
         self.dict_add_verify(self.json, "test_add_numbers")
 
     def test_add_array_numbers(self):
