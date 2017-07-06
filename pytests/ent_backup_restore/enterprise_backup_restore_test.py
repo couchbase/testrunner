@@ -1927,28 +1927,37 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def test_backup_resume(self):
         """
-        1. Creates specified bucket on the cluster and loads it with given number of items
+        1. Creates specified bucket on the cluster and loads it with given
+           number of items
         2. Creates a backupset
         3. Initiates a backup and kills the erlang server while backup is going on
         4. Waits for the backup command to timeout
         5. Executes backup command again with resume option
         6. Validates the old backup is resumes and backup is completed successfully
         """
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                                                      end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         old_backup_name = ""
         new_backup_name = ""
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+        backup_result = self.cluster.async_backup_cluster(
+                                          cluster_host=self.backupset.cluster_host,
                                           backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          directory=self.backupset.directory,
+                                          name=self.backupset.name,
+                                          resume=False,
+                                          purge=self.backupset.purge,
                                           no_progress_bar=self.no_progress_bar,
                                           cli_command_location=self.cli_command_location,
                                           cb_version=self.cb_version)
-        self.sleep(10)
+        self.sleep(3)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        op, er = conn.execute_command("ps aux | grep 'beam.smp' | awk '{print $2}'")
+        print "\nErlang process IDs before killed\n", op
         conn.kill_erlang()
+        op, er = conn.execute_command("ps aux | grep 'beam.smp' | awk '{print $2}'")
+        print "\nErlang process IDs after killed\n", op
         output = backup_result.result(timeout=200)
         self.log.info(str(output))
         status, output, message = self.backup_list()
@@ -1956,7 +1965,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         for line in output:
             if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
+                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+                                            "_\d{2}.\d+-\d{2}_\d{2}", line).group()
                 self.log.info("Backup name before resume: " + old_backup_name)
         conn.start_couchbase()
         self.sleep(30)
@@ -1968,10 +1978,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         for line in output:
             if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
+                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+                                            "_\d{2}.\d+-\d{2}_\d{2}", line).group()
                 self.log.info("Backup name after resume: " + new_backup_name)
         self.assertEqual(old_backup_name, new_backup_name,
-                         "Old backup name and new backup name are not same when resume is used")
+             "Old backup name and new backup name are not same when resume is used")
         self.log.info("Old backup name and new backup name are same when resume is used")
 
     def test_backup_restore_with_deletes(self):
