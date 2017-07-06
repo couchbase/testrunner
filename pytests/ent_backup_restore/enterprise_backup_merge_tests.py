@@ -65,6 +65,7 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
         self.log.info("*** done to load items to all buckets")
         self.backup_create_validate()
         self.backup()
+        self.set_meta_purge_interval()
         self._load_all_buckets(self.master, self.delete_gen, "delete",
                                self.expires)
         self.sleep(360, "Sleep for 6 minutes for the meta-data purge "
