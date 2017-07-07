@@ -2267,7 +2267,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def _cbindex_move(self, src_node, dst_node, index_list, queue=None,run_from_dst=False,username="Administrator", password="password",
                       expect_failure=False, bucket="default", remote_host=None):
-        ip_address = str(dst_node).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "")
+        ip_address = str(dst_node).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "").replace(" ssh_username:Administrator", "")
         cmd = """cbindex -type move -index '{0}' -bucket {1} -with '{{"nodes":"{2}"}}' -auth '{3}:{4}'""".format(
             index_list,
             bucket,
@@ -2316,7 +2316,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                     host_names_after_rebalance.append(index_map[bucket][index]['hosts'])
             for node in host_names_after_rebalance:
                 index_distribution_map_after_rebalance[node] = index_distribution_map_after_rebalance.get(node, 0) + 1
-            ip_address = str(dst_node).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "")
+            ip_address = str(dst_node).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "").replace(" ssh_username:Administrator", "")
             log.info(ip_address)
             log.info(index_distribution_map_after_rebalance)
             if ip_address in index_distribution_map_after_rebalance:

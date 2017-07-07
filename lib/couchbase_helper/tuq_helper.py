@@ -730,7 +730,7 @@ class N1QLHelper():
         if swap_rebalance:
             for node_in in nodes_in:
                 # strip of unnecessary data for comparison
-                ip_address = str(node_in).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "")
+                ip_address = str(node_in).replace("ip:", "").replace(" port", "").replace(" ssh_username:root", "").replace(" ssh_username:Administrator", "")
                 if ip_address not in indexer_nodes_after_rebalance:
                     self.log.info("swap rebalanced in node is not distributed any indexes")
                     raise Exception("swap rebalanced in node is not distributed any indexes")
