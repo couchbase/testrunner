@@ -10,6 +10,7 @@ from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from couchbase_cli import CouchbaseCLI
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
+from security.rbacmain import rbacmain
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -2487,18 +2488,23 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
            parameters in conf file:
                conf/couchbase-cli/py-offline-upgrade-rbac.conf
         """
-        username = self.input.param("username", None)
+        username = self.input.param("username", "Administrator")
         new_users = self.input.param("new-users", None)
-        password = self.input.param("password", None)
+        password = self.input.param("password", "password")
         new_password = self.input.param("new-password", None)
         command = self.input.param("command", None)
         sub_command = self.input.param("sub-command", None)
         new_users = self.input.param("new-users", None)
         new_roles = self.input.param("new-roles", None)
-        admins = self.input.param("admins", None)
-        ro_admins = self.input.param("ro-admins", None)
         enabled = self.input.param("enabled", False)
         default = self.input.param("default", None)
+        self.bucket_type = self.input.param("bucket-type", "couchbase")
+        self.bucket_ram = self.input.param("bucket-ram", 256)
+        self.eviction_policy = self.input.param("eviction-policy", "fullEviction")
+        replica_count = self.input.param("replica-count", 1)
+        enable_index_replica = self.input.param("enable-replica-index", 1)
+        self.priority = self.input.param("priority", "high")
+        self.enable_flush = self.input.param("enable-flush", 0)
         ops_before_upgrade = self.input.param("ops-before-upgrade", False)
         ops_during_upgrade = self.input.param("ops-during-upgrade", False)
         ops_after_upgrade = self.input.param("ops-after-upgrade", False)
@@ -2515,24 +2521,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         """
             Start install old version with param initial_version
         """
-        self._install(self.servers)
+        self._install(self.servers[:self.nodes_init])
+        self.cluster.rebalance([self.master], self.servers[1:self.nodes_init], [])
 
-        """
-            Before upgrade operations
-        """
-        cmd = "%s%s%s " % (self.cli_command_path, command, self.cmd_ext)
-        if sub_command:
-            cmd += "%s --cluster %s --user %s --password %s " \
-                     % (sub_command, self.master.ip, username, password)
-        if command and sub_command:
-            self.shell.execute_command(cmd)
-        rest = RestConnection(self.master)
-        cb_version = rest.get_nodes_version()
-        if cb_version[:5] in COUCHBASE_FROM_WATSON:
-            cli = CouchbaseCLI(self.master, username, password)
-            output, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled)
-            if self.debug_logs:
-                print "output from exe command  ", output
         """
             During upgrade operations
         """
@@ -2541,6 +2532,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         """
             After upgrade operations
         """
+        self.sleep(5)
+
         if new_users and new_roles:
             self.log.info("Add new users with roles after upgrade to version %s"
                                 % self.upgrade_versions)
@@ -2560,31 +2553,27 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                             new_users, new_roles)
                 if not found:
                     self.fail("Failed to add rbac user in")
-
+                self.log.info("Run CLI command with new user")
+                cmd = "%s%s%s " % (self.cli_command_path, command, self.cmd_ext)
+                if sub_command:
+                    cmd += "%s --cluster %s --user %s --password %s " \
+                           % (sub_command, self.master.ip, username, password)
+                if command and sub_command:
+                    self.shell.execute_command(cmd)
+                rest = RestConnection(self.master)
+                cb_version = rest.get_nodes_version()
+                if cb_version[:5] in COUCHBASE_FROM_WATSON:
+                    if self.debug_logs:
+                        print "output from exe command  ", output
             except Exception as e:
                 if e:
                     print "Exception error:   ", e
-            finally:
-                self.log.info("Delete new create user: %s " % new_users)
-                shell = RemoteMachineShellConnection(self.master)
-                curl_path = ""
-                if self.os == "windows":
-                    curl_path = self.cli_command_location
-                cmd = "%scurl%s -X %s -u %s:%s "\
-                        "http://%s:8091/settings/rbac/users/local/%s" \
-                                  % (curl_path,
-                                     self.cmd_ext,
-                                     "DELETE",
-                                     self.master.rest_username,
-                                     self.master.rest_password,
-                                     self.master.ip,
-                                     new_users)
-                output, error = shell.execute_command(cmd)
-                if self.debug_logs:
-                    print "output from delete users command\n ", output
-                shell.disconnect()
-            self.shell.disconnect()
 
+            self.log.info("Operation after upgrade")
+            if ops_after_upgrade == "bucket-ops":
+                self._bucket_ops(self.master, new_users, password, new_roles)
+
+            self.shell.disconnect()
 
     def _verify_rbac_users(self, server, login_user, login_password, users, roles):
         cmd = "%scouchbase-cli%s user-manage " % (self.cli_command_path,
@@ -2605,13 +2594,102 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         for x in output:
             if users in x:
                 users_found = True
-            if roles in x:
+            if "]" in roles:
+                roles_name = re.sub("[\[].*?[\]]", "", roles)
+            if roles_name in x:
                 roles_found = True
         if users_found and roles_found:
             self.log.info("Users '%s' and roles '%s' found in cluster"
                                                        % ( users, roles))
             found = True
         return found
+
+    def _bucket_ops(self, server, user, password, roles):
+        self.log.info("Do some bucket operation like create, delete")
+        bucket_create_roles = ["admin", "cluster_admin"]
+        cli = CouchbaseCLI(server, user, password)
+        try:
+            self.log.info("Create bucket 'bucket1' with roles %s" % roles)
+            cli.bucket_create("bucket1", self.bucket_type, 256,
+                                         self.eviction_policy, 1,
+                                         1, self.priority,
+                                         0, True)
+            self.buckets = RestConnection(server).get_buckets()
+            bucket_found = False
+            for bucket in self.buckets:
+                if bucket.name == "bucket1":
+                    if roles not in bucket_create_roles:
+                        self.fail("Roles %s should not have permission"
+                                  "to create bucket." % roles)
+                    self.log.info("Found bucket '%s' in cluster" % bucket.name)
+                    bucket_found = True
+            if not bucket_found:
+                self.fail("Failed to create bucket by user %s with roles: %s"
+                                                               % (user, roles))
+        except Exception, e:
+            if e and roles not in bucket_create_roles:
+                print "\nBucket permission of roles '%s' is enforced\n" % roles
+                self.log.info("Create bucket with admin roles for next test")
+                cli = CouchbaseCLI(server, "Administrator", password)
+                cli.bucket_create("bucket1", self.bucket_type, self.bucket_ram,
+                                             self.eviction_policy, 1,
+                                             1, self.priority,
+                                             self.enable_flush, True)
+
+        self.log.info("Enable flush and flush bucket")
+        bucket_edit_roles = ["admin", "cluster_admin", "bucket_admin[*]"]
+        cli = CouchbaseCLI(server, user, password)
+        output, _, _ = cli.bucket_edit("bucket1", self.bucket_ram,
+                                                  self.eviction_policy, 1,
+                                                  self.priority, 1)
+        if "SUCCESS: Bucket edited" not in output:
+            if roles in bucket_edit_roles:
+                self.fail("Failed to edit bucket with roles %s " % roles)
+            else:
+                self.log.info("%s has no permision to edit bucket" % roles)
+                print "\nEnable flush with admin roles for next test\n"
+                cli = CouchbaseCLI(server, "Administrator", password)
+                cli.bucket_edit("bucket1", self.bucket_ram,
+                                self.eviction_policy, 1,
+                                self.priority, 1)
+
+        self.log.info("Load data to bucket")
+        shell = RemoteMachineShellConnection(server)
+        cmd = "%scbworkloadgen%s -c %s:8091 -j -u %s -p %s -b bucket1 " \
+                                              % (self.cli_command_path,
+                                                 self.cmd_ext,
+                                                 server.ip,
+                                                 "Administrator",
+                                                 "password")
+        shell.execute_command(cmd)
+        shell.disconnect()
+        cli = CouchbaseCLI(server, user, password)
+        cli.bucket_flush("bucket1", True)
+        rest = RestConnection(server)
+        bucket_items = rest.get_active_key_count("bucket1")
+        if int(bucket_items) != 0 :
+            if roles in bucket_edit_roles:
+                self.fail("Failed to flush bucket with roles %s" % roles)
+            else:
+                self.log.info("%s has no permision to flush bucket" % roles)
+        else:
+            self.log.info("Roles %s success flush bucket " % roles)
+
+        try:
+            self.log.info("Delete bucket 'bucket1")
+            cli = CouchbaseCLI(server, user, password)
+            cli.bucket_delete("bucket1")
+            self.buckets = RestConnection(server).get_buckets()
+            for bucket in self.buckets:
+                if bucket.name == "bucket1":
+                    if roles in bucket_create_roles:
+                        self.fail("Roles %s failed to delete bucket." % roles)
+                    else:
+                        self.log.info(
+                            "%s has no permision to delete bucket" % roles)
+        except Exception, e:
+            if e:
+                print "\n%s\n", e
 
 
 class XdcrCLITest(CliBaseTest):
