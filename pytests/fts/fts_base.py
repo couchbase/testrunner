@@ -576,9 +576,15 @@ class FTSIndex:
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
 
-        if TestInputSingleton.input.param("kvstore", None):
-            self.index_definition['params']['store'] = {"kvStoreName":
-                            TestInputSingleton.input.param("kvstore", None)}
+        if TestInputSingleton.input.param("level_compaction", None):
+            self.index_definition['params']['store'] = {
+                "kvStoreName": "mossStore",
+                "mossStoreOptions": {
+                    "CompactionLevelMaxSegments": 4,
+                    "CompactionPercentage": 0.6,
+                    "CompactionLevelMultiplier": 6
+                }
+            }
 
         if TestInputSingleton.input.param("memory_only", None):
             self.index_definition['params']['store'] = \
