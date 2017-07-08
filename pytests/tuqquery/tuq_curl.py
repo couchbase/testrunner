@@ -58,7 +58,7 @@ class QueryCurlTests(QueryTests):
         self.full_access = self.input.param("full_access", True)
         self.run_cbq_query('delete from system:prepareds')
         if self.full_access:
-            self.shell.create_whitelist(self.n1ql_certs_path, True)
+            self.shell.create_whitelist(self.n1ql_certs_path, {"all_access":True})
 
     def suite_setUp(self):
         super(QueryCurlTests, self).suite_setUp()
@@ -666,7 +666,8 @@ class QueryCurlTests(QueryTests):
                   "'callback=']})temp"
         curl = self.shell.execute_commands_inside(self.cbqpath,query+options,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['results'][0]['results'] == expected_curl['query']['results'])
+        self.assertTrue(actual_curl['results'][0]['results']['quote']['Symbol']
+                        == expected_curl['query']['results']['quote']['Symbol'])
 
         curl_output2 = self.shell.execute_command(
             "{0} https://query.yahooapis.com/v1/public/yql --data 'q=select%20*%20from%20yahoo."
@@ -678,7 +679,10 @@ class QueryCurlTests(QueryTests):
                   "'env=store://datatables.org/alltableswithkeys','callback=']})temp"
         curl = self.shell.execute_commands_inside(self.cbqpath,query+options,'', '', '', '', '')
         actual_curl2 = self.convert_to_json(curl)
-        self.assertTrue(actual_curl2['results'][0]['results'] == expected_curl2['query']['results'])
+        self.assertTrue(actual_curl2['results'][0]['results']['quote']['Symbol']
+                        == expected_curl2['query']['results']['quote']['Symbol'] and
+                        actual_curl2['results'][0]['results']['quote']['YearLow'] ==
+                        expected_curl2['query']['results']['quote']['YearLow'])
 
     '''Tests the different ways to specify which method to use'''
     def test_conflicting_method_options(self):

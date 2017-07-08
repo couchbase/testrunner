@@ -911,15 +911,14 @@ class RemoteMachineShellConnection:
         cmd = 'echo "%s" > %s/%s' % (''.join(lines), remote_path, filename)
         self.execute_command(cmd)
 
-    def create_whitelist(self, path, all_access=False, allowed_list=None, disallowed_list=None):
+    def create_whitelist(self, path, whitelist):
         if not os.path.exists(path):
             self.execute_command("mkdir %s" % path)
-        settings ={"all_access":all_access,"allowed_urls":allowed_list,
-                   "disallowed_urls":disallowed_list}
-        if not os.path.exists(os.path.join(path, "curl_whitelist.json")):
-            filepath = os.path.join(path, "curl_whitelist.json")
-            file_data = json.dumps(settings)
-            self.create_file(filepath,file_data)
+        filepath = os.path.join(path, "curl_whitelist.json")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        file_data = json.dumps(whitelist)
+        self.create_file(filepath, file_data)
 
     def remove_directory(self, remote_path):
         if self.remote:
