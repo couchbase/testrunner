@@ -422,7 +422,6 @@ class StableTopFTS(FTSBaseTest):
                                                 stat_name='num_recs_to_persist')
         self.log.info("Data(metadata + docs) in write queue is {0}".
                       format(stat_value))
-        self.partitions_per_pindex = 2
         new_plan_param = self.construct_plan_params()
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
@@ -1719,9 +1718,7 @@ class StableTopFTS(FTSBaseTest):
         index = self._cb_cluster.create_fts_index(
             name='default_index',
             source_name='default',
-            source_params={"authUser": 'default',
-                           "authPassword": '',
-                           "includeXAttrs": True})
+            source_params={"includeXAttrs": True})
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         if self._update or self._delete:
@@ -1741,8 +1738,7 @@ class StableTopFTS(FTSBaseTest):
         import json, os, subprocess
         idx = {"sourceName": "default",
                "sourceType": "couchbase",
-               "type": "fulltext-index",
-               "sourceParams": {"authUser": "default"}}
+               "type": "fulltext-index"}
 
         qry = {"indexName": "default_index_1",
                  "query": {"field": "type", "match": "emp"},

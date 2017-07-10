@@ -150,7 +150,6 @@ class INDEX_DEFAULTS:
         "sourceType": "couchbase",
         "sourceName": "default",
         "sourceUUID": "",
-        "sourceParams": SOURCE_CB_PARAMS,
         "planParams": {}
     }
 
@@ -534,7 +533,6 @@ class FTSIndex:
             "sourceType": "couchbase",
             "sourceName": "default",
             "sourceUUID": "",
-            "sourceParams": INDEX_DEFAULTS.SOURCE_CB_PARAMS,
             "planParams": {}
         }
         self.name = self.index_definition['name'] = name
@@ -570,8 +568,8 @@ class FTSIndex:
                 self.build_custom_plan_params(plan_params)
 
         if source_params:
-            self.index_definition['sourceParams'] = \
-                self.build_source_params(source_params)
+            self.index_definition['sourceParams'] = {}
+            self.index_definition['sourceParams'] = source_params
 
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
@@ -673,14 +671,6 @@ class FTSIndex:
         plan = INDEX_DEFAULTS.PLAN_PARAMS
         plan.update(plan_params)
         return plan
-
-    def build_source_params(self, source_params):
-        if self._source_type == "couchbase":
-            src_params = INDEX_DEFAULTS.SOURCE_CB_PARAMS
-        else:
-            src_params = INDEX_DEFAULTS.SOURCE_FILE_PARAMS
-        src_params.update(source_params)
-        return src_params
 
     def add_child_field_to_default_mapping(self, field_name, field_type,
                                            field_alias=None, analyzer=None):
@@ -3567,8 +3557,6 @@ class FTSBaseTest(unittest.TestCase):
             name=index_name,
             source_name=bucket.name,
             index_params=index_params,
-            source_params={"authUser": bucket.name,
-                           "authPassword": bucket_password},
             plan_params=plan_params)
         self.is_index_partitioned_balanced(index)
         return index
