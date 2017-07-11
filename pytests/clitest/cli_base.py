@@ -64,6 +64,8 @@ class CliBaseTest(BaseTestCase):
         self.limit_docs = self.input.param("limit-docs", None)
         self.limit_rows = self.input.param("limit-rows", None)
         self.skip_rows = self.input.param("skip-rows", None)
+        self.omit_empty = self.input.param("omit-empty", None)
+        self.infer_types = self.input.param("infer-types", None)
         self.fx_generator = self.input.param("fx-generator", None)
         self.fx_gen_start = self.input.param("fx-gen-start", None)
         self.verify_data = self.input.param("verify-data", False)

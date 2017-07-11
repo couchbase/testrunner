@@ -717,7 +717,14 @@ class ImportExportTests(CliBaseTest):
 
     def test_import_csv_file(self):
         options = {"load_doc": False}
-        self.import_file = self.input.param("import_file", None)
+        return self._common_imex_test("import", options)
+
+    def test_import_csv_with_infer_types(self):
+        options = {"load_doc": False, "docs": "1000"}
+        return self._common_imex_test("import", options)
+
+    def test_import_csv_with_omit_empty(self):
+        options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
 
     def _common_imex_test(self, cmd, options):
@@ -846,6 +853,12 @@ class ImportExportTests(CliBaseTest):
                     limit_lines = " --limit-rows %s " % self.limit_rows
                 if self.skip_rows:
                     skip_lines = " --skip-rows %s " % self.skip_rows
+                omit_empty = ""
+                if self.omit_empty:
+                    omit_empty = " --omit-empty "
+                infer_types = ""
+                if self.infer_types:
+                    infer_types = " --infer-types "
                 fx_generator = ""
                 if self.fx_generator:
                     fx_generator = "::#%s#" % self.fx_generator.upper()
@@ -896,7 +909,7 @@ class ImportExportTests(CliBaseTest):
                     if self.cmd_ext:
                         des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s "\
-                                  " %s%s %s %s %s"\
+                                  " %s%s %s %s %s %s %s"\
                                               % (self.cli_command_path, cmd,
                                                  self.cmd_ext, self.imex_type,
                                                  server.ip, username, password,
@@ -905,7 +918,8 @@ class ImportExportTests(CliBaseTest):
                                                  self.format_type,
                                                  key_gen, fx_generator,
                                                  field_separator_flag,
-                                                 limit_lines, skip_lines)
+                                                 limit_lines, skip_lines,
+                                                 omit_empty, infer_types)
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
@@ -917,6 +931,9 @@ class ImportExportTests(CliBaseTest):
 
                     self.log.info("Import data to bucket")
                     output, error = self.shell.execute_command(imp_cmd_str)
+                    if error:
+                        self.fail("\nFailed to run command %s\nError:\n %s"
+                                  % (imp_cmd_str, error))
                     self.log.info("Output from execute command %s " % output)
                     """ Json `file:///root/json_list` imported to `http://host:8091`
                         successfully
@@ -935,20 +952,22 @@ class ImportExportTests(CliBaseTest):
 
     def _verify_import_data(self, options):
         keys = self.rest.get_active_key_count("default")
-        skip_lines = ""
+        skip_lines = 0
+        if self.import_file and self.import_file.startswith("csv"):
+            skip_lines = 1
         limit_lines = ""
         data_import = ""
         if options["docs"]:
             data_import = int(options["docs"])
         if self.skip_docs:
             data_import = int(options["docs"]) - int(self.skip_docs)
-            skip_lines = int(self.skip_docs)
+            skip_lines += int(self.skip_docs)
         if self.limit_docs:
             data_import = int(self.limit_docs)
             limit_lines = int(self.limit_docs)
         if self.skip_rows:
             data_import = int(options["docs"]) - int(self.skip_rows)
-            skip_lines = int(self.skip_rows)
+            skip_lines += int(self.skip_rows)
         if self.limit_rows:
             data_import = int(self.limit_rows)
             limit_lines = int(self.limit_rows)
@@ -997,13 +1016,12 @@ class ImportExportTests(CliBaseTest):
                     format_type = "csv_comma"
                 else:
                     format_type = "csv_tab"
-            with open("resources/imex/%s_%s_lines" % (format_type,
-                                                      options["docs"])) as f:
+            with open("resources/imex/%s" % self.import_file) as f:
                 if self.skip_docs and self.limit_docs:
                     self.log.info("Skip %s docs and import only %s docs after that"
                                                % (self.skip_docs, self.limit_docs))
                     src_data = list(itertools.islice(f, self.skip_docs,
-                                                        int(skip_lines) +
+                                                        skip_lines +
                                                         int(self.limit_docs)))
                     src_data = map(lambda s: s.strip(), src_data)
                     src_data = [x.replace(" ", "") for x in src_data]
@@ -1011,7 +1029,7 @@ class ImportExportTests(CliBaseTest):
                     self.log.info("Skip %s rows and import only %s rows after that"
                                   % (self.skip_rows, self.limit_rows))
                     src_data = list(itertools.islice(f, (self.skip_rows + 1),
-                                                        int(skip_lines) + 1 +
+                                                        skip_lines +
                                                         int(self.limit_rows)))
                 elif self.skip_docs:
                     self.log.info("Get data from %dth line" % skip_lines)
@@ -1025,10 +1043,10 @@ class ImportExportTests(CliBaseTest):
                     src_data = f.read().splitlines()[1:actual_lines]
                 elif self.skip_rows:
                     self.log.info("Get data from %dth lines" % skip_lines)
-                    src_data = f.read().splitlines()[(skip_lines + 1):]
+                    src_data = f.read().splitlines()[skip_lines:]
                 else:
                     self.log.info("Get data from source file")
-                    src_data = f.read().splitlines()
+                    src_data = f.read().splitlines()[skip_lines:]
             src_data = [x.replace(" ", "") for x in src_data]
             if self.debug_logs:
                 print "source data  ", src_data
@@ -1060,6 +1078,29 @@ class ImportExportTests(CliBaseTest):
                     if str(src_data[x].split(",")[2]) != bucket_keys[x]["id"]:
                         self.fail("Failed to import key %s to bucket"
                                   % src_data[x])
+                    curl_cmd = "curl -X GET -u Administrator:password " \
+                            "http://%s:8091/pools/default/buckets/default/docs/%d" \
+                               % (self.master.ip, x)
+                    if self.omit_empty:
+                        empty_data_keys = [2, 6, 100, 500, 750, 888]
+                        if x in empty_data_keys:
+                            output, error = shell.execute_command(curl_cmd)
+                            if output:
+                                key_value = output[0]
+                                key_value = ast.literal_eval(key_value)
+                                print "key value json  ", key_value["json"]
+                                if "age" in key_value["json"]:
+                                    if "body" in key_value["json"]:
+                                        self.fail("Failed to omit empty value field")
+                    if self.infer_types:
+                        self.log.info("Check data type in value")
+                        output, error = shell.execute_command(curl_cmd)
+                        if output:
+                            key_value = output[0]
+                            key_value = ast.literal_eval(key_value)
+                            if not isinstance( key_value["json"]["age"], int):
+                                self.fail("Failed to put inferred type into docs %s"
+                                          % src_data[x])
 
     def _verify_export_file(self, export_file_name, options):
         if not options["load_doc"]:
