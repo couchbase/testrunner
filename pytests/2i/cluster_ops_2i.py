@@ -113,6 +113,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             query_definitions = self.query_definitions,
             create_index = True, drop_index = False,
             query_with_explain = False, query = False)
+        self.sleep(20)
         self._verify_bucket_count_with_index_count()
         try:
             # Run operations expiry and deletion
