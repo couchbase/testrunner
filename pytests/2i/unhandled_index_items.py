@@ -66,24 +66,31 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         self.set_allow_large_keys(self.allow_large_keys)
         self.change_max_item_size(self.max_item_size)
         self.change_max_array_size(self.max_array_size)
-        self._upload_documents(num_items=self.num_docs,
+        try:
+            self._upload_documents(num_items=self.num_docs,
                                             item_size=self.max_item_size,
                                             array_size=self.max_array_size)
-        query_definitions = self._create_indexes()
-        self.sleep(10)
-        rest = RestConnection(self.master)
-        index_map = rest.get_index_id_map()
-        #full table scan
-        for bucket in self.buckets:
-            for query_definition in query_definitions:
-                index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
-                actual_result = self.rest.full_table_scan_gsi_index_with_rest(
-                    index_id, body={"stale": "false"})
-                expected_result = self._get_expected_results_for_scan(query_definition)
-                msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+        except Exception, ex:
+            msg_list = ["Too big", "Invalid"]
+            for msg in msg_list:
+                if msg in str(ex):
+                    log.info("Document being loaded is {0}".format(msg))
+        else:
+            query_definitions = self._create_indexes()
+            self.sleep(10)
+            rest = RestConnection(self.master)
+            index_map = rest.get_index_id_map()
+            #full table scan
+            for bucket in self.buckets:
+                for query_definition in query_definitions:
+                    index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
+                    actual_result = self.rest.full_table_scan_gsi_index_with_rest(
+                        index_id, body={"stale": "false"})
+                    expected_result = self._get_expected_results_for_scan(query_definition)
+                    msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
+                    self.assertEqual(sorted(actual_result), sorted(expected_result),
+                                     msg.format(query_definition.index_name,
+                                                actual_result, expected_result))
 
     def test_increase_max_item_limits(self):
         self.set_allow_large_keys(self.allow_large_keys)
