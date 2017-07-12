@@ -59,6 +59,7 @@ class CliBaseTest(BaseTestCase):
         self.format_type = self.input.param("format_type", None)
         self.import_method = self.input.param("import_method", "file://")
         self.force_failover = self.input.param("force_failover", False)
+        self.json_invalid_errors = self.input.param("json-invalid-errors", None)
         self.key_gen = self.input.param("key-gen", True)
         self.skip_docs = self.input.param("skip-docs", None)
         self.limit_docs = self.input.param("limit-docs", None)

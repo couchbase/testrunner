@@ -491,11 +491,10 @@ class ImportExportTests(CliBaseTest):
         """ imex_type     = json
             threads_flag   = -t
             errors_flag    = -e
-            logs_flag      = -l 
+            logs_flag      = -l
             include_key_flag = --include-key """
         server = copy.deepcopy(self.servers[0])
         self.threads_flag = self.input.param("threads_flag", "")
-        self.errors_flag = self.input.param("errors_flag", "")
         self.logs_flag = self.input.param("logs_flag", "")
         self.include_key_flag = self.input.param("include_key_flag", "")
         self.import_file = self.input.param("import_file", None)
@@ -859,6 +858,12 @@ class ImportExportTests(CliBaseTest):
                 infer_types = ""
                 if self.infer_types:
                     infer_types = " --infer-types "
+                json_invalid_errors_file = ""
+                if self.json_invalid_errors:
+                    self.log.info("Remove old json invalid error file")
+                    json_invalid_errors_file = "-e %sinvalid_error" % self.tmp_path
+                    self.shell.execute_command("rm -rf %s"
+                                                     % json_invalid_errors_file[3:])
                 fx_generator = ""
                 if self.fx_generator:
                     fx_generator = "::#%s#" % self.fx_generator.upper()
@@ -909,7 +914,7 @@ class ImportExportTests(CliBaseTest):
                     if self.cmd_ext:
                         des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s "\
-                                  " %s%s %s %s %s %s %s"\
+                                  " %s%s %s %s %s %s %s %s"\
                                               % (self.cli_command_path, cmd,
                                                  self.cmd_ext, self.imex_type,
                                                  server.ip, username, password,
@@ -919,7 +924,8 @@ class ImportExportTests(CliBaseTest):
                                                  key_gen, fx_generator,
                                                  field_separator_flag,
                                                  limit_lines, skip_lines,
-                                                 omit_empty, infer_types)
+                                                 omit_empty, infer_types,
+                                                 json_invalid_errors_file)
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
@@ -943,6 +949,15 @@ class ImportExportTests(CliBaseTest):
                     if "invalid" in self.import_file:
                         if self._check_output("Json import failed:", output):
                             json_loaded = True
+                        if self.json_invalid_errors:
+                            output, error = self.shell.execute_command("cat %s"
+                                                    % json_invalid_errors_file[3:])
+                            """
+                            wait for bug MB-25230 fixed to get content in output
+                            """
+                            if output:
+                                print "Output: ",output
+                                print "Error: ",error
                     elif self._check_output("successfully", output):
                         json_loaded = True
                     if not json_loaded:
@@ -957,7 +972,7 @@ class ImportExportTests(CliBaseTest):
             skip_lines = 1
         limit_lines = ""
         data_import = ""
-        if options["docs"]:
+        if "docs" in options:
             data_import = int(options["docs"])
         if self.skip_docs:
             data_import = int(options["docs"]) - int(self.skip_docs)
@@ -971,8 +986,9 @@ class ImportExportTests(CliBaseTest):
         if self.limit_rows:
             data_import = int(self.limit_rows)
             limit_lines = int(self.limit_rows)
-        print "Total docs in bucket: ", keys
-        print "Docs need to import: ", data_import
+        if not self.json_invalid_errors:
+            print "Total docs in bucket: ", keys
+            print "Docs need to import: ", data_import
 
         if data_import != int(keys):
             if self.skip_docs:
