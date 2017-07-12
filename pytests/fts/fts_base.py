@@ -578,9 +578,9 @@ class FTSIndex:
             self.index_definition['params']['store'] = {
                 "kvStoreName": "mossStore",
                 "mossStoreOptions": {
-                    "CompactionLevelMaxSegments": 4,
+                    "CompactionLevelMaxSegments": 9,
                     "CompactionPercentage": 0.6,
-                    "CompactionLevelMultiplier": 6
+                    "CompactionLevelMultiplier": 3
                 }
             }
 
