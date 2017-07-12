@@ -499,7 +499,9 @@ class StableTopFTS(FTSBaseTest):
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index")
-        self.create_es_index_mapping(index.es_custom_map, index.index_definition)
+        if self.es:
+            self.create_es_index_mapping(index.es_custom_map,
+                                         index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
         if self._update or self._delete:
