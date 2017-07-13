@@ -574,29 +574,30 @@ class FTSIndex:
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
 
+        self.index_definition['params']['store'] = {
+            "kvStoreName": "mossStore",
+            "mossStoreOptions": {}
+        }
+
         if TestInputSingleton.input.param("level_compaction", None):
-            self.index_definition['params']['store'] = {
-                "kvStoreName": "mossStore",
-                "mossStoreOptions": {
-                    "CompactionLevelMaxSegments": 9,
-                    "CompactionPercentage": 0.6,
-                    "CompactionLevelMultiplier": 3
-                }
+            self.index_definition['params']['store']['mossStoreOptions']= {
+                "CompactionLevelMaxSegments": 9,
+                "CompactionPercentage": 0.6,
+                "CompactionLevelMultiplier": 3
             }
+
+        if TestInputSingleton.input.param("moss_compact_threshold", None):
+            self.index_definition['params']['store']\
+                ['mossStoreOptions']['CompactionPercentage'] = int(
+                    TestInputSingleton.input.param(
+                        "moss_compact_threshold",
+                        None)
+                    )
 
         if TestInputSingleton.input.param("memory_only", None):
             self.index_definition['params']['store'] = \
                 {"kvStoreName": "moss",
                  "mossLowerLevelStoreName": ""}
-
-        if TestInputSingleton.input.param("moss_compact_threshold", None):
-            self.index_definition['params']['store'] = \
-                {"mossStoreOptions": {
-                    "CompactionPercentage": int(TestInputSingleton.input.param(
-                        "moss_compact_threshold",
-                        None))
-                }
-                }
 
         self.moss_enabled = TestInputSingleton.input.param("moss", True)
         if not self.moss_enabled:
