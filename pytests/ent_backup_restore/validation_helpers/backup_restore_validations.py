@@ -203,6 +203,12 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
 
     def validate_merge(self, backup_validation_path):
         for bucket in self.buckets:
+            if self.backupset.exclude_buckets and bucket.name in \
+                    self.backupset.exclude_buckets:
+                continue
+            if self.backupset.include_buckets and bucket.name not in \
+                    self.backupset.include_buckets:
+                continue
             start_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", self.backupset.start)
             start_file_path = os.path.join(self.backup_validation_path, start_file_name)
             start_json = {}

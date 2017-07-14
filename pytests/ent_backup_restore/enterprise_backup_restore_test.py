@@ -2638,6 +2638,76 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         else:
             self.fail("GSI index not created in restore cluster as expected")
 
+    def test_backup_merge_restore_with_gsi(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset
+        3. Creates a GSI index on source cluster
+        4. Backsup data and validates
+        5. Restores data ans validates
+        6. Ensures that same gsi index is created in restore cluster
+        """
+        rest_src = RestConnection(self.backupset.cluster_host)
+        rest_src.add_node(self.servers[1].rest_username,
+                          self.servers[1].rest_password,
+                          self.servers[1].ip, services=['index'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [],
+                                                 [])
+        rebalance.result()
+        gen = DocumentGenerator('test_docs', '{{"Num1": {0}, "Num2": {1}}}',
+                                xrange(100), xrange(100),
+                                start=0, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        cmd = "cbindex -type create -bucket default -using forestdb -index " \
+              "num1 -fields=Num1"
+        remote_client = RemoteMachineShellConnection(
+            self.backupset.cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error or "Index created" not in output[-1]:
+            self.fail("GSI index cannot be created")
+        self.backup_cluster_validate()
+        cmd = "cbindex -type create -bucket default -using forestdb -index " \
+              "num2 -fields=Num2"
+        remote_client = RemoteMachineShellConnection(
+            self.backupset.cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error or "Index created" not in output[-1]:
+            self.fail("GSI index cannot be created")
+        self.backup_cluster_validate()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_merge_validate()
+        rest_target = RestConnection(self.backupset.restore_cluster_host)
+        rest_target.add_node(self.input.clusters[0][1].rest_username,
+                             self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=['index'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [],
+                                                 [])
+        rebalance.result()
+        start = self.number_of_backups_taken
+        end = self.number_of_backups_taken
+        self.backupset.start = start
+        self.backupset.end = end
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=")
+        cmd = "cbindex -type list"
+        remote_client = RemoteMachineShellConnection(
+            self.backupset.restore_cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if len(output) > 1:
+            self.assertTrue("Index:default/Num1" in output[1],
+                            "GSI index not created in restore cluster as expected")
+            self.log.info("GSI index created in restore cluster as expected")
+        else:
+            self.fail("GSI index not created in restore cluster as expected")
+
     def test_backup_restore_with_fts(self):
         """
         1. Creates specified bucket on the cluster and loads it with given number of items

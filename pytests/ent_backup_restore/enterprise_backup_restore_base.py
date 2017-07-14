@@ -1,6 +1,7 @@
 import copy
 import os, re
 import shutil
+import urllib
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
@@ -107,8 +108,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.cluster_new_user:
             self.backupset.cluster_host_username = self.cluster_new_user
             self.backupset.restore_cluster_host_username = self.cluster_new_user
-        self.backupset.exclude_buckets = self.input.param("exclude-buckets", "")
-        self.backupset.include_buckets = self.input.param("include-buckets", "")
+        include_buckets = self.input.param("include-buckets", "")
+        include_buckets = include_buckets.split(",") if include_buckets else []
+        exclude_buckets = self.input.param("exclude-buckets", "")
+        exclude_buckets = exclude_buckets.split(",") if exclude_buckets else []
+        self.backupset.exclude_buckets = exclude_buckets
+        self.backupset.include_buckets = include_buckets
         self.backupset.disable_bucket_config = self.input.param("disable-bucket-config", False)
         self.backupset.disable_views = self.input.param("disable-views", False)
         self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
@@ -1487,6 +1492,14 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 self.backup_merge_actions[action](self)
                 self.log.info("Finished {} action for {}th time.".format(
                     action, i + 1))
+
+    def set_meta_purge_interval(self):
+        rest = RestConnection(self.master)
+        params = {}
+        api = rest.baseUrl + "controller/setAutoCompaction"
+        params["purgeInterval"] = 0.003
+        params = urllib.urlencode(params)
+        return rest._http_request(api, "POST", params)
 
     backup_merge_actions = {
         "bucket_ops": ops_on_buckets,
