@@ -591,7 +591,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         indexer_node = self.get_nodes_from_services_map(service_type="index")
         self._start_disk_writes_for_plasma([indexer_node])
         self._create_replica_indexes()
-        remote = RemoteMachineShellConnection(indexer_node.ip)
+        remote = RemoteMachineShellConnection(indexer_node)
         for i in range(3):
             try:
                 remote.stop_server()
@@ -602,6 +602,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
                 log.info(str(ex))
             finally:
                 remote.start_server()
+                self.sleep(20)
         post_recovery_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_recovery_tasks])
 
