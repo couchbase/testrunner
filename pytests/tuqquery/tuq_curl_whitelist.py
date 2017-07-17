@@ -420,7 +420,6 @@ class QueryWhitelistTests(QueryTests):
                 "'user':'%s:%s'})" % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        import pdb; pdb.set_trace()
         self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
 
 ##############################################################################################
