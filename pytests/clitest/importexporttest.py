@@ -26,7 +26,6 @@ class ImportExportTests(CliBaseTest):
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
         self.localhost = self.input.param("localhost", False)
-        self.field_separator = self.input.param("field_separator", "comma")
         self.json_create_gen = JsonDocGenerator("imex", op_type="create",
                                        encoding="utf-8", start=0, end=self.num_items)
         self.json_delete_gen = JsonDocGenerator("imex", op_type="delete",
@@ -179,6 +178,16 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": True, "docs":"1000"}
         return self._common_imex_test("export", options)
 
+    def test_export_with_secure_connection(self):
+        """
+           Need to add params below to test:
+            format_type=list (or lines)
+            secure-conn=True (default False)
+           Return: None
+        """
+        options = {"load_doc": True, "docs":"1000"}
+        return self._common_imex_test("export", options)
+
     def test_import_to_dgm_bucket(self):
         """
            Need to add params below to test:
@@ -250,8 +259,6 @@ class ImportExportTests(CliBaseTest):
                         field_separator_flag = ""
                         if self.imex_type == "csv":
                             format_flag = self.format_type = ""
-                            if self.format_type is None:
-                                self.format_type = ""
                             if self.field_separator != "comma":
                                 if self.field_separator == "tab":
                                     """ we test tab separator in this case """
@@ -498,7 +505,6 @@ class ImportExportTests(CliBaseTest):
         self.logs_flag = self.input.param("logs_flag", "")
         self.include_key_flag = self.input.param("include_key_flag", "")
         self.import_file = self.input.param("import_file", None)
-        self.format_type = self.input.param("format_type", None)
         import_method = self.input.param("import_method", "file://")
         self.output_flag = self.input.param("output_flag", "-o")
         threads_flag = ""
@@ -726,6 +732,13 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
 
+    def test_import_with_secure_connection(self):
+        """
+            For csv, require param key-gen=False
+        """
+        options = {"load_doc": False, "docs": "1000"}
+        return self._common_imex_test("import", options)
+
     def _common_imex_test(self, cmd, options):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
@@ -753,6 +766,22 @@ class ImportExportTests(CliBaseTest):
                                                    self.value_size,
                                                    start=0,
                                                    end=50000)
+        url_format = ""
+        secure_port = ""
+        secure_conn = ""
+        if self.secure_conn:
+            # bin_path, cert_path, user, password, server_cert
+            cacert = self.shell.get_cluster_certificate_info(self.cli_command_path,
+                                                             self.tmp_path,
+                                                             "Administrator",
+                                                             "password",
+                                                             self.master)
+            secure_port = "1"
+            url_format = "s"
+            if not self.no_cacert:
+                secure_conn = "--cacert %s" % cacert
+            if self.no_ssl_verify:
+                secure_conn = "--no-ssl-verify"
         if "export" in cmd:
             cmd = "cbexport"
             if options["load_doc"]:
@@ -789,12 +818,31 @@ class ImportExportTests(CliBaseTest):
                         export_file = export_file.replace("/cygdrive/c", "c:")
                     if self.localhost:
                         server.ip = "localhost"
-                    exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
-                         % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
-                                     server.ip, username, password, bucket.name,
-                                                    self.format_type, export_file)
+                    exe_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p %s" \
+                                  " -b %s -f %s %s -o %s"\
+                                  % (self.cli_command_path, cmd, self.cmd_ext,
+                                     self.imex_type, url_format, server.ip,
+                                     secure_port, username, password, bucket.name,
+                                     self.format_type, secure_conn, export_file)
                     output, error = self.shell.execute_command(exe_cmd_str)
-                    self._verify_export_file(bucket.name, options)
+                    data_exported = True
+                    if self.secure_conn:
+                        if self.no_ssl_verify:
+                            if not self._check_output("successfully", output):
+                                data_exported = False
+                                self.fail("Fail to export with no-ssl-verify flag")
+                        elif self.no_cacert:
+                            if self._check_output("successfully", output):
+                                data_exported = False
+                                self.fail("Secure connection works without cacert")
+                        elif not self._check_output("successfully", output):
+                            data_exported = False
+                            self.fail("Failed export json in secure connection")
+                    elif not self._check_output("successfully", output):
+                        data_exported = False
+                        self.fail("Failed to export json data")
+                    if data_exported:
+                        self._verify_export_file(bucket.name, options)
 
             if self.import_back:
                 import_file = export_file
@@ -913,19 +961,23 @@ class ImportExportTests(CliBaseTest):
                     """
                     if self.cmd_ext:
                         des_file = des_file.replace("/cygdrive/c", "c:")
-                    imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s "\
-                                  " %s%s %s %s %s %s %s %s"\
-                                              % (self.cli_command_path, cmd,
-                                                 self.cmd_ext, self.imex_type,
-                                                 server.ip, username, password,
-                                                 bucket.name, import_method,
-                                                 des_file, format_flag,
-                                                 self.format_type,
-                                                 key_gen, fx_generator,
-                                                 field_separator_flag,
-                                                 limit_lines, skip_lines,
-                                                 omit_empty, infer_types,
-                                                 json_invalid_errors_file)
+                    imp_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p %s " \
+                                  "-b %s -d %s%s %s %s "\
+                                  " %s%s %s %s %s %s %s %s "\
+                                       % (self.cli_command_path, cmd, self.cmd_ext,
+                                          self.imex_type,
+                                          url_format, server.ip, secure_port,
+                                          username, password,
+                                          bucket.name,
+                                          import_method, des_file,
+                                          format_flag,
+                                          self.format_type,
+                                          key_gen, fx_generator,
+                                          field_separator_flag,
+                                          limit_lines, skip_lines,
+                                          omit_empty, infer_types,
+                                          secure_conn)
+                    print "\ncommand format: ", imp_cmd_str
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
@@ -945,25 +997,39 @@ class ImportExportTests(CliBaseTest):
                         successfully
                     """
 
-                    json_loaded = False
-                    if "invalid" in self.import_file:
-                        if self._check_output("Json import failed:", output):
-                            json_loaded = True
+                    data_loaded = False
+                    if self.secure_conn:
+                        if self.no_ssl_verify:
+                            if self._check_output("successfully", output):
+                                data_loaded = True
+                            else:
+                                self.fail("Fail to import with no-ssl-verify flag")
+                        elif self.no_cacert:
+                            if self._check_output("successfully", output):
+                                self.fail("Secure connection works without cacert")
+                        elif self._check_output("successfully", output):
+                            data_loaded = True
+                        else:
+                            self.fail("Failed import data in secure connection")
+                    elif "invalid" in self.import_file:
                         if self.json_invalid_errors:
-                            output, error = self.shell.execute_command("cat %s"
+                            output1, error1 = self.shell.execute_command("cat %s"
                                                     % json_invalid_errors_file[3:])
                             """
                             wait for bug MB-25230 fixed to get content in output
                             """
-                            if output:
-                                print "Output: ",output
-                                print "Error: ",error
+                            if output1:
+                                print "Output: ",output1
+                                print "Error: ",error1
                     elif self._check_output("successfully", output):
-                        json_loaded = True
-                    if not json_loaded:
-                        self.fail("Failed to execute command")
+                        data_loaded = True
+
+                    if not data_loaded:
+                        if self.secure_conn and not self.no_cacert:
+                           self.fail("Failed to execute command")
                     self.sleep(5)
-                    self._verify_import_data(options)
+                    if data_loaded:
+                        self._verify_import_data(options)
 
     def _verify_import_data(self, options):
         keys = self.rest.get_active_key_count("default")
@@ -999,6 +1065,8 @@ class ImportExportTests(CliBaseTest):
                 self.fail("Import failed to limit %s rows" % self.limit_rows)
             if self.skip_rows:
                 self.fail("Import failed to skip %s rows" % self.limit_rows)
+            else:
+                self.fail("Import data does not match with bucket data")
 
         if self.verify_data:
             if self.field_substitutions:
@@ -1019,11 +1087,11 @@ class ImportExportTests(CliBaseTest):
             if self.imex_type == "json":
                 export_file = self.tmp_path + "bucket_data"
                 self.shell.execute_command("rm -rf %s " % export_file)
-                cmd = "%scbexport%s %s -c %s -u %s -p %s -b %s -f lines -o %s"\
+                cmd = "%scbexport%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
                               % (self.cli_command_path, self.cmd_ext,
                                  self.imex_type,
                                  self.master.ip, "cbadminbucket", "password",
-                                 "default", export_file)
+                                 "default", self.format_type, export_file)
                 output, error = self.shell.execute_command(cmd)
                 self.shell.log_command_output(output, error)
             format_type = "json"
@@ -1064,14 +1132,24 @@ class ImportExportTests(CliBaseTest):
                     self.log.info("Get data from source file")
                     src_data = f.read().splitlines()[skip_lines:]
             src_data = [x.replace(" ", "") for x in src_data]
-            if self.debug_logs:
-                print "source data  ", src_data
+            src_data = [x.rstrip(",") for x in src_data]
+            src_data[0] = src_data[0].replace("[", "")
+            src_data[len(src_data)-1] = src_data[len(src_data)-1].replace("]", "")
+
             if self.imex_type == "json":
                 self.log.info("Copy bucket data from remote to local")
                 self.shell.copy_file_remote_to_local(export_file,
                                               "/tmp/bucket_data")
                 with open("/tmp/bucket_data") as f:
                     bucket_data = f.read().splitlines()
+                    bucket_data = [x.replace(" ", "") for x in bucket_data]
+                    bucket_data = [x.rstrip(",") for x in bucket_data]
+                    bucket_data[0] = bucket_data[0].replace("[", "")
+                    bucket_data[len(bucket_data) - 1] = \
+                    bucket_data[len(bucket_data) - 1].replace("]", "")
+                if self.debug_logs:
+                    print "\nsource data  \n", src_data
+                    print "\nbucket data  \n", bucket_data
                 self.log.info("Compare source data and bucket data")
                 if sorted(src_data) == sorted(bucket_data):
                     self.log.info("Import data match bucket data")
@@ -1090,8 +1168,9 @@ class ImportExportTests(CliBaseTest):
                 for x in range(0, len(src_data)):
                     if self.debug_logs:
                         print "source data:  ", src_data[x].split(",")[2]
-                        print "bucket data:  \n", bucket_keys[x]
-                    if str(src_data[x].split(",")[2]) != bucket_keys[x]["id"]:
+                        print "bucket data:  \n", bucket_keys[x]["id"]
+                    if not any(str(src_data[x].split(",")[2]) in\
+                                                    k["id"] for k in bucket_keys):
                         self.fail("Failed to import key %s to bucket"
                                   % src_data[x])
                     curl_cmd = "curl -X GET -u Administrator:password " \
@@ -1145,8 +1224,26 @@ class ImportExportTests(CliBaseTest):
                 if self.format_type == "lines":
                     sample_file = open("resources/imex/json_%s_lines" % options["docs"])
                     samples = sample_file.read().splitlines()
+                    samples = [x.replace(" ", "") for x in samples]
                     export_file = open("/tmp/export/"+ export_file_name)
+
                     exports = export_file.read().splitlines()
+                    for x in range(len(exports)):
+                        tmp = exports[x].split(",")
+                        """ add leading zero to name value
+                            like pymc39 to pymc039
+                        """
+                        tmp1 = tmp[0][13:-1].zfill(3)
+                        tmp[0] = tmp[0][:13] + tmp1 + '"'
+                        exports[x] = ",".join(tmp)
+
+                    if self.debug_logs:
+                        s = set(exports)
+                        not_in_exports = [x for x in samples if x not in s]
+                        print "\n data in sample not in exports  ", not_in_exports
+                        e = set(samples)
+                        not_in_samples = [x for x in exports if x not in e]
+                        print "\n data in exports not in samples  ", not_in_samples
                     if sorted(samples) == sorted(exports):
                         self.log.info("export and sample json mathch")
                     else:
@@ -1164,6 +1261,9 @@ class ImportExportTests(CliBaseTest):
                     exports = ast.literal_eval(exports)
                     exports.sort(key=lambda k: k['name'])
 
+                    if self.debug_logs:
+                        print "\nSample list data: %s" % samples
+                        print "\nExport list data: %s" % exports
                     if samples == exports:
                         self.log.info("export and sample json files are matched")
                     else:
@@ -1171,8 +1271,12 @@ class ImportExportTests(CliBaseTest):
                     sample_file.close()
                     export_file.close()
             else:
-                self.fail("There is not export file '%s' in %s%s"\
-                                  % (export_file_name, self.ex_path, export_file_name))
+                file_exist = True
+                if self.secure_conn and self.no_cacert:
+                    file_exist = False
+                if file_exist:
+                    self.fail("There is not export file '%s' in %s%s"\
+                             % (export_file_name, self.ex_path, export_file_name))
 
     def _check_output(self, word_check, output):
         found = False

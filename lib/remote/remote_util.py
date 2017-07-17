@@ -3434,7 +3434,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("taskkill /F /T /IM cbbackup.exe")
             self.log_command_output(output, error)
         if self.info.distribution_type.lower() == 'mac':
-            backup_command = "%scbbackup" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            backup_command = "%scbbackup" % (MAC_COUCHBASE_BIN_PATH)
 
         command_options_string = ""
         if command_options is not '':
@@ -3466,7 +3466,7 @@ class RemoteMachineShellConnection:
             restore_command = "\"%scbrestore.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
         if self.info.distribution_type.lower() == 'mac':
-            restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            restore_command = "%scbrestore" % (MAC_COUCHBASE_BIN_PATH)
         outputs = errors = []
         for bucket in buckets:
             command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_file_location, "http://",
@@ -3545,7 +3545,7 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == 'windows':
             transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
         if self.info.distribution_type.lower() == 'mac':
-            transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            transfer_command = "%scbtransfer" % (MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
         if self.info.type.lower() == 'windows':
@@ -3586,7 +3586,7 @@ class RemoteMachineShellConnection:
                                                                         linux_couchbase_path,
                                                                         file)
         if self.info.distribution_type.lower() == 'mac':
-            cbdocloader_command = "%scbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbdocloader_command = "%scbdocloader" % (MAC_COUCHBASE_BIN_PATH)
             command = "%s -u %s -p %s %s %s:%s -b %s %s %s %s %ssamples/%s.zip"\
                                                                      % (cbdocloader_command,
                                                                         username, password,
@@ -3599,7 +3599,7 @@ class RemoteMachineShellConnection:
                                                                         MAC_CB_PATH, file)
 
         if self.info.type.lower() == 'windows':
-            cbdocloader_command = "%scbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbdocloader_command = "%scbdocloader.exe" % (WIN_COUCHBASE_BIN_PATH)
             WIN_COUCHBASE_SAMPLES_PATH = "C:/Program\ Files/Couchbase/Server/samples/"
             command = "%s -u %s -p %s %s %s:%s -b %s %s %s %s %s%s.zip" % (cbdocloader_command,
                                                                         username, password,
@@ -3622,9 +3622,9 @@ class RemoteMachineShellConnection:
                                                               LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbcollect_command = "%scbcollect_info.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbcollect_command = "%scbcollect_info" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbcollect_command = "%scbcollect_info" % (MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s" % (cbcollect_command, file)
         output, error = self.execute_command(command, use_channel=True)
@@ -3643,7 +3643,7 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == 'windows':
             couch_dbinfo_command = "%scouch_dbinfo.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            couch_dbinfo_command = "%scouch_dbinfo" % (MAC_COUCHBASE_BIN_PATH)
 
         command =  couch_dbinfo_command +' -i %sopt/couchbase/var/lib/couchbase/data/*/*[0-9] >' \
                                               % cb_data_path + file
@@ -3688,9 +3688,9 @@ class RemoteMachineShellConnection:
                                                      LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbvdiff_command = "%scbvdiff.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbvdiff_command = "%scbvdiff.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbvdiff_command = "%scbvdiff" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbvdiff_command = "%scbvdiff" % (MAC_COUCHBASE_BIN_PATH)
 
         if not password:
             command = "%s -b %s %s " % (cbvdiff_command, bucket.name, node_str)
@@ -3738,9 +3738,9 @@ class RemoteMachineShellConnection:
                                                      LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
 
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [SUBCOMMAND] [OPTIONS]
@@ -3761,9 +3761,9 @@ class RemoteMachineShellConnection:
         f, s, b = self.get_cbversion("unix")
         if self.info.type.lower() == 'windows':
             f, s, b = self.get_cbversion("windows")
-            cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
 
         cluster_param = (" -c http://{0}".format(cluster_host),
                          "")[cluster_host is None]
@@ -3783,19 +3783,34 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+    def get_cluster_certificate_info(self, bin_path, cert_path,
+                                     user, password, server_cert):
+        """
+            Get certificate info from cluster and store it in tmp dir
+        """
+        cert_file_location = cert_path + "cert.pem"
+        cmd = "%s/couchbase-cli ssl-manage -c %s:8091 -u %s -p %s "\
+              " --cluster-cert-info > %s" % (bin_path, server_cert.ip,
+                                             user, password,
+                                             cert_file_location)
+        output, _ = self.execute_command(cmd)
+        if output and "Error" in output[0]:
+            raise("Failed to get CA certificate from cluster.")
+        return cert_file_location
+
     def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket,
                                                      item_size, command_options):
         cbworkloadgen_command = "%scbworkloadgen" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbworkloadgen_command = "/home/%s%scbworkloadgen" % (self.username,
-                                                                 LINUX_COUCHBASE_BIN_PATH)
+                                                        LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
 
         if self.info.distribution_type.lower() == 'mac':
-            cbworkloadgen_command = "%scbworkloadgen" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbworkloadgen_command = "%scbworkloadgen" % (MAC_COUCHBASE_BIN_PATH)
 
         if self.info.type.lower() == 'windows':
-            cbworkloadgen_command = "%scbworkloadgen.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbworkloadgen_command = "%scbworkloadgen.exe" % (WIN_COUCHBASE_BIN_PATH)
 
         command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
                                                                           self.ip, self.port,
@@ -3814,10 +3829,10 @@ class RemoteMachineShellConnection:
 
         cbhealthchecker_command = "%scbhealthchecker" % (LINUX_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbhealthchecker_command = "%scbhealthchecker" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbhealthchecker_command = "%scbhealthchecker" % (MAC_COUCHBASE_BIN_PATH)
 
         if self.info.type.lower() == 'windows':
-            cbhealthchecker_command = "%scbhealthchecker" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbhealthchecker_command = "%scbhealthchecker" % (WIN_COUCHBASE_BIN_PATH)
 
         if path_to_store:
             self.execute_command('rm -rf %s; mkdir %s;cd %s' % (path_to_store,
@@ -3844,7 +3859,7 @@ class RemoteMachineShellConnection:
                                                        LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            command = "%stools/vbuckettool.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            command = "%stools/vbuckettool.exe" % (WIN_COUCHBASE_BIN_PATH)
         if prefix:
             command = prefix + command
         command = "%s - %s" % (command, ' '.join(keys))
