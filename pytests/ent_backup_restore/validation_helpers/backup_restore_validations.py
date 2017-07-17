@@ -250,13 +250,13 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 merge_current_seqno = merge_json['{0}'.format(i)]['current']['log']['log'][0]['seqno']
                 merge_current_uuid = merge_json['{0}'.format(i)]['current']['log']['log'][0]['uuid']
                 if not merge_last_seqno >= start_seqno:
-                    raise Exception("merge_last_seqno is not >= start_seqno for vbucket {0}".format(i))
+                    raise("merge_last_seqno is not >= start_seqno for vbucket {0}".format(i))
                 if not start_uuid == merge_last_uuid:
-                    raise Exception("start_uuid did not match merge_last_uuid for vbucket {0}".format(i))
+                    raise("start_uuid did not match merge_last_uuid for vbucket {0}".format(i))
                 if not merge_current_seqno >= end_seqno:
-                    raise Exception("merge_current_seqno is not >= end_seqno for vbucket {0}".format(i))
+                    raise ("merge_current_seqno is not >= end_seqno for vbucket {0}".format(i))
                 if not end_uuid == merge_current_uuid:
-                    raise Exception("end_uuid did not match merge_current_uuid for vbucket {0}".format(i))
+                    raise("end_uuid did not match merge_current_uuid for vbucket {0}".format(i))
 
             with open(start_file_path, 'w') as f:
                 json.dump(merge_json_str, f)
