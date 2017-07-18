@@ -259,15 +259,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Finished taking backup  with args: {0}".format(args))
         return output, error
 
-    def backup_cluster_validate(self, skip_backup=False):
+    def backup_cluster_validate(self, skip_backup=False, repeats=0):
         if not skip_backup:
             output, error = self.backup_cluster()
             if error or "Backup successfully completed" not in output[-1]:
                 self.fail("Taking cluster backup failed.")
-        status, msg = self.validation_helper.validate_backup()
-        if not status:
-            self.fail(msg)
-        self.log.info(msg)
+        if not repeats:
+            status, msg = self.validation_helper.validate_backup()
+            if not status:
+                self.fail(msg)
+            self.log.info(msg)
         self.store_vbucket_seqno()
         self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                           self.backup_validation_files_location)
@@ -321,6 +322,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             rest_helper = RestHelper(rest_conn)
+            ram_size = rest_conn.get_nodes_self().memoryQuota
+            bucket_size = self._get_bucket_size(ram_size, self.total_buckets)
             count = 0
             buckets = []
             for bucket in self.buckets:
@@ -338,7 +341,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                 .format(bucket_name,
                                                  self.backupset.restore_cluster_host.ip))
                     rest_conn.create_bucket(bucket=bucket_name,
-                                    ramQuotaMB=512,
+                                    ramQuotaMB=bucket_size,
                                     authType=bucket.authType if bucket.authType else 'none',
                                     proxyPort=bucket.port,
                                     saslPassword=bucket.saslPassword,
@@ -536,19 +539,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         return True, output, "Merging backup succeeded"
 
-    def backup_merge_validate(self):
+    def backup_merge_validate(self, repeats=0):
         status, output, message = self.backup_merge()
         if not status:
             self.fail(message)
+        if not repeats:
+            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                              self.backup_validation_files_location)
+            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
+            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                    self.backup_validation_files_location, merge=True)
 
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                          self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                            self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location, merge=True)
-
-        self.validation_helper.validate_merge(self.backup_validation_files_location)
+            self.validation_helper.validate_merge(self.backup_validation_files_location)
 
 
 class Backupset:
@@ -584,6 +587,9 @@ class Backupset:
         self.bucket_backup = ''
         self.backup_to_compact = ''
         self.map_buckets = None
+        self.deleted_buckets = []
+        self.new_buckets = []
+        self.flushed_buckets = []
 
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
@@ -631,7 +637,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                                 start=self.num_items / 10,
                                                 end=self.num_items)
         self.new_buckets = 1
-        self.deleted_bucket = []
         self.bucket_to_flush = 1
         self.ephemeral = False
         self.recreate_bucket = False
@@ -639,6 +644,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.recoveryType = 'full'
         self.nodes_in = self.input.param("nodes_in", 0)
         self.nodes_out = self.input.param("nodes_out", 0)
+        self.number_of_repeats = self.input.param("repeats", 1)
 
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
@@ -685,7 +691,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Backup the cluster and validate the backupset.
         :return: Nothing
         """
-        self.backup_cluster_validate()
+        self.backup_cluster_validate(repeats=self.number_of_repeats)
 
     def backup_with_expiry(self):
         """
@@ -727,7 +733,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Merge all the existing backups in the backupset.
         :return: Nothing
         """
-        self.backup_merge_validate()
+        self.backup_merge_validate(repeats=self.number_of_repeats)
 
     def merge_with_ops(self):
         """
@@ -938,7 +944,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         standard_buckets = []
         for i in range(0, self.new_buckets):
             if self.recreate_bucket:
-                name = self.deleted_bucket[i]
+                name = self.backupset.deleted_buckets[i]
             else:
                 name = 'bucket' + str(i)
             port = STANDARD_BUCKET_PORT + i + 1
@@ -962,6 +968,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                 eviction_policy='noEviction', lww=self.lww)
             self.buckets.append(bucket)
             standard_buckets.append(bucket)
+            if not self.recreate_bucket:
+                self.backupset.new_buckets.append(bucket.name)
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
         if self.enable_time_sync:
@@ -979,7 +987,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         """
         self.log.info("Deleting a bucket")
         bucket_to_delete = self.buckets[-1].name
-        self.deleted_bucket.append(bucket_to_delete)
+        self.backupset.deleted_buckets.append(bucket_to_delete)
         BucketOperationHelper.delete_bucket_or_assert(self.master,
                                                       bucket_to_delete,
                                                       self)
@@ -995,6 +1003,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         rest = RestConnection(self.master)
         bucket_name = self.buckets[bucket_to_flush].name
         rest.flush_bucket(bucket_name)
+        self.backupset.flushed_buckets.append(bucket_name)
 
     def flush_buckets(self):
         """

@@ -199,6 +199,15 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             if self.backupset.include_buckets and bucket.name not in \
                     self.backupset.include_buckets:
                 continue
+            if self.backupset.deleted_buckets and bucket.name in \
+                    self.backupset.deleted_buckets:
+                continue
+            if self.backupset.new_buckets and bucket.name in \
+                    self.backupset.new_buckets:
+                continue
+            if self.backupset.flushed_buckets and bucket.name in \
+                    self.backupset.flushed_buckets:
+                continue
             start_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", self.backupset.start)
             start_file_path = os.path.join(self.backup_validation_path, start_file_name)
             start_json = {}
