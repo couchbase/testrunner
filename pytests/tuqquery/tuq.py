@@ -18,22 +18,25 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-#from sdk_client import SDKClient
+# from sdk_client import SDKClient
 from couchbase_helper.tuq_generators import TuqGenerators
+
 
 def ExplainPlanHelper(res):
     try:
-	rv = res["results"][0]["plan"]
+        rv = res["results"][0]["plan"]
     except:
-	rv = res["results"][0]
+        rv = res["results"][0]
     return rv
+
 
 def PreparePlanHelper(res):
     try:
-	rv = res["results"][0]["plan"]
+        rv = res["results"][0]["plan"]
     except:
-	rv = res["results"][0]["operator"]
+        rv = res["results"][0]["operator"]
     return rv
+
 
 class QueryTests(BaseTestCase):
     def setUp(self):
@@ -256,6 +259,38 @@ class QueryTests(BaseTestCase):
             cnt += 1
             docs += 20
         return False
+
+    def print_list_of_dicts(self, list_to_print, num_elements=10):
+        print('\n\n')
+        print('Printing a list...')
+        for item in list_to_print:
+            self.print_dict(item)
+            num_elements = num_elements-1
+            if num_elements == 0:
+                break
+
+    def print_dict(self, dict_to_print):
+        for k, v in dict_to_print.iteritems():
+            print(k, v)
+        print('\n')
+
+    def expected_substr(self, a_string, start, index):
+        if start is 0:
+            substring = a_string[index:]
+            if index >= len(a_string):
+                return None
+            elif index < -len(a_string):
+                return None
+            else:
+                return substring
+        if start is 1:
+            substring = a_string[index-start:] if index > 0 else a_string[index:]
+            if index >= len(a_string):
+                return None
+            elif index < -len(a_string):
+                return None
+            else:
+                return substring
 
 
 ##############################################################################################
@@ -1198,20 +1233,49 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_substr(self):
-        for bucket in self.buckets:
-            self.query = "select name, SUBSTR(email, 7) as DOMAIN from %s" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.query = "select name, reverse(SUBSTR(email, 7)) as REV_DOMAIN from %s" % (bucket.name)
-            actual_result1 = self.run_cbq_query()
-            #self.assertTrue(actual_result['results']==actual_result1['results'])
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['DOMAIN']))
+        indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
+        for index in indices_to_test:
+            for bucket in self.buckets:
+                self.query = "select name, SUBSTR(email, %s) as DOMAIN from %s" % (str(index), bucket.name)
+                query_result = self.run_cbq_query()
+                query_docs = query_result['results']
+                sorted_query_docs = sorted(query_docs, key=lambda doc: (doc['name'], doc['DOMAIN']))
 
-            expected_result = [{"name": doc["name"], "DOMAIN" : doc['email'][7:]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['DOMAIN']))
-            self._verify_results(actual_result, expected_result)
+                expected_result = [{"name": doc["name"], "DOMAIN": self.expected_substr(doc['email'], 0, index)}
+                                   for doc in self.full_list]
+                sorted_expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['DOMAIN']))
+
+                self._verify_results(sorted_query_docs, sorted_expected_result)
+
+    def test_substr0(self):
+        indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
+        for index in indices_to_test:
+            for bucket in self.buckets:
+                self.query = "select name, SUBSTR0(email, %s) as DOMAIN from %s" % (str(index), bucket.name)
+                query_result = self.run_cbq_query()
+                query_docs = query_result['results']
+                sorted_query_docs = sorted(query_docs, key=lambda doc: (doc['name'], doc['DOMAIN']))
+
+                expected_result = [{"name": doc["name"], "DOMAIN": self.expected_substr(doc['email'], 0, index)}
+                                   for doc in self.full_list]
+                sorted_expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['DOMAIN']))
+
+                self._verify_results(sorted_query_docs, sorted_expected_result)
+
+    def test_substr1(self):
+        indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
+        for index in indices_to_test:
+            for bucket in self.buckets:
+                self.query = "select name, SUBSTR1(email, %s) as DOMAIN from %s" % (str(index), bucket.name)
+                query_result = self.run_cbq_query()
+                query_docs = query_result['results']
+                sorted_query_docs = sorted(query_docs, key=lambda doc: (doc['name'], doc['DOMAIN']))
+
+                expected_result = [{"name": doc["name"], "DOMAIN": self.expected_substr(doc['email'], 1, index)}
+                                   for doc in self.full_list]
+                sorted_expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['DOMAIN']))
+
+                self._verify_results(sorted_query_docs, sorted_expected_result)
 
     def test_trunc(self):
         for bucket in self.buckets:
