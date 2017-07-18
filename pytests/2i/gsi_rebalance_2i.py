@@ -2207,7 +2207,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def test_gsi_rebalance_out_indexer_node_when_other_indexer_is_in_paused_state(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.run_operation(phase="before")
-        self.rest.set_indexer_memoryQuota(indexMemoryQuota=256)
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=256)
         for i in xrange(2):
             query_definition_generator = SQLDefinitionGenerator()
             self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()

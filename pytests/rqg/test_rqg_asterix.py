@@ -136,7 +136,7 @@ class RQGASTERIXTests(BaseTestCase):
             self.sleep(10)
 
             # self.log.info("Increasing Indexer Memory Quota to {0}".format(self.indexer_memQuota))
-            # self.rest.set_indexer_memoryQuota(indexMemoryQuota=self.indexer_memQuota)
+            # self.rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=self.indexer_memQuota)
             # self.sleep(120)
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)

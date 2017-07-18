@@ -29,7 +29,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, COUCHBASE_FROM_VERSION_4
 from multiprocessing import Process, Manager, Semaphore
 
 try:
@@ -136,36 +136,43 @@ class NodeInitializeTask(Task):
         if self.index_quota_percent:
             self.index_quota = int((info.mcdMemoryReserved * 2/3) * \
                                       self.index_quota_percent / 100)
-            rest.set_indexer_memoryQuota(username, password, self.index_quota)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', username=username, password=password, MemoryQuota=self.index_quota)
         if self.quota_percent:
            self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
 
         """ Adjust KV RAM to correct value when there is INDEX
             and FTS services added to node from Watson  """
         index_quota = INDEX_QUOTA
+        kv_quota = int(info.mcdMemoryReserved * 2/3)
         if self.index_quota_percent:
                 index_quota = self.index_quota
         if not self.quota_percent:
             set_services = copy.deepcopy(self.services)
             if set_services is None:
                 set_services = ["kv"]
-            if "index" in set_services and "fts" not in set_services:
-                kv_quota = int(info.mcdMemoryReserved * 2/3) - index_quota
-                if kv_quota > MIN_KV_QUOTA:
-                    if kv_quota < int(self.quota):
-                        self.quota = kv_quota
-                    rest.set_indexer_memoryQuota(indexMemoryQuota=index_quota)
-                else:
-                    self.set_exception(Exception("KV RAM need to be larger than %s MB "
-                                      "at node  %s"  % (MIN_KV_QUOTA, self.server.ip)))
-            elif "index" in set_services and "fts" in set_services:
-                kv_quota = int(info.mcdMemoryReserved * 2/3) - index_quota - FTS_QUOTA
-                if kv_quota > MIN_KV_QUOTA:
-                    if kv_quota < int(self.quota):
-                        self.quota = kv_quota
-                else:
-                    self.set_exception(Exception("KV RAM need to be larger than %s MB "
-                                      "at node %s"  % (MIN_KV_QUOTA, self.server.ip)))
+#             info = rest.get_nodes_self()
+#             cb_version = info.version[:5]
+#             if cb_version in COUCHBASE_FROM_VERSION_4:
+            if "index" in set_services:
+                self.log.info("quota for index service will be %s MB" % (index_quota))
+                kv_quota -= index_quota
+                self.log.info("set index quota to node %s " % self.server.ip)
+                rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=index_quota)
+            if "fts" in set_services:
+                self.log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
+                kv_quota -= FTS_QUOTA
+                self.log.info("set both index and fts quota at node %s "% self.server.ip)
+                rest.set_service_memoryQuota(service='ftsMemoryQuota', MemoryQuota=FTS_QUOTA)
+            if "cbas" in set_services:
+                self.log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
+                kv_quota -= CBAS_QUOTA
+                rest.set_service_memoryQuota(service = "cbasMemoryQuota", MemoryQuota=CBAS_QUOTA)
+            if kv_quota < MIN_KV_QUOTA:
+                    raise Exception("KV RAM needs to be more than %s MB"
+                            " at node  %s"  % (MIN_KV_QUOTA, self.server.ip))
+            if kv_quota < int(self.quota):
+                self.quota = kv_quota
+
         rest.init_cluster_memoryQuota(username, password, self.quota)
         rest.set_indexer_storage_mode(username, password, self.gsi_type)
 

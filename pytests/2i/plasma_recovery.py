@@ -672,7 +672,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         log.info("Setting indexer memory quota to 256 MB...")
         node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(node)
-        rest.set_indexer_memoryQuota(indexMemoryQuota=256)
+        rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=256)
         cnt = 0
         docs = 50 + self.docs_per_day
         while cnt < 100:

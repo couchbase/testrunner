@@ -18,7 +18,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self.rest = RestConnection(self.dgmServer)
         if self.indexMemQuota > 256:
             log.info("Setting indexer memory quota to {0} MB...".format(self.indexMemQuota))
-            self.rest.set_indexer_memoryQuota(indexMemoryQuota=self.indexMemQuota)
+            self.rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=self.indexMemQuota)
             self.sleep(30)
         self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.dgmServer.port)]
         self.load_query_definitions = []
@@ -57,7 +57,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             indexer_memQuota += 200
             log.info("Increasing Indexer Memory Quota to {0}".format(indexer_memQuota))
             rest = RestConnection(self.dgmServer)
-            rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=indexer_memQuota)
             self.sleep(60)
             indexer_dgm = self._get_indexer_out_of_dgm(indexer_nodes=[self.dgmServer])
             if not indexer_dgm:
@@ -177,7 +177,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             indexer_memQuota += 50
             log.info("Increasing Indexer Memory Quota to {0}".format(indexer_memQuota))
             rest = RestConnection(self.dgmServer)
-            rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=indexer_memQuota)
             self.sleep(30)
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
@@ -194,7 +194,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             indexer_memQuota -= 50
             log.info("Decreasing Indexer Memory Quota to {0}".format(indexer_memQuota))
             rest = RestConnection(self.dgmServer)
-            rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=indexer_memQuota)
             self.sleep(30)
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
@@ -214,7 +214,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             indexer_memQuota -= 50
             log.info("Decreasing Indexer Memory Quota to {0}".format(indexer_memQuota))
             rest = RestConnection(self.dgmServer)
-            rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=indexer_memQuota)
             self.sleep(30)
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
@@ -233,12 +233,12 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                 indexer_memQuota += memory_quantum
                 log.info("Increasing Indexer Memory Quota to {0}".format(indexer_memQuota))
                 rest = RestConnection(self.dgmServer)
-                rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+                rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=indexer_memQuota)
                 self.sleep(30)
                 indexer_memQuota -= memory_quantum
                 log.info("Decreasing Indexer Memory Quota to {0}".format(indexer_memQuota))
                 rest = RestConnection(self.dgmServer)
-                rest.set_indexer_memoryQuota(indexMemoryQuota=indexer_memQuota)
+                rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=indexer_memQuota)
                 self.sleep(30)
         self._run_tasks([kvOps_tasks, mid_operation_tasks])
         post_operation_tasks = self.async_run_operations(phase="after")
@@ -279,7 +279,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         log.info("Setting indexer memory quota to 256 MB...")
         node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(node)
-        rest.set_indexer_memoryQuota(indexMemoryQuota=256)
+        rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=256)
         cnt = 0
         docs = 50
         validate_dgm = False

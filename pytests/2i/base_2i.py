@@ -840,7 +840,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         log.info("Setting indexer memory quota to {0} MB...".format(memory_quota))
         node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(node)
-        rest.set_indexer_memoryQuota(indexMemoryQuota=memory_quota)
+        rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=memory_quota)
         cnt = 0
         docs = 50 + self.docs_per_day
         while cnt < 100:

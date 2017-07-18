@@ -30,7 +30,7 @@ from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
                           CB_RELEASE_BUILDS, COUCHBASE_VERSIONS
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA
 from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
 from testconstants import WIN_COUCHBASE_PORT_CONFIG_PATH, WIN_COUCHBASE_OLD_CONFIG_PATH
 import TestInput
@@ -96,7 +96,7 @@ def installer_factory(params):
         sys.exit("ERROR: don't know what product you want installed")
 
     mb_alias = ["membase", "membase-server", "mbs", "mb"]
-    cb_alias = ["couchbase", "couchbase-server", "cb"]
+    cb_alias = ["couchbase", "couchbase-server", "cb", "cbas"]
     sdk_alias = ["python-sdk", "pysdk"]
     es_alias = ["elasticsearch"]
     css_alias = ["couchbase-single", "couchbase-single-server", "css"]
@@ -204,33 +204,29 @@ class Installer(object):
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
             moxi_alias = ["moxi", "moxi-server"]
-
-            if params["product"] in mb_alias:
-                names = ['membase-server-enterprise',
-                         'membase-server-community']
+            cbas_alias = ["cbas", "server-analytics"]
+            
+            if params["product"] in cbas_alias:
+                names = ['couchbase-server-enterprise', 'server-analytics']
+            elif params["product"] in mb_alias:
+                names = ['membase-server-enterprise', 'membase-server-community']
             elif params["product"] in cb_alias:
-                if "type" in params and params["type"].lower() in \
-                                      "couchbase-server-community":
+                if "type" in params and params["type"].lower() in "couchbase-server-community":
                     names = ['couchbase-server-community']
-                elif "type" in params and params["type"].lower() in \
-                                       "couchbase-server-enterprise":
+                elif "type" in params and params["type"].lower() in "couchbase-server-enterprise":
                     names = ['couchbase-server-enterprise']
                 else:
-                    names = ['couchbase-server-enterprise',
-                             'couchbase-server-community']
+                    names = ['couchbase-server-enterprise', 'couchbase-server-community']
             elif params["product"] in css_alias:
-                names = ['couchbase-single-server-enterprise',
-                         'couchbase-single-server-community']
+                names = ['couchbase-single-server-enterprise', 'couchbase-single-server-community']
             elif params["product"] in moxi_alias:
                 names = ['moxi-server']
             else:
                 ok = False
                 _errors.append(errors["INVALID-PARAMS"])
             if "1" in openssl:
-                names = ['couchbase-server-enterprise_centos6',
-                         'couchbase-server-community_centos6',
-                         'couchbase-server-enterprise_ubuntu_1204',
-                         'couchbase-server-community_ubuntu_1204']
+                names = ['couchbase-server-enterprise_centos6', 'couchbase-server-community_centos6', \
+                         'couchbase-server-enterprise_ubuntu_1204', 'couchbase-server-community_ubuntu_1204']
             if "toy" in params:
                 names = ['couchbase-server-enterprise']
 
@@ -265,6 +261,8 @@ class Installer(object):
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = CB_REPO
+            elif "server-analytics" in names:
+                build_repo = CB_REPO.replace("couchbase-server", "server-analytics") + CB_VERSION_NAME[version[:3]] + "/"
             elif "moxi-server" in names and version[:5] != "2.5.2":
                 print "version   ", version
                 """
@@ -494,43 +492,29 @@ class CouchbaseServerInstaller(Installer):
                         kv_quota = int(rest.get_nodes_self().mcdMemoryReserved)
                     info = rest.get_nodes_self()
                     cb_version = info.version[:5]
-
-                    if cb_version in COUCHBASE_FROM_VERSION_4:
-                        if "index" in set_services and "fts" not in set_services:
-                            log.info("quota for index service will be %s MB" \
-                                                              % (INDEX_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved * 2/3) - INDEX_QUOTA
-                            log.info("set index quota to node %s " % server.ip)
-                            rest.set_indexer_memoryQuota(indexMemoryQuota=INDEX_QUOTA)
-                            if kv_quota < MIN_KV_QUOTA:
-                                raise Exception("KV RAM needs to be more than %s MB"
-                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
-                        elif "index" in set_services and "fts" in set_services:
-                            log.info("quota for index service will be %s MB" \
-                                                              % (INDEX_QUOTA))
-                            log.info("quota for fts service will be %s MB" \
-                                                                % (FTS_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved * 2/3)\
-                                                                 - INDEX_QUOTA \
-                                                                 - FTS_QUOTA
-                            log.info("set both index and fts quota at node %s "\
-                                                                    % server.ip)
-                            rest.set_indexer_memoryQuota(indexMemoryQuota=INDEX_QUOTA)
-                            rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
-                            if kv_quota < MIN_KV_QUOTA:
-                                raise Exception("KV RAM need to be more than %s MB"
-                                       " at node  %s"  % (MIN_KV_QUOTA, server.ip))
-                        elif "fts" in set_services and "index" not in set_services:
-                            log.info("quota for fts service will be %s MB" \
-                                                                % (FTS_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved * 2/3) - FTS_QUOTA
-                            if kv_quota < MIN_KV_QUOTA:
-                                raise Exception("KV RAM need to be more than %s MB"
-                                       " at node  %s"  % (MIN_KV_QUOTA, server.ip))
-                            """ for fts, we need to grep quota from ns_server
+                    kv_quota = int(info.mcdMemoryReserved * 2/3)
+                    """ for fts, we need to grep quota from ns_server
                                 but need to make it works even RAM of vm is
                                 smaller than 2 GB """
-                            rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
+                                
+                    if cb_version in COUCHBASE_FROM_VERSION_4:
+                        if "index" in set_services:
+                            log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
+                            kv_quota -= INDEX_QUOTA
+                            log.info("set index quota to node %s " % server.ip)
+                            rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=INDEX_QUOTA)
+                        if "fts" in set_services:
+                            log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
+                            kv_quota -= FTS_QUOTA
+                            log.info("set both index and fts quota at node %s "% server.ip)
+                            rest.set_service_memoryQuota(service='ftsMemoryQuota', MemoryQuota=FTS_QUOTA)
+                        if "cbas" in set_services:
+                            log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
+                            kv_quota -= CBAS_QUOTA
+                            rest.set_service_memoryQuota(service = "cbasMemoryQuota", MemoryQuota=CBAS_QUOTA)
+                        if kv_quota < MIN_KV_QUOTA:
+                                raise Exception("KV RAM needs to be more than %s MB"
+                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
                     """ set kv quota smaller than 1 MB so that it will satify
                         the condition smaller than allow quota """
                     kv_quota -= 1
