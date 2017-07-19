@@ -2025,17 +2025,22 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
-    def test_backup_restore_after_upgrade(self):
+    def test_backup_restore_after_offline_upgrade(self):
         """
-        1. Test has to be supplied initial_version to be installed and upgrade_version to be upgraded to
+        1. Test has to be supplied initial_version to be installed and upgrade_version
+           to be upgraded to
         2. Installs initial_version on the servers
-        3. Upgrades cluster to upgrade_version - initializes them and creates bucket default
+        3. Upgrades cluster to upgrade_version - initializes them and creates bucket
+           default
         4. Creates a backupset - backsup data and validates
         5. Restores data and validates
         """
         self._install(self.servers)
         upgrade_version = self.input.param("upgrade_version", "4.5.0-1069")
-        upgrade_threads = self._async_update(upgrade_version=upgrade_version, servers=self.servers)
+        if self.force_version_upgrade:
+            upgrade_version = self.force_version_upgrade
+        upgrade_threads = self._async_update(upgrade_version=upgrade_version,
+                                                        servers=self.servers)
         for th in upgrade_threads:
             th.join()
         self.log.info("Upgraded to: {ver}".format(ver=upgrade_version))
@@ -2044,7 +2049,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             rest_conn = RestConnection(server)
             rest_conn.init_cluster(username='Administrator', password='password')
             rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                                                              end=self.num_items)
+        """ Only server from Spock needs build in user
+            to access bucket and other tasks
+        """
+        if "5" <= self.cb_version[:1]:
+            self.add_built_in_server_user()
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster_validate()

@@ -81,6 +81,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cluster_new_user = self.input.param("new_user", None)
         self.cluster_new_role = self.input.param("new_role", None)
         self.restore_only = self.input.param("restore-only", False)
+        self.force_version_upgrade = self.input.param("force-version-upgrade", None)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
             self.backupset.cluster_host_username = self.servers[1].rest_username
@@ -266,14 +267,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.cluster_host)
             secure_port = "1"
             url_format = "s"
-        password_input = "-p %s " % self.backupset.cluster_host_password
+        password_input = "--password %s " % self.backupset.cluster_host_password
         if self.backupset.passwd_env:
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
 
-        args = "backup -a {0} -r {1} {6} http{7}://{2}:{8}{3} -u {4} {5}". \
-            format(self.backupset.directory, self.backupset.name,
+        args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} --username"\
+                   " {4} {5}".format(self.backupset.directory, self.backupset.name,
                    self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port,
                    self.backupset.cluster_host_username,
@@ -358,14 +359,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.restore_cluster_host)
             url_format = "s"
             secure_port = "1"
-        password_input = "-p %s " % self.backupset.restore_cluster_host_password
+        password_input = "--password %s " % self.backupset.restore_cluster_host_password
         if self.backupset.passwd_env:
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
 
         args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4}"\
-               " -u {5} {6} --start {7} --end {8}" \
+               " --username {5} {6} --start {7} --end {8}" \
                                .format(self.backupset.directory,
                                        self.backupset.name,
                                        self.cluster_flag,
