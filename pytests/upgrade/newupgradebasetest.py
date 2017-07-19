@@ -303,7 +303,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             queue.put(True)
 
     def _async_update(self, upgrade_version, servers, queue=None, skip_init=False):
-        self.log.info("servers {0} will be upgraded to {1} version".
+        self.log.info("\n\n*** servers {0} will be upgraded to {1} version ***\n".
                       format([server.ip for server in servers], upgrade_version))
         q = queue or self.queue
         upgrade_threads = []

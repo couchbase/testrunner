@@ -10,7 +10,7 @@ from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
-from newupgradebasetest import NewUpgradeBaseTest
+from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
 from couchbase_helper.document import View
 from tasks.future import TimeoutError
@@ -2036,29 +2036,39 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Restores data and validates
         """
         self._install(self.servers)
-        upgrade_version = self.input.param("upgrade_version", "4.5.0-1069")
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                            end=self.num_items)
+        rebalance = self.cluster.async_rebalance(self.servers[:2], [self.servers[1]],
+                                                 [])
+        rebalance.result()
+        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.sleep(5)
+        BucketOperationHelper.delete_bucket_or_assert(self.master, "default", self)
+
+        """ Start to upgrade """
+        upgrade_version = self.input.param("upgrade_version", "5.0.0-3330")
         if self.force_version_upgrade:
             upgrade_version = self.force_version_upgrade
         upgrade_threads = self._async_update(upgrade_version=upgrade_version,
-                                                        servers=self.servers)
+                                                        servers=self.servers[:2])
         for th in upgrade_threads:
             th.join()
         self.log.info("Upgraded to: {ver}".format(ver=upgrade_version))
         self.sleep(30)
-        for server in self.servers:
-            rest_conn = RestConnection(server)
-            rest_conn.init_cluster(username='Administrator', password='password')
-            rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                                                              end=self.num_items)
+
+        """ Re-create default bucket on upgrade cluster """
+        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
+        self.sleep(5)
+
         """ Only server from Spock needs build in user
             to access bucket and other tasks
         """
+        print "************** cb version: ", self.cb_version
         if "5" <= self.cb_version[:1]:
             self.add_built_in_server_user()
-        self._load_all_buckets(self.master, gen, "create", 0)
-        self.backup_create()
-        self.backup_cluster_validate()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
     def test_backup_restore_with_python_sdk(self):
