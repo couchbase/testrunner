@@ -1089,6 +1089,57 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for task in ops_tasks:
             task.result()
 
+    def backup_with_memcached_crash_and_restart(self):
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.pause_memcached()
+        conn.unpause_memcached()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Backup successfully completed" in output[0],
+                        "Backup failed with memcached crash and restart within 180 seconds")
+        self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
+
+    def backup_with_erlang_crash_and_restart(self):
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.kill_erlang()
+        conn.start_couchbase()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Backup successfully completed" in output[0],
+                        "Backup failed with erlang crash and restart within 180 seconds")
+        self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
+
+    def backup_with_cb_server_stop_and_restart(self):
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.stop_couchbase()
+        conn.start_couchbase()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Backup successfully completed" in output[0],
+                        "Backup failed with couchbase stop and start within 180 seconds")
+        self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
+
     def merge(self):
         """
         Merge all the existing backups in the backupset.
@@ -1343,6 +1394,59 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self._load_bucket(bucket, self.master, self.initial_load_gen,
                               "create", self.expires)
 
+    def create_bucket_with_ops(self):
+        """
+        Create new buckets and populate the bucket with items while ops are on
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        bucket_size = self._reconfigure_bucket_memory(self.new_buckets)
+        rest = RestConnection(self.master)
+        server_id = rest.get_nodes_self().id
+        bucket_tasks = []
+        bucket_params = copy.deepcopy(
+            self.bucket_base_params['membase']['non_ephemeral'])
+        bucket_params['size'] = bucket_size
+        if self.ephemeral:
+            bucket_params['bucket_type'] = 'ephemeral'
+            bucket_params['eviction_policy'] = 'noEviction'
+        standard_buckets = []
+        for i in range(0, self.new_buckets):
+            if self.recreate_bucket:
+                name = self.backupset.deleted_buckets[i]
+            else:
+                name = 'bucket' + str(i)
+            port = STANDARD_BUCKET_PORT + i + 1
+            bucket_priority = None
+            if self.standard_bucket_priority is not None:
+                bucket_priority = self.get_bucket_priority(
+                    self.standard_bucket_priority[i])
+
+            bucket_params['bucket_priority'] = bucket_priority
+            bucket_tasks.append(
+                self.cluster.async_create_standard_bucket(name=name, port=port,
+                                                          bucket_params=bucket_params))
+            bucket = Bucket(name=name, authType=None, saslPassword=None,
+                            num_replicas=self.num_replicas,
+                            bucket_size=self.bucket_size,
+                            port=port, master_id=server_id,
+                            eviction_policy='noEviction', lww=self.lww)
+            self.buckets.append(bucket)
+            standard_buckets.append(bucket)
+            if not self.recreate_bucket:
+                self.backupset.new_buckets.append(bucket.name)
+        for task in bucket_tasks:
+            task.result(self.wait_timeout * 10)
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets(
+                ['bucket' + str(i) for i in range(
+                    self.new_buckets)])
+        for task in ops_tasks:
+            task.result()
+        for bucket in standard_buckets:
+            self._load_bucket(bucket, self.master, self.initial_load_gen,
+                              "create", self.expires)
+
     def delete_bucket(self):
         """
         Delete a bucket from the cluster
@@ -1355,6 +1459,22 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                                       bucket_to_delete,
                                                       self)
         self.buckets.pop()
+
+    def delete_bucket_with_ops(self):
+        """
+        Delete a bucket from the cluster while bucket operations are on
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.log.info("Deleting a bucket")
+        bucket_to_delete = self.buckets[-1].name
+        self.backupset.deleted_buckets.append(bucket_to_delete)
+        BucketOperationHelper.delete_bucket_or_assert(self.master,
+                                                      bucket_to_delete,
+                                                      self)
+        self.buckets.pop()
+        for task in ops_tasks:
+            task.result()
 
     def _flush_bucket(self, bucket_to_flush):
         """
@@ -1378,6 +1498,19 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                        self.buckets.__len__()):
             self._flush_bucket(i)
 
+    def flush_buckets_with_ops(self):
+        """
+        Flush buckets from the cluster while ops are on
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self.log.info("Flushing {} buckets".format(self.bucket_to_flush))
+        for i in range(self.buckets.__len__() - self.bucket_to_flush,
+                       self.buckets.__len__()):
+            self._flush_bucket(i)
+        for task in ops_tasks:
+            task.result()
+
     def load_flushed_buckets(self):
         """
         Reload the flushed buckets in the cluster.
@@ -1396,6 +1529,16 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         :return: Nothing
         """
         self._run_compaction(number_of_times=1)
+
+    def compact_buckets_with_ops(self):
+        """
+        Compact all the buckets in the cluster while ops are on
+        :return: Nothing
+        """
+        ops_tasks = self.async_ops_on_buckets()
+        self._run_compaction(number_of_times=1)
+        for task in ops_tasks:
+            task.result()
 
     def rollback(self):
         buckets = self.buckets
@@ -1517,6 +1660,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "backup": backup,
         "backup_with_expiry": backup_with_expiry,
         "backup_after_expiry": backup_after_expiry,
+        "backup_with_memcached_crash_and_restart": backup_with_memcached_crash_and_restart,
+        "backup_with_erlang_crash_and_restart": backup_with_erlang_crash_and_restart,
+        "backup_with_cb_server_stop_and_restar": backup_with_cb_server_stop_and_restart,
         "merge": merge,
         "compact_backup": compact_backup,
         "rebalance": rebalance,
@@ -1531,10 +1677,14 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "recover_with_ops": recover_node_with_ops,
         "failover_and_recover_with_ops": failover_and_recover_with_ops,
         "create_buckets": create_new_bucket_and_populate,
+        "create_buckets_with_ops": create_bucket_with_ops,
         "recreate_buckets": create_new_bucket_and_populate,
         "flush_buckets": flush_buckets,
         "load_flushed_buckets": load_flushed_buckets,
+        "flush_buckets_with_ops": flush_buckets_with_ops,
         "delete_buckets": delete_bucket,
+        "delete_buckets_with_ops": delete_bucket_with_ops,
         "compact_buckets": compact_buckets,
+        "compact_buckets_with_ops": compact_buckets_with_ops,
         "rollback": rollback
     }
