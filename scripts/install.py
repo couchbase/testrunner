@@ -435,7 +435,7 @@ class MembaseServerInstaller(Installer):
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")
-            log.info('wait 5 seconds for membase server to start')
+            log.info('wait 5 seconds for Membase server to start')
             time.sleep(5)
         remote_client.disconnect()
         if queue:
@@ -663,7 +663,7 @@ class CouchbaseServerInstaller(Installer):
                                          vbuckets=vbuckets, swappiness=swappiness,\
                                         openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
                                         fts_query_limit=fts_query_limit)
-                    log.info('wait 5 seconds for membase server to start')
+                    log.info('wait 5 seconds for Couchbase server to start')
                     time.sleep(5)
                     if "rest_vbuckets" in params:
                         rest_vbuckets = int(params["rest_vbuckets"])
@@ -682,7 +682,7 @@ class CouchbaseServerInstaller(Installer):
             try:
                 success = remote_client.install_server_via_repo(info.deliverable_type,\
                                                              cb_edition, remote_client)
-                log.info('wait 5 seconds for membase server to start')
+                log.info('wait 5 seconds for Couchbase server to start')
                 time.sleep(5)
             except BaseException, e:
                 success = False
