@@ -5,8 +5,23 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 
 class CBASBucketOperations(CBASBaseTest):
     def setUp(self):
+        self.input = TestInputSingleton.input
+        self.input.test_params.update({"default_bucket":False})
+        
         super(CBASBucketOperations, self).setUp()
-
+            
+        ''' Considering all the scenarios where:
+        1. There can be 1 KV and multiple cbas nodes(and tests wants to add all cbas into cluster.)
+        2. There can be 1 KV and multiple cbas nodes(and tests wants only 1 cbas node)
+        3. There can be only 1 node running KV,CBAS service.
+        NOTE: Cases pending where there are nodes which are running only cbas. For that service check on nodes is needed.
+        '''
+        if "add_all_cbas_nodes" in self.input.test_params and self.input.test_params["add_all_cbas_nodes"] and len(self.cbas_servers) > 1:
+            self.add_all_cbas_node_then_rebalance()
+        
+        '''Create default bucket'''
+        self.create_default_bucket()
+        
     def tearDown(self):
         super(CBASBucketOperations, self).tearDown()
 

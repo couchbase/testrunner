@@ -26,7 +26,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         self.rest = RestConnection(self.dgmServer)
         if self.indexMemQuota > 256:
             log.info("Setting indexer memory quota to {0} MB...".format(self.indexMemQuota))
-            self.rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=self.indexMemQuota)
+            self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=self.indexMemQuota)
             self.sleep(30)
         self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.dgmServer.port)]
         self.multi_create_index(

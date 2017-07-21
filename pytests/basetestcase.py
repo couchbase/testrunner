@@ -142,9 +142,6 @@ class BaseTestCase(unittest.TestCase):
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'plasma')
-            if hasattr(self.input, 'cbas'):
-                if self.input.cbas:
-                    self.cbas_node = self.input.cbas
             # bucket parameters go here,
             self.bucket_size = self.input.param("bucket_size", None)
             self.bucket_type = self.input.param("bucket_type", 'membase')

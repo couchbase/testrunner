@@ -51,98 +51,9 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
             total_items, _ = self.get_num_items_in_cbas_dataset(
                 self.cbas_dataset_name)
 
-    def _run_concurrent_queries(self):
-        # Run queries concurrently
-        self.log.info("Running queries concurrently now...")
-        threads = []
-        for i in range(0, self.num_concurrent_queries):
-            threads.append(Thread(target=self._run_query,
-                                  name="query_thread_{0}".format(i), args=()))
-        i = 0
-        for thread in threads:
-            # Send requests in batches, and sleep for 5 seconds before sending another batch of queries.
-            i += 1
-            if i % self.concurrent_batch_size == 0:
-                self.sleep(5, "submitted {0} queries".format(i))
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        self.log.info(
-            "%s queries submitted, %s failed, %s passed, %s rejected" % (
-                self.num_concurrent_queries, self.failed_count,
-                self.success_count, self.rejected_count))
-
-        if self.failed_count + self.success_count + self.rejected_count != self.num_concurrent_queries:
-            self.fail("Some queries errored out. Check logs.")
-
-        if self.failed_count > 0:
-            self.fail("Some queries failed.")
-
-    def _run_query(self):
-        # Execute query (with sleep induced)
-        name = threading.currentThread().getName();
-        client_context_id = name
-
-        try:
-            status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
-                self.statement, mode=self.mode, rest=self.rest, timeout=3600,
-                client_context_id=client_context_id)
-            # Validate if the status of the request is success, and if the count matches num_items
-            if self.mode == "immediate":
-                if status == "success":
-                    if self.validate_item_count:
-                        if results[0]['$1'] != self.expected_count:
-                            self.log.info("Query result : %s", results[0]['$1'])
-                            self.log.info(
-                                "********Thread %s : failure**********",
-                                name)
-                            self.failed_count += 1
-                        else:
-                            self.log.info(
-                                "--------Thread %s : success----------",
-                                name)
-                            self.success_count += 1
-                    else:
-                        self.log.info("--------Thread %s : success----------",
-                                      name)
-                        self.success_count += 1
-                else:
-                    self.log.info("Status = %s", status)
-                    self.log.info("********Thread %s : failure**********", name)
-                    self.failed_count += 1
-
-            elif self.mode == "async":
-                if status == "running" and handle:
-                    self.log.info("--------Thread %s : success----------", name)
-                    self.success_count += 1
-                else:
-                    self.log.info("Status = %s", status)
-                    self.log.info("********Thread %s : failure**********", name)
-                    self.failed_count += 1
-
-            elif self.mode == "deferred":
-                if status == "success" and handle:
-                    self.log.info("--------Thread %s : success----------", name)
-                    self.success_count += 1
-                else:
-                    self.log.info("Status = %s", status)
-                    self.log.info("********Thread %s : failure**********", name)
-                    self.failed_count += 1
-        except Exception, e:
-            if str(e) == "Request Rejected":
-                self.log.info("Error 503 : Request Rejected")
-                self.rejected_count += 1
-            elif str(e) == "Capacity cannot meet job requirement":
-                self.log.info(
-                    "Error 500 : Capacity cannot meet job requirement")
-                self.rejected_count += 1
-            else:
-                self.log.error(str(e))
-
     def test_concurrent_query_mgmt(self):
         self._setupForTest()
-        self._run_concurrent_queries()
+        self._run_concurrent_queries(self.statement, self.mode, self.num_concurrent_queries)
 
     def test_resource_intensive_queries_queue_mgmt(self):
         self._setupForTest()
@@ -168,7 +79,7 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
 
         self.validate_item_count = False
 
-        self._run_concurrent_queries()
+        self._run_concurrent_queries(self.statement, self.mode, self.num_concurrent_queries)
 
         if self.expect_reject:
             if self.rejected_count < self.num_concurrent_queries:
@@ -229,7 +140,7 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
     def test_cancel_request_in_queue(self):
         client_context_id = "query_thread_{0}".format(int(self.num_concurrent_queries)-1)
         self._setupForTest()
-        self._run_concurrent_queries()
+        self._run_concurrent_queries(self.statement, self.mode, self.num_concurrent_queries)
         status = self.delete_request(client_context_id)
         if str(status) != "200":
             self.fail ("Status is not 200")

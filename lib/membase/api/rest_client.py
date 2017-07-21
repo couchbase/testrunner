@@ -821,23 +821,22 @@ class RestConnection(object):
             kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
         info = self.get_nodes_self()
 
-
         cb_version = info.version[:5]
         if cb_version in COUCHBASE_FROM_VERSION_4:
             if "index" in self.node_services:
                 log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
                 kv_quota -= INDEX_QUOTA
                 log.info("set index quota to node %s " % self.ip)
-                self.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=INDEX_QUOTA)
+                self.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
             if "fts" in self.node_services:
                 log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
                 kv_quota -= FTS_QUOTA
                 log.info("set both index and fts quota at node %s "% self.ip)
-                self.set_service_memoryQuota(service='ftsMemoryQuota', MemoryQuota=FTS_QUOTA)
+                self.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
             if "cbas" in self.node_services:
                 log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
                 kv_quota -= CBAS_QUOTA
-                self.set_service_memoryQuota(service = "cbasMemoryQuota", MemoryQuota=CBAS_QUOTA)
+                self.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
             kv_quota -= 1
             if kv_quota < MIN_KV_QUOTA:
                     raise Exception("KV RAM needs to be more than %s MB"
@@ -889,12 +888,12 @@ class RestConnection(object):
 
     def set_service_memoryQuota(self, service, username='Administrator',
                                  password='password',
-                                 MemoryQuota=256):
+                                 memoryQuota=256):
         ''' cbasMemoryQuota for cbas service.
             ftsMemoryQuota for fts service.
             indexMemoryQuota for index service.'''
         api = self.baseUrl + 'pools/default'
-        params = urllib.urlencode({service: MemoryQuota})
+        params = urllib.urlencode({service: memoryQuota})
         log.info('pools/default params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
@@ -2906,6 +2905,16 @@ class RestConnection(object):
         else:
             return None
 
+    def get_nodes_data_from_cluster(self, param="nodes"):
+        api = self.baseUrl + "pools/default/"
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        if status:
+            if param in json_parsed:
+                return json_parsed[param]
+        else:
+            return None
+        
     def flush_bucket(self, bucket="default"):
         if isinstance(bucket, Bucket):
             bucket_name = bucket.name

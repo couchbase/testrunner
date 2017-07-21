@@ -5,14 +5,26 @@ from basetestcase import BaseTestCase
 from lib.couchbase_helper.analytics_helper import AnalyticsHelper
 from couchbase_helper.documentgenerator import DocumentGenerator
 import urllib
-from lib.membase.api.rest_client import RestConnection
+from lib.membase.api.rest_client import RestConnection, RestHelper, Bucket
 from lib.couchbase_helper.cluster import *
 from lib.membase.helper.bucket_helper import BucketOperationHelper
+from testconstants import FTS_QUOTA, CBAS_QUOTA, INDEX_QUOTA, MIN_KV_QUOTA
+from threading import Thread
+import threading
 
 class CBASBaseTest(BaseTestCase):
-    def setUp(self):
+    def setUp(self, add_defualt_cbas_node = True):
         super(CBASBaseTest, self).setUp()
         self.cbas_node = self.input.cbas
+        self.cbas_servers = []
+        self.kv_servers = []
+
+        for server in self.servers:
+            if "cbas" in server.services:
+                self.cbas_servers.append(server)
+            if "kv" in server.services:
+                self.kv_servers.append(server)
+        
         self.analytics_helper = AnalyticsHelper()
         self._cb_cluster = self.cluster
         self.travel_sample_docs_count = 31591
@@ -22,11 +34,9 @@ class CBASBaseTest(BaseTestCase):
         self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
         self.cb_bucket_password = self.input.param('cb_bucket_password', '')
         self.expected_error = self.input.param("error", None)
-        
         if self.expected_error:
             self.expected_error = self.expected_error.replace("INVALID_IP",invalid_ip)
             self.expected_error = self.expected_error.replace("PORT",self.master.port)
-        
         self.cb_server_ip = self.input.param("cb_server_ip", self.master.ip)
         self.cb_server_ip = self.cb_server_ip.replace('INVALID_IP',invalid_ip)
         self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
@@ -37,7 +47,6 @@ class CBASBaseTest(BaseTestCase):
         self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid', self.cbas_dataset_name)
         self.skip_drop_connection = self.input.param('skip_drop_connection',False)
         self.skip_drop_dataset = self.input.param('skip_drop_dataset', False)
-
         self.query_id = self.input.param('query_id',None)
         self.mode = self.input.param('mode',None)
         self.num_concurrent_queries = self.input.param('num_queries',5000)
@@ -46,20 +55,127 @@ class CBASBaseTest(BaseTestCase):
         self.compiler_param_val = self.input.param('compiler_param_val', None)
         self.expect_reject = self.input.param('expect_reject', False)
         self.expect_failure = self.input.param('expect_failure', False)
-        
+        self.otpNodes = []
+
         self.rest = RestConnection(self.master)
+        
+        self.log.info("Setting the min possible memory quota so that adding mode nodes to the cluster wouldn't be a problem.")
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=MIN_KV_QUOTA)
+        self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
+        self.rest.set_service_memoryQuota(service='cbasMemoryQuota', memoryQuota=CBAS_QUOTA)
+        
         # Drop any existing buckets and datasets
-        self.cleanup_cbas()
+        if self.cbas_node:
+            self.cleanup_cbas()
+                    
+        if not self.cbas_node and len(self.cbas_servers)>=1:
+            self.cbas_node = self.cbas_servers[0]
+            if "cbas" in self.master.services:
+                self.cleanup_cbas()
+            if add_defualt_cbas_node:
+                if self.master.ip != self.cbas_node.ip:
+                    self.otpNodes.append(self.add_node(self.cbas_node))
+                else:
+                    self.otpNodes = self.rest.node_statuses()
+                    ''' This cbas cleanup is actually not needed.
+                        When a node is added to the cluster, it is automatically cleaned-up.'''
+                self.cleanup_cbas()
+                self.cbas_servers.remove(self.cbas_node)
+        
+        self.log.info("==============  CBAS_BASE setup was finished for test #{0} {1} ==============" \
+                          .format(self.case_number, self._testMethodName))
+    
+    def create_default_bucket(self):
+        node_info = self.rest.get_nodes_self()
+        if node_info.memoryQuota and int(node_info.memoryQuota) > 0 :
+            ram_available = node_info.memoryQuota
+            
+        self.bucket_size = ram_available - 1
+        default_params=self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                         enable_replica_index=self.enable_replica_index,
+                                                         eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_default_bucket(default_params)
+        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                   num_replicas=self.num_replicas, bucket_size=self.bucket_size,
+                                   eviction_policy=self.eviction_policy, lww=self.lww,
+                                   type=self.bucket_type))
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets( ['default'] )
+    
+    def add_all_cbas_node_then_rebalance(self):
+        if len(self.cbas_servers)>=1:
+            for server in self.cbas_servers:
+                '''This is the case when master node is running cbas service as well'''
+                if self.master.ip != server.ip:
+                    self.otpNodes.append(self.rest.add_node(user=server.rest_username,
+                                               password=server.rest_password,
+                                               remoteIp=server.ip,
+                                               port=8091,
+                                               services=server.services.split(",")))
+    
+            self.rebalance()
+        else:
+            self.log.info("No CBAS server to add in cluster")
 
-    def tearDown(self):
-        super(CBASBaseTest, self).tearDown()
-
-    def load_sample_buckets(self, server, bucketName, total_items=None):
-        """
-        Load the specified sample bucket in Couchbase
-        """
+        return self.otpNodes
+    
+    def rebalance(self, wait_for_completion=True):
+        nodes = self.rest.node_statuses()
+        started = self.rest.rebalance(otpNodes=[node.id for node in nodes])
+        if started and wait_for_completion:
+            try:
+                result = self.rest.monitorRebalance()
+                self.assertTrue(result, "Rebalance operation failed after adding %s cbas nodes,"%self.cbas_servers)
+                self.log.info("successfully rebalanced cluster {0}".format(result))
+            except Exception as e:
+                self.log.info(15*"#"+"THIS IS A BUG: MB-25006. REMOVE THIS TRY-CATCH ONCE BUG IS FIXED."+15*"#")
+                pass
+        else:
+            self.assertTrue(started, "Rebalance operation started and in progress,"%self.cbas_servers)
+        
+    def remove_all_cbas_node_then_rebalance(self,cbas_otpnodes=None, rebalance=True ):
+        return self.remove_node(cbas_otpnodes,rebalance) 
+        
+    def add_node(self, node=None, services=None, rebalance=True, wait_for_rebalance_completion=True):
+        if not node:
+            self.fail("There is no node to add to cluster.")
+        if not services:
+            services = node.services.split(",")        
+        otpnode = self.rest.add_node(user=node.rest_username,
+                               password=node.rest_password,
+                               remoteIp=node.ip,
+                               port=8091,
+                               services=services
+                               )
+        if rebalance:
+            self.rebalance(wait_for_completion=wait_for_rebalance_completion)
+        return otpnode
+    
+    def remove_node(self,otpnode=None, wait_for_rebalance=True):
+        nodes = self.rest.node_statuses()
+        '''This is the case when master node is running cbas service as well'''
+        if len(nodes) <= len(otpnode):
+            return
+        
+        helper = RestHelper(self.rest)
+        try:
+            removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
+                                              ejectedNodes=[node.id for node in otpnode],
+                                              wait_for_rebalance=wait_for_rebalance)
+        except Exception as e:
+            self.sleep(5,"First time rebalance failed on Removal. Wait and try again. THIS IS A BUG.")
+            removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
+                                              ejectedNodes=[node.id for node in otpnode],
+                                              wait_for_rebalance=wait_for_rebalance)
+            
+        self.assertTrue(removed, "Rebalance operation failed while removing %s cbas nodes,"%self.cbas_servers)
+        
+    def load_sample_buckets(self, servers=None, bucketName=None, total_items=None):
+        """ Load the specified sample bucket in Couchbase """
         self.rest.load_sample(bucketName)
-        BucketOperationHelper.wait_for_memcached(self.master, bucketName)
+#         BucketOperationHelper.wait_for_memcached(self.master, bucketName);
         
         """ check for load data into travel-sample bucket """
         if total_items:
@@ -67,18 +183,24 @@ class CBASBaseTest(BaseTestCase):
             end_time = time.time() + 300
             while time.time() < end_time:
                 self.sleep(10)
-                num_actual = self.get_item_count(self.master,bucketName)
+                num_actual = 0
+                if not servers:
+                    num_actual = self.get_item_count(self.master,bucketName)
+                else:
+                    for server in servers:
+                        if "kv" in server.services:
+                            num_actual += self.get_item_count(server,bucketName)
                 if int(num_actual) == total_items:
                     self.log.info("%s items are loaded in the %s bucket" %(num_actual,bucketName))
                     break
-                
+                self.log.info("%s items are loaded in the %s bucket" %(num_actual,bucketName))
             if int(num_actual) != total_items:
                 return False
         else:
             self.sleep(120)
 
         return True
-
+    
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
                               cb_server_ip,
                               validate_error_msg=False):
@@ -218,12 +340,12 @@ class CBASBaseTest(BaseTestCase):
         shell = RemoteMachineShellConnection(server)
         if mode:
             output, error = shell.execute_command(
-                """curl -s --data pretty=true --data mode={2} --data-urlencode 'statement={1}' http://{0}:8095/analytics/service -v""".format(
-                    self.cbas_node.ip, statement, mode))
+                """curl -s --data pretty=true --data mode={2} --data-urlencode 'statement={1}' http://{0}:8095/analytics/service -v -u {3}:{4}""".format(
+                    self.cbas_node.ip, statement, mode, self.cbas_node.rest_username, self.cbas_node.rest_password))
         else:
             output, error = shell.execute_command(
-            """curl -s --data pretty=true --data-urlencode 'statement={1}' http://{0}:8095/analytics/service -v""".format(
-                self.cbas_node.ip, statement))
+            """curl -s --data pretty=true --data-urlencode 'statement={1}' http://{0}:8095/analytics/service -v -u {2}:{3}""".format(
+                self.cbas_node.ip, statement, self.cbas_node.rest_username, self.cbas_node.rest_password))
         response = ""
         for line in output:
             response = response + line
@@ -445,8 +567,9 @@ class CBASBaseTest(BaseTestCase):
         """
         pretty = "true"
         if not rest:
-            rest = RestConnection(self.master)
+            rest = RestConnection(self.cbas_node)
         try:
+            self.log.info("Running query on cbas: %s"%statement)
             response = rest.execute_statement_on_cbas(statement, mode, pretty,
                                                       timeout, client_context_id)
             response = json.loads(response)
@@ -464,7 +587,8 @@ class CBASBaseTest(BaseTestCase):
                 handle = response["handle"]
             else:
                 handle = None
-
+            
+            self.log.info("Query Result: %s"%response)
             return response["status"], response[
                 "metrics"], errors, results, handle
 
@@ -485,7 +609,7 @@ class CBASBaseTest(BaseTestCase):
         fail_count = 0
         failed_queries = []
         for count in range(0, num_queries):
-            tasks.append(self._cb_cluster.async_cbas_query_execute(self.master,
+            tasks.append(self._cb_cluster.async_cbas_query_execute(self.cbas_node,
                                                                    cbas_base_url,
                                                                    statement,
                                                                    mode,
@@ -513,3 +637,96 @@ class CBASBaseTest(BaseTestCase):
             return status
         except Exception, e:
             raise Exception(str(e))
+
+    def _run_concurrent_queries(self, query, mode, num_queries, rest=None):
+        self.failed_count = 0
+        self.success_count = 0
+        self.rejected_count = 0
+        # Run queries concurrently
+        self.log.info("Running queries concurrently now...")
+        threads = []
+        for i in range(0, num_queries):
+            threads.append(Thread(target=self._run_query,
+                                  name="query_thread_{0}".format(i), args=(query,mode,rest)))
+        i = 0
+        for thread in threads:
+            # Send requests in batches, and sleep for 5 seconds before sending another batch of queries.
+            i += 1
+            if i % self.concurrent_batch_size == 0:
+                self.sleep(5, "submitted {0} queries".format(i))
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.log.info(
+            "%s queries submitted, %s failed, %s passed, %s rejected" % (
+                num_queries, self.failed_count,
+                self.success_count, self.rejected_count))
+
+        if self.failed_count + self.success_count + self.rejected_count != num_queries:
+            self.fail("Some queries errored out. Check logs.")
+
+        if self.failed_count > 0:
+            self.fail("Some queries failed.")
+
+    def _run_query(self, query, mode, rest=None, validate_item_count=False, expected_count=0):
+        # Execute query (with sleep induced)
+        name = threading.currentThread().getName();
+        client_context_id = name
+
+        try:
+            status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+                query, mode=mode, rest=rest, timeout=3600,
+                client_context_id=client_context_id)
+            # Validate if the status of the request is success, and if the count matches num_items
+            if mode == "immediate":
+                if status == "success":
+                    if validate_item_count:
+                        if results[0]['$1'] != expected_count:
+                            self.log.info("Query result : %s", results[0]['$1'])
+                            self.log.info(
+                                "********Thread %s : failure**********",
+                                name)
+                            self.failed_count += 1
+                        else:
+                            self.log.info(
+                                "--------Thread %s : success----------",
+                                name)
+                            self.success_count += 1
+                    else:
+                        self.log.info("--------Thread %s : success----------",
+                                      name)
+                        self.success_count += 1
+                else:
+                    self.log.info("Status = %s", status)
+                    self.log.info("********Thread %s : failure**********", name)
+                    self.failed_count += 1
+
+            elif mode == "async":
+                if status == "running" and handle:
+                    self.log.info("--------Thread %s : success----------", name)
+                    self.success_count += 1
+                else:
+                    self.log.info("Status = %s", status)
+                    self.log.info("********Thread %s : failure**********", name)
+                    self.failed_count += 1
+
+            elif mode == "deferred":
+                if status == "success" and handle:
+                    self.log.info("--------Thread %s : success----------", name)
+                    self.success_count += 1
+                else:
+                    self.log.info("Status = %s", status)
+                    self.log.info("********Thread %s : failure**********", name)
+                    self.failed_count += 1
+        except Exception, e:
+            if str(e) == "Request Rejected":
+                self.log.info("Error 503 : Request Rejected")
+                self.rejected_count += 1
+            elif str(e) == "Capacity cannot meet job requirement":
+                self.log.info(
+                    "Error 500 : Capacity cannot meet job requirement")
+                self.rejected_count += 1
+            else:
+                self.log.error(str(e))
+                

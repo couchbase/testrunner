@@ -1,23 +1,35 @@
 from cbas_base import *
-
+from membase.api.rest_client import RestHelper
 
 class CBASFunctionalTests(CBASBaseTest):
     def setUp(self):
         self.input = TestInputSingleton.input
         if "default_bucket" not in self.input.test_params:
             self.input.test_params.update({"default_bucket":False})
-                    
         super(CBASFunctionalTests, self).setUp()
+        
         self.validate_error = False
         if self.expected_error:
             self.validate_error = True
-        
-        result = self.load_sample_buckets(server=self.master, bucketName="travel-sample", total_items=self.travel_sample_docs_count)
+            
+        ''' Considering all the scenarios where:
+        1. There can be 1 KV and multiple cbas nodes(and tests wants to add all cbas into cluster.)
+        2. There can be 1 KV and multiple cbas nodes(and tests wants only 1 cbas node)
+        3. There can be only 1 node running KV,CBAS service.
+        NOTE: Cases pending where there are nodes which are running only cbas. For that service check on nodes is needed.
+        '''
+        if "add_all_cbas_nodes" in self.input.test_params and self.input.test_params["add_all_cbas_nodes"] and len(self.cbas_servers) >= 1:
+            self.add_all_cbas_node_then_rebalance()
+            result = self.load_sample_buckets(servers=list(set(self.cbas_servers + [self.master, self.cbas_node])),
+                                              bucketName="travel-sample",
+                                              total_items=self.travel_sample_docs_count)
+        else:
+            result = self.load_sample_buckets(servers=list(set([self.master,self.cbas_node])),
+                                              bucketName="travel-sample",
+                                              total_items=self.travel_sample_docs_count)
+
         self.assertTrue(result, msg="wait_for_memcached failed while loading sample bucket: travel-sample")
         
-    def tearDown(self):
-        super(CBASFunctionalTests, self).tearDown()
-
     def test_create_bucket_on_cbas(self):
         # Create bucket on CBAS
         result = self.create_bucket_on_cbas(
@@ -25,21 +37,32 @@ class CBASFunctionalTests(CBASBaseTest):
             cb_bucket_name=self.cb_bucket_name,
             cb_server_ip=self.cb_server_ip,
             validate_error_msg=self.validate_error)
+        
+        if self.otpNodes:
+            self.cleanup_cbas()
+            self.remove_node(otpnode=self.otpNodes)
+            
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
-
+        
     def test_create_another_bucket_on_cbas(self):
         # Create first bucket on CBAS
-        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+        result = self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
                                    cb_server_ip=self.cb_server_ip)
-
+        self.assertTrue(result, "Not able to create first bucket on cbas. Bucket: %s"%self.cbas_bucket_name)
+        
         # Create another bucket on CBAS
         result = self.create_bucket_on_cbas(
             cbas_bucket_name=self.cbas_bucket_name,
             cb_bucket_name=self.cb_bucket_name,
             cb_server_ip=self.cb_server_ip,
             validate_error_msg=self.validate_error)
+        self.assertTrue(result, "Test for second bucket with same name on cbas failed.")
+        
+#         if self.otpNodes:
+#             self.cleanup_cbas()
+#             self.remove_node(otpnode=self.otpNodes)
         if not result:
             self.fail("Test failed")
 
@@ -54,7 +77,8 @@ class CBASFunctionalTests(CBASBaseTest):
             cbas_bucket_name=self.cbas_bucket_name_invalid,
             cbas_dataset_name=self.cbas_dataset_name,
             validate_error_msg=self.validate_error)
-
+#         if self.otpNodes:
+#             self.remove_node(otpnode=self.otpNodes)
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -73,6 +97,8 @@ class CBASFunctionalTests(CBASBaseTest):
             cbas_bucket_name=self.cbas_bucket_name,
             cbas_dataset_name=self.cbas_dataset2_name,
             validate_error_msg=self.validate_error)
+#         if self.otpNodes:
+#             self.remove_node(otpnode=self.otpNodes)
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -93,7 +119,8 @@ class CBASFunctionalTests(CBASBaseTest):
                                         self.cbas_bucket_name_invalid,
                                         cb_bucket_password=self.cb_bucket_password,
                                         validate_error_msg=self.validate_error)
-
+        if self.otpNodes:
+            self.remove_node(otpnode=self.otpNodes)
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -116,7 +143,6 @@ class CBASFunctionalTests(CBASBaseTest):
         result = self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
                                         cb_bucket_password=self.cb_bucket_password,
                                         validate_error_msg=self.validate_error)
-
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -140,7 +166,6 @@ class CBASFunctionalTests(CBASBaseTest):
                                              disconnect_if_connected=
                                              self.disconnect_if_connected,
                                              validate_error_msg=self.validate_error)
-
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -169,7 +194,6 @@ class CBASFunctionalTests(CBASBaseTest):
                                              disconnect_if_connected=
                                              self.disconnect_if_connected,
                                              validate_error_msg=self.validate_error)
-
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -195,7 +219,6 @@ class CBASFunctionalTests(CBASBaseTest):
         result = self.drop_dataset(
             cbas_dataset_name=self.cbas_dataset_name_invalid,
             validate_error_msg=self.validate_error)
-
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -223,7 +246,6 @@ class CBASFunctionalTests(CBASBaseTest):
         result = self.drop_cbas_bucket(
             cbas_bucket_name=self.cbas_bucket_name_invalid,
             validate_error_msg=self.validate_error)
-
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
 
@@ -289,7 +311,6 @@ class CBASFunctionalTests(CBASBaseTest):
         count_filtered_ds = results[0]["$1"]
         self.log.info("**Count of records in filtered dataset ds1 = %s",
                       count_filtered_ds)
-
         # Validate if the count of records in both cases is the same
         if count_filtered_ds != count_full_ds:
             self.fail("Count not matching for full dataset with filters in "

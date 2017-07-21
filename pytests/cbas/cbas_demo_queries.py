@@ -116,6 +116,9 @@ class QueryDetails:
 
 class CBASDemoQueries(CBASBaseTest):
     def setUp(self):
+        self.input = TestInputSingleton.input
+        if "default_bucket" not in self.input.test_params:
+            self.input.test_params.update({"default_bucket":False})
         super(CBASDemoQueries, self).setUp()
 
     def tearDown(self):
@@ -126,11 +129,12 @@ class CBASDemoQueries(CBASBaseTest):
         query_record, dataset_record = query_details.get_query_and_dataset_details()
 
         # Delete Default bucket and load beer-sample bucket
-        self.cluster.bucket_delete(server=self.master, bucket="default")
-        self.load_sample_buckets(server=self.master,
+#         self.cluster.bucket_delete(server=self.master, bucket="default")
+        self.load_sample_buckets(servers=[self.master],
                                  bucketName=dataset_record['cb_bucket_name'],
                                  total_items=self.beer_sample_docs_count)
-
+        if "add_all_cbas_nodes" in self.input.test_params and self.input.test_params["add_all_cbas_nodes"] and len(self.cbas_servers) > 1:
+            self.add_all_cbas_node_then_rebalance()
         # Create bucket on CBAS
         self.create_bucket_on_cbas(
             cbas_bucket_name=dataset_record['cbas_bucket_name'],

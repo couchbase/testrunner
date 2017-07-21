@@ -502,16 +502,16 @@ class CouchbaseServerInstaller(Installer):
                             log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
                             kv_quota -= INDEX_QUOTA
                             log.info("set index quota to node %s " % server.ip)
-                            rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=INDEX_QUOTA)
+                            rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
                         if "fts" in set_services:
                             log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
                             kv_quota -= FTS_QUOTA
                             log.info("set both index and fts quota at node %s "% server.ip)
-                            rest.set_service_memoryQuota(service='ftsMemoryQuota', MemoryQuota=FTS_QUOTA)
+                            rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
                         if "cbas" in set_services:
                             log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
                             kv_quota -= CBAS_QUOTA
-                            rest.set_service_memoryQuota(service = "cbasMemoryQuota", MemoryQuota=CBAS_QUOTA)
+                            rest.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
                         if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM needs to be more than %s MB"
                                         " at node  %s"  % (MIN_KV_QUOTA, server.ip))

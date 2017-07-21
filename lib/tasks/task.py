@@ -136,7 +136,7 @@ class NodeInitializeTask(Task):
         if self.index_quota_percent:
             self.index_quota = int((info.mcdMemoryReserved * 2/3) * \
                                       self.index_quota_percent / 100)
-            rest.set_service_memoryQuota(service='indexMemoryQuota', username=username, password=password, MemoryQuota=self.index_quota)
+            rest.set_service_memoryQuota(service='indexMemoryQuota', username=username, password=password, memoryQuota=self.index_quota)
         if self.quota_percent:
            self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
 
@@ -157,16 +157,16 @@ class NodeInitializeTask(Task):
                 self.log.info("quota for index service will be %s MB" % (index_quota))
                 kv_quota -= index_quota
                 self.log.info("set index quota to node %s " % self.server.ip)
-                rest.set_service_memoryQuota(service='indexMemoryQuota', MemoryQuota=index_quota)
+                rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=index_quota)
             if "fts" in set_services:
                 self.log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
                 kv_quota -= FTS_QUOTA
                 self.log.info("set both index and fts quota at node %s "% self.server.ip)
-                rest.set_service_memoryQuota(service='ftsMemoryQuota', MemoryQuota=FTS_QUOTA)
+                rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
             if "cbas" in set_services:
                 self.log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
                 kv_quota -= CBAS_QUOTA
-                rest.set_service_memoryQuota(service = "cbasMemoryQuota", MemoryQuota=CBAS_QUOTA)
+                rest.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
             if kv_quota < MIN_KV_QUOTA:
                     raise Exception("KV RAM needs to be more than %s MB"
                             " at node  %s"  % (MIN_KV_QUOTA, self.server.ip))
