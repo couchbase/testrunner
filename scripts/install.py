@@ -248,6 +248,14 @@ class Installer(object):
                 """
                 if msi_build[0] in COUCHBASE_FROM_SPOCK:
                     info.deliverable_type = "msi"
+                elif "5" > msi_build[0] and int(info.windows_name) == 2016:
+                    log.info("\n========\n"
+                        "         Build version %s does not support on\n"
+                        "         Windows Server 2016\n"
+                        "========"  % msi_build[0])
+                    os.system("ps aux | grep python | grep %d " % os.getpid())
+                    time.sleep(5)
+                    os.system('kill %d' % os.getpid())
             else:
                 print "Incorrect version format"
                 sys.exit()
