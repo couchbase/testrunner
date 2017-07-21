@@ -949,7 +949,10 @@ class RemoteMachineShellConnection:
             info = {}
             if "OS Name" in systeminfo:
                 info["os"] = systeminfo["OS Name"].find("indows") and "windows" or "NONE"
-                info["os_name"] = systeminfo["OS Name"].find("2008 R2") and "2k8" or "NONE"
+            if systeminfo["OS Name"].find("2008 R2") != -1:
+                info["os_name"] = 2008
+            elif systeminfo["OS Name"].find("2016") != -1:
+                info["os_name"] = 2016
             if "System Type" in systeminfo:
                 info["os_arch"] = systeminfo["System Type"].find("64") and "x86_64" or "NONE"
             info.update(systeminfo)

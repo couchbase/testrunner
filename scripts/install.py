@@ -26,7 +26,8 @@ from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
+from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON,\
+                          COUCHBASE_FROM_SPOCK
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4,\
                           CB_RELEASE_BUILDS
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
@@ -220,6 +221,33 @@ class Installer(object):
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
+        print "\n*** OS version of this server %s is %s ***" % (remote_client.ip,
+                                                       info.distribution_version)
+        if info.distribution_version.lower() == "suse 12":
+            if version[:5] not in COUCHBASE_FROM_SPOCK:
+                mesg = "%s does not support cb version %s \n" % \
+                         (info.distribution_version, version[:5])
+                remote_client.stop_current_python_running(mesg)
+        if info.type.lower() == "windows":
+            if "-" in version:
+                msi_build = version.split("-")
+                """
+                    In spock from build 2924 and later release, we only support
+                    msi installation method on windows
+                """
+                if msi_build[0] in COUCHBASE_FROM_SPOCK:
+                    info.deliverable_type = "msi"
+                elif "5" > msi_build[0] and int(info.windows_name) == 2016:
+                    log.info("\n========\n"
+                        "         Build version %s does not support on\n"
+                        "         Windows Server 2016\n"
+                        "========"  % msi_build[0])
+                    os.system("ps aux | grep python | grep %d " % os.getpid())
+                    time.sleep(5)
+                    os.system('kill %d' % os.getpid())
+            else:
+                print "Incorrect version format"
+                sys.exit()
         remote_client.disconnect()
         if ok and not linux_repo:
             timeout = 300
