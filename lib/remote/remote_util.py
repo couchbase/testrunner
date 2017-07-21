@@ -2146,8 +2146,11 @@ class RemoteMachineShellConnection:
 
                 if "-" in full_version:
                     msi_build = full_version.split("-")
-                    if msi_build[0] in COUCHBASE_FROM_SPOCK and \
-                                    int(msi_build[1]) >= 2924:
+                    """
+                       In spock from build 2924 and later release, we only support
+                       msi installation method on windows
+                    """
+                    if msi_build[0] in COUCHBASE_FROM_SPOCK:
                         os_type = "msi"
                         windows_msi = True
                         self.info.deliverable_type = "msi"

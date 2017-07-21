@@ -242,8 +242,11 @@ class Installer(object):
         if info.type.lower() == "windows":
             if "-" in version:
                 msi_build = version.split("-")
-                if msi_build[0] in COUCHBASE_FROM_SPOCK and \
-                     int(msi_build[1]) >= 2924:
+                """
+                    In spock from build 2924 and later release, we only support
+                    msi installation method on windows
+                """
+                if msi_build[0] in COUCHBASE_FROM_SPOCK:
                     info.deliverable_type = "msi"
             else:
                 print "Incorrect version format"
@@ -638,9 +641,12 @@ class CouchbaseServerInstaller(Installer):
         if not linux_repo:
             if type == "windows":
                 log.info('***** Download Windows binary*****')
+                """
+                    In spock from build 2924 and later release, we only support
+                    msi installation method on windows
+                """
                 if "-" in params["version"] and \
-                    params["version"].split("-")[0] in COUCHBASE_FROM_SPOCK and \
-                    int(params["version"].split("-")[1]) >= 2924:
+                    params["version"].split("-")[0] in COUCHBASE_FROM_SPOCK:
                     self.msi = True
                     os_type = "msi"
                 remote_client.download_binary_in_win(build.url, params["version"],

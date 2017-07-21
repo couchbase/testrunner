@@ -733,7 +733,11 @@ class BuildQuery(object):
                     build.architecture_type = "amd64"
                 elif "x86" in architecture_type:
                     build.architecture_type = "x86"
-            if "-" in version and int(version.split("-")[1]) >= 2924:
+            """
+                    In spock from build 2924 and later release, we only support
+                    msi installation method on windows
+            """
+            if "-" in version and version.split("-")[0] in COUCHBASE_FROM_SPOCK:
                 deliverable_type = "msi"
 
         if "deb" in deliverable_type and "centos6" in edition_type:
