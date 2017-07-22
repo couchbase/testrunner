@@ -744,6 +744,21 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.assertTrue("Backup successfully completed" in output[0],
                         "Backup failed with memcached crash and restart within 180 seconds")
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
+        self.sleep(30)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.append(o[0])
+        conn.log_command_output(o, e)
+        self.number_of_backups_taken += 1
+        self.store_vbucket_seqno()
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
 
     def backup_with_erlang_crash_and_restart(self):
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
@@ -761,6 +776,21 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.assertTrue("Backup successfully completed" in output[0],
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
+        self.sleep(30)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.append(o[0])
+        conn.log_command_output(o, e)
+        self.number_of_backups_taken += 1
+        self.store_vbucket_seqno()
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
 
     def backup_with_cb_server_stop_and_restart(self):
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
@@ -778,6 +808,21 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.assertTrue("Backup successfully completed" in output[0],
                         "Backup failed with couchbase stop and start within 180 seconds")
         self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
+        self.sleep(30)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.append(o[0])
+        conn.log_command_output(o, e)
+        self.number_of_backups_taken += 1
+        self.store_vbucket_seqno()
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
 
     def merge(self):
         """
@@ -1229,12 +1274,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 if "backup" in action:
                     iterations = params[0]
                     self.backupset.number_of_backups += int(iterations)
-                elif "backup_with_expiry" in action:
-                    iterations = params[0]
-                    self.backupset.number_of_backups += int(iterations)
-                elif "backup_after_expiry" in action:
-                    iterations = params[0]
-                    self.backupset.number_of_backups += int(iterations)
                 elif "failover" in action or "recover" in action:
                     if 'hard' in params:
                         self.graceful = False
@@ -1299,7 +1338,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "backup_after_expiry": backup_after_expiry,
         "backup_with_memcached_crash_and_restart": backup_with_memcached_crash_and_restart,
         "backup_with_erlang_crash_and_restart": backup_with_erlang_crash_and_restart,
-        "backup_with_cb_server_stop_and_restar": backup_with_cb_server_stop_and_restart,
+        "backup_with_cb_server_stop_and_restart": backup_with_cb_server_stop_and_restart,
         "merge": merge,
         "compact_backup": compact_backup,
         "rebalance": rebalance,
