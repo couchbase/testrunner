@@ -1198,6 +1198,7 @@ class RemoteMachineShellConnection:
     def create_windows_info(self):
             systeminfo = self.get_windows_system_info()
             info = {}
+            info["os_name"] = "2k8"
             if "OS Name" in systeminfo:
                 info["os"] = systeminfo["OS Name"].find("indows") and "windows" or "NONE"
             if systeminfo["OS Name"].find("2008 R2") != -1:
