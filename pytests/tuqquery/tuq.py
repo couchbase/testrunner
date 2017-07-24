@@ -198,6 +198,11 @@ class QueryTests(BaseTestCase):
             expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_list_sorted)
 
+    def test_long_ints(self):
+        result = self.run_cbq_query("select 1492855384243896327 as a, tostring(1492855384243896327) "
+                                     "as b")
+        self.assertTrue(result['results'][0]['b'] == str(result['results'][0]['a']))
+
 ##############################################################################################
 #
 #   ALL
