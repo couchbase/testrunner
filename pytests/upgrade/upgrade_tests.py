@@ -830,16 +830,6 @@ class UpgradeTests(NewUpgradeBaseTest):
         if queue is not None:
             queue.put(True)
 
-    def _convert_server_map(self, servers):
-        map = {}
-        for server in servers:
-            key  = self._gen_server_key(server)
-            map[key] = server
-        return map
-
-    def _gen_server_key(self, server):
-        return "{0}:{1}".format(server.ip, server.port)
-
     def kv_ops_create(self):
         try:
             self.log.info("kv_ops_create")

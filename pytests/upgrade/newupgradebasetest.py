@@ -772,3 +772,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                     end=self.ops_dist_map[key]["end"],
                     start=self.ops_dist_map[key]["start"])
         return gen_docs_map
+
+    def _convert_server_map(self, servers):
+        map = {}
+        for server in servers:
+            key  = self._gen_server_key(server)
+            map[key] = server
+        return map
+
+    def _gen_server_key(self, server):
+        return "{0}:{1}".format(server.ip, server.port)

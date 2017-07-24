@@ -2015,7 +2015,9 @@ class BaseTestCase(unittest.TestCase):
                cbadminbucket
            Default added user is cbadminbucket with admin role
         """
-        rest = RestConnection(self.master)
+        if node is None:
+            node = self.master
+        rest = RestConnection(node)
         versions = rest.get_nodes_versions()
         if not versions:
             return
@@ -2031,8 +2033,6 @@ class BaseTestCase(unittest.TestCase):
         if rolelist is None:
             rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
                                                       'roles': 'admin'}]
-        if node is None:
-            node = self.master
 
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))

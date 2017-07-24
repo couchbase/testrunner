@@ -20,7 +20,7 @@ from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
-                          WIN_TMP_PATH, STANDARD_BUCKET_PORT
+                          WIN_TMP_PATH, STANDARD_BUCKET_PORT, COUCHBASE_FROM_WATSON
 from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
@@ -32,8 +32,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         super(EnterpriseBackupRestoreBase, self).setUp()
         """ from version 4.6.0 and later, --host flag is deprecated """
         self.cluster_flag = "--host"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
         self.backupset = Backupset()
         self.cmd_ext = ""
         self.database_path = COUCHBASE_DATA_PATH
@@ -74,6 +72,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.non_master_host = self.input.param("non-master", False)
         self.compact_backup = self.input.param("compact-backup", False)
         self.merged = self.input.param("merged", None)
+        self.after_upgrade_merged = self.input.param("after-upgrade-merged", False)
+        self.create_gsi = self.input.param("create-gsi", False)
         self.do_restore = self.input.param("do-restore", False)
         self.do_verify = self.input.param("do-verify", False)
         self.create_views = self.input.param("create-views", False)
@@ -128,6 +128,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.start = self.input.param("start", 1)
         self.backupset.end = self.input.param("stop", 1)
         self.backupset.number_of_backups = self.input.param("number_of_backups", 1)
+        self.backupset.number_of_backups_after_upgrade = \
+                             self.input.param("number_of_backups_after_upgrade", 0)
         self.backupset.filter_keys = self.input.param("filter-keys", "")
         self.backupset.random_keys = self.input.param("random_keys", False)
         self.backupset.filter_values = self.input.param("filter-values", "")
@@ -140,6 +142,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
         self.backupset.map_buckets = self.input.param("map-buckets", None)
+        self.add_node_services = self.input.param("add-node-services", "kv")
         self.backupset.backup_compressed = \
                                       self.input.param("backup-conpressed", False)
         self.backups = []
@@ -149,7 +152,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.buckets,
                                             self.backup_validation_files_location,
                                             self.backups,
-                                            self.num_items)
+                                            self.num_items,
+                                            self.vbuckets)
         self.number_of_backups_taken = 0
         self.vbucket_seqno = []
         self.expires = self.input.param("expires", 0)
@@ -272,6 +276,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
+        if "4.6" <= RestConnection(self.backupset.cluster_host).get_nodes_version():
+            self.cluster_flag = "--cluster"
 
         args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} --username"\
                    " {4} {5}".format(self.backupset.directory, self.backupset.name,
@@ -325,6 +331,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             output, error = self.backup_cluster()
             if error or "Backup successfully completed" not in output[-1]:
                 self.fail("Taking cluster backup failed.")
+        self.backup_list()
         if not repeats:
             status, msg = self.validation_helper.validate_backup()
             if not status:
@@ -364,6 +371,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
+        if "4.6" <= RestConnection(self.backupset.restore_cluster_host).get_nodes_version():
+            self.cluster_flag = "--cluster"
 
         args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4}"\
                " --username {5} {6} --start {7} --end {8}" \
@@ -454,6 +463,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                    password_env)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        if "Error restoring cluster" in output[0]:
+            self.fail("Failed to restore cluster")
         res = output
         res.extend(error)
         error_str = "Error restoring cluster: Transfer failed. "\
@@ -889,6 +900,38 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             self.fail("Item miss match on 2 backup files")
 
+    def create_indexes(self):
+        cmd = "cbindex -type create -bucket default -using memopt -index " \
+              "num1 -fields=Num1"
+        shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = shell.execute_command(command)
+        if self.debug_logs:
+            self.log.info("\noutput gsi:   %s" % output)
+        cmd = "cbindex -type create -bucket default -using memdb -index " \
+              "num2 -fields=Num2"
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        shell.execute_command(command)
+        shell.disconnect()
+
+    def verify_gsi(self):
+        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+            self.add_built_in_server_user(node=self.backupset.cluster_host)
+        cmd = "cbindex -type list"
+        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+            cmd += " -auth %s:%s" % (self.backupset.cluster_host.rest_username,
+                                     self.backupset.cluster_host.rest_password)
+        shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = shell.execute_command(command)
+        shell.log_command_output(output, error)
+        if len(output) > 1:
+            self.assertTrue("Index:default/Num1" in output[1],
+                            "GSI index not created in restore cluster as expected")
+            self.log.info("GSI index created in restore cluster as expected")
+        else:
+            self.fail("GSI index not created in restore cluster as expected")
+
 
 class Backupset:
     def __init__(self):
@@ -918,6 +961,7 @@ class Backupset:
         self.start = 1
         self.end = 1
         self.number_of_backups = 1
+        self.number_of_backups_after_upgrade = 1
         self.filter_keys = ''
         self.filter_values = ''
         self.no_ssl_verify = False

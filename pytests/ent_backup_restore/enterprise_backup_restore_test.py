@@ -16,7 +16,8 @@ from couchbase_helper.document import View
 from tasks.future import TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
-from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH
+from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
+                          COUCHBASE_FROM_4DOT6
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID= 20485
@@ -235,14 +236,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def _backup_restore_with_ops(self, exp=0, backup=True, compare_uuid=False,
                                  compare_function="==", replicas=False,
-                                 mode="memory"):
+                                 mode="memory", node=None, repeats=0):
         self.ops_type = self.input.param("ops-type", "update")
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
                                                       end=self.num_items)
         self.log.info("Start doing ops: %s " % self.ops_type)
-        self._load_all_buckets(self.master, gen, self.ops_type, exp)
+        if node is None:
+            node = self.master
+        self._load_all_buckets(node, gen, self.ops_type, exp)
         if backup:
-            self.backup_cluster_validate()
+            self.backup_cluster_validate(repeats=repeats)
         else:
             self.backup_restore_validate(compare_uuid=compare_uuid,
                                          seqno_compare_function=compare_function,
@@ -2027,13 +2030,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def test_backup_restore_after_offline_upgrade(self):
         """
-        1. Test has to be supplied initial_version to be installed and upgrade_version
-           to be upgraded to
-        2. Installs initial_version on the servers
-        3. Upgrades cluster to upgrade_version - initializes them and creates bucket
-           default
-        4. Creates a backupset - backsup data and validates
-        5. Restores data and validates
+            1. Test has to be supplied initial_version to be installed, create
+               default bucket and load data to this bucket.
+            2. Backup cluster and verify data and delete default bucket
+            3. Upgrades cluster to upgrade_version re-reates default bucket
+            4. Restores data and validates
         """
         self._install(self.servers)
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
@@ -2070,6 +2071,113 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if "5" <= self.cb_version[:1]:
             self.add_built_in_server_user()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_after_online_upgrade(self):
+        """
+            1. Test has to be supplied initial_version to be installed and
+               upgrade_version to be upgraded to
+            2. Installs initial_version on the servers
+            3. Load data and backup in pre-upgrade
+            4. Install upgrade version on 2 nodes.  Use swap rebalance to upgrade
+               cluster
+            5. Operation after upgrade cluster
+            6. Restores data and validates
+        """
+        self.bucket_helper = BucketOperationHelper()
+        servers = copy.deepcopy(self.servers)
+        self.vbuckets = self.initial_vbuckets
+        if len(servers) != 4:
+            self.fail("\nThis test needs exactly 4 nodes to run! ")
+        self._install(servers)
+        self.sleep(5, "wait for node ready")
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                            end=self.num_items)
+        rebalance = self.cluster.async_rebalance(servers[:self.nodes_init],
+                                       [servers[int(self.nodes_init) - 1]], [])
+        rebalance.result()
+        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        if RestConnection(self.master).get_nodes_version()[:5] in COUCHBASE_FROM_4DOT6:
+            self.cluster_flag = "--cluster"
+
+        """ create index """
+        if self.create_gsi:
+            rest = RestConnection(self.master)
+            if "5" > rest.get_nodes_version()[:1]:
+                rest.set_indexer_storage_mode(storageMode="memdb")
+            self.create_indexes()
+        self.backup_create()
+        if self.backupset.number_of_backups > 1:
+            self.log.info("Start doing multiple backup")
+            for i in range(1, self.backupset.number_of_backups + 1):
+                self._backup_restore_with_ops()
+        else:
+            self.backup_cluster_validate()
+        start = randrange(1, self.backupset.number_of_backups + 1)
+        if start == self.backupset.number_of_backups:
+            end = start
+        else:
+            end = randrange(start, self.backupset.number_of_backups + 1)
+        self.sleep(5)
+        self.backup_list()
+
+        """ Start to online upgrade using swap rebalance """
+        self.initial_version = self.upgrade_versions[0]
+        if self.force_version_upgrade:
+            self.initial_version = self.force_version_upgrade
+        self.sleep(self.sleep_time,
+                   "Pre-setup of old version is done. Wait for online upgrade to: "
+                   "{0} version".format(self.initial_version))
+        self.product = 'couchbase-server'
+        self._install(servers[2:])
+        self.sleep(self.sleep_time,
+                   "Installation of new version is done. Wait for rebalance")
+        self.log.info(
+            "Rebalanced in upgraded nodes and rebalanced out nodes with old version")
+        add_node_services = [self.add_node_services]
+        if "-" in self.add_node_services:
+            add_node_services = self.add_node_services.split("-")
+
+        self.cluster.rebalance(servers, servers[2:], servers[:2],
+                                                    services=add_node_services)
+        self.sleep(5)
+        self.backupset.cluster_host = servers[2]
+        """ Upgrade is done """
+
+        if self.backupset.number_of_backups_after_upgrade:
+            self.backupset.number_of_backups += \
+                                 self.backupset.number_of_backups_after_upgrade
+            if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+                self.add_built_in_server_user(node=self.backupset.cluster_host)
+            for i in range(1, self.backupset.number_of_backups_after_upgrade + 2):
+                self._backup_restore_with_ops(node=self.backupset.cluster_host,
+                                              repeats=1)
+            self.backup_list()
+
+        """ merged after upgrade """
+        if self.after_upgrade_merged:
+            self.backupset.start = 1
+            self.backupset.end = len(self.backups)
+            self.backup_merge_validate()
+            self.backup_list()
+        self.bucket_helper.delete_bucket_or_assert(self.backupset.cluster_host,
+                                                               "default", self)
+
+        """ Re-create default bucket on upgrade cluster """
+        RestConnection(servers[2]).create_bucket(bucket='default',
+                                                      ramQuotaMB=512)
+        self.sleep(5)
+
+        """ Only server from Spock needs to add built-in user """
+        if "5" <= RestConnection(servers[2]).get_nodes_version()[:1]:
+            self.add_built_in_server_user(node=self.backupset.cluster_host)
+        if self.after_upgrade_merged:
+            self.backupset.end = 1
+
+        """ restore back to cluster """
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        if self.create_gsi:
+            self.verify_gsi()
 
     def test_backup_restore_with_python_sdk(self):
         """

@@ -11,8 +11,9 @@ from remote.remote_util import RemoteMachineShellConnection
 
 
 class BackupRestoreValidations(BackupRestoreValidationBase):
-    def __init__(self, backupset, cluster, restore_cluster, bucket, backup_validation_path,
-                 backups, num_items):
+    def __init__(self, backupset, cluster, restore_cluster, bucket,
+                 backup_validation_path, backups, num_items,
+                 vubckets):
         BackupRestoreValidationBase.__init__(self)
         self.backupset = backupset
         self.cluster = cluster
@@ -21,6 +22,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         self.backup_validation_path = backup_validation_path
         self.backups = backups
         self.num_items = num_items
+        self.vbuckets = vbuckets
         self.log = logger.Logger.get_logger()
 
     def validate_backup_create(self):
@@ -249,7 +251,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 except Exception, e:
                     raise e
 
-            for i in range(0, 1024):
+            for i in range(0, int(self.vbuckets)):
                 start_seqno = start_json['{0}'.format(i)]['last']['log']['log'][0]['seqno']
                 start_uuid =  start_json['{0}'.format(i)]['last']['log']['log'][0]['uuid']
                 end_seqno = end_json['{0}'.format(i)]['current']['log']['log'][0]['seqno']
