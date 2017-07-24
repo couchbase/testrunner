@@ -77,7 +77,7 @@ class CBASCompilationParamsTests(CBASBaseTest):
 
         try:
             status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
-                self.statement, mode=self.mode, rest=self.rest, timeout=3600)
+                self.statement, mode=self.mode, timeout=3600)
             self.log.info("Status = %s", status)
             if not self.expect_failure and status != "success":
                 self.fail("Unexpected failure")
@@ -106,7 +106,7 @@ class CBASCompilationParamsTests(CBASBaseTest):
 
         try:
             status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
-                self.statement, mode=self.mode, rest=self.rest, timeout=3600)
+                self.statement, mode=self.mode, timeout=3600)
             self.log.info("Status = %s", status)
             if not self.expect_failure and status != "success":
                 self.fail("Unexpected failure")
