@@ -56,10 +56,16 @@ class CBASClusterOperations(CBASBaseTest):
     
     def test_rebalance_in(self):
         '''
+        Description: This will test the rebalance in feature i.e. one node coming in to the cluster.
+        Then Rebalance. Verify that is has no effect on the data ingested to cbas.
+        
         Steps:
         1. Setup cbas. bucket, datasets/shadows, connect.
         2. Add a node and rebalance. Don't wait for rebalance completion.
         3. During rebalance, do mutations and execute queries on cbas.
+        
+        Author: Ritesh Agarwal/Mihir Kamdar
+        Date Created: 18/07/2017
         '''
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
 
@@ -84,11 +90,17 @@ class CBASClusterOperations(CBASBaseTest):
 
     def test_rebalance_out(self):
         '''
+        Description: This will test the rebalance out feature i.e. one node going out of cluster.
+        Then Rebalance.
+        
         Steps:
         1. Add a node, Rebalance.
         2. Setup cbas. bucket, datasets/shadows, connect.
         3. Remove a node and rebalance. Don't wait for rebalance completion.
         4. During rebalance, do mutations and execute queries on cbas.
+        
+        Author: Ritesh Agarwal/Mihir Kamdar
+        Date Created: 18/07/2017
         '''
         self.add_node(node=self.rebalanceServers[1])
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
@@ -114,11 +126,17 @@ class CBASClusterOperations(CBASBaseTest):
 
     def test_swap_rebalance(self):
         '''
+        Description: This will test the swap rebalance feature i.e. one node going out and one node coming in cluster.
+        Then Rebalance. Verify that is has no effect on the data ingested to cbas.
+        
         Steps:
         1. Setup cbas. bucket, datasets/shadows, connect.
         2. Add a node that is to be swapped against the leaving node. Do not rebalance.
         3. Remove a node and rebalance.
         4. During rebalance, do mutations and execute queries on cbas.
+        
+        Author: Ritesh Agarwal/Mihir Kamdar
+        Date Created: 20/07/2017
         '''
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
         self.setup_for_test()
@@ -145,6 +163,9 @@ class CBASClusterOperations(CBASBaseTest):
 
     def test_failover(self):
         '''
+        Description: This will test the node failover both graceful and hard failover based on
+        graceful_failover param in testcase conf file.
+        
         Steps:
         1. Add node to the cluster which will be failed over.
         2. Create docs, setup cbas.
@@ -152,6 +173,9 @@ class CBASClusterOperations(CBASBaseTest):
         4. Do rebalance asynchronously. During rebalance perform mutations.
         5. Run some CBAS queries.
         6. Check for correct number of items in CBAS datasets.
+        
+        Author: Ritesh Agarwal/Mihir Kamdar
+        Date Created: 20/07/2017
         '''
         
         #Add node which will be failed over later.
