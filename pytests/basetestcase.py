@@ -83,6 +83,18 @@ class BaseTestCase(unittest.TestCase):
         self.result_analyzer = DataAnalysisResultAnalyzer()
         self.set_testrunner_client()
         self.change_bucket_properties=False
+        self.cbas_node = self.input.cbas
+        self.cbas_servers = []
+        self.kv_servers = []
+        self.otpNodes = []
+        for server in self.servers:
+            if "cbas" in server.services:
+                self.cbas_servers.append(server)
+            if "kv" in server.services:
+                self.kv_servers.append(server)
+        if not self.cbas_node and len(self.cbas_servers)>=1:
+            self.cbas_node = self.cbas_servers[0]
+                            
         try:
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)

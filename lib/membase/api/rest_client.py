@@ -969,7 +969,6 @@ class RestConnection(object):
     def execute_statement_on_cbas(self, statement, mode, pretty=True,
                                   timeout=70, client_context_id=None):
         api = self.cbas_base_url + "/analytics/service"
-        log.info("Executing query: %s"%statement)
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         headers = {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization,

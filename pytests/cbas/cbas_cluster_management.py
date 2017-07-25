@@ -13,14 +13,12 @@ class CBASClusterManagement(CBASBaseTest):
     def setup_cbas_bucket_dataset_connect(self, cb_bucket, num_docs):
         # Create bucket on CBAS
         self.assertTrue(self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
-                       cb_bucket_name=cb_bucket,
-                       cb_server_ip=self.cbas_node.ip),"bucket creation failed on cbas")
+                       cb_bucket_name=cb_bucket),"bucket creation failed on cbas")
         
         self.assertTrue(self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
                           cbas_dataset_name=self.cbas_dataset_name), "dataset creation failed on cbas")
         
-        self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name,
-                   cb_bucket_password=self.cb_bucket_password),"Connecting cbas bucket to cb bucket failed")
+        self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name),"Connecting cbas bucket to cb bucket failed")
         
         self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], num_docs),"Data ingestion to cbas couldn't complete in 300 seconds.")
         
@@ -206,9 +204,130 @@ class CBASClusterManagement(CBASBaseTest):
             set_up_cbas = self.setup_cbas_bucket_dataset_connect("default", self.num_items)
             self._run_concurrent_queries(query,"immediate",1000,RestConnection(self.cbas_node))
             
-        for node in self.cbas_servers+[self.cbas_node]:
+        for node in self.cbas_servers:
             if node.ip != self.master.ip:
-                self.add_node(node=node,rebalance=True)
+                self.add_node(node=node)
                 if not set_up_cbas:
                     set_up_cbas = self.setup_cbas_bucket_dataset_connect("default", self.num_items)
                 self._run_concurrent_queries(query,"immediate",1000,RestConnection(node))
+
+    def test_add_first_cbas_restart_rebalance(self):
+        '''
+        Description: This test will add the first cbas node then start rebalance and cancel rebalance
+        before rebalance completes.
+        
+        Steps:
+        1. Add first cbas node.
+        2. Start rebalance.
+        3. While rebalance is in progress, stop rebalancing. Again start rebalance
+        4. Create bucket, datasets, connect bucket. Data ingestion should start.
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_node, services=["kv","cbas"],wait_for_rebalance_completion=False)
+        
+        if self.rest._rebalance_progress_status() == "running":
+            self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
+        else:
+            self.fail("Rebalance completed before the test could have stopped rebalance.")
+        
+        self.rebalance()
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+
+    def test_add_data_node_cancel_rebalance(self):
+        '''
+        Description: This test will add the first cbas node then start rebalance and cancel rebalance
+        before rebalance completes.
+        
+        Steps:
+        1. Add first cbas node. Start rebalance.
+        2. Create bucket, datasets, connect bucket. Data ingestion should start.
+        3. Add another data node. Rebalance, while rebalance is in progress, stop rebalancing.
+        4. Create bucket, datasets, connect bucket. Data ingestion should start.
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_node)
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        
+        self.add_node(self.kv_servers[1],wait_for_rebalance_completion=False)
+        if self.rest._rebalance_progress_status() == "running":
+            self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
+        else:
+            self.fail("Rebalance completed before the test could have stopped rebalance.")
+        
+        self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count)
+    
+    
+    def test_add_data_node_restart_rebalance(self):
+        '''
+        Description: This test will add the first cbas node then start rebalance and cancel rebalance
+        before rebalance completes.
+        
+        Steps:
+        1. Add first cbas node. Start rebalance.
+        2. Create bucket, datasets, connect bucket. Data ingestion should start.
+        3. Add another data node. Rebalance, while rebalance is in progress, stop rebalancing. Again start rebalance.
+        4. Create bucket, datasets, connect bucket. Data ingestion should start.
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_node)
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        
+        self.add_node(self.kv_servers[1],wait_for_rebalance_completion=False)
+        if self.rest._rebalance_progress_status() == "running":
+            self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
+        else:
+            self.fail("Rebalance completed before the test could have stopped rebalance.")
+        
+        self.rebalance()
+        self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count)
+        
+    def test_add_first_cbas_stop_rebalance(self):
+        '''
+        Description: This test will add the first cbas node then start rebalance and cancel rebalance
+        before rebalance completes.
+        
+        Steps:
+        1. Add first cbas node.
+        2. Start rebalance.
+        3. While rebalance is in progress, stop rebalancing.
+        4. Verify that the cbas node is not added to the cluster and should not accept queries.
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_node, services=["kv","cbas"],wait_for_rebalance_completion=False)
+        if self.rest._rebalance_progress_status() == "running":
+            self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
+        else:
+            self.fail("Rebalance completed before the test could have stopped rebalance.")
+        
+        self.assertFalse(self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                       cb_bucket_name="travel-sample"),"bucket creation failed on cbas")
+
+    def test_add_second_cbas_stop_rebalance(self):
+        '''
+        Description: This test will add the second cbas node then start rebalance and cancel rebalance
+        before rebalance completes.
+        
+        Steps:
+        1. Add first cbas node.
+        2. Start rebalance, wait for rebalance complete.
+        3. Add another cbas node, rebalance and while rebalance is in progress, stop rebalancing.
+        4. Verify that the second cbas node is not added to the cluster and should not accept queries.
+        5. First cbas node should be able to serve queries.
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_servers[0], services=["kv","cbas"])
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        
+        self.add_node(self.cbas_servers[1], services=["kv","cbas"],wait_for_rebalance_completion=False)
+        if self.rest._rebalance_progress_status() == "running":
+            self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
+        else:
+            self.fail("Rebalance completed before the test could have stopped rebalance.")
+        
+        query = "select count(*) from {0};".format(self.cbas_dataset_name)
+#         self.assertFalse(self.execute_statement_on_cbas_via_rest(query, rest=RestConnection(self.cbas_servers[1])),
+#                          "Successfully executed a cbas query from a node which is not part of cluster.")
+        
+        self.assertTrue(self.execute_statement_on_cbas_via_rest(query, rest=RestConnection(self.cbas_servers[0])),
+                         "Successfully executed a cbas query from a node which is not part of cluster.")
+        

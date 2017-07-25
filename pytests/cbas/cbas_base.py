@@ -18,7 +18,7 @@ class CBASBaseTest(BaseTestCase):
         self.cbas_node = self.input.cbas
         self.cbas_servers = []
         self.kv_servers = []
-
+ 
         for server in self.servers:
             if "cbas" in server.services:
                 self.cbas_servers.append(server)
@@ -32,13 +32,13 @@ class CBASBaseTest(BaseTestCase):
         invalid_ip = '10.111.151.109'
         self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
         self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
-        self.cb_bucket_password = self.input.param('cb_bucket_password', '')
+        self.cb_bucket_password = self.input.param('cb_bucket_password', None)
         self.expected_error = self.input.param("error", None)
         if self.expected_error:
             self.expected_error = self.expected_error.replace("INVALID_IP",invalid_ip)
             self.expected_error = self.expected_error.replace("PORT",self.master.port)
-        self.cb_server_ip = self.input.param("cb_server_ip", self.master.ip)
-        self.cb_server_ip = self.cb_server_ip.replace('INVALID_IP',invalid_ip)
+        self.cb_server_ip = self.input.param("cb_server_ip", None)
+        self.cb_server_ip = self.cb_server_ip.replace('INVALID_IP',invalid_ip) if self.cb_server_ip is not None else None
         self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
         self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid', self.cbas_bucket_name)
         self.cbas_dataset2_name = self.input.param('cbas_dataset2_name', None)
@@ -78,8 +78,8 @@ class CBASBaseTest(BaseTestCase):
                     self.otpNodes.append(self.add_node(self.cbas_node))
                 else:
                     self.otpNodes = self.rest.node_statuses()
-                    ''' This cbas cleanup is actually not needed.
-                        When a node is added to the cluster, it is automatically cleaned-up.'''
+                ''' This cbas cleanup is actually not needed.
+                    When a node is added to the cluster, it is automatically cleaned-up.'''
                 self.cleanup_cbas()
                 self.cbas_servers.remove(self.cbas_node)
         
@@ -174,8 +174,7 @@ class CBASBaseTest(BaseTestCase):
         
     def load_sample_buckets(self, servers=None, bucketName=None, total_items=None):
         """ Load the specified sample bucket in Couchbase """
-        self.rest.load_sample(bucketName)
-#         BucketOperationHelper.wait_for_memcached(self.master, bucketName);
+        self.assertTrue(self.rest.load_sample(bucketName),"Failure while loading sample bucket: %s"%bucketName)
         
         """ check for load data into travel-sample bucket """
         if total_items:
@@ -202,12 +201,16 @@ class CBASBaseTest(BaseTestCase):
         return True
     
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
-                              cb_server_ip,
+                              cb_server_ip=None,
                               validate_error_msg=False):
         """
         Creates a bucket on CBAS
         """
-        cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"name\":\"" + cb_bucket_name + "\",\"nodes\":\"" + cb_server_ip + "\"};"
+        if cb_server_ip:
+            cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"name\":\"" + cb_bucket_name + "\",\"nodes\":\"" + cb_server_ip + "\"};"
+        else:
+            '''DP3 doesn't need to specify cb server ip as cbas node is part of the cluster.'''
+            cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"name\":\"" + cb_bucket_name + "\"};"
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
             cmd_create_bucket)
         if validate_error_msg:
@@ -239,16 +242,16 @@ class CBASBaseTest(BaseTestCase):
             else:
                 return True
 
-    def connect_to_bucket(self, cbas_bucket_name, cb_bucket_password="",
-                          validate_error_msg=False, cb_bucket_username=""):
+    def connect_to_bucket(self, cbas_bucket_name, cb_bucket_password=None,
+                          validate_error_msg=False, cb_bucket_username=None):
         """
         Connects to a CBAS bucket
         """
-        if cb_bucket_username=="":
-            cb_bucket_username="cbadminbucket"
-        if cb_bucket_password=="":
-            cb_bucket_password="password"
-        cmd_connect_bucket = "connect bucket " + cbas_bucket_name + " with {\"username\":\"" + cb_bucket_username + "\",\"password\":\"" + cb_bucket_password + "\"};"
+        if cb_bucket_username and cb_bucket_password:
+            cmd_connect_bucket = "connect bucket " + cbas_bucket_name + " with {\"username\":\"" + cb_bucket_username + "\",\"password\":\"" + cb_bucket_password + "\"};"
+        else:
+            '''DP3 doesn't need to specify Username/Password as cbas node is part of the cluster.'''
+            cmd_connect_bucket = "connect bucket " + cbas_bucket_name
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
             cmd_connect_bucket)
         if validate_error_msg:
@@ -588,7 +591,6 @@ class CBASBaseTest(BaseTestCase):
             else:
                 handle = None
             
-            self.log.info("Query Result: %s"%response)
             return response["status"], response[
                 "metrics"], errors, results, handle
 
@@ -630,7 +632,7 @@ class CBASBaseTest(BaseTestCase):
         """
         Deletes a request from CBAS
         """
-        rest = RestConnection(self.master)
+        rest = RestConnection(self.cbas_node)
         try:
             status = rest.delete_active_request_on_cbas(client_context_id)
             self.log.info (status)

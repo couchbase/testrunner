@@ -144,6 +144,10 @@ class QueryTests(BaseTestCase):
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
+            if (self.analytics):
+                self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
+                self.setup_analytics()
+                self.sleep(30,'wait for analytics setup')
         except Exception, ex:
             self.log.error('SUITE SETUP FAILED')
             self.tearDown()
@@ -152,6 +156,8 @@ class QueryTests(BaseTestCase):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
         if self.analytics == True:
+            bucket_username = "cbadminbucket"
+            bucket_password = "password"
             data = 'use Default ;'
             for bucket in self.buckets:
                 data += 'disconnect bucket {0} if connected;'.format(bucket.name)
@@ -162,7 +168,7 @@ class QueryTests(BaseTestCase):
             f.write(data)
             f.close()
             url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
-            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
             os.system(cmd)
             os.remove(filename)
         super(QueryTests, self).tearDown()
@@ -183,10 +189,10 @@ class QueryTests(BaseTestCase):
     def setup_analytics(self):
         data = 'use Default;'
         self.log.info("No. of buckets : %s", len(self.buckets))
+        bucket_username = "cbadminbucket"
+        bucket_password = "password"
         for bucket in self.buckets:
-            bucket_username = "cbadminbucket"
-            bucket_password = "password"
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.master.ip)
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.cbas_node.ip)
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow")
             data += 'connect bucket {0} with {{"username":"{1}","password":"{2}"}};'.format(bucket.name, bucket_username, bucket_password)
         filename = "file.txt"
@@ -194,7 +200,7 @@ class QueryTests(BaseTestCase):
         f.write(data)
         f.close()
         url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
-        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
         os.remove(filename)
 
@@ -4299,7 +4305,7 @@ class QueryTests(BaseTestCase):
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")
                 self.log.info('RUN QUERY %s' % query)
-                result = rest.execute_statement_on_cbas(query, "immediate")
+                result = RestConnection(self.cbas_node).execute_statement_on_cbas(query, "immediate")
                 result = json.loads(result)
             else :
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
