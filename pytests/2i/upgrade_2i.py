@@ -15,6 +15,7 @@ QUERY_TEMPLATE = "SELECT {0} FROM %s "
 class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def setUp(self):
         super(UpgradeSecondaryIndex, self).setUp()
+        self.disable_plasma_upgrade = self.input.param("disable_plasma_upgrade", False)
         self.num_plasma_buckets = self.input.param("standard_buckets", 1)
         self.initial_version = self.input.param('initial_version', '4.6.0-3653')
         self.post_upgrade_gsi_type = self.input.param('post_upgrade_gsi_type', 'memory_optimized')
@@ -132,6 +133,42 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
         self.sleep(180)
         self._run_tasks([after_tasks])
+
+    def test_online_upgrade_with_rebalance(self):
+        before_tasks = self.async_run_operations(buckets=self.buckets,
+                                                 phase="before")
+        self._run_tasks([before_tasks])
+        self._install(self.nodes_in_list, version=self.upgrade_to)
+        for i in range(len(self.nodes_out_list)):
+            node = self.nodes_out_list[i]
+            node_rest = RestConnection(node)
+            node_info = "{0}:{1}".format(node.ip, node.port)
+            node_services_list = node_rest.get_nodes_services()[node_info]
+            node_services = [",".join(node_services_list)]
+            active_nodes = []
+            for active_node in self.servers:
+                if active_node.ip != node.ip:
+                    active_nodes.append(active_node)
+            in_between_tasks = self.async_run_operations(buckets=self.buckets,
+                                                         phase="in_between")
+            kv_ops = self.kv_mutations()
+            if "index" in node_services:
+                self._create_equivalent_indexes(node)
+            rebalance = self.cluster.async_rebalance(active_nodes,
+                                                 [self.nodes_in_list[i]], [],
+                                                 services=node_services)
+            rebalance.result()
+            log.info("===== Nodes Rebalanced In with Upgraded versions =====")
+            self._run_tasks([kv_ops, in_between_tasks])
+            rebalance = self.cluster.async_rebalance(active_nodes, [], [node])
+            rebalance.result()
+            if "index" in node_services:
+                self.disable_upgrade_to_plasma(self.nodes_in_list[i])
+                self._recreate_equivalent_indexes(self.nodes_in_list[i])
+                self.sleep(60)
+                self._verify_indexer_storage_mode(self.nodes_in_list[i])
+            self._verify_bucket_count_with_index_count()
+            self.multi_query_using_index()
 
     def test_upgrade_with_memdb(self):
         """
@@ -603,3 +640,34 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
         return index_map, stats_map
+
+    def disable_upgrade_to_plasma(self, indexer_node):
+        rest = RestConnection(indexer_node)
+        doc = {"indexer.settings.storage_mode.disable_upgrade": self.disable_plasma_upgrade}
+        rest.set_index_settings(doc)
+        self.sleep(10)
+        remote = RemoteMachineShellConnection(indexer_node)
+        remote.stop_server()
+        self.sleep(30)
+        remote.start_server()
+        self.sleep(30)
+
+    def _verify_indexer_storage_mode(self, indexer_node):
+        indexer_info = "{0}:8091".format(indexer_node.ip)
+        rest = RestConnection(indexer_node)
+        index_metadata = rest.get_indexer_metadata()["status"]
+        node_map = self._get_nodes_with_version()
+        for node in node_map.iterkeys():
+            if node == indexer_node.ip:
+                if node_map[node]["version"] < "5" or \
+                                self.gsi_type == "memory_optimized":
+                    return
+                else:
+                    if self.disable_plasma_upgrade:
+                        gsi_type = "forestdb"
+                    else:
+                        gsi_type = "plasma"
+                    for index_val in index_metadata:
+                        if index_val["hosts"] == indexer_info:
+                            self.assertEqual(index_val["indexType"], gsi_type,
+                                         "GSI type is not {0} after upgrade for index {1}".format(gsi_type, index_val["name"]))
