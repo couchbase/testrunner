@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
+from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -23,6 +24,7 @@ from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
 class ImportExportTests(CliBaseTest):
     def setUp(self):
         super(ImportExportTests, self).setUp()
+        self.cluster_helper = Cluster()
         self.ex_path = self.tmp_path + "export/"
         self.num_items = self.input.param("items", 1000)
         self.localhost = self.input.param("localhost", False)
@@ -661,12 +663,12 @@ class ImportExportTests(CliBaseTest):
     """ imex_type=json,format_type=list,import_file=json_list_1000_lines
                                   =lines,.... """
     def test_import_json_file(self):
-        options = {"load_doc": False}
+        options = {"load_doc": False, "docs": "1000"}
         self.import_file = self.input.param("import_file", None)
         return self._common_imex_test("import", options)
 
     def test_import_json_generate_keys(self):
-        options = {"load_doc": False, "docs":"1000"}
+        options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
 
     def test_import_json_with_limit_n_docs(self):
@@ -743,6 +745,7 @@ class ImportExportTests(CliBaseTest):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         path = self.input.param("path", None)
+        self.pre_imex_ops_keys = 0
         self.short_flag = self.input.param("short_flag", True)
         import_method = self.input.param("import_method", "file://")
         if "url" in import_method:
@@ -809,6 +812,8 @@ class ImportExportTests(CliBaseTest):
             self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
             self.log.info("create export dir in %s" % self.tmp_path)
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+            if self.check_preload_keys:
+                self.pre_imex_ops_keys = self.rest.get_active_key_count("default")
             """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
             if len(self.buckets) >= 1:
@@ -986,6 +991,10 @@ class ImportExportTests(CliBaseTest):
                         self.log.info("**** Load bucket to %s of active resident"\
                                           % self.active_resident_threshold)
                         self._load_all_buckets(self.master, kv_gen, "create", 0)
+                    self.cluster_helper.wait_for_stats([self.master], "default", "",
+                                                             "ep_queue_size", "==", 0)
+                    if self.check_preload_keys:
+                        self.pre_imex_ops_keys = self.rest.get_active_key_count("default")
 
                     self.log.info("Import data to bucket")
                     output, error = self.shell.execute_command(imp_cmd_str)
@@ -1052,6 +1061,9 @@ class ImportExportTests(CliBaseTest):
         if self.limit_rows:
             data_import = int(self.limit_rows)
             limit_lines = int(self.limit_rows)
+        if self.dgm_run:
+            keys = int(keys) - int(self.pre_imex_ops_keys)
+
         if not self.json_invalid_errors:
             print "Total docs in bucket: ", keys
             print "Docs need to import: ", data_import

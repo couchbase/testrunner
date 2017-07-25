@@ -75,6 +75,7 @@ class CliBaseTest(BaseTestCase):
         self.no_ssl_verify = self.input.param("no-ssl-verify", False)
         self.verify_data = self.input.param("verify-data", False)
         self.field_substitutions = self.input.param("field-substitutions", None)
+        self.check_preload_keys = self.input.param("check-preload-keys", True)
         self.debug_logs = self.input.param("debug-logs", False)
         info = self.shell.extract_remote_info()
         self.os_version = info.distribution_version.lower()
