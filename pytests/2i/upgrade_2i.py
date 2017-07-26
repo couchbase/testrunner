@@ -144,6 +144,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  phase="before")
         self._run_tasks([before_tasks])
         self._install(self.nodes_in_list, version=self.upgrade_to)
+        prepare_statements = self._create_prepare_statement()
         for i in range(len(self.nodes_out_list)):
             node = self.nodes_out_list[i]
             node_rest = RestConnection(node)
@@ -187,6 +188,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         before_tasks = self.async_run_operations(buckets=self.buckets,
                                                  phase="before")
         self._run_tasks([before_tasks])
+        prepare_statements = self._create_prepare_statement()
         if self.rebalance_empty_node:
             self._install(self.nodes_in_list, version=self.upgrade_to)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -245,6 +247,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 self._verify_indexer_storage_mode(node)
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
+            self._execute_prepare_statement(prepare_statements)
 
     def test_upgrade_with_memdb(self):
         """
