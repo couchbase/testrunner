@@ -183,6 +183,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 self._verify_indexer_storage_mode(self.nodes_in_list[i])
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
+            try:
+                self._execute_prepare_statement(prepare_statements)
+            except Exception, ex:
+                msg = "queryport.indexNotFound"
+                self.assertIn(msg, str(ex), str(ex))
 
     def test_online_upgrade_with_failover(self):
         before_tasks = self.async_run_operations(buckets=self.buckets,
