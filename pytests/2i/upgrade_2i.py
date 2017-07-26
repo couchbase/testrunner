@@ -1,3 +1,4 @@
+import copy
 import logging
 from datetime import datetime
 from threading import Thread
@@ -16,6 +17,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def setUp(self):
         super(UpgradeSecondaryIndex, self).setUp()
         self.disable_plasma_upgrade = self.input.param("disable_plasma_upgrade", False)
+        self.rebalance_empty_node = self.input.param("rebalance_empty_node", True)
         self.num_plasma_buckets = self.input.param("standard_buckets", 1)
         self.initial_version = self.input.param('initial_version', '4.6.0-3653')
         self.post_upgrade_gsi_type = self.input.param('post_upgrade_gsi_type', 'memory_optimized')
@@ -63,6 +65,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         kv_ops = self.kv_mutations()
         for kv_op in kv_ops:
             kv_op.result()
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in nodes:
+            self._verify_indexer_storage_mode(node)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.load_query_definitions)
 
@@ -152,13 +157,21 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             in_between_tasks = self.async_run_operations(buckets=self.buckets,
                                                          phase="in_between")
             kv_ops = self.kv_mutations()
-            if "index" in node_services:
+            if "index" in node_services_list:
                 self._create_equivalent_indexes(node)
+            if "n1ql" in node_services_list:
+                n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql",
+                                                              get_all_nodes=True)
+                if len(n1ql_nodes) > 1:
+                    for n1ql_node in n1ql_nodes:
+                        if node.ip != n1ql_node.ip:
+                            self.n1ql_node = n1ql_node
+                            break
             rebalance = self.cluster.async_rebalance(active_nodes,
                                                  [self.nodes_in_list[i]], [],
                                                  services=node_services)
             rebalance.result()
-            log.info("===== Nodes Rebalanced In with Upgraded versions =====")
+            log.info("===== Node Rebalanced In with Upgraded version =====")
             self._run_tasks([kv_ops, in_between_tasks])
             rebalance = self.cluster.async_rebalance(active_nodes, [], [node])
             rebalance.result()
@@ -167,6 +180,69 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 self._recreate_equivalent_indexes(self.nodes_in_list[i])
                 self.sleep(60)
                 self._verify_indexer_storage_mode(self.nodes_in_list[i])
+            self._verify_bucket_count_with_index_count()
+            self.multi_query_using_index()
+
+    def test_online_upgrade_with_failover(self):
+        before_tasks = self.async_run_operations(buckets=self.buckets,
+                                                 phase="before")
+        self._run_tasks([before_tasks])
+        if self.rebalance_empty_node:
+            self._install(self.nodes_in_list, version=self.upgrade_to)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     [self.nodes_in_list[0]], [],
+                                                     services=["index"])
+            rebalance.result()
+            self.disable_upgrade_to_plasma(self.nodes_in_list[0])
+        for i in range(len(self.nodes_out_list)):
+            node = self.nodes_out_list[i]
+            node_rest = RestConnection(node)
+            node_info = "{0}:{1}".format(node.ip, node.port)
+            node_services_list = node_rest.get_nodes_services()[node_info]
+            node_services = [",".join(node_services_list)]
+            active_nodes = []
+            for active_node in self.servers:
+                if active_node.ip != node.ip:
+                    active_nodes.append(active_node)
+            in_between_tasks = self.async_run_operations(buckets=self.buckets,
+                                                         phase="in_between")
+            kv_ops = self.kv_mutations()
+            if "index" in node_services_list:
+                self._create_equivalent_indexes(node)
+            if "n1ql" in node_services_list:
+                n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql",
+                                                              get_all_nodes=True)
+                if len(n1ql_nodes) > 1:
+                    for n1ql_node in n1ql_nodes:
+                        if node.ip != n1ql_node.ip:
+                            self.n1ql_node = n1ql_node
+                            break
+            failover_task = self.cluster.async_failover(
+                [self.master],
+                failover_nodes=[node],
+                graceful=False)
+            failover_task.result()
+            log.info("Node Failed over...")
+            upgrade_th = self._async_update(self.upgrade_to, [node])
+            for th in upgrade_th:
+                th.join()
+            log.info("==== Upgrade Complete ====")
+            rest = RestConnection(self.master)
+            nodes_all = rest.node_statuses()
+            for cluster_node in nodes_all:
+                if cluster_node.ip == node.ip:
+                    log.info("Adding Back: {0}".format(node))
+                    rest.add_back_node(cluster_node.id)
+                    rest.set_recovery_type(otpNode=cluster_node.id,
+                                       recoveryType="full")
+            log.info("Adding node back to cluster...")
+            rebalance = self.cluster.async_rebalance(active_nodes, [], [])
+            rebalance.result()
+            self._run_tasks([kv_ops, in_between_tasks])
+            if "index" in node_services:
+                self._remove_equivalent_indexes(node)
+                self.sleep(60)
+                self._verify_indexer_storage_mode(node)
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
 
@@ -516,6 +592,17 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                         self.drop_index(bucket, query_definition)
                         self.sleep(20)
                     query_definition.index_name = query_definition.index_name.split("_replica")[0]
+
+    def _remove_equivalent_indexes(self, index_node):
+        rest = RestConnection(self.master)
+        index_map = rest.get_index_status()
+        log.info(index_map)
+        for query_definition in self.query_definitions:
+            if "_replica" in query_definition.index_name:
+                for bucket in self.buckets:
+                    self.drop_index(bucket, query_definition)
+                    self.sleep(20)
+                query_definition.index_name = query_definition.index_name.split("_replica")[0]
 
     def _create_equivalent_indexes(self, index_node):
         index_nodes = self.get_nodes_from_services_map(service_type="index",
