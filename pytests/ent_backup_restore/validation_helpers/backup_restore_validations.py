@@ -13,7 +13,7 @@ from remote.remote_util import RemoteMachineShellConnection
 class BackupRestoreValidations(BackupRestoreValidationBase):
     def __init__(self, backupset, cluster, restore_cluster, bucket,
                  backup_validation_path, backups, num_items,
-                 vubckets):
+                 vbuckets):
         BackupRestoreValidationBase.__init__(self)
         self.backupset = backupset
         self.cluster = cluster
