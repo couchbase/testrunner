@@ -507,6 +507,7 @@ class ImportExportTests(CliBaseTest):
         self.logs_flag = self.input.param("logs_flag", "")
         self.include_key_flag = self.input.param("include_key_flag", "")
         self.import_file = self.input.param("import_file", None)
+        self.errors_flag = self.input.param("errors_flag", "")
         import_method = self.input.param("import_method", "file://")
         self.output_flag = self.input.param("output_flag", "-o")
         threads_flag = ""
@@ -723,7 +724,7 @@ class ImportExportTests(CliBaseTest):
         return self._common_imex_test("import", options)
 
     def test_import_csv_file(self):
-        options = {"load_doc": False}
+        options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
 
     def test_import_csv_with_infer_types(self):
@@ -813,7 +814,8 @@ class ImportExportTests(CliBaseTest):
             self.log.info("create export dir in %s" % self.tmp_path)
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
             if self.check_preload_keys:
-                self.pre_imex_ops_keys = self.rest.get_active_key_count("default")
+                self.pre_imex_ops_keys = \
+                            RestConnection(self.master).get_active_key_count("default")
             """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
             if len(self.buckets) >= 1:
@@ -987,14 +989,15 @@ class ImportExportTests(CliBaseTest):
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
                         """
-                        self.rest.disable_auto_compaction()
+                        RestConnection(self.master).disable_auto_compaction()
                         self.log.info("**** Load bucket to %s of active resident"\
                                           % self.active_resident_threshold)
                         self._load_all_buckets(self.master, kv_gen, "create", 0)
                     self.cluster_helper.wait_for_stats([self.master], "default", "",
                                                              "ep_queue_size", "==", 0)
                     if self.check_preload_keys:
-                        self.pre_imex_ops_keys = self.rest.get_active_key_count("default")
+                        self.pre_imex_ops_keys = \
+                                 RestConnection(self.master).get_active_key_count("default")
 
                     self.log.info("Import data to bucket")
                     output, error = self.shell.execute_command(imp_cmd_str)
@@ -1041,7 +1044,7 @@ class ImportExportTests(CliBaseTest):
                         self._verify_import_data(options)
 
     def _verify_import_data(self, options):
-        keys = self.rest.get_active_key_count("default")
+        keys = RestConnection(self.master).get_active_key_count("default")
         skip_lines = 0
         if self.import_file and self.import_file.startswith("csv"):
             skip_lines = 1
