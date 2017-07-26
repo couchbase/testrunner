@@ -11,7 +11,6 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
             conn = RemoteMachineShellConnection(server)
             conn.extract_remote_info()
             conn.terminate_processes(conn.info, ["cbbackupmgr"])
-        self.number_of_repeats = self.input.param("repeats", 1)
 
     def tearDown(self):
         super(EnterpriseBackupMergeTest, self).tearDown()

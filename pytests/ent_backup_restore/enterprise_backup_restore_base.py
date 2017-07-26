@@ -259,17 +259,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Finished taking backup  with args: {0}".format(args))
         return output, error
 
-    def backup_cluster_validate(self, skip_backup=False, repeats=0):
+    def backup_cluster_validate(self, skip_backup=False, repeats=1):
         if not skip_backup:
             output, error = self.backup_cluster()
             if error or "Backup successfully completed" not in output[-1]:
                 self.fail("Taking cluster backup failed.")
-        if not repeats:
+        if repeats < 2:
             status, msg = self.validation_helper.validate_backup()
             if not status:
                 self.fail(msg)
             self.log.info(msg)
-        self.store_vbucket_seqno()
+        if not self.backupset.force_updates:
+            self.store_vbucket_seqno()
         self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                           self.backup_validation_files_location)
         self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
@@ -539,11 +540,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         return True, output, "Merging backup succeeded"
 
-    def backup_merge_validate(self, repeats=0):
+    def backup_merge_validate(self, repeats=1):
         status, output, message = self.backup_merge()
         if not status:
             self.fail(message)
-        if not repeats:
+        if repeats < 2:
             self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                               self.backup_validation_files_location)
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
