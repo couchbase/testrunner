@@ -222,7 +222,7 @@ class ImportExportTests(CliBaseTest):
             self.log.info("Change password to new one")
             if self.input.param("password", None) is None:
                 self.fail("Need to pass param 'password' to run this test")
-            options_cli = "-u Administrator -p %s --cluster-password %s "\
+            options_cli = "-u Administrator -p %s --cluster-password '%s' "\
                                         % (rest_password, new_password)
             output, _ = self.shell.couchbase_cli(command, self.master.ip, options_cli)
             if self._check_output("SUCCESS", output):
@@ -236,7 +236,7 @@ class ImportExportTests(CliBaseTest):
         finally:
             if password_changed:
                 self.log.info("change password back to default in ini file")
-                options = "-u Administrator -p %s --cluster-password %s "\
+                options = "-u Administrator -p '%s' --cluster-password '%s' "\
                                            % (new_password, rest_password)
                 output, _ = self.shell.couchbase_cli(command, self.master.ip, options)
                 if self._check_output("SUCCESS", output):
@@ -792,7 +792,7 @@ class ImportExportTests(CliBaseTest):
                 if len(self.buckets) >= 1:
                     for bucket in self.buckets:
                         self.log.info("load json to bucket %s " % bucket.name)
-                        load_cmd = "%s%s%s -n %s:8091 -u %s -p %s -j -i %s -b %s "\
+                        load_cmd = "%s%s%s -n %s:8091 -u %s -p '%s' -j -i %s -b %s "\
                             % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
                                server.ip, username, password, options["docs"],
                                bucket.name)
@@ -826,7 +826,7 @@ class ImportExportTests(CliBaseTest):
                         export_file = export_file.replace("/cygdrive/c", "c:")
                     if self.localhost:
                         server.ip = "localhost"
-                    exe_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p %s" \
+                    exe_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p '%s' " \
                                   " -b %s -f %s %s -o %s"\
                                   % (self.cli_command_path, cmd, self.cmd_ext,
                                      self.imex_type, url_format, server.ip,
@@ -883,7 +883,7 @@ class ImportExportTests(CliBaseTest):
                                         enable_replica_index=self.enable_replica_index,
                                         eviction_policy=self.eviction_policy)
                 self.cluster.create_default_bucket(bucket_params)
-                imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s "\
+                imp_cmd_str = "%s%s%s %s -c %s -u %s -p '%s' -b %s "\
                                         "-d file://%s -f %s -g key::%%%s%%"\
                                         % (self.cli_command_path, "cbimport",
                                            self.cmd_ext, self.imex_type,
@@ -969,7 +969,7 @@ class ImportExportTests(CliBaseTest):
                     """
                     if self.cmd_ext:
                         des_file = des_file.replace("/cygdrive/c", "c:")
-                    imp_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p %s " \
+                    imp_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p '%s' " \
                                   "-b %s -d %s%s %s %s "\
                                   " %s%s %s %s %s %s %s %s "\
                                        % (self.cli_command_path, cmd, self.cmd_ext,
@@ -1104,7 +1104,7 @@ class ImportExportTests(CliBaseTest):
             if self.imex_type == "json":
                 export_file = self.tmp_path + "bucket_data"
                 self.shell.execute_command("rm -rf %s " % export_file)
-                cmd = "%scbexport%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
+                cmd = "%scbexport%s %s -c %s -u %s -p '%s' -b %s -f %s -o %s"\
                               % (self.cli_command_path, self.cmd_ext,
                                  self.imex_type,
                                  self.master.ip, "cbadminbucket", "password",
