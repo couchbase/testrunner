@@ -814,8 +814,9 @@ class ImportExportTests(CliBaseTest):
             self.log.info("create export dir in %s" % self.tmp_path)
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
             if self.check_preload_keys:
-                self.pre_imex_ops_keys = \
-                            RestConnection(self.master).get_active_key_count("default")
+                for bucket in self.buckets:
+                    self.pre_imex_ops_keys = \
+                            RestConnection(self.master).get_active_key_count(bucket.name)
             """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
             if len(self.buckets) >= 1:
@@ -993,11 +994,11 @@ class ImportExportTests(CliBaseTest):
                         self.log.info("**** Load bucket to %s of active resident"\
                                           % self.active_resident_threshold)
                         self._load_all_buckets(self.master, kv_gen, "create", 0)
-                    self.cluster_helper.wait_for_stats([self.master], "default", "",
+                    self.cluster_helper.wait_for_stats([self.master], bucket.name, "",
                                                              "ep_queue_size", "==", 0)
                     if self.check_preload_keys:
                         self.pre_imex_ops_keys = \
-                                 RestConnection(self.master).get_active_key_count("default")
+                            RestConnection(self.master).get_active_key_count(bucket.name)
 
                     self.log.info("Import data to bucket")
                     output, error = self.shell.execute_command(imp_cmd_str)
@@ -1044,7 +1045,8 @@ class ImportExportTests(CliBaseTest):
                         self._verify_import_data(options)
 
     def _verify_import_data(self, options):
-        keys = RestConnection(self.master).get_active_key_count("default")
+        for bucket in self.buckets:
+            keys = RestConnection(self.master).get_active_key_count(bucket.name)
         skip_lines = 0
         if self.import_file and self.import_file.startswith("csv"):
             skip_lines = 1
