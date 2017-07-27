@@ -1,4 +1,3 @@
-import copy
 import logging
 from datetime import datetime
 from threading import Thread
@@ -52,6 +51,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         """
 
         # Perform pre_upgrade operations on cluster
+        before_tasks = self.async_run_operations(buckets=self.buckets,
+                                                 phase="before")
+        self._run_tasks([before_tasks])
+        prepare_statements = self._create_prepare_statement()
         for server in self.servers:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
@@ -62,14 +65,26 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             upgrade_thread.join()
         self.sleep(20)
         self.add_built_in_server_user()
+
+        for server in self.servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.start_server()
+            remote.disconnect()
+        self.sleep(20)
         kv_ops = self.kv_mutations()
         for kv_op in kv_ops:
             kv_op.result()
-        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        nodes = self.get_nodes_from_services_map(service_type="index",
+                                                 get_all_nodes=True)
         for node in nodes:
             self._verify_indexer_storage_mode(node)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.load_query_definitions)
+        try:
+            self._execute_prepare_statement(prepare_statements)
+        except Exception, ex:
+            msg = "No such prepared statement"
+            self.assertIn(msg, str(ex), str(ex))
 
     def test_online_upgrade(self):
         services_in = []
