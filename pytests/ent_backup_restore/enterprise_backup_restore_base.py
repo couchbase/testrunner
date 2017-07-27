@@ -925,15 +925,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Item miss match on 2 backup files")
 
     def create_indexes(self):
-        cmd = "cbindex -type create -bucket default -using memdb -index " \
-              "num1 -fields=Num1"
+        gsi_type = "memory_optimized"
+        self.gsi_names = ["num1", "num2"]
+        rest = RestConnection(self.backupset.cluster_host)
+        if "5" <= rest.get_nodes_version()[:1]:
+            gsi_type = "plasma"
+        cmd = "cbindex -type create -bucket default -using %s -index " \
+              "%s -fields=Num1" % (gsi_type, self.gsi_names[0])
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
+        self.log.info("Create gsi indexes")
         output, error = shell.execute_command(command)
         if self.debug_logs:
             self.log.info("\noutput gsi:   %s" % output)
-        cmd = "cbindex -type create -bucket default -using memdb -index " \
-              "num2 -fields=Num2"
+        cmd = "cbindex -type create -bucket default -using %s -index " \
+              "%s -fields=Num2" % (gsi_type, self.gsi_names[1])
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         shell.execute_command(command)
         shell.disconnect()
@@ -949,12 +955,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
+        index_found = 0
         if len(output) > 1:
-            self.assertTrue("Index:default/Num1" in output[1],
-                            "GSI index not created in restore cluster as expected")
-            self.log.info("GSI index created in restore cluster as expected")
-        else:
-            self.fail("GSI index not created in restore cluster as expected")
+            for name in self.gsi_names:
+                for x in output:
+                    if "Index:default/%s" % name in x:
+                        index_found += 1
+                        self.log.info("GSI index name %s created in restore cluster "
+                                      "as expected" % name)
+        if index_found < len(self.gsi_names):
+            self.fail("Some GSI index is not created in restore cluster.")
 
 
 class Backupset:

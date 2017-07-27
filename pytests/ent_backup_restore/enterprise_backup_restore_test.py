@@ -2095,7 +2095,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rebalance = self.cluster.async_rebalance(servers[:self.nodes_init],
                                        [servers[int(self.nodes_init) - 1]], [])
         rebalance.result()
+        self.sleep(5)
         RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
+        self.buckets = RestConnection(self.master).get_buckets()
         self._load_all_buckets(self.master, gen, "create", 0)
         if RestConnection(self.master).get_nodes_version()[:5] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
@@ -2104,7 +2106,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.create_gsi:
             rest = RestConnection(self.master)
             if "5" > rest.get_nodes_version()[:1]:
-                rest.set_indexer_storage_mode(storageMode="memdb")
+                if self.gsi_type == "forestdb":
+                    self.fail("Need to set param self.gsi_type=memory_optimized")
+                rest.set_indexer_storage_mode(storageMode="memory_optimized")
+            else:
+                rest.set_indexer_storage_mode(storageMode="plasma")
             self.create_indexes()
         self.backup_create()
         if self.backupset.number_of_backups > 1:
@@ -2167,6 +2173,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         RestConnection(servers[2]).create_bucket(bucket='default',
                                                       ramQuotaMB=512)
         self.sleep(5)
+        self.total_buckets = len(self.buckets)
 
         """ Only server from Spock needs to add built-in user """
         if "5" <= RestConnection(servers[2]).get_nodes_version()[:1]:
