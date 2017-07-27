@@ -815,6 +815,8 @@ class ImportExportTests(CliBaseTest):
             self.shell.execute_command("mkdir %sexport " % self.tmp_path)
             if self.check_preload_keys:
                 for bucket in self.buckets:
+                    self.cluster_helper.wait_for_stats([self.master], bucket.name, "",
+                                                                "ep_queue_size", "==", 0)
                     self.pre_imex_ops_keys = \
                             RestConnection(self.master).get_active_key_count(bucket.name)
             """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
@@ -997,6 +999,8 @@ class ImportExportTests(CliBaseTest):
                     self.cluster_helper.wait_for_stats([self.master], bucket.name, "",
                                                              "ep_queue_size", "==", 0)
                     if self.check_preload_keys:
+                        self.cluster_helper.wait_for_stats([self.master], bucket.name, "",
+                                                                 "ep_queue_size", "==", 0)
                         self.pre_imex_ops_keys = \
                             RestConnection(self.master).get_active_key_count(bucket.name)
 
