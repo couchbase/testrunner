@@ -6,25 +6,48 @@ import urllib
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
 from couchbase_helper.documentgenerator import BlobGenerator,DocumentGenerator
-from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from ent_backup_restore.validation_helpers.backup_restore_validations \
                                                  import BackupRestoreValidations
-from ent_backup_restore.validation_helpers.directory_structure_validations \
-                                            import DirectoryStructureValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from couchbase_helper.document import View
-from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
+from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
-                          WIN_TMP_PATH, STANDARD_BUCKET_PORT, COUCHBASE_FROM_WATSON
+                          WIN_TMP_PATH, STANDARD_BUCKET_PORT
 from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
 from lib.memcached.helper.data_helper import MemcachedClientHelper
+
+SOURCE_CB_PARAMS = {
+                      "authUser": "default",
+                      "authPassword": "",
+                      "authSaslUser": "",
+                      "authSaslPassword": "",
+                      "clusterManagerBackoffFactor": 0,
+                      "clusterManagerSleepInitMS": 0,
+                      "clusterManagerSleepMaxMS": 20000,
+                      "dataManagerBackoffFactor": 0,
+                      "dataManagerSleepInitMS": 0,
+                      "dataManagerSleepMaxMS": 20000,
+                      "feedBufferSizeBytes": 0,
+                      "feedBufferAckThreshold": 0
+                    }
+INDEX_DEFINITION = {
+                          "type": "fulltext-index",
+                          "name": "",
+                          "uuid": "",
+                          "params": {},
+                          "sourceType": "couchbase",
+                          "sourceName": "default",
+                          "sourceUUID": "",
+                          "sourceParams": SOURCE_CB_PARAMS,
+                          "planParams": {}
+                        }
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -902,7 +925,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Item miss match on 2 backup files")
 
     def create_indexes(self):
-        cmd = "cbindex -type create -bucket default -using memopt -index " \
+        cmd = "cbindex -type create -bucket default -using memdb -index " \
               "num1 -fields=Num1"
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
@@ -1036,6 +1059,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.nodes_in = self.input.param("nodes_in", 0)
         self.nodes_out = self.input.param("nodes_out", 0)
         self.number_of_repeats = self.input.param("repeats", 1)
+        self.backup_to_corrupt = 0
+        self.backup_to_delete = 0
+        self.skip_restore_indexes = self.input.param("skip_restore_indexe", False)
+        self.overwrite_indexes = self.input.param("overwrite_indexes", False)
 
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
@@ -1247,6 +1274,114 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.merge()
         for task in ops_tasks:
             task.result()
+
+    def merge_with_memcached_crash_and_restart(self):
+        self.log.info("backups before merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
+        merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                        directory=self.backupset.directory, name=self.backupset.name,
+                                                        cli_command_location=self.cli_command_location,
+                                                        start=int(self.backupset.start) - 1,
+                                                        end=int(self.backupset.end) - 1
+                                                        )
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        conn.pause_memcached()
+        conn.unpause_memcached()
+        output = merge_result.result(timeout=200)
+        self.assertTrue("Merge successfully completed" in output[0],
+                        "Merge failed with memcached crash and restart within 180 seconds")
+        self.log.info("Merge succeeded with memcached crash and restart within 180 seconds")
+        self.sleep(30)
+        del self.backups[self.backupset.start - 1:self.backupset.end]
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.insert(self.backupset.start - 1, o[0])
+        self.number_of_backups_taken -= (self.backupset.end - self.backupset.start + 1)
+        self.number_of_backups_taken += 1
+        self.log.info("backups after merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        if self.number_of_repeats < 2:
+            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                              self.backup_validation_files_location)
+            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
+            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                    self.backup_validation_files_location)
+            self.validation_helper.validate_merge(self.backup_validation_files_location)
+
+    def merge_with_erlang_crash_and_restart(self):
+        self.log.info("backups before merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
+        merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                        directory=self.backupset.directory, name=self.backupset.name,
+                                                        cli_command_location=self.cli_command_location,
+                                                        start=int(self.backupset.start) - 1,
+                                                        end=int(self.backupset.end) - 1
+                                                        )
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        conn.kill_erlang()
+        conn.start_couchbase()
+        output = merge_result.result(timeout=200)
+        self.assertTrue("Merge successfully completed" in output[0],
+                        "Merge failed with erlang crash and restart within 180 seconds")
+        self.log.info("Merge succeeded with erlang crash and restart within 180 seconds")
+        self.sleep(30)
+        del self.backups[self.backupset.start - 1:self.backupset.end]
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.insert(self.backupset.start - 1, o[0])
+        self.number_of_backups_taken -= (self.backupset.end - self.backupset.start + 1)
+        self.number_of_backups_taken += 1
+        self.log.info("backups after merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        if self.number_of_repeats < 2:
+            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                              self.backup_validation_files_location)
+            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
+            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                    self.backup_validation_files_location)
+            self.validation_helper.validate_merge(self.backup_validation_files_location)
+
+    def merge_with_cb_server_stop_and_restart(self):
+        self.log.info("backups before merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
+        merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                        directory=self.backupset.directory, name=self.backupset.name,
+                                                        cli_command_location=self.cli_command_location,
+                                                        start=int(self.backupset.start) - 1,
+                                                        end=int(self.backupset.end) - 1
+                                                        )
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        conn.stop_couchbase()
+        conn.start_couchbase()
+        output = merge_result.result(timeout=200)
+        self.assertTrue("Merge successfully completed" in output[0],
+                        "Merge failed with couchbase stop and start within 180 seconds")
+        self.log.info("Merge succeeded with couchbase stop and start within 180 seconds")
+        self.sleep(30)
+        del self.backups[self.backupset.start - 1:self.backupset.end]
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.insert(self.backupset.start - 1, o[0])
+        self.number_of_backups_taken -= (self.backupset.end - self.backupset.start + 1)
+        self.number_of_backups_taken += 1
+        self.log.info("backups after merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        if self.number_of_repeats < 2:
+            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                              self.backup_validation_files_location)
+            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
+            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                    self.backup_validation_files_location)
+            self.validation_helper.validate_merge(self.backup_validation_files_location)
 
     def compact_backup(self):
         """
@@ -1566,6 +1701,39 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for task in ops_tasks:
             task.result()
 
+    def delete_backup(self):
+        """
+        Delete an incr backup
+        :return: Nothing
+        """
+        backup_to_delete = self.backups.pop(self.backup_to_delete)
+        self.log.info("Deleting backup " + backup_to_delete)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        o, e = conn.execute_command(
+            "rm -rf " + self.backupset.directory + "/" + self.backupset.name + "/" + backup_to_delete)
+        conn.log_command_output(o, e)
+        self.backupset.number_of_backups -= 1
+        self.backupset.end -= 1
+        self.number_of_backups_taken -= 1
+
+    def corrupt_backup(self):
+        """
+        Corrupt an incr backup
+        :return: Nothing
+        """
+        backup_to_corrupt = self.backups[self.backup_to_corrupt - 1]
+        self.log.info("Corrupting backup " + backup_to_corrupt)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1}/{2} | tail".format(self.backupset.directory, self.backupset.name,
+                                                     backup_to_corrupt)
+        o, e = conn.execute_command(command)
+        conn.log_command_output(o, e)
+        data_dir = o[0]
+        o, e = conn.execute_command("dd if=/dev/zero of=" + self.backupset.directory + "/" + self.backupset.name + "/" +
+                                    backup_to_corrupt + "/" + data_dir + "/data/shard_0.fdb" +
+                                    " bs=1024 count=100 seek=10 conv=notrunc")
+        conn.log_command_output(o, e)
+
     def _flush_bucket(self, bucket_to_flush):
         """
         Flush a bucket from the cluster.
@@ -1663,6 +1831,80 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
             self.sleep(60)
 
+    def create_indexes(self):
+        rest_src = RestConnection(self.backupset.cluster_host)
+        rest_src.add_node(self.servers[1].rest_username,
+                          self.servers[1].rest_password,
+                          self.servers[1].ip, services=['index', 'fts'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [],
+                                                 [])
+        rebalance.result()
+
+        cmd = "cbindex -type create -bucket default -using plasma -index " \
+              "age_idx -fields=age"
+        remote_client = RemoteMachineShellConnection(
+            self.backupset.cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error or "Index created" not in output[-1]:
+            self.fail("GSI index cannot be created")
+        cmd = "cbindex -type create -bucket default -using plasma -index " \
+              "name_idx -fields=name"
+        remote_client = RemoteMachineShellConnection(
+            self.backupset.cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error or "Index created" not in output[-1]:
+            self.fail("GSI index cannot be created")
+
+        index_definition = INDEX_DEFINITION
+        index_name = index_definition['name'] = "age"
+        try:
+            self.log.info("Create fts index")
+            rest_src.create_fts_index(index_name, index_definition)
+        except Exception, ex:
+            self.fail(ex)
+
+        if not self.skip_restore_indexes:
+            rest_src = RestConnection(self.backupset.restore_cluster_host)
+            rest_src.add_node(self.servers[2].rest_username,
+                              self.servers[2].rest_password,
+                              self.servers[2].ip, services=['index', 'fts'])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [],
+                                                     [])
+            rebalance.result()
+
+            if self.overwrite_indexes:
+                cmd = "cbindex -type create -bucket default -using plasma -index " \
+                      "age_idx1 -fields=age"
+                remote_client = RemoteMachineShellConnection(
+                    self.backupset.restore_cluster_host)
+                command = "{0}/{1}".format(self.cli_command_location, cmd)
+                output, error = remote_client.execute_command(command)
+                remote_client.log_command_output(output, error)
+                if error or "Index created" not in output[-1]:
+                    self.fail("GSI index cannot be created")
+
+                index_definition = INDEX_DEFINITION
+                index_name = index_definition['name'] = "age1"
+                try:
+                    self.log.info("Create fts index")
+                    rest_src.create_fts_index(index_name, index_definition)
+                except Exception, ex:
+                    self.fail(ex)
+
+    def update_indexes(self):
+        index_definition = INDEX_DEFINITION
+        index_definition['name'] = "age1"
+        rest_fts = RestConnection(self.backupset.cluster_host)
+        try:
+            self.log.info("Update fts index")
+            rest_fts.update_fts_index("age", index_definition)
+        except Exception, ex:
+            self.fail(ex)
+
     def do_backup_merge_actions(self):
         """
         Perform the actions mentioned the self.actions param.
@@ -1719,6 +1961,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     if params.__len__() == 2:
                         if params[1] == "ephemeral":
                             self.ephemeral = True
+                elif "delete_backup" in action:
+                    self.backup_to_delete = int(params[0])
+                elif "corrupt_backup" in action:
+                    self.backup_to_corrupt = int(params[0])
                 else:
                     if params[0].isdigit():
                         iterations = int(params[0])
@@ -1748,6 +1994,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "backup_with_erlang_crash_and_restart": backup_with_erlang_crash_and_restart,
         "backup_with_cb_server_stop_and_restart": backup_with_cb_server_stop_and_restart,
         "merge": merge,
+        "merge_with_memcached_crash_and_restart": merge_with_memcached_crash_and_restart,
+        "merge_with_erlang_crash_and_restart": merge_with_erlang_crash_and_restart,
+        "merge_with_cb_server_stop_and_restart": merge_with_cb_server_stop_and_restart,
         "compact_backup": compact_backup,
         "rebalance": rebalance,
         "failover": failover,
@@ -1770,5 +2019,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "delete_buckets_with_ops": delete_bucket_with_ops,
         "compact_buckets": compact_buckets,
         "compact_buckets_with_ops": compact_buckets_with_ops,
-        "rollback": rollback
+        "rollback": rollback,
+        "delete_backup": delete_backup,
+        "corrupt_backup": corrupt_backup,
+        "create_indexes": create_indexes,
+        "update_indexes": update_indexes
     }
