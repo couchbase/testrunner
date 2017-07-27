@@ -2698,15 +2698,15 @@ class RemoteMachineShellConnection:
         log.info("running command on {0}: {1}".format(self.ip, main_command))
         output=""
         if self.remote:
-            stdin,stdout, stderro = self._ssh_client.exec_command(main_command)
-            time.sleep(20)
-            #output = stdout.readlines().split()
+            (stdin, stdout, stderro) = self._ssh_client.exec_command(main_command)
+            time.sleep(10)
             count = 0
             for line in stdout.readlines():
                 if (count == 0) and line.lower().find("error") > 0:
                    output = "status:FAIL"
                    break
-              #if line.find("results") > 0 or line.find("status") > 0 or line.find("metrics") or line.find("elapsedTime")> 0 or  line.find("executionTime")> 0 or line.find("resultCount"):
+
+                #if line.find("results") > 0 or line.find("status") > 0 or line.find("metrics") or line.find("elapsedTime")> 0 or  line.find("executionTime")> 0 or line.find("resultCount"):
                 if (count > 0):
                     output+=line.strip()
                     output = output.strip()

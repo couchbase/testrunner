@@ -8,8 +8,10 @@ import os
 from subprocess import Popen, PIPE
 from remote.remote_util import RemoteMachineShellConnection
 from tuq import QueryTests
+import re
 
 log = logger.Logger.get_logger()
+
 
 class AdvancedQueryTests(QueryTests):
     def setUp(self):
@@ -17,28 +19,78 @@ class AdvancedQueryTests(QueryTests):
         self.use_rest = False
         self.cbqpath = '%scbq -quiet -u %s -p %s' % (self.path, self.username, self.password)
 
-
     def tearDown(self):
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
         super(AdvancedQueryTests, self).tearDown()
 
-
     def test_url(self):
+        '''
+        Description: This test will ensure that the commandline cbq command can and will connect to the valid URLs
+        and will through an error if the URL is invalid.
+
+        Steps:
+        1. Create list of URLs that should work and a list of URLs the should not work
+        2. Send cbq command to remote shell on each server. The command will use a URL with the -e parameter
+
+        Author: Korrigan Clark
+        Date Modified: 26/07/2017
+        '''
+        ###
+        prefixes = ['http://', 'https://', 'couchbase://', 'couchbases://']
+        ips = ['localhost', '127.0.0.1'] + [str(server.ip) for server in self.servers]
+        ports = [':8091', ':8093', ':18091', ':18093']
+
+        pass_urls = []
+
+        # creates url, port tuples that should be valid.
+        # port will be used to verify it connected to the proper endpoint
+        for prefix in prefixes:
+            for ip in ips:
+                pass_urls.append((ip, '8091'))
+                if prefix == 'couchbase://':
+                    pass_urls.append((prefix+ip, '8091'))
+                if prefix == 'couchbases://':
+                    pass_urls.append((prefix+ip, '18091'))
+                for port in ports:
+                    if prefix == 'http://' and port in ['8091', '8093']:
+                        pass_urls.append((prefix+ip+port, port))
+                    if prefix == 'https://' and port in ['18091', '18093']:
+                        pass_urls.append((prefix+ip+port, port))
+
+        fail_urls = []
+
+        # creates urls that should not work, either wrong prefix/prot combo or invalid url
+        for prefix in prefixes:
+            for ip in ips:
+                for port in ports:
+                    if prefix == 'http://' and port in ['18091', '18093']:
+                        fail_urls.append(prefix+ip+port)
+                        fail_urls.append(prefix+ip+port+'!')
+                        fail_urls.append(prefix+ip+'!'+port)
+                    if prefix == 'https://' and port in ['8091', '8093']:
+                        fail_urls.append(prefix+ip+port)
+                        fail_urls.append(prefix+ip+port+'!')
+                        fail_urls.append(prefix+ip+'!'+port)
+                    if prefix == 'couchbase://':
+                        fail_urls.append(prefix+ip+port)
+                    if prefix == 'couchbases://':
+                        fail_urls.append(prefix+ip+port)
+
+        # run through all servers and try to connect cbq to the given url
         for server in self.servers:
-            shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
+                shell = RemoteMachineShellConnection(server)
                 try:
-                    o = shell.execute_commands_inside('%s/cbq  -u=Administrator -p=password http://localhost:8091@' % (self.path),'','','','','','')
-                    self.assertTrue('status:FAIL' in o)
-                    o = shell.execute_commands_inside('%s/cbq  -u=Administrator -p=password http://localhost:8091:' % (self.path),'','','','','','')
-                    self.assertTrue('status:FAIL' in o)
-                    o = shell.execute_commands_inside('%s/cbq  -u=Administrator -p=password http://localhost:8091[' % (self.path),'','','','','','')
-                    self.assertTrue('status:FAIL' in o)
-                    o = shell.execute_commands_inside('%s/cbq  -u=Administrator -p=password http://localhost:8091]' % (self.path),'','','','','','')
-                    self.assertTrue('status:FAIL' in o)
-                    o = shell.execute_commands_inside('%s/cbq  -u=Administrator -p=password http://localhost:8091:' % (self.path),'','','','','','')
-                    self.assertTrue('status:FAIL' in o)
+                    for url in pass_urls:
+                        cmd = self.path+'cbq  -u=Administrator -p=password -e='+url[0]+' -no-ssl-verify=true'
+                        o = shell.execute_commands_inside(cmd, '', ['select * from system:nodes;', '\quit'], '', '', '', '')
+                        self.assertTrue(url[1] in o)
+
+                    for url in fail_urls:
+                        cmd = self.path+'cbq  -u=Administrator -p=password -e='+url+' -no-ssl-verify=true'
+                        o = shell.execute_commands_inside(cmd, '', ['select * from system:nodes;', '\quit'], '', '', '', '')
+                        self.assertTrue('status:FAIL' in o)
                 finally:
                     shell.disconnect()
 
@@ -449,6 +501,11 @@ class AdvancedQueryTests(QueryTests):
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,True )
                 print o
 
+##############################################################################################
+#
+#   Helper Functions
+#
+##############################################################################################
 
     def execute_commands_inside(self, main_command, query, queries, bucket1, password, bucket2, source,
                                 subcommands=[], min_output_size=0,
