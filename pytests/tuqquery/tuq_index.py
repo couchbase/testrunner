@@ -189,9 +189,7 @@ class QueriesViewsTests(QueryTests):
         self.run_cbq_query()
 
     '''MB-22111: Unnest array covering indexes should not have DistinctScan unless a Distinct array
-       is being used in the index
-       MB-25388: Unnest array covering indexes should not be used unless the query is actually
-       covered'''
+       is being used in the index'''
     def test_unnest_covering_array_index(self):
         idx = "by_VMs"
         self.query = 'CREATE INDEX %s ON default (ALL ARRAY r.`name` FOR r IN VMs END, email)' % idx
@@ -241,58 +239,6 @@ class QueriesViewsTests(QueryTests):
                         and query_result3['metrics']['resultCount'] == result_count)
         self.query = "DROP INDEX default.%s USING %s" % (idx2, self.index_type)
         self.run_cbq_query()
-
-        # Start test for MB-25388
-        self.query = 'INSERT INTO default VALUES("k200",{"messages":[{"seqno":100,"id":"abc"}]})'
-        self.run_cbq_query()
-
-        self.query = 'CREATE INDEX ix200 ON default(ALL ARRAY v.seqno FOR v IN messages END)'
-        self.run_cbq_query()
-
-        self.query = 'EXPLAIN SELECT v.seqno FROM default UNNEST default.messages AS v WHERE v.id = "abc" ' \
-                     'AND v.seqno > 1'
-        result=self.run_cbq_query()
-        plan4 = ExplainPlanHelper(result)
-        self.assertTrue('covers' not in plan4['~children'][0])
-
-        self.query = 'SELECT v.seqno FROM default UNNEST default.messages AS v WHERE v.id = "abc" ' \
-                     'AND v.seqno > 1'
-        query_result4 = self.run_cbq_query()
-        self.assertTrue(query_result4['results'][0]['seqno'] == 100)
-
-
-    '''MB-24594: Test joins that use covering indexes
-       -insert documents into default
-       -create the two indexes
-       -check to see if the subsuquent covered query returns the correct results'''
-    def test_covered_index_join(self):
-        self.query = ('INSERT INTO default VALUES ("f001", { "parent": '
-                      '"1496116023888_5a14fc5c-e29a-4fd8-90c4-e052748ff01c", "deleted": false }), '
-                      'VALUES ("f002", { "parent": "1496116023888_5a14fc5c-e29a-4fd8-90c4-e052748ff01c", '
-                      '"deleted": true, "abc": 1 }), VALUES ( '
-                      '"1496116023888_5a14fc5c-e29a-4fd8-90c4-e052748ff01c", { "metadata": '
-                      '{ "published": 1496116023888}, "tag": { "expiryepoch": 1496202423888, '
-                      '"token": "c7468adf-ac8a-4551-a4fa-3b136f9d76ca" } })')
-        self.run_cbq_query()
-
-        self.query = ("CREATE INDEX ix1 ON default(tag.token, tag.expiryepoch, metadata.published, "
-                      "metadata.deleted)")
-        self.run_cbq_query()
-
-        self.query = ("CREATE INDEX ix2 ON default(parent,abc)")
-        self.run_cbq_query()
-
-        self.query = ("explain select 1 from default a JOIN default b ON KEY b.parent FOR a where a.tag.token = "
-                   "'c7468adf-ac8a-4551-a4fa-3b136f9d76ca' and a.tag.expiryepoch > 1 and "
-                   "a.metadata.published > 1 and b.abc = 1")
-        explain = self.run_cbq_query()
-        self.assertTrue('covers' in explain['results'][0]['plan']['~children'][0])
-
-        self.query = ("select 1 from default a JOIN default b ON KEY b.parent FOR a where a.tag.token = "
-                   "'c7468adf-ac8a-4551-a4fa-3b136f9d76ca' and a.tag.expiryepoch > 1 and "
-                   "a.metadata.published > 1 and b.abc = 1")
-        results = self.run_cbq_query()
-        self.assertTrue(results['results'][0]['$1'] == 1)
 
     def test_explain_query_count(self):
         for bucket in self.buckets:
