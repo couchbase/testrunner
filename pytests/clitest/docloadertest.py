@@ -63,7 +63,8 @@ class docloaderTests(CliBaseTest):
                 command = "unzip %ssamples/%s.zip" % (MAC_CB_PATH,
                                                       self.load_filename)
             output, error = self.shell.execute_command(command)
-            self.shell.log_command_output(output, error)
+            if self.debug_logs:
+                self.shell.log_command_output(output, error)
 
         self.verify_results(self.load_filename)
         self.verify_ddoc(self.load_filename)
