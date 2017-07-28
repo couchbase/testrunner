@@ -128,6 +128,7 @@ class BaseTestCase(unittest.TestCase):
                 self.skip_buckets_handle = self.input.param("skip_buckets_handle", False)
             self.nodes_out_dist = self.input.param("nodes_out_dist", None)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
+            self.sasl_password = self.input.param("sasl_password", 'password')
             self.absolute_path = self.input.param("absolute_path", True)
             self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
@@ -495,13 +496,13 @@ class BaseTestCase(unittest.TestCase):
             if self.sasl_bucket_priority is not None:
                 bucket_priority = self.get_bucket_priority(self.sasl_bucket_priority[i])
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name,
-                                                                      password,
+                                                                      self.sasl_password,
                                                                       bucket_size,
                                                                       self.num_replicas,
                                                                       enable_replica_index=self.enable_replica_index,
                                                                       eviction_policy=self.eviction_policy,
                                                                       bucket_priority=bucket_priority, lww=self.lww))
-            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=password,
+            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=self.sasl_password,
                                        num_replicas=self.num_replicas, bucket_size=bucket_size,
                                        master_id=server_id, eviction_policy=self.eviction_policy, lww=self.lww))
         for task in bucket_tasks:

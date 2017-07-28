@@ -35,6 +35,31 @@ class AdvancedQueryTests(QueryTests):
                 finally:
                     shell.disconnect()
 
+    def test_colon_in_password(self):
+        shell = RemoteMachineShellConnection(self.master)
+        try:
+            queries = ['\set -creds bucket0:name:123;','create primary index on bucket0;',
+                       'select * from bucket0 limit 1;']
+            o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path), '', queries, '',
+                                              '', '', '')
+            self.assertTrue('"status":"success"' in o and '"resultCount":1' in o
+                            and "employee-9" in o)
+
+            o = shell.execute_commands_inside('%s/cbq -user bucket0 -password name:123'
+                                              % (self.path), 'select * from bucket0 limit 1;',
+                                              '', '','', '', '')
+            self.assertTrue('"status":"success"' in o and '"resultCount":1' in o and
+                            "employee-9" in o)
+
+            o = shell.execute_commands_inside('%s/cbq -credentials bucket0:name:123'
+                                              % (self.path), 'select * from bucket0 limit 1;',
+                                              '', '', '', '', '')
+            self.assertTrue('"status":"success"' in o and '"resultCount":1' in o and
+                            "employee-9" in o)
+        finally:
+            shell.execute_commands_inside('%s/cbq --quiet' % (self.path),
+                                          'drop primary index on bucket0', '', '','', '', '')
+
     def test_engine_postive(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
