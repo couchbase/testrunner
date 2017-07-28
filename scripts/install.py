@@ -207,7 +207,7 @@ class Installer(object):
             cbas_alias = ["cbas", "server-analytics"]
             
             if params["product"] in cbas_alias:
-                names = ['couchbase-server-enterprise', 'server-analytics']
+                names = ['couchbase-server-analytics', 'server-analytics']
             elif params["product"] in mb_alias:
                 names = ['membase-server-enterprise', 'membase-server-community']
             elif params["product"] in cb_alias:

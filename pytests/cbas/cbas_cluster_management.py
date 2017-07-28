@@ -26,8 +26,12 @@ class CBASClusterManagement(CBASBaseTest):
     
     def test_add_cbas_node_one_by_one(self):
         '''
+        Description: Add cbas nodes 1 by 1 and rebalance on every add.
+        
         Steps:
         1. For all the cbas nodes provided in ini file, Add all of them 1by1 and Rebalance.
+        
+        Author: Ritesh Agarwal
         '''
         nodes_before = len(self.rest.get_nodes_data_from_cluster())
         added = 0
@@ -39,22 +43,38 @@ class CBASClusterManagement(CBASBaseTest):
         self.assertTrue(nodes_before+added == nodes_after, "While adding cbas nodes seems like some nodes were removed during rebalance.")
         
     def test_add_all_cbas_nodes_in_cluster(self):
+        '''
+        Description: Add all cbas nodes and then rebalance.
+
+        Steps:
+        1. For all the cbas nodes provided in ini file, Add all of them in one go and Rebalance.
+        
+        Author: Ritesh Agarwal
+        '''
         self.add_all_cbas_node_then_rebalance()
 #         
     def test_add_remove_all_cbas_nodes_in_cluster(self):
         '''
+        Description: First add all cbas nodes and then rebalance. Remove all added cbas node, rebalance.
+        
         Steps:
         1. For all the cbas nodes provided in ini file, Add all of them in one go and Rebalance.
         2. Remove all nodes together and then rebalance.
+        
+        Author: Ritesh Agarwal
         '''
         cbas_otpnodes = self.add_all_cbas_node_then_rebalance()
         self.remove_all_cbas_node_then_rebalance(cbas_otpnodes)
 
     def test_concurrent_sevice_existence_with_cbas(self):
         '''
+        Description: Test add/remove nodes via REST APIs.
+        
         Steps:
         1. Add nodes by randomly picking up the services from the service_list.
         2. Check that correct services are running after the node is added.
+        
+        Author: Ritesh Agarwal
         '''
         service_list = [["kv","cbas","index","n1ql"],
                         ["cbas","n1ql","index"],
@@ -77,6 +97,15 @@ class CBASClusterManagement(CBASBaseTest):
                     self.log.info("Successfully added %s to the cluster with services %s"%(otpNode.id,service))
                     
     def test_add_delete_cbas_nodes_CLI(self):
+        '''
+        Description: Test add/remove nodes via CLI.
+        
+        Steps:
+        1. Add nodes by randomly picking up the services from the service_list.
+        2. Check that correct services are running after the node is added.
+        
+        Author: Ritesh Agarwal
+        '''
         service_list = {"data,analytics,index":["kv","cbas","index"],
                         "analytics,query,index":["cbas","n1ql","index"],
                         "data,analytics,query":["kv","cbas","n1ql"],
@@ -168,10 +197,14 @@ class CBASClusterManagement(CBASBaseTest):
             
     def test_add_cbas_rebalance_runqueries(self):
         '''
+        Description: Add CBAS node, rebalance. Run concurrent queries.
+        
         Steps:
         1. Add cbas node then do rebalance.
         2. Once rebalance is completed, on cbas node connect to bucket, create shadows.
         3. Data ingestion should start. Run queries.
+        
+        Author: Ritesh Agarwal
         '''
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
         self.create_default_bucket()
@@ -182,9 +215,13 @@ class CBASClusterManagement(CBASBaseTest):
         
     def test_add_data_rebalance_runqueries(self):
         '''
+        Description: Add data node rebalance. During rebalance setup cbas. Run concurrent queries.
+        
         Steps:
         1. Add data node then do rebalance.
         2. While rebalance is happening, on cbas node connect to bucket, create shadows and Run queries.
+        
+        Author: Ritesh Agarwal
         '''
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
         self.create_default_bucket()
@@ -195,6 +232,17 @@ class CBASClusterManagement(CBASBaseTest):
         self._run_concurrent_queries(query,"immediate",500)
         
     def test_all_cbas_node_running_queries(self):
+        '''
+        Description: Test that all the cbas nodes are capable to serve queries.
+        
+        Steps:
+        1. Perform doc operation on the KV node.
+        2. Add 1 cbas node and setup cbas.
+        3. Add all other cbas nodes.
+        4. Verify all cbas nodes should be able to serve queries.
+        
+        Author: Ritesh Agarwal
+        '''
         set_up_cbas = False
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
         self.create_default_bucket()
@@ -221,6 +269,8 @@ class CBASClusterManagement(CBASBaseTest):
         2. Start rebalance.
         3. While rebalance is in progress, stop rebalancing. Again start rebalance
         4. Create bucket, datasets, connect bucket. Data ingestion should start.
+        
+        Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
         self.add_node(self.cbas_node, services=["kv","cbas"],wait_for_rebalance_completion=False)
@@ -243,6 +293,8 @@ class CBASClusterManagement(CBASBaseTest):
         2. Create bucket, datasets, connect bucket. Data ingestion should start.
         3. Add another data node. Rebalance, while rebalance is in progress, stop rebalancing.
         4. Create bucket, datasets, connect bucket. Data ingestion should start.
+        
+        Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
         self.add_node(self.cbas_node)
@@ -254,7 +306,7 @@ class CBASClusterManagement(CBASBaseTest):
         else:
             self.fail("Rebalance completed before the test could have stopped rebalance.")
         
-        self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count)
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
     
     
     def test_add_data_node_restart_rebalance(self):
@@ -267,6 +319,8 @@ class CBASClusterManagement(CBASBaseTest):
         2. Create bucket, datasets, connect bucket. Data ingestion should start.
         3. Add another data node. Rebalance, while rebalance is in progress, stop rebalancing. Again start rebalance.
         4. Create bucket, datasets, connect bucket. Data ingestion should start.
+        
+        Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
         self.add_node(self.cbas_node)
@@ -279,7 +333,7 @@ class CBASClusterManagement(CBASBaseTest):
             self.fail("Rebalance completed before the test could have stopped rebalance.")
         
         self.rebalance()
-        self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count)
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
         
     def test_add_first_cbas_stop_rebalance(self):
         '''
@@ -291,6 +345,8 @@ class CBASClusterManagement(CBASBaseTest):
         2. Start rebalance.
         3. While rebalance is in progress, stop rebalancing.
         4. Verify that the cbas node is not added to the cluster and should not accept queries.
+        
+        Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
         self.add_node(self.cbas_node, services=["kv","cbas"],wait_for_rebalance_completion=False)
@@ -313,6 +369,8 @@ class CBASClusterManagement(CBASBaseTest):
         3. Add another cbas node, rebalance and while rebalance is in progress, stop rebalancing.
         4. Verify that the second cbas node is not added to the cluster and should not accept queries.
         5. First cbas node should be able to serve queries.
+        
+        Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
         self.add_node(self.cbas_servers[0], services=["kv","cbas"])
@@ -330,4 +388,144 @@ class CBASClusterManagement(CBASBaseTest):
         
         self.assertTrue(self.execute_statement_on_cbas_via_rest(query, rest=RestConnection(self.cbas_servers[0])),
                          "Successfully executed a cbas query from a node which is not part of cluster.")
+    
+    def test_reboot_cbas(self):
+        '''
+        Description: This test will add the second cbas node then start rebalance and cancel rebalance
+        before rebalance completes.
         
+        Steps:
+        1. Add first cbas node.
+        2. Start rebalance, wait for rebalance complete.
+        3. Create bucket, datasets, connect bucket. Data ingestion should start.
+        4. Reboot CBAS node addd in Step 1.
+        5. After reboot cbas node should be able to serve queries, validate items count.
+        
+        Author: Ritesh Agarwal
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_node, services=["kv","cbas"])
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        
+        from fts.fts_base import NodeHelper
+        NodeHelper.reboot_server(self.cbas_node, self)
+        
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
+
+    def test_restart_cb(self):
+        '''
+        Description: This test will restart CB and verify that CBAS is also up and running with CB.
+        
+        Steps:
+        1. Add first cbas node.
+        2. Start rebalance, wait for rebalance complete.
+        3. Stop Couchbase service, Start Couchbase Service. Wait for service to get started.
+        4. Verify that CBAS service is also up Create bucket, datasets, connect bucket. Data ingestion should start.
+        
+        Author: Ritesh Agarwal
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_servers[0], services=["cbas"])
+        
+        from fts.fts_base import NodeHelper
+        NodeHelper.stop_couchbase(self.cbas_servers[0])
+        NodeHelper.start_couchbase(self.cbas_servers[0])
+        NodeHelper.wait_service_started(self.cbas_servers[0])
+        
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
+
+    def test_run_queries_cbas_shutdown(self):
+        '''
+        Description: This test the ongoing queries while cbas node goes down.
+        
+        Steps:
+        1. Add first cbas node.
+        2. Start rebalance, wait for rebalance complete.
+        3. Create bucket, datasets, connect bucket. Data ingestion should start.
+        4. Add another cbas node, rebalance.
+        5. Start concurrent queries on first cbas node.
+        6. Second cbas node added in step 4 should be able to serve queries.
+        
+        Author: Ritesh Agarwal
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_servers[0], services=["cbas"])
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        self.add_node(self.cbas_servers[1], services=["cbas"])
+        
+        query = "select count(*) from {0};".format(self.cbas_dataset_name)
+        self._run_concurrent_queries(query, "immediate", 2000, rest=RestConnection(self.cbas_servers[0]))
+        
+        from fts.fts_base import NodeHelper
+        NodeHelper.stop_couchbase(self.cbas_servers[0])
+        failover_task = self._cb_cluster.async_failover(self.input.servers,
+                                                        [self.cbas_servers[0]],
+                                                        graceful=True)
+        failover_task.result()
+        self.rebalance()
+        
+    def test_primary_cbas_shutdown(self):
+        '''
+        Description: This test will add the second cbas node then start rebalance and cancel rebalance
+        before rebalance completes.
+        
+        Steps:
+        1. Add first cbas node.
+        2. Start rebalance, wait for rebalance complete.
+        3. Create bucket, datasets, connect bucket. Data ingestion should start.
+        4. Add another cbas node, rebalance.
+        5. Stop Couchbase service for Node1 added in step 1. Failover the node and rebalance.
+        6. Second cbas node added in step 4 should be able to serve queries.
+        
+        Author: Ritesh Agarwal
+        '''
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_servers[0], services=["cbas"])
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        self.add_node(self.cbas_servers[1], services=["cbas"])
+        from fts.fts_base import NodeHelper
+        NodeHelper.stop_couchbase(self.cbas_servers[0])
+        
+        failover_task = self._cb_cluster.async_failover(self.input.servers,
+                                                        [self.cbas_servers[0]],
+                                                        graceful=True)
+        failover_task.result()
+        self.rebalance()
+        
+        query = "select count(*) from {0};".format(self.cbas_dataset_name)
+        self._run_concurrent_queries(query, "immediate", 100, rest=RestConnection(self.cbas_servers[1]))
+        
+    def test_remove_all_cbas_nodes_in_cluster_add_last_node_back(self):
+        '''
+        Steps:
+        1. For all the cbas nodes provided in ini file, Add all of them in one go and Rebalance.
+        2. Remove all nodes together and then rebalance.
+        
+        Author: Ritesh Agarwal
+        '''
+        cbas_otpnodes = []
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        cbas_otpnodes.append(self.add_node(self.cbas_servers[0], services=["cbas"]))
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+        
+        for node in self.cbas_servers[1:]:
+            cbas_otpnodes.append(self.add_node(node, services=["cbas"]))
+        cbas_otpnodes.reverse()
+        for node in cbas_otpnodes:
+            self.remove_node([node])
+            
+        self.add_node(self.cbas_servers[0], services=["cbas"])
+        self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
+            
+    def test_create_bucket_with_default_port(self):
+        query = "create bucket " + self.cbas_bucket_name + " with {\"name\":\"" + self.cb_bucket_name + "\",\"nodes\":\"" + self.master.ip + ","+ self.master.ip + ":" +"8091" +"\"};"
+        self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
+        self.add_node(self.cbas_servers[0], services=["cbas"])
+        result = self.execute_statement_on_cbas_via_rest(query, "immediate")[0]
+        self.assertTrue(result == "success", "CBAS bucket cannot be created with provided port: %s"%query)
+        
+        self.assertTrue(self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
+                          cbas_dataset_name=self.cbas_dataset_name), "dataset creation failed on cbas")
+        self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name),"Connecting cbas bucket to cb bucket failed")
+        self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], self.travel_sample_docs_count),"Data ingestion to cbas couldn't complete in 300 seconds.")
