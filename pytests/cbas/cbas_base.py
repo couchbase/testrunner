@@ -14,6 +14,11 @@ import threading
 
 class CBASBaseTest(BaseTestCase):
     def setUp(self, add_defualt_cbas_node = True):
+        self.log = logger.Logger.get_logger()
+        if self._testMethodDoc:
+            self.log.info("\n\nStarting Test: %s \n%s"%(self._testMethodName,self._testMethodDoc))
+        else:
+            self.log.info("\n\nStarting Test: %s"%(self._testMethodName))
         super(CBASBaseTest, self).setUp()
         self.cbas_node = self.input.cbas
         self.cbas_servers = []

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from cbas_base import *
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
