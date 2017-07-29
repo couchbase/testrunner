@@ -464,6 +464,8 @@ class CBASClusterManagement(CBASBaseTest):
                                                         graceful=True)
         failover_task.result()
         self.rebalance()
+        NodeHelper.start_couchbase(self.cbas_servers[0])
+        NodeHelper.wait_service_started(self.cbas_servers[0])
         
     def test_primary_cbas_shutdown(self):
         '''
@@ -495,6 +497,8 @@ class CBASClusterManagement(CBASBaseTest):
         
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
         self._run_concurrent_queries(query, "immediate", 100, rest=RestConnection(self.cbas_servers[1]))
+        NodeHelper.start_couchbase(self.cbas_servers[0])
+        NodeHelper.wait_service_started(self.cbas_servers[0])
         
     def test_remove_all_cbas_nodes_in_cluster_add_last_node_back(self):
         '''
@@ -519,7 +523,7 @@ class CBASClusterManagement(CBASBaseTest):
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
             
     def test_create_bucket_with_default_port(self):
-        query = "create bucket " + self.cbas_bucket_name + " with {\"name\":\"" + self.cb_bucket_name + "\",\"nodes\":\"" + self.master.ip + ","+ self.master.ip + ":" +"8091" +"\"};"
+        query = "create bucket " + self.cbas_bucket_name + " with {\"name\":\"" + self.cb_bucket_name + "\",\"nodes\":\"" + self.master.ip + ":" +"8091" +"\"};"
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
         self.add_node(self.cbas_servers[0], services=["cbas"])
         result = self.execute_statement_on_cbas_via_rest(query, "immediate")[0]
