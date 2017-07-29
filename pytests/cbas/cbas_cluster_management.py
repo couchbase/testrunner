@@ -531,5 +531,6 @@ class CBASClusterManagement(CBASBaseTest):
         
         self.assertTrue(self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
                           cbas_dataset_name=self.cbas_dataset_name), "dataset creation failed on cbas")
-        self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name),"Connecting cbas bucket to cb bucket failed")
+        self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name, cb_bucket_password="password", cb_bucket_username="Administrator"),
+                        "Connecting cbas bucket to cb bucket failed")
         self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], self.travel_sample_docs_count),"Data ingestion to cbas couldn't complete in 300 seconds.")
