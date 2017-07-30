@@ -33,8 +33,14 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
                                 query_template=query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
-        self.multi_create_index(buckets = self.buckets,
+        if not self.build_index_after_create:
+            self.build_index_after_create = True
+            self.multi_create_index(buckets = self.buckets,
                 query_definitions = self.load_query_definitions)
+            self.build_index_after_create = False
+        else:
+            self.multi_create_index(buckets = self.buckets,
+                                    query_definitions=self.load_query_definitions)
 
     def tearDown(self):
         self.upgrade_servers = self.servers
@@ -65,11 +71,16 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             upgrade_thread.join()
         self.sleep(20)
         self.add_built_in_server_user()
-
-        for server in self.servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.start_server()
-            remote.disconnect()
+        ops_map = self.generate_operation_map("before")
+        if "create_index" in ops_map and not self.build_index_after_create:
+            index_name_list = []
+            for query_definition in self.query_definitions:
+                index_name_list.append(query_definition.index_name)
+            build_index_tasks = []
+            for bucket in self.buckets:
+                build_index_tasks.append(self.async_build_index(
+                    bucket, index_name_list))
+            self._run_tasks([build_index_tasks])
         self.sleep(20)
         kv_ops = self.kv_mutations()
         for kv_op in kv_ops:
@@ -261,10 +272,21 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             rebalance = self.cluster.async_rebalance(active_nodes, [], [])
             rebalance.result()
             self._run_tasks([kv_ops, in_between_tasks])
+            ops_map = self.generate_operation_map("before")
             if "index" in node_services:
                 self._remove_equivalent_indexes(node)
                 self.sleep(60)
                 self._verify_indexer_storage_mode(node)
+            if "create_index" in ops_map and not self.build_index_after_create:
+                index_name_list = []
+                for query_definition in self.query_definitions:
+                    index_name_list.append(query_definition.index_name)
+                build_index_tasks = []
+                for bucket in self.buckets:
+                    build_index_tasks.append(self.async_build_index(
+                    bucket, index_name_list))
+                self._run_tasks([build_index_tasks])
+            self.sleep(20)
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
             self._execute_prepare_statement(prepare_statements)
@@ -633,7 +655,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         index_nodes = [x for x in index_nodes if x.ip != index_node.ip]
         if index_nodes:
             ops_map = self.generate_operation_map("in_between")
-            if ops_map and ("create_index" not in ops_map):
+            if "create_index" not in ops_map:
                 lost_indexes = self._find_index_lost_when_indexer_down(index_node)
                 deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip,
                                                      index_nodes[0].port)]
