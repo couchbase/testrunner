@@ -216,7 +216,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if self.input.clusters:
                 for key in self.input.clusters.keys():
                     servers = self.input.clusters[key]
-                    self.backup_reset_clusters(servers)
+                    try:
+                        self.backup_reset_clusters(servers)
+                    except:
+                        self.log.error("was not able to cleanup cluster the first time")
+                        self.backup_reset_clusters(servers)
             if os.path.exists(validation_files_location):
                 shutil.rmtree(validation_files_location)
 
@@ -339,7 +343,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
 
-        if error or (output and "Backup successfully completed" not in output[0]):
+        if error or (output and "Backup successfully completed" not in output):
             return output, error
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)

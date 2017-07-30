@@ -10,47 +10,49 @@ from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
+from security.rbac_base import RbacBase
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
 from couchbase_helper.document import View
 from tasks.future import TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
-from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
-                          COUCHBASE_FROM_4DOT6
+from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
+    COUCHBASE_FROM_4DOT6
 
 AUDITBACKUPID = 20480
-AUDITRESTOREID= 20485
+AUDITRESTOREID = 20485
 SOURCE_CB_PARAMS = {
-                      "authUser": "default",
-                      "authPassword": "",
-                      "authSaslUser": "",
-                      "authSaslPassword": "",
-                      "clusterManagerBackoffFactor": 0,
-                      "clusterManagerSleepInitMS": 0,
-                      "clusterManagerSleepMaxMS": 20000,
-                      "dataManagerBackoffFactor": 0,
-                      "dataManagerSleepInitMS": 0,
-                      "dataManagerSleepMaxMS": 20000,
-                      "feedBufferSizeBytes": 0,
-                      "feedBufferAckThreshold": 0
-                    }
+    "authUser": "default",
+    "authPassword": "",
+    "authSaslUser": "",
+    "authSaslPassword": "",
+    "clusterManagerBackoffFactor": 0,
+    "clusterManagerSleepInitMS": 0,
+    "clusterManagerSleepMaxMS": 20000,
+    "dataManagerBackoffFactor": 0,
+    "dataManagerSleepInitMS": 0,
+    "dataManagerSleepMaxMS": 20000,
+    "feedBufferSizeBytes": 0,
+    "feedBufferAckThreshold": 0
+}
 INDEX_DEFINITION = {
-                          "type": "fulltext-index",
-                          "name": "",
-                          "uuid": "",
-                          "params": {},
-                          "sourceType": "couchbase",
-                          "sourceName": "default",
-                          "sourceUUID": "",
-                          "sourceParams": SOURCE_CB_PARAMS,
-                          "planParams": {}
-                        }
+    "type": "fulltext-index",
+    "name": "",
+    "uuid": "",
+    "params": {},
+    "sourceType": "couchbase",
+    "sourceName": "default",
+    "sourceUUID": "",
+    "sourceParams": SOURCE_CB_PARAMS,
+    "planParams": {}
+}
 
 
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
+        self.users_check_restore = self.input.param("users-check-restore", '').replace("ALL", "*").split(";")
         for server in [self.backupset.backup_host, self.backupset.restore_cluster_host]:
             conn = RemoteMachineShellConnection(server)
             conn.extract_remote_info()
@@ -118,7 +120,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("*** start restore validation")
             self.backup_restore_validate(compare_uuid=False,
                                          seqno_compare_function=">=",
-                                         expected_error=self.expected_error )
+                                         expected_error=self.expected_error)
             if self.backupset.number_of_backups == 1:
                 continue
             while "{0}/{1}".format(start, end) in restored:
@@ -218,7 +220,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("Validate deleted keys")
             self.backup_compact_deleted_keys_validation(initial_keys)
 
-        self.log.info( "start restore cluster ")
+        self.log.info("start restore cluster ")
         restored = {"{0}/{1}".format(start, end): ""}
         for i in range(1, self.backupset.number_of_backups + 1):
             self.backupset.start = start
@@ -239,7 +241,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                  mode="memory", node=None, repeats=0):
         self.ops_type = self.input.param("ops-type", "update")
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                                                      end=self.num_items)
+                            end=self.num_items)
         self.log.info("Start doing ops: %s " % self.ops_type)
         if node is None:
             node = self.master
@@ -438,11 +440,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             :return: None
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                                                      end=self.num_items)
+                            end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         output, error = self.backup_cluster()
-        if output and  "Backup successfully completed" not in output[0]:
+        if output and "Backup successfully completed" not in output[0]:
             self.fail("Failed to run with password env %s " % output)
         self.backup_cluster_validate(skip_backup=True)
         self.backup_list()
@@ -471,14 +473,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         for line in output:
             if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
                 backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}",
-                                                                                line).group()
+                                        line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
-        backup_bucket_config_path = self.backupset.directory + "/backup" +\
-                    "/" + self.backups[self.backupset.number_of_backups -1] + \
-                    "/" + self.buckets[0].name + "-*"\
-                    "/bucket-config.json"
+        backup_bucket_config_path = self.backupset.directory + "/backup" + \
+                                    "/" + self.backups[self.backupset.number_of_backups - 1] + \
+                                    "/" + self.buckets[0].name + "-*" \
+                                                                 "/bucket-config.json"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         self.log.info("Remore } in bucket-config.json to make it invalid json ")
         remote_client.execute_command("sed -i 's/}//' %s " % backup_bucket_config_path)
@@ -559,8 +561,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                  self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate data in merge backup ")
         self.validate_backup_data(self.backupset.backup_host, [self.master],
-                                       "ent-backup", False, False, "memory",
-                                       self.num_items, "ent-backup1")
+                                  "ent-backup", False, False, "memory",
+                                  self.num_items, "ent-backup1")
         self.backup_cluster_validate(skip_backup=True)
 
     def test_merge_backup_with_merge_kill_and_re_merge(self):
@@ -674,11 +676,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, create_gen1, "create", 0)
         self.log.info("Delete half docs of 1st batch")
         delete_gen = BlobGenerator("ent-backup1", "ent-backup-", self.value_size,
-                                    end=self.num_items/2)
+                                   end=self.num_items / 2)
         self._load_all_buckets(self.master, delete_gen, "delete", 0)
         self.log.info("Load 2nd batch docs")
         create_gen2 = BlobGenerator("ent-backup2", "ent-backup-", self.value_size,
-                                    end=self.num_items/2)
+                                    end=self.num_items / 2)
         self._load_all_buckets(self.master, create_gen2, "create", 0)
         self.log.info("Start backup")
         self.backup_create()
@@ -698,11 +700,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if not found:
                 self.log.info("Load another docs to bucket %s " % bucket.name)
                 create_gen3 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
-                                                                     end=self.num_items/4)
+                                            end=self.num_items / 4)
                 self._load_bucket(bucket.name, self.master, create_gen3, "create")
                 self.backup_cluster()
                 create_gen4 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
-                                                                     end=self.num_items/4)
+                                            end=self.num_items / 4)
                 self._load_bucket(bucket.name, self.master, create_gen4, "create")
                 self.backup_cluster()
                 status, output, message = self.backup_merge()
@@ -747,10 +749,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         for bucket in self.buckets:
             for node in clusters:
                 shell.execute_command("%scbstats%s %s:11210 -b %s stop" % \
-                                              (self.cli_command_location,
-                                               self.cmd_ext,
-                                               node.ip,
-                                               bucket.name))
+                                      (self.cli_command_location,
+                                       self.cmd_ext,
+                                       node.ip,
+                                       bucket.name))
         shell.disconnect()
         self.log.info("Load 2nd batch docs")
         create_gen2 = BlobGenerator("ent-backup2", "ent-backup-", self.value_size,
@@ -774,10 +776,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             else:
                                 print "to true"
                                 ready = True
-                        cmd = "%scbstats%s %s:11210 failovers -u %s -p %s | grep num_entries "\
-                              "| awk%s '{print $2}' | grep -m 5 '4\|5\|6\|7'"\
-                                % (self.cli_command_location, self.cmd_ext, server.ip,
-                                  "cbadminbucket", "password", self.cmd_ext)
+                        cmd = "%scbstats%s %s:11210 failovers -u %s -p %s | grep num_entries " \
+                              "| awk%s '{print $2}' | grep -m 5 '4\|5\|6\|7'" \
+                              % (self.cli_command_location, self.cmd_ext, server.ip,
+                                 "cbadminbucket", "password", self.cmd_ext)
                         output, error = shell.execute_command(cmd)
                         if output:
                             self.log.info("number failover logs entries reached. %s " % output)
@@ -809,8 +811,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                 self.backupset.directory)
         if self.input.param("command", "backup") != "list":
             options += " -%s http://%s:%s" % (self.input.param("cluster", "-cluster"),
-                              self.backupset.cluster_host.ip,
-                              self.backupset.cluster_host.port)
+                                              self.backupset.cluster_host.ip,
+                                              self.backupset.cluster_host.port)
             options += " -%s Administrator" % self.input.param("bkusername", "-username")
             options += " -%s password" % self.input.param("bkpassword", "-password")
         self.backup_create()
@@ -840,7 +842,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if display_option == "-h":
             if subcommand is None:
                 content = ['cbbackupmgr [<command>] [<args>]', '',
-                                '  backup    Backup a Couchbase cluster']
+                           '  backup    Backup a Couchbase cluster']
             else:
                 content = ['cbbackupmgr %s [<args>]' % subcommand, '',
                            'Required Flags:']
@@ -848,18 +850,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         elif display_option == "--help":
             content = None
             if subcommand is None:
-                content  =  \
-                 ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
-                  '', '', '', 'NAME',
-                  '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
-                  '       cluster', '', 'SYNOPSIS',
-                  '       cbbackupmgr [--version] [--help] <command> [<args>]']
+                content = \
+                    ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
+                     '', '', '', 'NAME',
+                     '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
+                     '       cluster', '', 'SYNOPSIS',
+                     '       cbbackupmgr [--version] [--help] <command> [<args>]']
             else:
                 subcmd_cap = subcommand.upper()
                 content = \
-                 ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
-                                                               % (subcmd_cap, subcmd_cap),
-                   '', '', '', 'NAME']
+                    ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
+                     % (subcmd_cap, subcmd_cap),
+                     '', '', '', 'NAME']
             self.validate_help_content(output[:5], content)
         shell.disconnect()
 
@@ -889,9 +891,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         if verify_data:
             self.validate_backup_data(self.backupset.backup_host,
-                                  self.servers[:self.nodes_init],
-                                  "ent-backup", False, False, "memory",
-                                  self.num_items, None)
+                                      self.servers[:self.nodes_init],
+                                      "ent-backup", False, False, "memory",
+                                      self.num_items, None)
         if self.do_restore:
             self.log.info("Restore with secure connection")
             self.backup_restore()
@@ -911,10 +913,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.validate_keys = self.input.param("validate_keys", False)
         if self.validate_keys:
             gen = BlobGenerator(key_name, "ent-backup-", self.value_size,
-                                                         end=self.num_items)
+                                end=self.num_items)
         else:
             gen = DocumentGenerator('random_keys', '{{"age": {0}}}', xrange(100),
-                                     start=0, end=self.num_items)
+                                    start=0, end=self.num_items)
 
         self._load_all_buckets(self.master, gen, "create", 0)
         self.log.info("Start backup")
@@ -926,11 +928,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not self.backupset.filter_keys:
             regex_check = self.backupset.filter_values
         self.validate_backup_data(self.backupset.backup_host,
-                                       [self.backupset.restore_cluster_host],
-                                       key_name, False, False, "memory",
-                                       self.num_items, None,
-                                       validate_keys=self.validate_keys,
-                                       regex_pattern=regex_check)
+                                  [self.backupset.restore_cluster_host],
+                                  key_name, False, False, "memory",
+                                  self.num_items, None,
+                                  validate_keys=self.validate_keys,
+                                  regex_pattern=regex_check)
 
     def test_backup_with_rbac(self):
         """
@@ -950,7 +952,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         if self.create_fts_index:
             gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0,
-                                                                 end=self.num_items)
+                                    end=self.num_items)
             index_definition = INDEX_DEFINITION
             index_name = index_definition['name'] = "age"
             rest_fts = RestConnection(self.master)
@@ -961,7 +963,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail(ex)
         else:
             gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                                                          end=self.num_items)
+                                end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         if self.create_views:
             self._create_views()
@@ -977,7 +979,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      "roles": "%s" % self.cluster_new_role}]
         users_can_backup_all = ["admin", "cluster_admin", "bucket_full_access[*]",
                                 "bucket_admin[*]",
-                                    "data_backup[*]"]
+                                "data_backup[*]"]
         users_can_not_backup_all = ["views_admin[*]", "replication_admin",
                                     "replication_target[*]", "data_monitoring[*]",
                                     "data_writer[*]", "data_reader[*]",
@@ -987,9 +989,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         try:
             status = self.add_built_in_server_user(testuser, rolelist)
             if not status:
-                self.fail("Fail to add user: %s with role: %s "\
-                                         % (self.cluster_new_user,
-                                            self.cluster_new_role))
+                self.fail("Fail to add user: %s with role: %s " \
+                          % (self.cluster_new_user,
+                             self.cluster_new_role))
             output, error = self.backup_cluster()
             success_msg = ['Backup successfully completed']
             fail_msg = "Error backing up cluster:"
@@ -1009,14 +1011,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail(message)
             if self.do_verify:
                 current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup,
-                                                          self.buckets,
-                                                          self.skip_consistency,
-                                                          self.per_node)
+                                                         self.buckets,
+                                                         self.skip_consistency,
+                                                         self.per_node)
                 self.log.info("*** Start to validate data in merge backup ")
                 result = self.validate_backup_data(self.backupset.backup_host,
-                                               [self.master],
-                                               "ent-backup", False, False, "memory",
-                                                self.num_items, None)
+                                                   [self.master],
+                                                   "ent-backup", False, False, "memory",
+                                                   self.num_items, None)
                 self.validate_backup_views()
         except Exception as e:
             if e:
@@ -1032,14 +1034,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         error_found = True
                     if not error_found:
                         raise Exception("cbbackupmgr does not block user role: %s to backup" \
-                                                           % self.cluster_new_role)
+                                        % self.cluster_new_role)
                     if self.cluster_new_role == "views_admin[*]" and self.create_views:
                         status, mesg = self.validate_backup_views(self.backupset.backup_host)
                         if not status:
                             raise Exception(mesg)
                 if "Expected error message not thrown" in str(e):
                     raise Exception("cbbackupmgr does not block user role: %s to backup" \
-                                                           % self.cluster_new_role)
+                                    % self.cluster_new_role)
             if self.cluster_new_role in users_can_backup_all:
                 if success_msg[0] not in output[0]:
                     self.fail(e)
@@ -1050,15 +1052,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             curl_path = ""
             if self.os_name == "windows":
                 curl_path = self.cli_command_location
-            cmd = "%scurl%s -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s"\
-                                              % (curl_path,
-                                                 self.cmd_ext,
-                                                 "DELETE",
-                                                 self.master.rest_username,
-                                                 self.master.rest_password,
-                                                 self.backupset.cluster_host.ip,
-                                                 self.cluster_new_user)
-            output , error = shell.execute_command(cmd)
+            cmd = "%scurl%s -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s" \
+                  % (curl_path,
+                     self.cmd_ext,
+                     "DELETE",
+                     self.master.rest_username,
+                     self.master.rest_password,
+                     self.backupset.cluster_host.ip,
+                     self.cluster_new_user)
+            output, error = shell.execute_command(cmd)
 
     def test_restore_with_rbac(self):
         """
@@ -1080,9 +1082,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if "-" in self.cluster_new_role:
             self.cluster_new_role = self.cluster_new_role.replace("-", ",")
         shell.execute_command("cp -r entbackup%s %s/entbackup" % (fts, self.tmp_path))
-        output, error = shell.execute_command("cd %s/backup/*/*/data; "\
-                                              "unzip shar*.zip"\
-                                             % self.backupset.directory)
+        output, error = shell.execute_command("cd %s/backup/*/*/data; " \
+                                              "unzip shar*.zip" \
+                                              % self.backupset.directory)
         shell.log_command_output(output, error)
         shell.execute_command("echo '' > {0}/logs/backup.log" \
                               .format(self.backupset.directory))
@@ -1103,14 +1105,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         try:
             status = self.add_built_in_server_user(testuser, rolelist)
             if not status:
-                self.fail("Fail to add user: %s with role: %s "\
-                                         % (self.cluster_new_user,
-                                            self.cluster_new_role))
+                self.fail("Fail to add user: %s with role: %s " \
+                          % (self.cluster_new_user,
+                             self.cluster_new_role))
             output, error = self.backup_restore()
 
             users_can_restore_all = ["admin", "cluster_admin",
-                                    "bucket_full_access[*]", "bucket_admin[*]",
-                                    "data_backup[*]"]
+                                     "bucket_full_access[*]", "bucket_admin[*]",
+                                     "data_backup[*]"]
             users_can_not_restore_all = ["views_admin[*]", "ro_admin",
                                          "replication_admin", "data_monitoring[*]",
                                          "data_writer[*]", "data_reader[*]",
@@ -1132,20 +1134,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if "," in self.cluster_new_role:
                 roles = self.cluster_new_role.split(",")
                 if set(roles) & set(users_can_not_restore_all) and \
-                   set(roles) & set(users_can_restore_all):
+                                set(roles) & set(users_can_restore_all):
                     if success_msg != output:
-                        self.fail("User: %s failed to restore data with roles: %s. "\
+                        self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the output %s " % \
                                   (self.cluster_new_user, roles, output))
                     if int(actual_keys) != 1000:
-                        self.fail("User: %s failed to restore data with roles: %s. "\
+                        self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the actual docs in bucket %s " % \
                                   (self.cluster_new_user, roles, actual_keys))
             elif self.cluster_new_role in users_can_not_restore_all:
                 if int(actual_keys) == 1000:
-                    self.fail("User: %s with role: %s should not allow to restore data"\
-                                          % (self.cluster_new_user,
-                                            self.cluster_new_role))
+                    self.fail("User: %s with role: %s should not allow to restore data" \
+                              % (self.cluster_new_user,
+                                 self.cluster_new_role))
                 if fail_msg not in output[0]:
                     self.fail("cbbackupmgr failed to block user to restore")
         finally:
@@ -1154,15 +1156,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             curl_path = ""
             if self.os_name == "windows":
                 curl_path = self.cli_command_location
-            cmd = "%scurl%s -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s"\
-                                              % (curl_path,
-                                                 self.cmd_ext,
-                                                 "DELETE",
-                                                 self.master.rest_username,
-                                                 self.master.rest_password,
-                                                 self.backupset.cluster_host.ip,
-                                                 self.cluster_new_user)
-            output , error = shell.execute_command(cmd)
+            cmd = "%scurl%s -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s" \
+                  % (curl_path,
+                     self.cmd_ext,
+                     "DELETE",
+                     self.master.rest_username,
+                     self.master.rest_password,
+                     self.backupset.cluster_host.ip,
+                     self.cluster_new_user)
+            output, error = shell.execute_command(cmd)
             shell.disconnect()
 
     def test_backup_restore_with_nodes_reshuffle(self):
@@ -1186,7 +1188,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Creating new zone " + target_zone)
         rest_conn.add_zone(target_zone)
         self.log.info("Moving {0} to new zone {1}".format(self.backupset.cluster_host.ip, target_zone))
-        rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)],source_zone,target_zone)
+        rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)], source_zone, target_zone)
         self.log.info("Restoring to {0} after group change".format(self.backupset.cluster_host.ip))
         try:
             self.backup_restore_validate()
@@ -1194,7 +1196,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(str(ex))
         finally:
             self.log.info("Moving {0} back to old zone {1}".format(self.backupset.cluster_host.ip, source_zone))
-            rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)],target_zone,source_zone)
+            rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)], target_zone, source_zone)
             self.log.info("Deleting new zone " + target_zone)
             rest_conn.delete_zone(target_zone)
 
@@ -1280,7 +1282,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 "bucket": "{0}".format(self.buckets[0].name),
                 "sockname": "{0}:11210".format(self.backupset.cluster_host.ip),
                 "peername": "{0}".format(self.backupset.backup_host.ip)
-                }
+            }
         elif action == 'restore':
             expected_results = {
                 "real_userid:source": "memcached",
@@ -1292,7 +1294,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 "bucket": "{0}".format(self.buckets[0].name),
                 "sockname": "{0}:11210".format(self.backupset.restore_cluster_host.ip),
                 "peername": "{0}".format(self.backupset.backup_host.ip)
-                }
+            }
         return expected_results
 
     def test_backup_restore_with_lesser_nodes(self):
@@ -1353,7 +1355,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         4. Restores the backup and validates
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                             end=self.num_items)
+                            end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
@@ -1379,12 +1381,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location,
-                                          cb_version=self.cb_version)
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
@@ -1405,12 +1407,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location,
-                                          cb_version=self.cb_version)
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
@@ -1431,12 +1433,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location,
-                                          cb_version=self.cb_version)
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.pause_memcached()
@@ -1469,8 +1471,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.kill_erlang()
             output = backup_result.result(timeout=200)
-            self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
-                            "Expected error message not thrown by Backup 180 seconds after erlang crash")
+            self.assertTrue(
+                "Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                "Expected error message not thrown by Backup 180 seconds after erlang crash")
             self.log.info("Expected error message thrown by Backup 180 seconds after erlang crash")
         except Exception as ex:
             self.fail(str(ex))
@@ -1501,8 +1504,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.stop_couchbase()
             output = backup_result.result(timeout=200)
-            self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
-                            "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
+            self.assertTrue(
+                "Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
             self.log.info("Expected error message thrown by Backup 180 seconds after couchbase-server stop")
         except Exception as ex:
             self.fail(str(ex))
@@ -1533,8 +1537,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.pause_memcached()
             output = backup_result.result(timeout=200)
-            self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
-                            "Expected error message not thrown by Backup 180 seconds after memcached crash")
+            self.assertTrue(
+                "Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                "Expected error message not thrown by Backup 180 seconds after memcached crash")
             self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
         except Exception as ex:
             self.fail(str(ex))
@@ -1556,14 +1561,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                           backup_host=self.backupset.backup_host,
-                                                           backups=self.backups, start=self.backupset.start,
-                                                           end=self.backupset.end, directory=self.backupset.directory,
-                                                           name=self.backupset.name,
-                                                           force_updates=self.backupset.force_updates,
-                                                           no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location,
-                                                           cb_version=self.cb_version)
+                                                            backup_host=self.backupset.backup_host,
+                                                            backups=self.backups, start=self.backupset.start,
+                                                            end=self.backupset.end, directory=self.backupset.directory,
+                                                            name=self.backupset.name,
+                                                            force_updates=self.backupset.force_updates,
+                                                            no_progress_bar=self.no_progress_bar,
+                                                            cli_command_location=self.cli_command_location,
+                                                            cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.kill_erlang()
@@ -1587,14 +1592,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                           backup_host=self.backupset.backup_host,
-                                                           backups=self.backups, start=self.backupset.start,
-                                                           end=self.backupset.end, directory=self.backupset.directory,
-                                                           name=self.backupset.name,
-                                                           force_updates=self.backupset.force_updates,
-                                                           no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location,
-                                                           cb_version=self.cb_version)
+                                                            backup_host=self.backupset.backup_host,
+                                                            backups=self.backups, start=self.backupset.start,
+                                                            end=self.backupset.end, directory=self.backupset.directory,
+                                                            name=self.backupset.name,
+                                                            force_updates=self.backupset.force_updates,
+                                                            no_progress_bar=self.no_progress_bar,
+                                                            cli_command_location=self.cli_command_location,
+                                                            cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.stop_couchbase()
@@ -1618,14 +1623,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                           backup_host=self.backupset.backup_host,
-                                                           backups=self.backups, start=self.backupset.start,
-                                                           end=self.backupset.end, directory=self.backupset.directory,
-                                                           name=self.backupset.name,
-                                                           force_updates=self.backupset.force_updates,
-                                                           no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location,
-                                                           cb_version=self.cb_version)
+                                                            backup_host=self.backupset.backup_host,
+                                                            backups=self.backups, start=self.backupset.start,
+                                                            end=self.backupset.end, directory=self.backupset.directory,
+                                                            name=self.backupset.name,
+                                                            force_updates=self.backupset.force_updates,
+                                                            no_progress_bar=self.no_progress_bar,
+                                                            cli_command_location=self.cli_command_location,
+                                                            cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.pause_memcached()
@@ -1663,8 +1668,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.kill_erlang()
             output = restore_result.result(timeout=200)
-            self.assertTrue("Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
-                            "Expected error message not thrown by Restore 180 seconds after erlang crash")
+            self.assertTrue(
+                "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
+                "Expected error message not thrown by Restore 180 seconds after erlang crash")
             self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
         except Exception as ex:
             self.fail(str(ex))
@@ -1700,8 +1706,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.stop_couchbase()
             output = restore_result.result(timeout=200)
-            self.assertTrue("Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
-                            "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
+            self.assertTrue(
+                "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
+                "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
             self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
         except Exception as ex:
             self.fail(str(ex))
@@ -1737,8 +1744,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.pause_memcached()
             output = restore_result.result(timeout=200)
-            self.assertTrue("Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
-                            "Expected error message not thrown by Restore 180 seconds after memcached crash")
+            self.assertTrue(
+                "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
+                "Expected error message not thrown by Restore 180 seconds after memcached crash")
             self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
         except Exception as ex:
             self.fail(str(ex))
@@ -1875,8 +1883,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                  self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate data in merge backup ")
         self.validate_backup_data(self.backupset.backup_host, [self.master],
-                                       "ent-backup", False, False, "memory",
-                                       self.num_items, None)
+                                  "ent-backup", False, False, "memory",
+                                  self.num_items, None)
         self.backup_cluster_validate(skip_backup=True)
 
     def test_backup_purge(self):
@@ -1894,12 +1902,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         old_backup_name = ""
         new_backup_name = ""
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location,
-                                          cb_version=self.cb_version)
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
@@ -1939,21 +1947,21 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         6. Validates the old backup is resumes and backup is completed successfully
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                                                      end=self.num_items)
+                            end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         old_backup_name = ""
         new_backup_name = ""
         backup_result = self.cluster.async_backup_cluster(
-                                          cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory,
-                                          name=self.backupset.name,
-                                          resume=False,
-                                          purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location,
-                                          cb_version=self.cb_version)
+            cluster_host=self.backupset.cluster_host,
+            backup_host=self.backupset.backup_host,
+            directory=self.backupset.directory,
+            name=self.backupset.name,
+            resume=False,
+            purge=self.backupset.purge,
+            no_progress_bar=self.no_progress_bar,
+            cli_command_location=self.cli_command_location,
+            cb_version=self.cb_version)
         self.sleep(3)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         op, er = conn.execute_command("ps aux | grep 'beam.smp' | awk '{print $2}'")
@@ -1985,7 +1993,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                             "_\d{2}.\d+-\d{2}_\d{2}", line).group()
                 self.log.info("Backup name after resume: " + new_backup_name)
         self.assertEqual(old_backup_name, new_backup_name,
-             "Old backup name and new backup name are not same when resume is used")
+                         "Old backup name and new backup name are not same when resume is used")
         self.log.info("Old backup name and new backup name are same when resume is used")
 
     def test_backup_restore_with_deletes(self):
@@ -2054,7 +2062,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.force_version_upgrade:
             upgrade_version = self.force_version_upgrade
         upgrade_threads = self._async_update(upgrade_version=upgrade_version,
-                                                        servers=self.servers[:2])
+                                             servers=self.servers[:2])
         for th in upgrade_threads:
             th.join()
         self.log.info("Upgraded to: {ver}".format(ver=upgrade_version))
@@ -2093,7 +2101,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
                             end=self.num_items)
         rebalance = self.cluster.async_rebalance(servers[:self.nodes_init],
-                                       [servers[int(self.nodes_init) - 1]], [])
+                                                 [servers[int(self.nodes_init) - 1]], [])
         rebalance.result()
         self.sleep(5)
         RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
@@ -2145,16 +2153,31 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             add_node_services = self.add_node_services.split("-")
 
         self.cluster.rebalance(servers, servers[2:], servers[:2],
-                                                    services=add_node_services)
+                               services=add_node_services)
         self.sleep(5)
         self.backupset.cluster_host = servers[2]
         """ Upgrade is done """
 
+        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+            for user in self.users_check_restore:
+                user_name = user.replace('[', '_').replace(']', '_')
+                testuser = [{'id': user_name, 'name': user_name,
+                             'password': 'password'}]
+                rolelist = [{'id': user_name, 'name': user_name,
+                             'roles': user}]
+
+                self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
+                                                                               servers[2].ip))
+                RbacBase().create_user_source(testuser, 'builtin', servers[2])
+
+                self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
+                                                                        testuser[0]["name"]))
+                RbacBase().add_user_role(rolelist, RestConnection(servers[2]), 'builtin')
+
         if self.backupset.number_of_backups_after_upgrade:
             self.backupset.number_of_backups += \
-                                 self.backupset.number_of_backups_after_upgrade
-            if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
-                self.add_built_in_server_user(node=self.backupset.cluster_host)
+                self.backupset.number_of_backups_after_upgrade
+
             for i in range(1, self.backupset.number_of_backups_after_upgrade + 2):
                 self._backup_restore_with_ops(node=self.backupset.cluster_host,
                                               repeats=1)
@@ -2166,25 +2189,35 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.backupset.end = len(self.backups)
             self.backup_merge_validate()
             self.backup_list()
-        self.bucket_helper.delete_bucket_or_assert(self.backupset.cluster_host,
-                                                               "default", self)
 
-        """ Re-create default bucket on upgrade cluster """
-        RestConnection(servers[2]).create_bucket(bucket='default',
-                                                      ramQuotaMB=512)
-        self.sleep(5)
-        self.total_buckets = len(self.buckets)
+        backupsets = [self.backupset]
+        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+            for user in self.users_check_restore:
+                new_backupset = copy.deepcopy(self.backupset)
+                new_backupset.restore_cluster_host_username = user.replace('[', '_').replace(']', '_')
+                backupsets.append(new_backupset)
+        for backupset in backupsets:
+            self.backupset = backupset
+            if self.bucket_flush:
+                self.log.info("Start to flush bucket")
+                rest = RestConnection(servers[2])
+                rest.flush_bucket()
+            else:
+                self.bucket_helper.delete_bucket_or_assert(self.backupset.cluster_host,
+                                                           "default", self)
+                """ Re-create default bucket on upgrade cluster """
+                RestConnection(servers[2]).create_bucket(bucket='default',
+                                                         ramQuotaMB=512)
+            self.sleep(5)
+            self.total_buckets = len(self.buckets)
 
-        """ Only server from Spock needs to add built-in user """
-        if "5" <= RestConnection(servers[2]).get_nodes_version()[:1]:
-            self.add_built_in_server_user(node=self.backupset.cluster_host)
-        if self.after_upgrade_merged:
-            self.backupset.end = 1
+            if self.after_upgrade_merged:
+                self.backupset.end = 1
 
-        """ restore back to cluster """
-        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
-        if self.create_gsi:
-            self.verify_gsi()
+            """ restore back to cluster """
+            self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+            if self.create_gsi:
+                self.verify_gsi()
 
     def test_backup_restore_with_python_sdk(self):
         """
@@ -2199,8 +2232,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         try:
             cb = Bucket('couchbase://' + self.backupset.cluster_host.ip + '/default',
-                                         username=self.master.rest_username,
-                                         password=self.master.rest_password)
+                        username=self.master.rest_username,
+                        password=self.master.rest_password)
             if cb is not None:
                 self.log.info("Established connection to bucket on cluster host using python SDK")
             else:
@@ -2222,13 +2255,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         try:
             cb = Bucket('couchbase://' + self.backupset.restore_cluster_host.ip + '/default',
-                                         username=self.master.rest_username,
-                                         password=self.master.rest_password)
+                        username=self.master.rest_username,
+                        password=self.master.rest_password)
             if cb is not None:
-                self.log.info("Established connection to bucket on restore host "\
+                self.log.info("Established connection to bucket on restore host " \
                               "using python SDK")
             else:
-                self.fail("Failed to establish connection to bucket on restore "\
+                self.fail("Failed to establish connection to bucket on restore " \
                           "host using python SDK")
         except Exception, ex:
             self.fail(str(ex))
@@ -2249,7 +2282,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail("CAS mismatch for key: {0}".format(key))
             if cluster_host_data[key]["flags"] != restore_host_data[key]["flags"]:
                 self.fail("Flags mismatch for key: {0}".format(key))
-        self.log.info("Successfully validated cluster host data cas and flags "\
+        self.log.info("Successfully validated cluster host data cas and flags " \
                       "against restore host data")
 
     def test_backup_restore_with_flush(self):
@@ -2283,7 +2316,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
         rest = RestConnection(self.backupset.cluster_host)
         rest.delete_bucket()
-        rest.create_bucket(bucket="default",ramQuotaMB=512)
+        rest.create_bucket(bucket="default", ramQuotaMB=512)
         self.log.info("Deleted default bucket and recreated it - restoring it now..")
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
@@ -2296,7 +2329,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        #['cbbackupmgr config [<args>]', '', 'Required Flags:', '', '  -a,--archive                The archive directory to use', '  -r,--repo                   The name of the backup repository to create and', '                              configure', '', 'Optional Flags:', '', '     --exclude-buckets        A comma separated list of buckets to exclude from', '                              backups. All buckets except for the ones specified', '                              will be backed up.', '     --include-buckets        A comma separated list of buckets to back up. Only', '                              buckets in this list are backed up.', '     --disable-bucket-config  Disables backing up bucket configuration', '                              information', '     --disable-views          Disables backing up view definitions', '     --disable-gsi-indexes    Disables backing up GSI index definitions', '     --disable-ft-indexes     Disables backing up Full Text index definitions', '     --disable-data           Disables backing up cluster data', '  -h,--help                   Prints the help message', '']
+        # ['cbbackupmgr config [<args>]', '', 'Required Flags:', '', '  -a,--archive                The archive directory to use', '  -r,--repo                   The name of the backup repository to create and', '                              configure', '', 'Optional Flags:', '', '     --exclude-buckets        A comma separated list of buckets to exclude from', '                              backups. All buckets except for the ones specified', '                              will be backed up.', '     --include-buckets        A comma separated list of buckets to back up. Only', '                              buckets in this list are backed up.', '     --disable-bucket-config  Disables backing up bucket configuration', '                              information', '     --disable-views          Disables backing up view definitions', '     --disable-gsi-indexes    Disables backing up GSI index definitions', '     --disable-ft-indexes     Disables backing up Full Text index definitions', '     --disable-data           Disables backing up cluster data', '  -h,--help                   Prints the help message', '']
         self.assertEqual(output[0], "cbbackupmgr config [<args>]", "Expected error message not thrown")
         cmd = "config --archive"
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -2319,7 +2352,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Backup repository creation failed: Backup Repository `backup` exists",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
 
     def test_backup_cluster_restore_negative_args(self):
         """
@@ -2358,22 +2391,27 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Error: Archive directory `abc` doesn't exist", "Expected error message not thrown")
-        cmd = cmd_to_test + " --archive {0} -c http://localhost:8091 -u Administrator -p password".format(self.backupset.directory)
+        cmd = cmd_to_test + " --archive {0} -c http://localhost:8091 -u Administrator -p password".format(
+            self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Flag required, but not specified: -r/--repo", "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo".format(self.backupset.directory)
-        command = "{0}/cbbackupmgr {1} -c http://localhost:8091 -u Administrator -p password -r".format(self.cli_command_location, cmd)
+        command = "{0}/cbbackupmgr {1} -c http://localhost:8091 -u Administrator -p password -r".format(
+            self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Expected argument for option: --repo", "Expected error message not thrown")
-        cmd = cmd_to_test + " --archive {0} --repo {1} -u Administrator -p password".format(self.backupset.directory, self.backupset.name)
+        cmd = cmd_to_test + " --archive {0} --repo {1} -u Administrator -p password".format(self.backupset.directory,
+                                                                                            self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -c/--cluster", "Expected error message not thrown")
-        cmd = cmd_to_test + " --archive {0} --repo {1} -c  -u Administrator -p password -r repo".format(self.backupset.directory, self.backupset.name)
+        self.assertEqual(output[0], "Flag required, but not specified: -c/--cluster",
+                         "Expected error message not thrown")
+        cmd = cmd_to_test + " --archive {0} --repo {1} -c  -u Administrator -p password -r repo".format(
+            self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -2385,7 +2423,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -u/--username", "Expected error message not thrown")
+        self.assertEqual(output[0], "Flag required, but not specified: -u/--username",
+                         "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} \
                               --username".format(self.backupset.directory,
                                                  self.backupset.name,
@@ -2486,49 +2525,49 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "cbbackupmgr compact [<args>]",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
         cmd = "compact --archive"
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Expected argument for option: --archive",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
         cmd = "compact --archive {0}".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Flag required, but not specified: -r/--repo",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
         cmd = "compact --archive {0} --repo".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Expected argument for option: --repo",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
         cmd = "compact --archive {0} --repo {1}".format(self.backupset.directory,
                                                         self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Flag required, but not specified: -/--backup",
-                                    "Expected error message not thrown")
-        cmd = "compact --archive {0} --repo {1} --backup"\
-                        .format(self.backupset.directory, self.backupset.name)
+                         "Expected error message not thrown")
+        cmd = "compact --archive {0} --repo {1} --backup" \
+            .format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Expected argument for option: --backup",
-                                    "Expected error message not thrown")
-        cmd = "compact --archive abc --repo {0} --backup {1}"\
-                                 .format(self.backupset.name, self.backups[0])
+                         "Expected error message not thrown")
+        cmd = "compact --archive abc --repo {0} --backup {1}" \
+            .format(self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error opening archive at abc due to `Not an archive directory"\
-                                            in output[-1],
-                                            "Expected error message not thrown")
-        cmd = "compact --archive {0} --repo abc --backup {1}"\
-                            .format(self.backupset.directory, self.backups[0])
+        self.assertTrue("Error opening archive at abc due to `Not an archive directory" \
+                        in output[-1],
+                        "Expected error message not thrown")
+        cmd = "compact --archive {0} --repo abc --backup {1}" \
+            .format(self.backupset.directory, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -2573,68 +2612,68 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Error merging data: Backup backup doesn't contain any backups",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
         self._take_n_backups(n=2)
         cmd = "merge --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1} --start bbb --end end".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Error merging data: Error restoring data, `bbb` is invalid start point",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Expected argument for option: --start", "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start {2}".format(self.backupset.directory,
-                                                              self.backupset.name, self.backups[0])
+                                                                  self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1} --end aa".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Error merging data: Error restoring data, `aa` is invalid end point",
-                                    "Expected error message not thrown")
+                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start {2} --end".format(self.backupset.directory,
-                                                              self.backupset.name, self.backups[0])
+                                                                        self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertEqual(output[0], "Expected argument for option: --end", "Expected error message not thrown")
         cmd = "merge --archive abc --repo {0} --start {1} --end {2}".format(self.backupset.name,
-                                                                        self.backups[0], self.backups[1])
+                                                                            self.backups[0], self.backups[1])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertTrue("Error: Archive directory `abc` doesn't exist" in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo abc --start {1} --end {2}".format(self.backupset.directory,
-                                                                        self.backups[0], self.backups[1])
+                                                                            self.backups[0], self.backups[1])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertTrue("Error merging data: Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start abc --end {2}".format(self.backupset.directory,
-                                                                        self.backupset.name, self.backups[1])
+                                                                            self.backupset.name, self.backups[1])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertTrue("Error merging data: Error restoring data, `abc` is invalid start point" in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start {2} --end abc".format(self.backupset.directory,
-                                                                        self.backupset.name, self.backups[0])
+                                                                            self.backupset.name, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertTrue("Error merging data: Error restoring data, `abc` is invalid end point" in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start {2} --end {3}".format(self.backupset.directory,
-                                                                        self.backupset.name,
-                                                                        self.backups[1],self.backups[0])
+                                                                            self.backupset.name,
+                                                                            self.backups[1], self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.assertTrue("Error merging data: start point `{0}` is after end point `{1}`".format
-                                                    (self.backups[1], self.backups[0]) in output[-1],
+                        (self.backups[1], self.backups[0]) in output[-1],
                         "Expected error message not thrown")
 
     def test_backup_remove_negative_args(self):
@@ -2707,7 +2746,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_target = RestConnection(self.backupset.restore_cluster_host)
         rest_target.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['kv','index'])
+                             self.input.clusters[0][1].ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
@@ -2716,7 +2755,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                              prefix + default_ddoc_name,
                                              default_view_name, query, timeout=30)
             self.assertEqual(len(result['rows']), self.num_items,
-                    "Querying view on restore cluster did not return expected number of items")
+                             "Querying view on restore cluster did not return expected number of items")
             self.log.info("Querying view on restore cluster returned expected number of items")
         except TimeoutError:
             self.fail("View could not be queried in restore cluster within timeout")
@@ -2736,13 +2775,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100),
-                                 start=0, end=self.num_items)
+                                start=0, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
 
-        cmd = "cbindex -type create -bucket default -using plasma -index age -fields=age "\
-                                  " -auth %s:%s" % (self.master.rest_username,
-                                                    self.master.rest_password)
+        cmd = "cbindex -type create -bucket default -using plasma -index age -fields=age " \
+              " -auth %s:%s" % (self.master.rest_username,
+                                self.master.rest_password)
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
@@ -2859,7 +2898,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
         gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0,
-                                                                 end=self.num_items)
+                                end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         index_definition = INDEX_DEFINITION
@@ -2881,7 +2920,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         try:
             status, content = rest_target_fts.get_fts_index_definition(index_name)
             self.assertTrue(status and content['status'] == 'ok',
-                             "FTS index not found in restore cluster as expected")
+                            "FTS index not found in restore cluster as expected")
             self.log.info("FTS index found in restore cluster as expected")
         finally:
             rest_src_fts.delete_fts_index(index_name)
@@ -2941,7 +2980,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             val = int(val)
         return val
 
-    def load_to_dgm(self, active = 75, ttl = 0):
+    def load_to_dgm(self, active=75, ttl=0):
         """
         decides how many items to load to enter active% dgm state
         where active is an integer value between 0 and 100
@@ -2952,7 +2991,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         # go into heavy dgm
         while curr_active > active:
             curr_items = self.stat('curr_items')
-            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size , start=curr_items + 1, end=curr_items+50000)
+            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size, start=curr_items + 1, end=curr_items + 50000)
             try:
                 self._load_all_buckets(self.master, gen_create, "create", ttl)
             except:
