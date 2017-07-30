@@ -53,7 +53,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
         self.users_check_restore = self.input.param("users-check-restore", '').replace("ALL", "*").split(";")
-        self.users_check_restore.remove('')
+        if '' in self.users_check_restore:
+            self.users_check_restore.remove('')
         for server in [self.backupset.backup_host, self.backupset.restore_cluster_host]:
             conn = RemoteMachineShellConnection(server)
             conn.extract_remote_info()
@@ -2079,7 +2080,32 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         print "************** cb version: ", self.cb_version
         if "5" <= self.cb_version[:1]:
             self.add_built_in_server_user()
-        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+            for user in self.users_check_restore:
+                user_name = user.replace('[', '_').replace(']', '_')
+                testuser = [{'id': user_name, 'name': user_name,
+                             'password': 'password'}]
+                rolelist = [{'id': user_name, 'name': user_name,
+                             'roles': user}]
+
+                self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
+                                                                               self.master.ip))
+                RbacBase().create_user_source(testuser, 'builtin', self.master)
+
+                self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
+                                                                        testuser[0]["name"]))
+                RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
+
+        backupsets = [self.backupset]
+        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+            for user in self.users_check_restore:
+                new_backupset = copy.deepcopy(self.backupset)
+                new_backupset.restore_cluster_host_username = user.replace('[', '_').replace(']', '_')
+                backupsets.append(new_backupset)
+        for backupset in backupsets:
+            self.backupset = backupset
+            self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+            self.bucket_helper.delete_bucket_or_assert(self.backupset.cluster_host,
+                                                       "default", self)
 
     def test_backup_restore_after_online_upgrade(self):
         """
