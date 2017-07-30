@@ -53,6 +53,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
         self.users_check_restore = self.input.param("users-check-restore", '').replace("ALL", "*").split(";")
+        self.users_check_restore.remove('')
         for server in [self.backupset.backup_host, self.backupset.restore_cluster_host]:
             conn = RemoteMachineShellConnection(server)
             conn.extract_remote_info()
