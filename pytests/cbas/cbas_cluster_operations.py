@@ -10,6 +10,7 @@ class CBASClusterOperations(CBASBaseTest):
         self.input.test_params.update({"default_bucket":False})
         self.rebalanceServers = None
         self.nodeType = "KV"        
+        self.wait_for_rebalance=True
         super(CBASClusterOperations, self).setUp()
         
         self.create_default_bucket()
@@ -19,6 +20,7 @@ class CBASClusterOperations(CBASBaseTest):
         
         if self.nodeType == "KV":
             self.rebalanceServers = self.kv_servers
+            self.wait_for_rebalance=False
         elif self.nodeType == "CBAS":
             self.rebalanceServers = [self.cbas_node] + self.cbas_servers
             
@@ -71,7 +73,7 @@ class CBASClusterOperations(CBASBaseTest):
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
 
         self.setup_for_test()
-        self.add_node(node=self.rebalanceServers[1], rebalance=True, wait_for_rebalance_completion=False)
+        self.add_node(node=self.rebalanceServers[1], rebalance=True, wait_for_rebalance_completion=self.wait_for_rebalance)
         self.log.info("Rebalance state:%s"%self.rest._rebalance_progress_status())
         
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create",
@@ -111,7 +113,7 @@ class CBASClusterOperations(CBASBaseTest):
         for node in nodes:
             if node.ip == self.rebalanceServers[1].ip:
                 otpnodes.append(node)
-        self.remove_node(otpnodes, wait_for_rebalance=False)
+        self.remove_node(otpnodes, wait_for_rebalance=self.wait_for_rebalance)
         self.log.info("Rebalance state:%s"%self.rest._rebalance_progress_status())
         
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create",
@@ -149,7 +151,7 @@ class CBASClusterOperations(CBASBaseTest):
                 otpnodes.append(node)
                 
         self.add_node(node=self.rebalanceServers[1], rebalance=False)
-        self.remove_node(otpnodes, wait_for_rebalance=False)
+        self.remove_node(otpnodes, wait_for_rebalance=self.wait_for_rebalance)
         self.master = self.rebalanceServers[1]
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create",
                                                self.num_items,

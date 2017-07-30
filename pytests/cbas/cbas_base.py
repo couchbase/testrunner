@@ -174,8 +174,8 @@ class CBASBaseTest(BaseTestCase):
             removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
                                               ejectedNodes=[node.id for node in otpnode],
                                               wait_for_rebalance=wait_for_rebalance)
-            
-        self.assertTrue(removed, "Rebalance operation failed while removing %s cbas nodes,"%self.cbas_servers)
+        if wait_for_rebalance:
+            self.assertTrue(removed, "Rebalance operation failed while removing %s,"%otpnode)
         
     def load_sample_buckets(self, servers=None, bucketName=None, total_items=None):
         """ Load the specified sample bucket in Couchbase """
