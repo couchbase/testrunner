@@ -2206,8 +2206,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.backupset.number_of_backups_after_upgrade:
             self.backupset.number_of_backups += \
                 self.backupset.number_of_backups_after_upgrade
-
+            if "5" <= self.cb_version[:1]:
+                self.add_built_in_server_user(node=self.backupset.cluster_host)
             for i in range(1, self.backupset.number_of_backups_after_upgrade + 2):
+                self.log.info("_backup_restore_with_ops #{0} started...".format(i))
                 self._backup_restore_with_ops(node=self.backupset.cluster_host,
                                               repeats=1)
             self.backup_list()
