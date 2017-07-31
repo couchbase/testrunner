@@ -21,7 +21,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.initial_version = self.input.param('initial_version', '4.6.0-3653')
         self.post_upgrade_gsi_type = self.input.param('post_upgrade_gsi_type', 'memory_optimized')
         self.upgrade_to = self.input.param("upgrade_to")
-        self.use_replica = self.input.param("use_replica", True)
+        self.index_batch_size = self.input.param("index_batch_size", -1)
+        self.toggle_disable_upgrade = self.input.param("toggle_disable_upgrade", False)
         query_template = QUERY_TEMPLATE
         query_template = query_template.format("job_title")
         self.whereCondition= self.input.param("whereCondition"," job_title != \"Sales\" ")
@@ -29,7 +30,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 3)
         for x in range(self.initial_index_number):
-            index_name = "index_name_"+str(x)
+            index_name = "index_name_"+ str(x)
             query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
                                 query_template=query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
@@ -214,6 +215,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             except Exception, ex:
                 msg = "queryport.indexNotFound"
                 self.assertIn(msg, str(ex), str(ex))
+            if self.toggle_disable_upgrade:
+                self.disable_plasma_upgrade = not self.toggle_disable_upgrade
 
     def test_online_upgrade_with_failover(self):
         before_tasks = self.async_run_operations(buckets=self.buckets,
@@ -226,8 +229,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                      [self.nodes_in_list[0]], [],
                                                      services=["index"])
             rebalance.result()
-            self.disable_upgrade_to_plasma(self.nodes_in_list[0])
         for i in range(len(self.nodes_out_list)):
+            if self.rebalance_empty_node:
+                self.disable_upgrade_to_plasma(self.nodes_in_list[0])
+                self.set_batch_size(self.nodes_in_list[0], self.index_batch_size)
             node = self.nodes_out_list[i]
             node_rest = RestConnection(node)
             node_info = "{0}:{1}".format(node.ip, node.port)
@@ -277,6 +282,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 self._remove_equivalent_indexes(node)
                 self.sleep(60)
                 self._verify_indexer_storage_mode(node)
+                self._verify_throttling(node)
             if "create_index" in ops_map and not self.build_index_after_create:
                 index_name_list = []
                 for query_definition in self.query_definitions:
@@ -290,6 +296,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
             self._execute_prepare_statement(prepare_statements)
+            if self.toggle_disable_upgrade:
+                self.disable_plasma_upgrade = not self.disable_plasma_upgrade
 
     def test_upgrade_with_memdb(self):
         """
@@ -526,6 +534,34 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.multi_create_index(buckets=buckets,query_definitions=self.query_definitions)
         self.multi_query_using_index(buckets=buckets, query_definitions=self.query_definitions)
         self._verify_gsi_rebalance()
+
+    def test_downgrade_plasma_to_fdb(self):
+        before_tasks = self.async_run_operations(buckets=self.buckets,
+                                                 phase="before")
+        self._run_tasks([before_tasks])
+        indexer_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(indexer_node)
+        rest.set_downgrade_storage_mode_with_rest(self.disable_plasma_upgrade)
+        failover_task = self.cluster.async_failover(
+                [self.master],
+                failover_nodes=[indexer_node],
+                graceful=False)
+        failover_task.result()
+        log.info("Node Failed over...")
+        rest = RestConnection(self.master)
+        nodes_all = rest.node_statuses()
+        for cluster_node in nodes_all:
+            if cluster_node.ip == indexer_node.ip:
+                log.info("Adding Back: {0}".format(indexer_node))
+                rest.add_back_node(cluster_node.id)
+                rest.set_recovery_type(otpNode=cluster_node.id,
+                                       recoveryType="full")
+        log.info("Adding node back to cluster...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+        rebalance.result()
+        self.sleep(20)
+        self._verify_indexer_storage_mode(indexer_node)
+        self.multi_query_using_index()
 
     def kv_mutations(self, docs=None):
         if not docs:
@@ -784,6 +820,22 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         remote.start_server()
         self.sleep(30)
 
+    def set_batch_size(self, indexer_node, batch_size=5):
+        rest = RestConnection(indexer_node)
+        doc = {"indexer.settings.build.batch_size": batch_size}
+        rest.set_index_settings(doc)
+        self.sleep(10)
+        remote = RemoteMachineShellConnection(indexer_node)
+        remote.stop_server()
+        self.sleep(30)
+        remote.start_server()
+        self.sleep(30)
+
+    def get_batch_size(self, indexer_node):
+        rest = RestConnection(indexer_node)
+        json_settings = rest.get_index_settings()
+        return json_settings["indexer.settings.build.batch_size"]
+
     def _verify_indexer_storage_mode(self, indexer_node):
         indexer_info = "{0}:8091".format(indexer_node.ip)
         rest = RestConnection(indexer_node)
@@ -803,3 +855,25 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                         if index_val["hosts"] == indexer_info:
                             self.assertEqual(index_val["indexType"], gsi_type,
                                          "GSI type is not {0} after upgrade for index {1}".format(gsi_type, index_val["name"]))
+
+    def _verify_throttling(self, indexer_node):
+        indexer_info = "{0}:8091".format(indexer_node.ip)
+        rest = RestConnection(indexer_node)
+        index_metadata = rest.get_indexer_metadata()["status"]
+        index_building = 0
+        index_created = 0
+        for index_val in index_metadata:
+            if index_val["hosts"] == indexer_info:
+                index_building = index_building + (index_val["status"].lower() == "building")
+                index_created = index_created + (index_val["status"].lower() == "created")
+        batch_size = self.get_batch_size(indexer_node)
+        self.assertGreaterEqual(batch_size, -1, "Batch size is less than -1. Failing")
+        if batch_size == -1:
+            self.assertEqual(index_created, 0, "{0} indexes are in created state when batch size is -1".format(index_created))
+            return
+        if batch_size == 0:
+            self.assertEqual(index_created, 0, "{0} indexes are in building when batch size is 0".format(index_building))
+            return
+        if batch_size > 0:
+            self.assertLessEqual(index_building, batch_size, "{0} indexes are in building when batch size is {1}".format(index_building, batch_size))
+            return

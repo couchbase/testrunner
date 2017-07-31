@@ -23,6 +23,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.verify_query_result= self.input.param("verify_query_result",True)
         self.verify_explain_result= self.input.param("verify_explain_result",True)
         self.defer_build= self.input.param("defer_build",True)
+        self.build_index_after_create = self.input.param("build_index_after_create", True)
         self.run_query_with_explain= self.input.param("run_query_with_explain",True)
         self.run_query= self.input.param("run_query",True)
         self.graceful = self.input.param("graceful",False)
@@ -63,12 +64,13 @@ class BaseSecondaryIndexingTests(QueryTests):
     def create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         create_task = self.async_create_index(bucket, query_definition, deploy_node_info, desc=desc)
         create_task.result()
-        if self.defer_build:
-            build_index_task = self.async_build_index(bucket, [query_definition.index_name])
-            build_index_task.result()
-        check = self.n1ql_helper.is_index_ready_and_in_list(bucket, query_definition.index_name,
+        if self.build_index_after_create:
+            if self.defer_build:
+                build_index_task = self.async_build_index(bucket, [query_definition.index_name])
+                build_index_task.result()
+            check = self.n1ql_helper.is_index_ready_and_in_list(bucket, query_definition.index_name,
                                                             server=self.n1ql_node)
-        self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
+            self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition, deploy_node_info=None, desc=None):
         index_where_clause = None
@@ -162,7 +164,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         create_index_tasks.append(self.async_create_index(bucket.name,
                             query_definition, deploy_node_info = self.deploy_node_info))
                     self.sleep(3)
-        if self.defer_build:
+        if self.defer_build and self.build_index_after_create:
             index_list = []
             for task in create_index_tasks:
                 task.result()
