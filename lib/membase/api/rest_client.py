@@ -2127,7 +2127,7 @@ class RestConnection(object):
                            'ramQuotaMB': ramQuotaMB,
                            'authType': authType,
                            'replicaNumber': replicaNumber,
-                           'proxyPort': proxyPort,
+                           #'proxyPort': proxyPort,
                            'bucketType': bucketType,
                            'replicaIndex': replica_index,
                            'threadsNumber': threadsNumber,
