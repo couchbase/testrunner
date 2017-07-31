@@ -713,7 +713,8 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue(self.isClusterInitialized(server), "Cluster was not initialized")
             self.assertTrue(self.verifyServices(server, services), "Services do not match")
             self.assertTrue(self.verifyNotificationsEnabled(server), "Notification not enabled")
-            self.assertTrue(self.verifyClusterName(server, name), "Cluster name does not match")
+            self.assertTrue(self.verifyClusterName(server, "init/edit %s" % server.ip),
+                                                           "Cluster name does not match")
 
             if "index" in services:
                 self.assertTrue(self.verifyIndexSettings(server, None, None, None, index_storage_mode, None, None),
