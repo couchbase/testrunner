@@ -2109,7 +2109,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
 
-    def couchbase_uninstall(self, windows_msi=False):
+    def couchbase_uninstall(self, windows_msi=False, product=None):
         log.info('{0} *****In couchbase uninstall****'.format( self.ip))
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
@@ -2330,7 +2330,11 @@ class RemoteMachineShellConnection:
                 else:
                     if sv in COUCHBASE_FROM_VERSION_4:
                         if self.is_enterprise(type):
-                            uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                            if product is not None and product == "cbas":
+                                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                                        .format("couchbase-server-analytics", "couchbase-server-analytics")
+                            else:
+                                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
                                         .format("couchbase-server", "couchbase-server")
                         else:
                             uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
@@ -2360,7 +2364,10 @@ class RemoteMachineShellConnection:
                     self.log_command_output(output, error)
                     if sv in COUCHBASE_FROM_VERSION_4:
                         if self.is_enterprise(type):
-                            uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
+                            if product is not None and product == "cbas":
+                                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server-analytics")
+                            else:
+                                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
                         else:
                             uninstall_cmd = 'rpm -e {0}' \
                                           .format("couchbase-server-community")

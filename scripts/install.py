@@ -132,7 +132,7 @@ class Installer(object):
         #remote_client.membase_uninstall()
 
         self.msi = 'msi' in params and params['msi'].lower() == 'true'
-        remote_client.couchbase_uninstall(windows_msi=self.msi)
+        remote_client.couchbase_uninstall(windows_msi=self.msi,product=params['product'])
         remote_client.disconnect()
 
 
