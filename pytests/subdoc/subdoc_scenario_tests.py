@@ -67,25 +67,24 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
         rebalance.result()
 
     def test_failover(self):
-        try:
-            self.run_async_data()
-            servr_out = self.nodes_out_list
-            failover_task = self.cluster.async_failover([self.master],
+        self.run_async_data()
+        servr_out = self.nodes_out_list
+        failover_task = self.cluster.async_failover([self.master],
                                                         failover_nodes=servr_out, graceful=self.graceful)
-            failover_task.result()
-            if self.graceful:
-                # Check if rebalance is still running
-                msg = "graceful failover failed for nodes"
-                self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+        failover_task.result()
+        if self.graceful:
+            # Check if rebalance is still running
+            msg = "graceful failover failed for nodes"
+            self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [], servr_out)
-            self.run_mutation_operations_for_situational_tests()
-            self.sleep(120, "Wait for rebalance")
-            for t in self.load_thread_list:
-                if t.is_alive():
-                    if t is not None:
-                        t.signal = False
-            rebalance.result()
+        self.run_mutation_operations_for_situational_tests()
+        self.sleep(120, "Wait for rebalance")
+        for t in self.load_thread_list:
+            if t.is_alive():
+                if t is not None:
+                    t.signal = False
+        rebalance.result()
 
     def test_failover_add_back(self):
         self.run_async_data()
