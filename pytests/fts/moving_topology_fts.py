@@ -884,7 +884,7 @@ class MovingTopFTS(FTSBaseTest):
         reb_thread.start()
         self.sleep(15)
         index = self._cb_cluster.get_fts_index_by_name('default_index_1')
-        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        new_plan_param = {"maxPartitionsPerPIndex": 64}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
@@ -926,7 +926,7 @@ class MovingTopFTS(FTSBaseTest):
         reb_thread.start()
         self.sleep(15)
         index = self._cb_cluster.get_fts_index_by_name('default_index_1')
-        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        new_plan_param = {"maxPartitionsPerPIndex": 128}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
@@ -1003,7 +1003,7 @@ class MovingTopFTS(FTSBaseTest):
             name="failover",
             args=())
         index = self._cb_cluster.get_fts_index_by_name('default_index_1')
-        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        new_plan_param = {"maxPartitionsPerPIndex": 128}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
@@ -1179,16 +1179,17 @@ class MovingTopFTS(FTSBaseTest):
             "removing node(s) {0} from cluster".format(ejected_nodes))
 
         while count<5:
+            if RestHelper(rest).is_cluster_rebalanced():
+                self.log.info("Rebalance is finished already.")
+                break
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=ejected_nodes)
-            self.sleep(30)
             stopped = rest.stop_rebalance()
+            self.sleep(1)
             self.assertTrue(stopped, msg="unable to stop rebalance")
             count += 1
 
-        if RestHelper(rest).is_cluster_rebalanced():
-            self.log.info("Rebalance is finished already.")
-        else:
+        if not RestHelper(rest).is_cluster_rebalanced():
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=ejected_nodes)
 
