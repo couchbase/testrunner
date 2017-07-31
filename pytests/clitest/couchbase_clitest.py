@@ -686,7 +686,8 @@ class CouchbaseCliTest(CliBaseTest):
             rest.force_eject_node()
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.cluster_init(data_ramsize, index_ramsize, fts_ramsize, services, index_storage_mode, name,
+        stdout, _, _ = cli.cluster_init(data_ramsize, index_ramsize, fts_ramsize,
+                                        services, index_storage_mode, name,
                                         username, password, port)
 
         if username:
@@ -706,8 +707,9 @@ class CouchbaseCliTest(CliBaseTest):
             if port:
                 server.port = port
 
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Cluster initialized"),
-                            "Expected command to succeed")
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
+                                                     "init/edit %s" % server.ip),
+                                                     "Expected command to succeed")
             self.assertTrue(self.isClusterInitialized(server), "Cluster was not initialized")
             self.assertTrue(self.verifyServices(server, services), "Services do not match")
             self.assertTrue(self.verifyNotificationsEnabled(server), "Notification not enabled")
