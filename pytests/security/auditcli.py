@@ -132,7 +132,7 @@ class auditcli(BaseTestCase):
                                    'groupUUID':"0", 'node':'ns_1@' + self.servers[num + 1].ip, 'source':source,
                                    'user':self.master.rest_username, "real_userid:user":self.ldapUser, "ip":'127.0.0.1', "remote:port":57457}
             self.checkConfig(self.eventID, self.master, expectedResults)
-            expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.servers[num + 1].ip, "ns_1@" + self.master.ip],
+            expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
                                     'ejected_nodes':[], 'source':'ns_server', 'source':source, 'user':self.master.rest_username,
                                     "ip":'127.0.0.1', "port":57457, "real_userid:user":self.ldapUser}
             self.checkConfig(8200, self.master, expectedResults)
@@ -144,7 +144,7 @@ class auditcli(BaseTestCase):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
                 #expectedResults = {'node':'ns_1@' + self.servers[num + 1].ip, 'source':source, 'user':self.master.rest_username, "ip":'127.0.0.1', "port":57457}
                 #self.checkConfig(self.eventID, self.master, expectedResults)
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.servers[num + 1].ip, "ns_1@" + self.master.ip],
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
                                     'ejected_nodes':["ns_1@" + self.servers[num + 1].ip], 'source':source, 'user':self.master.rest_username,
                                     "ip":'127.0.0.1', "port":57457, "real_userid:user":self.ldapUser}
                 self.checkConfig(8200, self.master, expectedResults)
@@ -547,7 +547,7 @@ class XdcrCLITest(CliBaseTest):
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
             expectedResults = {"real_userid:source":self.source, "user":self.__user,
                                "cluster_name":"remote", "cluster_hostname":self.servers[xdcr_hostname].ip + ":8091",
-                               "is_encrypted":False}
+                               "is_encrypted":False, 'encryption_type':''}
             self.checkConfig(16385, self.master, expectedResults)
 
         if not xdcr_cluster_name:

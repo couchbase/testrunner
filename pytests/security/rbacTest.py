@@ -128,6 +128,7 @@ class rbacTest(ldaptest):
         for user in user_list:
             status, content, header =  rbacmain(self.master,self.auth_type)._set_user_roles(user_name=user[0],payload=payload)
             self.assertFalse(status,"Incorrect status for incorrect role name")
+            msg = '\"' + msg + '\"'
             if msg != content:
                 self.assertFalse(True,"Message shown is incorrect")
 
@@ -138,6 +139,7 @@ class rbacTest(ldaptest):
         for user in user_list:
             status, content, header =  rbacmain(self.master,self.auth_type)._set_user_roles(user_name=user[0],payload=payload)
             self.assertFalse(status,"Incorrect status for incorrect role name")
+            msg = '\"' + msg + '\"'
             if msg != content:
                 self.assertFalse(True,"Message shown is incorrect")
 
