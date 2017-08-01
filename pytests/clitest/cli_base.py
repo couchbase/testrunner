@@ -127,7 +127,7 @@ class CliBaseTest(BaseTestCase):
             for line in output:
                 if line == "ERROR: " + message:
                     return True
-                if message in line:
+                if message.lower() in line.lower():
                     return True
             log.info("Did not receive expected error message `ERROR: %s`", message)
             return False

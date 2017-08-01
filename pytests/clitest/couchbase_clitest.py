@@ -685,10 +685,19 @@ class CouchbaseCliTest(CliBaseTest):
             rest = RestConnection(server)
             rest.force_eject_node()
 
-        cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.cluster_init(data_ramsize, index_ramsize, fts_ramsize,
+            cli = CouchbaseCLI(server, username, password)
+            stdout, _, _ = cli.cluster_init(data_ramsize, index_ramsize, fts_ramsize,
                                         services, index_storage_mode, name,
                                         username, password, port)
+        else:
+            shell = RemoteMachineShellConnection(server)
+            cmd = "%s%scouchbase-cli cluster-init  --cluster=%s:8091 "\
+                                    % (self.cli_command_path, self.cmd_ext, server.ip)
+            cmd += "-u %s -p %s " % (username, password)
+            if data_ramsize:
+                cmd += "--cluster-ramsize %s" % data_ramsize
+            stdout, error = shell.execute_command(cmd)
+            shell.disconnect()
 
         if username:
             server.rest_username = username
