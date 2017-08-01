@@ -2024,14 +2024,8 @@ class QueriesIndexTests(QueryTests):
 
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
-
                 self.assertTrue("covers" in str(plan))
-                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ("cover ((distinct (array (all (array `j` for `j` in `i` end)) for `i` in (`default`.`tasks`) end)))"))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][1]) == ("cover ((`default`.`department`))"))
-                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][2]) == ("cover ((`default`.`tasks`))" ))
-                self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][3]) == ("cover ((`default`.`name`))" ))
-                #self.assertTrue(str(plan['~children'][0]['~children'][0]['scan'][0]['covers'][4]) == ("cover ((meta(`default`).`id`))" ))
-
+                self.assertTrue(len(plan['~children'][0]['~children'][0]['scan']['covers']) == 5)
 
                 self.query = "select %s.name from %s  UNNEST tasks as i UNNEST i as j WHERE j = 'Search'  " % (
                 bucket.name,bucket.name) + \
