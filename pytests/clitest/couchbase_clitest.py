@@ -687,8 +687,12 @@ class CouchbaseCliTest(CliBaseTest):
 
             cli = CouchbaseCLI(server, username, password)
             stdout, _, _ = cli.cluster_init(data_ramsize, index_ramsize, fts_ramsize,
-                                        services, index_storage_mode, name,
-                                        username, password, port)
+                                                services, index_storage_mode, name,
+                                                username, password, port)
+            if name:
+                stdoutname, _ , _ = cli.setting_cluster(data_ramsize, index_ramsize,
+                                                        fts_ramsize, name, username,
+                                                        password, port)
         else:
             shell = RemoteMachineShellConnection(server)
             cmd = "%s%scouchbase-cli cluster-init  --cluster=%s:8091 "\
@@ -715,30 +719,41 @@ class CouchbaseCliTest(CliBaseTest):
             # Update the cluster manager port if it was specified to be changed
             if port:
                 server.port = port
-
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
                                                      "init/edit %s" % server.ip),
                                                      "Expected command to succeed")
-            self.assertTrue(self.isClusterInitialized(server), "Cluster was not initialized")
-            self.assertTrue(self.verifyServices(server, services), "Services do not match")
-            self.assertTrue(self.verifyNotificationsEnabled(server), "Notification not enabled")
-            self.assertTrue(self.verifyClusterName(server, "init/edit %s" % server.ip),
+            self.assertTrue(self.isClusterInitialized(server),
+                                                 "Cluster was not initialized")
+            self.assertTrue(self.verifyServices(server, services),
+                                                 "Services do not match")
+            self.assertTrue(self.verifyNotificationsEnabled(server),
+                                                 "Notification not enabled")
+            if name:
+                self.assertTrue(self.verifyCommandOutput(stdoutname, expect_error,
+                                                         "set cluster settings"),
+                                                         "Expected command to succeed")
+                self.assertTrue(self.verifyClusterName(server, name),
                                                            "Cluster name does not match")
 
             if "index" in services:
-                self.assertTrue(self.verifyIndexSettings(server, None, None, None, index_storage_mode, None, None),
+                self.assertTrue(self.verifyIndexSettings(server, None, None, None,
+                                                         index_storage_mode, None, None),
                                 "Index storage mode not properly set")
 
-            self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize, fts_ramsize),
-                            "Ram quotas not set properly")
+            self.assertTrue(self.verifyRamQuotas(server, data_ramsize,
+                                                 index_ramsize, fts_ramsize),
+                                                 "Ram quotas not set properly")
         else:
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg), "Expected error message not found")
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                                                     "Expected error message not found")
             if not initialized:
-                self.assertTrue(not self.isClusterInitialized(server), "Cluster was initialized, but error was received")
+                self.assertTrue(not self.isClusterInitialized(server),
+                                      "Cluster was initialized, but error was received")
 
         # Reset the cluster (This is important for when we change the port number)
         rest = RestConnection(server)
-        rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port)
+        rest.init_cluster(initial_server.rest_username, initial_server.rest_password,
+                                                        initial_server.port)
 
     def testRebalanceStop(self):
         username = self.input.param("username", None)
