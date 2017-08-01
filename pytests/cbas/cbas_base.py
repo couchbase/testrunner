@@ -60,6 +60,10 @@ class CBASBaseTest(BaseTestCase):
         self.compiler_param_val = self.input.param('compiler_param_val', None)
         self.expect_reject = self.input.param('expect_reject', False)
         self.expect_failure = self.input.param('expect_failure', False)
+        self.index_name = self.input.param('index_name',None)
+        self.index_fields = self.input.param('index_fields', None)
+        if self.index_fields:
+            self.index_fields = self.index_fields.split("-")
         self.otpNodes = []
 
         self.rest = RestConnection(self.master)
@@ -736,4 +740,44 @@ class CBASBaseTest(BaseTestCase):
                 self.rejected_count += 1
             else:
                 self.log.error(str(e))
+
+    def verify_index_created(self, index_name, index_fields, dataset):
+        result = True
+
+        statement = "select * from Metadata.`Index` where DatasetName='{0}' and IsPrimary=False".format(
+            dataset)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        if status != "success":
+            result = False
+            self.log.info("Index not created. Metadata query status = %s",
+                          status)
+        else:
+            index_found = False
+            for index in results:
+                if index["Index"]["IndexName"] == index_name:
+                    index_found = True
+                    field_names = []
+                    for index_field in index_fields:
+                        if "meta()".lower() in index_field:
+                            field_names.append(index_field.split(".")[1])
+                        else:
+                            field_names.append(str(index_field.split(":")[0]))
+                            field_names.sort()
+                    self.log.info(field_names)
+                    actual_field_names = []
+                    for index_field in index["Index"]["SearchKey"]:
+                        if type(index_field) is list:
+                            index_field = ".".join(index_field)
+                        actual_field_names.append(str(index_field))
+                        actual_field_names.sort()
+
+                    actual_field_names.sort()
+                    self.log.info(actual_field_names)
+                    if field_names != actual_field_names:
+                        result = False
+                        self.log.info("Index fields not correct")
+                    break
+            result &= index_found
+        return result
                 
