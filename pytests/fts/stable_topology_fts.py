@@ -245,14 +245,12 @@ class StableTopFTS(FTSBaseTest):
         # create "emp" bucket
         self._cb_cluster.create_standard_buckets(bucket_size=1000,
                                                  name="emp",
-                                                 port=11234,
                                                  num_replicas=0)
         emp = self._cb_cluster.get_bucket_by_name('emp')
 
         # create "wiki" bucket
         self._cb_cluster.create_standard_buckets(bucket_size=1000,
                                                  name="wiki",
-                                                 port=11235,
                                                  num_replicas=0)
         wiki = self._cb_cluster.get_bucket_by_name('wiki')
 

@@ -1038,6 +1038,8 @@ class MovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
 
         # Stop Persistence on Node A & Node B
+        self.log.info("Stopping persistence on {0}".
+                      format(self._input.servers[:2]))
         mem_client = MemcachedClientHelper.direct_client(self._input.servers[0],
                                                          bucket)
         mem_client.stop_persistence()
@@ -1065,11 +1067,14 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info("Docs in Bucket : %s, Docs in Index : %s" % (
             before_bucket_doc_count, before_index_doc_count))
 
-        # Kill memcached on Node A so that Node B becomes master
+        # Kill memcached on Node A
+        self.log.info("Killing memcached on {0}".format(self._master.ip))
         shell = RemoteMachineShellConnection(self._master)
         shell.kill_memcached()
 
         # Start persistence on Node B
+        self.log.info("Starting persistence on {0}".
+                      format(self._input.servers[1].ip))
         mem_client = MemcachedClientHelper.direct_client(self._input.servers[1],
                                                          bucket)
         mem_client.start_persistence()
@@ -1080,7 +1085,7 @@ class MovingTopFTS(FTSBaseTest):
         failover_task.result()
 
         # Wait for Failover & FTS index rollback to complete
-        self.sleep(10)
+        self.wait_for_indexing_complete()
 
         # Run FTS query to fetch count of mutated items post rollback.
         for index in self._cb_cluster.get_indexes():
@@ -1094,14 +1099,18 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info("Docs in Bucket : %s, Docs in Index : %s"
                       % (after_bucket_doc_count, after_index_doc_count))
 
-        # Validation : If there are deletes, validate the #docs in index goes up post rollback
+        # Validation : If there are deletes, validate the #docs in index goes
+        #  up post rollback
         if self._input.param("delete", False):
             self.assertGreater(after_index_doc_count, before_index_doc_count,
-                               "Deletes : Index count after rollback not greater than before rollback")
+                               "Deletes : Index count after rollback not "
+                               "greater than before rollback")
         else:
-            # For Updates, validate that #hits goes down in the query output post rollback
+            # For Updates, validate that #hits goes down in the query output
+            # post rollback
             self.assertGreater(hits1, hits2,
-                               "Mutated items before rollback are not more than after rollback")
+                               "Mutated items before rollback are not more "
+                               "than after rollback")
 
         # Failover FTS node
         failover_fts_node = self._input.param("failover_fts_node", False)
