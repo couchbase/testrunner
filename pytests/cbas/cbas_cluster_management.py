@@ -450,7 +450,7 @@ class CBASClusterManagement(CBASBaseTest):
         Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
-        self.add_node(self.cbas_servers[0], services=["cbas"])
+        otpNode = self.add_node(self.cbas_servers[0], services=["cbas"])
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
         self.add_node(self.cbas_servers[1], services=["cbas"])
         
@@ -459,10 +459,7 @@ class CBASClusterManagement(CBASBaseTest):
         
         from fts.fts_base import NodeHelper
         NodeHelper.stop_couchbase(self.cbas_servers[0])
-        failover_task = self._cb_cluster.async_failover(self.input.servers,
-                                                        [self.cbas_servers[0]],
-                                                        graceful=True)
-        failover_task.result()
+        self.rest.fail_over(otpNode=otpNode.id)
         self.rebalance()
         NodeHelper.start_couchbase(self.cbas_servers[0])
         NodeHelper.wait_service_started(self.cbas_servers[0])
@@ -483,16 +480,12 @@ class CBASClusterManagement(CBASBaseTest):
         Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
-        self.add_node(self.cbas_servers[0], services=["cbas"])
+        otpNode = self.add_node(self.cbas_servers[0], services=["cbas"])
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
         self.add_node(self.cbas_servers[1], services=["cbas"])
         from fts.fts_base import NodeHelper
         NodeHelper.stop_couchbase(self.cbas_servers[0])
-        
-        failover_task = self._cb_cluster.async_failover(self.input.servers,
-                                                        [self.cbas_servers[0]],
-                                                        graceful=True)
-        failover_task.result()
+        self.rest.fail_over(otpNode=otpNode.id)
         self.rebalance()
         
         query = "select count(*) from {0};".format(self.cbas_dataset_name)
