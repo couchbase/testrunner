@@ -66,13 +66,18 @@ class QueryWhitelistTests(QueryTests):
         error_msg= "Errorevaluatingprojection.-cause:File/opt/couchbase/bin/../" \
                    "var/lib/couchbase/n1qlcerts/curl_whitelist.jsondoesnotexistonnode" \
                    "%s.CURL()endpointsshouldbewhitelisted." % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:File/opt/couchbase/bin/../" \
+                   "var/lib/couchbase/n1qlcerts/curl_whitelist.jsondoesnotexistonnode" \
+                   "::1,127.0.0.1.CURL()endpointsshouldbewhitelisted."
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg
+                        or json_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test running a curl command with an empty whitelist'''
     def test_empty_whitelist(self):
@@ -81,22 +86,33 @@ class QueryWhitelistTests(QueryTests):
         error_msg= "Errorevaluatingprojection.-cause:File/opt/couchbase/bin/../var/lib/couchbase/" \
                    "n1qlcerts/curl_whitelist.jsoncontainsemptyJSONobjectonnode%s.CURL()" \
                    "endpointsshouldbewhitelisted." % (self.master.ip)
+
+        # Error message that appears on VMs that have incorrectly set up their hostname
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:File/opt/couchbase/bin/../" \
+                   "var/lib/couchbase/n1qlcerts/curl_whitelist.jsoncontainsemptyJSONobjectonnode" \
+                   "::1,127.0.0.1.CURL()endpointsshouldbewhitelisted."
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg or
+                        json_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         error_msg = "Errorevaluatingprojection.-cause:all_accessshouldbebooleanvalueinfile/opt/" \
                     "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode%s."\
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:all_accessshouldbebooleanvalueinfile/opt/" \
+                    "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode::1,127.0.0.1."
+
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": None, "allowed_urls": None,
                                                            "disallowed_urls": None})
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg or
+                        json_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test running a curl command with whitelists that are invalid'''
     def test_invalid_whitelist(self):
@@ -105,23 +121,34 @@ class QueryWhitelistTests(QueryTests):
         error_msg= "Errorevaluatingprojection.-cause:File/opt/couchbase/bin/../var/lib/couchbase/" \
                    "n1qlcerts/curl_whitelist.jsoncontainsinvalidJSONonnode%s." \
                    "ContentshavetobeaJSONobject." % (self.master.ip)
+
+        error_msg_bad_vm= "Errorevaluatingprojection.-cause:File/opt/couchbase/bin/../var/lib/couchbase/" \
+                   "n1qlcerts/curl_whitelist.jsoncontainsinvalidJSONonnode::1,127.0.0.1." \
+                   "ContentshavetobeaJSONobject."
+
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg
+                        or json_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         error_msg = "Errorevaluatingprojection.-cause:all_accessshouldbebooleanvalueinfile/opt/" \
                     "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:all_accessshouldbebooleanvalueinfile/opt/" \
+                    "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode::1,127.0.0.1." \
+
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": "hello",
                                                            "allowed_urls": ["goodbye"],
                                                            "disallowed_urls": ["invalid"]})
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg
+                        or json_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test running a curl command with a whitelist that contains the field all_access: True and also
        inavlid/fake fields'''
@@ -223,6 +250,10 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                     "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                    "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode::1,127.0.0.1." \
+
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  %self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
@@ -230,7 +261,8 @@ class QueryWhitelistTests(QueryTests):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg or
+                        actual_curl['errors'][0]['msg'] == error_msg == error_msg_bad_vm)
 
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": False,
                                                            "all_access": True})
@@ -241,10 +273,15 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:all_accessshouldbebooleanvalueinfile/opt/" \
                     "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:all_accessshouldbebooleanvalueinfile/opt/" \
+                    "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode::1,127.0.0.1." \
+
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": [True,False]})
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg or
+                        actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test to make sure that whitelist enforces that allowed_urls field must be given as a list'''
     def test_invalid_allowed_url(self):
@@ -253,6 +290,10 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:allowed_urlsshouldbelistofurlsinfile/opt/" \
                     "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:allowed_urlsshouldbelistofurlsinfile/opt/" \
+                    "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode::1,127.0.0.1." \
+
         n1ql_query = 'select * from default limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -260,7 +301,8 @@ class QueryWhitelistTests(QueryTests):
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg or
+                        json_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test the allowed_urls field, try to run curl against an endpoint not in allowed_urls and then
        try to run curl against an endpoint in allowed_urls'''
@@ -271,14 +313,16 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                     "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode%s." \
                     % (self.master.ip)
-        curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
-                                                 %self.curl_path)
-        expected_curl = self.convert_list_to_json(curl_output[0])
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                    "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode::1,127.0.0.1." \
+
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
@@ -300,24 +344,31 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                     "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode%s." \
                     % (self.master.ip)
-        curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
-                                                 %self.curl_path)
-        expected_curl = self.convert_list_to_json(curl_output[0])
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                    "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode::1,127.0.0.1." \
+
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                     "https://maps.googleapis.com/maps/api/geocode/jsononnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                    "https://maps.googleapis.com/maps/api/geocode/jsononnode::1,127.0.0.1." \
+
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test that disallowed_urls field has precedence over allowed_urls'''
     def test_disallowed_precedence(self):
@@ -329,12 +380,17 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                     "https://maps.googleapis.com/maps/api/geocode/jsononnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                    "https://maps.googleapis.com/maps/api/geocode/jsononnode::1,127.0.0.1." \
+
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": False,
                                                            "allowed_urls":
@@ -343,7 +399,8 @@ class QueryWhitelistTests(QueryTests):
                                                                ["https://maps.googleapis.com/maps/api/geocode/json"]})
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test valid allowed with an invalid disallowed'''
     def test_allowed_invalid_disallowed(self):
@@ -354,6 +411,10 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                     "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                    "https://jira.atlassian.com/rest/api/latest/issue/JRA-9onnode::1,127.0.0.1." \
+
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  %self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
@@ -361,7 +422,8 @@ class QueryWhitelistTests(QueryTests):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
@@ -381,9 +443,14 @@ class QueryWhitelistTests(QueryTests):
         error_msg = "Errorevaluatingprojection.-cause:disallowed_urlsshouldbelistofurlsinfile/opt/" \
                     "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode%s." \
                     % (self.master.ip)
+
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:disallowed_urlsshouldbelistofurlsinfile/opt/" \
+                    "couchbase/bin/../var/lib/couchbase/n1qlcerts/curl_whitelist.jsononnode::1,127.0.0.1." \
+
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Test a valid disallowed with an invalid allowed'''
     def test_disallowed_invalid_allowed(self):
@@ -396,31 +463,41 @@ class QueryWhitelistTests(QueryTests):
                     "https://maps.googleapis.com/maps/api/geocode/jsononnode%s." \
                     % (self.master.ip)
 
+        error_msg_bad_vm = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                    "https://maps.googleapis.com/maps/api/geocode/jsononnode::1,127.0.0.1." \
+
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg
+                        or actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": False,
                                                            "allowed_urls": "blahblahblah",
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg or
+                        actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
     '''Should not be able to curl localhost even if you are on the localhost unless whitelisted'''
     def test_localhost(self):
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": False})
         error_msg ="Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                    "http://localhost:8093/query/serviceonnode%s." % (self.master.ip)
+
+        error_msg_bad_vm ="Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+                   "http://localhost:8093/query/serviceonnode::1,127.0.0.1."
+
         n1ql_query = 'select * from default limit 5'
         query = "select curl('http://localhost:8093/query/service', {'data' : 'statement=%s'," \
                 "'user':'%s:%s'})" % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg
+                        or json_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
 ##############################################################################################
 #
