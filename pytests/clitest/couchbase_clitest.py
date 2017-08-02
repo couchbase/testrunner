@@ -14,8 +14,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from couchbase_cli import CouchbaseCLI
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
-                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK,\
-                          COUCHBASE_FROM_4DOT6
+                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -407,10 +406,8 @@ class CouchbaseCliTest(CliBaseTest):
                                           cluster_port=8091, user="Administrator",
                                                               password="password")
                 server_added = False
-                output_msg = "SUCCESS: Server added"
-                if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-                    output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
-                                                         self.servers[num + 1].port)
+                output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
+                                                     self.servers[num + 1].port)
                 if len(output) >= 1:
                     for x in output:
                         if output_msg in x:
@@ -609,10 +606,8 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
-            output_msg = "SUCCESS: Server added"
-            if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-                output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
-                                                    self.servers[num + 1].port)
+            output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
+                                                 self.servers[num + 1].port)
             self.assertEqual(output[0], output_msg)
 
         cli_command = "rebalance-status"
@@ -2494,7 +2489,7 @@ class XdcrCLITest(CliBaseTest):
             else:
                 if output_error == \
                       "['ERROR: unable to delete xdcr remote site localhost (404) Object Not Found',"\
-                      " 'unknown remote cluster']" and  self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
+                                                             " 'unknown remote cluster']":
                     output_error = \
                       "['ERROR: unable to delete xdcr remote site localhost (400) Bad Request',\
                                                              '{\"_\":\"unknown remote cluster\"}']"
@@ -2591,23 +2586,16 @@ class XdcrCLITest(CliBaseTest):
         else:
             self.fail("need params xdcr-certificate to run")
         cli_command = "ssl-manage"
-        cert_info = "--retrieve-cert"
-        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-            cert_info = "--cluster-cert-info"
-            output, error = self.__execute_cli(cli_command=cli_command,
-                                                           options=cert_info)
-            cert_file = open("cert.pem", "w")
-            """ cert must be in format PEM-encoded x509.  Need to add newline
-                at the end of each line. """
-            for item in output:
-                cert_file.write("%s\n" % item)
-            cert_file.close()
-            self.shell.copy_file_local_to_remote(xdcr_cert,
-                                            self.root_path + xdcr_cert)
-            os.system("rm -f %s " % xdcr_cert)
-        else:
-            options = "{0}={1}".format(cert_info, xdcr_cert)
-            output, error = self.__execute_cli(cli_command=cli_command, options=options)
+        cert_info = "--cluster-cert-info"
+        output, error = self.__execute_cli(cli_command=cli_command, options=cert_info)
+        cert_file = open("cert.pem", "w")
+        """ cert must be in format PEM-encoded x509.  Need to add newline
+            at the end of each line. """
+        for item in output:
+            cert_file.write("%s\n" % item)
+        cert_file.close()
+        self.shell.copy_file_local_to_remote(xdcr_cert, self.root_path + xdcr_cert)
+        os.system("rm -f %s " % xdcr_cert)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
         if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
                 self.assertTrue(self._check_output("-----END CERTIFICATE-----", output))

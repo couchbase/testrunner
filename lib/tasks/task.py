@@ -28,7 +28,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 try:
     CHECK_FLAG = False
@@ -4227,12 +4227,9 @@ class EnterpriseBackupTask(Task):
         self.no_progress_bar = no_progress_bar
         self.cli_command_location = cli_command_location
         self.cb_version = cb_version
-        self.cluster_flag = "--host"
-        """ from couchbase version 4.6.x, --host flag is not supported """
+        self.cluster_flag = "--cluster"
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
-        elif self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
         self.output = []
         self.error = []
         try:
@@ -4289,12 +4286,9 @@ class EnterpriseRestoreTask(Task):
         self.no_progress_bar = no_progress_bar
         self.cli_command_location = cli_command_location
         self.cb_version = cb_version
-        self.cluster_flag = "--host"
-        """ from couchbase version 4.6.x, --host flag is not supported """
+        self.cluster_flag = "--cluster"
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
-        elif self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
         self.output = []
         self.error = []
         self.backups = backups

@@ -10,7 +10,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH
-from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6
+from testconstants import COUCHBASE_FROM_WATSON
 from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
@@ -203,9 +203,7 @@ class CreateBucketTests(BaseTestCase):
 
         """ check all indexes are completed """
         index_name = []
-        index_count = 8
-        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-            index_count = 10
+        index_count = 10
         result = self.rest.index_tool_stats()
 
         self.log.info("check if all %s indexes built." % index_count)
@@ -279,9 +277,7 @@ class CreateBucketTests(BaseTestCase):
 
         """ check all indexes are completed """
         index_name = []
-        index_count = 8
-        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-            index_count = 10
+        index_count = 10
         result = self.rest.index_tool_stats()
         """ check all indexes are completed """
 

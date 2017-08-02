@@ -11,7 +11,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper, Bucket as \
     RestBucket
-from testconstants import COUCHBASE_FROM_4DOT6, LINUX_COUCHBASE_BIN_PATH,\
+from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, \
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, \
@@ -51,9 +51,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def setUp(self):
         super(EnterpriseBackupRestoreBase, self).setUp()
         """ from version 4.6.0 and later, --host flag is deprecated """
-        self.cluster_flag = "--host"
-        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
+        self.cluster_flag = "--cluster"
         self.backupset = Backupset()
         self.cmd_ext = ""
         self.database_path = COUCHBASE_DATA_PATH
