@@ -751,3 +751,74 @@ class DataCollector(object):
                 bucketMap[bucket.name] = content
                 os.remove(dest_path)
         return headerInfo, bucketMap
+
+    def get_kv_dump_from_backup_file(self, server, cli_command, cmd_ext,
+                                     backup_dir, master_key, buckets):
+        """
+            Extract key value from database file shard_0.fdb
+            Return: key, kv store name, status and value
+        """
+        conn = RemoteMachineShellConnection(server)
+        backup_data = {}
+        status = False
+        for bucket in buckets:
+            backup_data[bucket.name] = {}
+            output, error = conn.execute_command("ls %s/backup/201*/%s*/data " \
+                                                 % (backup_dir, bucket.name))
+            if "shard_0.fdb" in output:
+                if master_key == "random_keys":
+                    master_key = ".\{12\}$"
+                cmd = "%sforestdb_dump%s --plain-meta " \
+                      "%s/backup/201*/%s*/data/shard_0.fdb | grep -A 8 '^Doc\sID:\s%s' " \
+                      % (cli_command, cmd_ext, \
+                         backup_dir, bucket.name, master_key)
+                dump_output, error = conn.execute_command(cmd)
+                if dump_output:
+                    """ remove empty element """
+                    dump_output = [x.strip(' ') for x in dump_output]
+                    """ remove '--' element """
+                    dump_output = [x for x in dump_output if not "--" in x]
+                    print "Start extracting data from database file"
+                    key_ids = [x.split(":")[1].strip(' ') for x in dump_output[0::9]]
+                    key_partition = [x.split(":")[1].strip(' ') for x in dump_output[1::9]]
+                    key_status = [x.split(":")[-1].strip(' ') for x in dump_output[6::9]]
+                    key_value = []
+                    for x in dump_output[8::9]:
+                        if x.split(":", 1)[1].strip(' ').startswith("{"):
+                            key_value.append(x.split(":", 1)[1].strip())
+                        else:
+                            key_value.append(x.split(":")[-1].strip(' '))
+                    for idx, key in enumerate(key_ids):
+                        backup_data[bucket.name][key] = \
+                            {"KV store name": key_partition[idx], "Status": key_status[idx],
+                             "Value": key_value[idx]}
+                    print "Done get data from backup file"
+                    status = True
+                else:
+                    print "Data base is empty"
+                    return backup_data, status
+            else:
+                raise Exception("Could not find file shard_0.fdb at %s" % server.ip)
+        return backup_data, status
+
+    def get_views_definition_from_backup_file(self, server, backup_dir, buckets):
+        """
+            Extract key value from database file shard_0.fdb
+            Return: key, kv store name, status and value
+            /tmp/entbackup/backup/20*/default-*/views.json
+        """
+        conn = RemoteMachineShellConnection(server)
+        backup_data = {}
+        for bucket in buckets:
+            backup_data[bucket.name] = {}
+            output, error = conn.execute_command("ls %s/backup/20*/%s* " \
+                                                 % (backup_dir, bucket.name))
+            if "views.json" in output:
+                cmd = "cat %s/backup/20*/%s*/views.json" % (backup_dir, bucket.name)
+                views_output, error = conn.execute_command(cmd)
+                views_output = [x.strip(' ') for x in views_output]
+                if views_output:
+                    views_output = " ".join(views_output)
+                    return views_output
+                else:
+                    return False
