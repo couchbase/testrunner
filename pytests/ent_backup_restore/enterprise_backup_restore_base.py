@@ -52,7 +52,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         super(EnterpriseBackupRestoreBase, self).setUp()
         """ from version 4.6.0 and later, --host flag is deprecated """
         self.cluster_flag = "--host"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
         self.backupset = Backupset()
         self.cmd_ext = ""

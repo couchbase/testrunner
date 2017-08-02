@@ -41,7 +41,7 @@ class CliBaseTest(BaseTestCase):
         """ cli output message """
         self.cli_bucket_create_msg = "SUCCESS: Bucket created"
         self.cli_rebalance_msg = "SUCCESS: Rebalance complete"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
             self.cli_bucket_create_msg = "SUCCESS: bucket-create"
             self.cli_rebalance_msg = "SUCCESS: rebalanced cluster"
         self.os = 'linux'
@@ -134,6 +134,8 @@ class CliBaseTest(BaseTestCase):
         else:
             for line in output:
                 if line == "SUCCESS: " + message:
+                    return True
+                if message.lower() in line.lower():
                     return True
             log.info("Did not receive expected success message `SUCCESS: %s`", message)
             return False

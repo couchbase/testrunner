@@ -408,7 +408,7 @@ class CouchbaseCliTest(CliBaseTest):
                                                               password="password")
                 server_added = False
                 output_msg = "SUCCESS: Server added"
-                if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
                     output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
                                                          self.servers[num + 1].port)
                 if len(output) >= 1:
@@ -610,7 +610,7 @@ class CouchbaseCliTest(CliBaseTest):
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
             output_msg = "SUCCESS: Server added"
-            if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+            if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
                 output_msg = "Server %s:%s added" % (self.servers[num + 1].ip,\
                                                     self.servers[num + 1].port)
             self.assertEqual(output[0], output_msg)
@@ -1017,11 +1017,11 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         if cmd == "cluster-edit":
-            stdout, _, _ = cli.cluster_edit(data_ramsize, index_ramsize, fts_ramsize, name, new_username,
-                                            new_password, port)
+            stdout, _, _ = cli.cluster_edit(data_ramsize, index_ramsize, fts_ramsize, name,
+                                            new_username, new_password, port)
         else:
-            stdout, _, _ = cli.setting_cluster(data_ramsize, index_ramsize, fts_ramsize, name, new_username,
-                                               new_password, port)
+            stdout, _, _ = cli.setting_cluster(data_ramsize, index_ramsize, fts_ramsize,
+                                               name, new_username, new_password, port)
 
         if new_username and not expect_error:
                 server.rest_username = new_username
@@ -1032,33 +1032,37 @@ class CouchbaseCliTest(CliBaseTest):
 
         if not expect_error:
             # Update the cluster manager port if it was specified to be changed
+            printout_message = ""
+            if data_ramsize or index_ramsize or fts_ramsize:
+                printout_message = "set memory quota successfully"
             if port:
                 server.port = port
+                printout_message = "init/edit %s" % server.ip
+
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, printout_message),
+                                                               "Expected command to succeed")
             if data_ramsize is None:
                 data_ramsize = init_data_memory
             if index_ramsize is None:
                 index_ramsize = init_index_memory
             if fts_ramsize is None:
                 fts_ramsize = init_fts_memory
-            if name is None:
-                name = init_name
 
-            if cmd == "cluster-edit":
-                self.verifyWarningOutput(stdout, "The cluster-edit command is depercated, use setting-cluster instead")
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Cluster settings modified"),
-                            "Expected command to succeed")
-            self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize, fts_ramsize),
-                            "Ram quotas not set properly")
-            self.assertTrue(self.verifyClusterName(server, name), "Cluster name does not match")
+            self.assertTrue(self.verifyRamQuotas(server, data_ramsize, index_ramsize,
+                                                                       fts_ramsize),
+                                                      "Ram quotas not set properly")
         else:
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg), "Expected error message not found")
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                                                      "Expected error message not found")
             if not initialized:
-                self.assertTrue(not self.isClusterInitialized(server), "Cluster was initialized, but error was received")
+                self.assertTrue(not self.isClusterInitialized(server),
+                                       "Cluster was initialized, but error was received")
 
         # Reset the cluster (This is important for when we change the port number)
         rest = RestConnection(server)
-        self.assertTrue(rest.init_cluster(initial_server.rest_username, initial_server.rest_password, initial_server.port),
-                   "Cluster was not re-initialized at the end of the test")
+        self.assertTrue(rest.init_cluster(initial_server.rest_username,
+                                          initial_server.rest_password, initial_server.port),
+                                     "Cluster was not re-initialized at the end of the test")
 
     def testSettingIndex(self):
         username = self.input.param("username", None)
@@ -2490,7 +2494,7 @@ class XdcrCLITest(CliBaseTest):
             else:
                 if output_error == \
                       "['ERROR: unable to delete xdcr remote site localhost (404) Object Not Found',"\
-                      " 'unknown remote cluster']" and  self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+                      " 'unknown remote cluster']" and  self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
                     output_error = \
                       "['ERROR: unable to delete xdcr remote site localhost (400) Bad Request',\
                                                              '{\"_\":\"unknown remote cluster\"}']"
@@ -2588,7 +2592,7 @@ class XdcrCLITest(CliBaseTest):
             self.fail("need params xdcr-certificate to run")
         cli_command = "ssl-manage"
         cert_info = "--retrieve-cert"
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
             cert_info = "--cluster-cert-info"
             output, error = self.__execute_cli(cli_command=cli_command,
                                                            options=cert_info)

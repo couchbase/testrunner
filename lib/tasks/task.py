@@ -4231,7 +4231,7 @@ class EnterpriseBackupTask(Task):
         """ from couchbase version 4.6.x, --host flag is not supported """
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
-        elif self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        elif self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
         self.output = []
         self.error = []
@@ -4293,7 +4293,7 @@ class EnterpriseRestoreTask(Task):
         """ from couchbase version 4.6.x, --host flag is not supported """
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
-        elif self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        elif self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
         self.output = []
         self.error = []

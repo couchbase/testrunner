@@ -204,7 +204,7 @@ class CreateBucketTests(BaseTestCase):
         """ check all indexes are completed """
         index_name = []
         index_count = 8
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
             index_count = 10
         result = self.rest.index_tool_stats()
 
@@ -280,7 +280,7 @@ class CreateBucketTests(BaseTestCase):
         """ check all indexes are completed """
         index_name = []
         index_count = 8
-        if self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        if self.cb_version[:3] in COUCHBASE_FROM_4DOT6:
             index_count = 10
         result = self.rest.index_tool_stats()
         """ check all indexes are completed """

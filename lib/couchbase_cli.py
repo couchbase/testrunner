@@ -1,4 +1,5 @@
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from testconstants import COUCHBASE_FROM_4DOT6
 
 class CouchbaseCLI:
@@ -140,8 +141,7 @@ class CouchbaseCLI:
                                                      self.hostname, options)
         remote_client.disconnect()
         print_msg = "Cluster initialized"
-        if self.cb_version is not None and \
-               self.cb_version[:5] in COUCHBASE_FROM_4DOT6:
+        if RestConnection(self.server).get_nodes_version()[:3] in COUCHBASE_FROM_4DOT6:
             print_msg = "init/edit %s" % self.server.ip
         return stdout, stderr, self._was_success(stdout, print_msg)
 
