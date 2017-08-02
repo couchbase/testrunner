@@ -404,7 +404,7 @@ class DMLQueryTests(QueryTests):
                                                                                               bucket.name, keys[i])
                 if self.named_prepare:
                     i = i+1
-                    self.named_prepare="prepare_" + prefix + str(i)
+                    self.named_prepare="prepare_" + prefix + str(i) + bucket.name
                     self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
                 else:
                     self.query = "PREPARE %s" % self.query
