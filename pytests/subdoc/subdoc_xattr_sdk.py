@@ -314,13 +314,13 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     def test_delete_doc_with_xattr_access_deleted(self):
         k = 'xattrs'
 
-        self.client.upsert(k, {})
+        self.client.upsert(k, {"a": 1})
 
-        # Try to upsert a single xattr
+        # Try to upsert a single xattr with _access_deleted
         try:
             rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
-                                                xattr=True,
-                                                create_parents=True),  _access_deleted=True)
+                                                    xattr=True,
+                                                    create_parents=True), _access_deleted=True)
         except Exception as e:
             self.assertEquals("couldn't parse arguments", e.message)
 
@@ -1102,6 +1102,31 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
         self.assertEqual(result['rows'][0], {u'value': 2, u'id': u'xattr', u'key': {u'xattr': True}})
 
+    def test_view_one_xattr_index_xattr_on_deleted_docs(self):
+        k = 'xattr'
+
+        self.client.upsert(k, {"xattr": True})
+        self.client.mutate_in(k, SD.upsert('integer', 2, xattr=True))
+
+        shell = RemoteMachineShellConnection(self.master)
+        shell.execute_command("""echo '{
+    "views" : {
+        "view1": {
+             "map" : "function(doc, meta){emit(meta.id, null);}"
+        }
+    },
+    "index_xattr_on_deleted_docs" : true
+    }' > /tmp/views_def.json""")
+        o, e = shell.execute_command(
+            "curl -X PUT -H 'Content-Type: application/json' http://Administrator:password@127.0.0.1:8092/default/_design/ddoc1 -d @/tmp/views_def.json")
+        self.log.info(o)
+        rest = RestConnection(self.master)
+        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+
+        result = rest.query_view('ddoc1', 'view1', self.buckets[0].name, query)
+        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
+        self.assertEqual(result['rows'][0], {u'value': 2, u'id': u'xattr', u'key': {u'xattr': True}})
+
     def test_view_all_xattrs(self):
         k = 'xattr'
 
@@ -1263,6 +1288,48 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
+        self.assertEqual(result['total_rows'], 1, "1 document should be returned")
+        self.assertEqual(result['rows'][0], {u'value': {u'u_c': u'ABCDEFGHIJKLMNOPQRSTUVWXZYZ',
+                                                        u'low_case': u'abcdefghijklmnoprestuvxyz',
+                                                        u'int_big': 1.0383838392939393e+24, u'double_z': 0,
+                                                        u'arr_ints': [1, 2, 3, 4, 5], u'int_posit': 1,
+                                                        u'int_zero': 0, u'arr_floa': [299792458, 299792458, 299792458],
+                                                        u'float': 299792458, u'float_neg': -299792458, u'double_s': 1.1,
+                                                        u'arr_mixed': [0, 299792458, 1.1], u'double_n': -1.1,
+                                                        u'str_empty': u'', u'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5],
+                                                        u'd_time': u'2012-10-03 15:35:46.461491',
+                                                        u'arr_arrs': [[299792458, 299792458, 299792458],
+                                                                      [0, 299792458, 1.1], [], [0, 0, 0]],
+                                                        u'int_neg': -1, u'spec_chrs': u'_-+!#@$%&*(){}\\][;.,<>?/',
+                                                        u'json': {u'not_to_bes_tested_string_field1':
+                                                                      u'not_to_bes_tested_string'}},
+                                             u'id': u'xattr', u'key': {u'xattr': True}})
+
+    def test_view_all_xattrs_many_items_index_xattr_on_deleted_docs(self):
+        key = 'xattr'
+
+        self.client.upsert(key, {"xattr": True})
+        for k, v in SubdocXattrSdkTest.VALUES.iteritems():
+            self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
+
+        shell = RemoteMachineShellConnection(self.master)
+        shell.execute_command("""echo '{
+        "views" : {
+            "view1": {
+                 "map" : "function(doc, meta){emit(doc, meta.xattrs);}"
+            }
+        },
+        "index_xattr_on_deleted_docs" : true
+        }' > /tmp/views_def.json""")
+        o, _ = shell.execute_command(
+                "curl -X PUT -H 'Content-Type: application/json' http://Administrator:password@127.0.0.1:8092/default/_design/ddoc1 -d @/tmp/views_def.json")
+        self.log.info(o)
+
+        ddoc_name = "ddoc1"
+        rest = RestConnection(self.master)
+        query = {"stale": "false", "full_set": "true", "connection_timeout": 60000}
+
+        result = rest.query_view(ddoc_name, "view1", self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
         self.assertEqual(result['rows'][0], {u'value': {u'u_c': u'ABCDEFGHIJKLMNOPQRSTUVWXZYZ',
                                                         u'low_case': u'abcdefghijklmnoprestuvxyz',
@@ -1637,7 +1704,7 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         self.assertEquals('Backup repository `example` created successfully in archive `/tmp/backups`', output[0])
         output, error = self.shell.execute_command(
             "/opt/couchbase/bin/cbbackupmgr backup --archive /tmp/backups --repo example "
-            "--cluster couchbase://127.0.0.1 --username Administrator --password password %s" % self.backup_extra_params )
+            "--cluster couchbase://127.0.0.1 --username Administrator --password password %s" % self.backup_extra_params)
         self.log.info(output)
         self.assertEquals('Backup successfully completed', output[1])
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
@@ -1656,8 +1723,9 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         self.log.info(output)
         output, error = self.shell.execute_command("/opt/couchbase/bin/cbbackupmgr restore --archive /tmp/backups"
                                                    " --repo example --cluster couchbase://127.0.0.1 "
-                                                   "--username Administrator --password password --start %s %s" % (output[
-                                                       0], self.restore_extra_params))
+                                                   "--username Administrator --password password --start %s %s" % (
+                                                       output[
+                                                           0], self.restore_extra_params))
         self.log.info(output)
         self.assertEquals('Restore completed successfully', output[1])
         # https://issues.couchbase.com/browse/MB-23864
