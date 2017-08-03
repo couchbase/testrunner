@@ -149,6 +149,7 @@ class OptionsRestTests(QueryTests):
             actual_result = self.run_cbq_query(query_params= {'$rate':3, 'args' :'["test_rate"]'})
             self.assertTrue(actual_result['results'], 'There are no results')
 
+
     # This test is for verifying the optimized adhoc queries.
     # MB-24871 has the test case file uploaded in it.
     def test_optimized_adhoc_queries(self):
@@ -247,25 +248,25 @@ class OptionsRestTests(QueryTests):
             output = self.curl_helper(statement)
             statement = "p1"
             output = self.prepare_helper(statement)
-            self.assertTrue(output['metrics']['resultCount'] == 24)
+            self.assertTrue(output['metrics']['resultCount'] == 144)
 
             statement = "PREPARE p2 FROM SELECT * FROM %s where job_title=$1 and name=$2"% (bucket.name)
             output = self.curl_helper(statement)
             statement = 'p2'
             output = self.prepare_helper2(statement)
-            self.assertTrue(output['metrics']['resultCount'] == 24)
+            self.assertTrue(output['metrics']['resultCount'] == 144)
 
             statement = "PREPARE p3 FROM SELECT * FROM %s where job_title=$type and name=$name"% (bucket.name)
             output = self.curl_helper(statement)
             statement = 'p3'
             output = self.prepare_helper(statement)
-            self.assertTrue(output['metrics']['resultCount'] == 24)
+            self.assertTrue(output['metrics']['resultCount'] == 144)
 
             statement = 'PREPARE p4 FROM SELECT * FROM %s where job_title=$type and name=$name&$type="Engineer"&$name="id@mail.com"'% (bucket.name)
             output = self.curl_helper(statement)
             statement = 'p3'
             output = self.prepare_helper(statement)
-            self.assertTrue(output['metrics']['resultCount'] == 24)
+            self.assertTrue(output['metrics']['resultCount'] == 144)
 
             #update
             statement = 'EXPLAIN UPDATE %s set id = "1" where job_title=$type and name=$name&$type="Engineer"&$name=""'% (bucket.name)
@@ -281,7 +282,7 @@ class OptionsRestTests(QueryTests):
 
             statement = 'UPDATE %s set id = "1" where job_title=$1 and name=$2&args=["Engineer","employee-4"]'% (bucket.name)
             output = self.curl_helper(statement)
-            self.assertTrue(output['metrics']['mutationCount'] == 24)
+            self.assertTrue(output['metrics']['mutationCount'] == 144)
 
             #delete
             statement = 'EXPLAIN DELETE FROM %s where job_title=$type and name=$name&$type="Engineer"&$name="employee-4"'% (bucket.name)
@@ -294,19 +295,18 @@ class OptionsRestTests(QueryTests):
 
             statement = 'DELETE FROM %s where job_title=$type and name=$name&$type="Engineer"&$name="employee-4"'% (bucket.name)
             output = self.curl_helper(statement)
-            self.assertTrue(output['metrics']['mutationCount'] == 24)
+            self.assertTrue(output['metrics']['mutationCount'] == 144)
 
             statement='DELETE FROM %s  where job_title=$1 and name=$2&args=["Engineer","employee-4"]'% (bucket.name)
             output = self.curl_helper(statement)
             self.assertTrue("success" in str(output))
 
-            self.query = "CREATE INDEX `def_name2` ON %s(`name`) WHERE  job_title = 'Support'"% (bucket.name)
-            self.run_cbq_query()
             #subqueries
             statement = 'EXPLAIN SELECT * FROM %s t1 WHERE job_title = "Engineer" and name IN (SELECT name FROM %s where job_title=$type and name=$name)&$type="Support"&$name="employee-4"'% (bucket.name,bucket.name)
             output = self.curl_helper(statement)
-            self.assertTrue(output['results'][0]['plan']['~children'][0]['index'] == 'def_name2')
-
+            self.assertTrue(output['results'][0]['plan']['~children'][0]['index'] == 'def_name')
+            self.query = "CREATE INDEX `def_name2` ON %s(`name`) WHERE  job_title = 'Support'"% (bucket.name)
+            self.run_cbq_query()
             statement = 'SELECT * FROM %s t1 WHERE job_title = "Engineer" and name IN (SELECT name FROM %s where job_title=$type and name=$name)&$type="Support"&$name="employee-4"'% (bucket.name,bucket.name)
             actual_result = self.curl_helper(statement)
             statement = 'SELECT * FROM %s t1 use index(`#primary`) WHERE job_title = "Engineer" and name IN (SELECT name FROM %s where job_title=$type and name=$name)&$type="Support"&$name="employee-4"'% (bucket.name,bucket.name)
@@ -337,7 +337,7 @@ class OptionsRestTests(QueryTests):
             self.assertTrue(output['results'][0]['plan']['~children'][0]['~children'][0]['index'] == 'def_name2')
             statement = 'SELECT * FROM  (SELECT name FROM %s where job_title=$1 and name=$2) as name&args=["Support","employee-4"]'% (bucket.name)
             actual_result = self.curl_helper(statement)
-            self.assertTrue(output['metrics']['mutationCount'] == 24)
+            self.assertTrue(output['metrics']['mutationCount'] == 144)
 
 
 

@@ -81,8 +81,10 @@ class QueryTests(BaseTestCase):
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
+        self.curl_path = "curl"
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
+            self.curl_path = "%scurl" % self.path
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
         if self.primary_indx_type.lower() == "gsi":
