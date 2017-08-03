@@ -228,6 +228,7 @@ class QueriesViewsTests(QueryTests):
                      'default (DISTINCT ARRAY r.`name` FOR r IN VMs END,VMs, email)' % idx2
         self.run_cbq_query()
 
+        result_count = 4032
         self.query = 'explain SELECT t.email, r.`name` FROM default t UNNEST t.VMs AS r ' \
                      'WHERE r.`name` = "vm_12"'
         result = self.run_cbq_query()
