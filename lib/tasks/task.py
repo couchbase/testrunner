@@ -174,10 +174,8 @@ class NodeInitializeTask(Task):
                 self.quota = kv_quota
 
         rest.init_cluster_memoryQuota(username, password, self.quota)
-        if self.gsi_type == "forestdb":
-            doc = {"indexer.settings.storage_mode.disable_upgrade": True}
-            rest.set_index_settings(doc)
         rest.set_indexer_storage_mode(username, password, self.gsi_type)
+
         if self.services:
             status = rest.init_node_services(username= username, password = password,\
                                           port = self.port, hostname= self.server.ip,\
