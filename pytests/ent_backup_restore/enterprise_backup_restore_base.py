@@ -1263,17 +1263,17 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
         merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                        backups=self.backups,
                                                         directory=self.backupset.directory, name=self.backupset.name,
                                                         cli_command_location=self.cli_command_location,
-                                                        start=int(self.backupset.start) - 1,
-                                                        end=int(self.backupset.end) - 1
+                                                        start=int(self.backupset.start),
+                                                        end=int(self.backupset.end)
                                                         )
-        self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         conn.pause_memcached()
         conn.unpause_memcached()
         output = merge_result.result(timeout=200)
-        self.assertTrue("Merge successfully completed" in output[0],
+        self.assertTrue("Merge completed successfully" in output[0],
                         "Merge failed with memcached crash and restart within 180 seconds")
         self.log.info("Merge succeeded with memcached crash and restart within 180 seconds")
         self.sleep(30)
@@ -1299,17 +1299,17 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
         merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                        backups=self.backups,
                                                         directory=self.backupset.directory, name=self.backupset.name,
                                                         cli_command_location=self.cli_command_location,
-                                                        start=int(self.backupset.start) - 1,
-                                                        end=int(self.backupset.end) - 1
+                                                        start=int(self.backupset.start),
+                                                        end=int(self.backupset.end)
                                                         )
-        self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         conn.kill_erlang()
         conn.start_couchbase()
         output = merge_result.result(timeout=200)
-        self.assertTrue("Merge successfully completed" in output[0],
+        self.assertTrue("Merge completed successfully" in output[0],
                         "Merge failed with erlang crash and restart within 180 seconds")
         self.log.info("Merge succeeded with erlang crash and restart within 180 seconds")
         self.sleep(30)
@@ -1335,17 +1335,17 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
         merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                        backups=self.backups,
                                                         directory=self.backupset.directory, name=self.backupset.name,
                                                         cli_command_location=self.cli_command_location,
-                                                        start=int(self.backupset.start) - 1,
-                                                        end=int(self.backupset.end) - 1
+                                                        start=int(self.backupset.start),
+                                                        end=int(self.backupset.end)
                                                         )
-        self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         conn.stop_couchbase()
         conn.start_couchbase()
         output = merge_result.result(timeout=200)
-        self.assertTrue("Merge successfully completed" in output[0],
+        self.assertTrue("Merge completed successfully" in output[0],
                         "Merge failed with couchbase stop and start within 180 seconds")
         self.log.info("Merge succeeded with couchbase stop and start within 180 seconds")
         self.sleep(30)
