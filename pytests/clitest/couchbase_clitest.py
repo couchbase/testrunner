@@ -1261,7 +1261,7 @@ class CouchbaseCliTest(CliBaseTest):
                                          replica_count, enable_index_replica, priority, enable_flush, wait)
 
         if not expect_error:
-            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket created"),
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "bucket-create"),
                             "Expected command to succeed")
             self.assertTrue(self.verifyBucketSettings(server, bucket_name, bucket_password, bucket_type, memory_quota,
                                                       eviction_policy, replica_count, enable_index_replica, priority,

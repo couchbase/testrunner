@@ -239,12 +239,16 @@ class CliBaseTest(BaseTestCase):
             return False
 
         if eviction_policy is not None and eviction_policy != result["evictionPolicy"]:
-            log.info("Eviction policy does not match (%s vs %s)", eviction_policy, result["evictionPolicy"])
-            return False
+            if bucket_type == "couchbase":
+                log.info("Eviction policy does not match (%s vs %s)", eviction_policy,
+                          result["evictionPolicy"])
+                return False
 
         if replica_count is not None and replica_count != result["replicaNumber"]:
-            log.info("Replica count does not match (%s vs %s)", replica_count, result["replicaNumber"])
-            return False
+            if bucket_type == "couchbase":
+                log.info("Replica count does not match (%s vs %s)", replica_count,
+                          result["replicaNumber"])
+                return False
 
         if enable_index_replica == 1:
             enable_index_replica = True
