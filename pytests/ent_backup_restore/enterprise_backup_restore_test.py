@@ -2130,7 +2130,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rebalance = self.cluster.async_rebalance(servers[:self.nodes_init],
                                                  [servers[int(self.nodes_init) - 1]], [])
         rebalance.result()
-        self.sleep(5)
+        self.sleep(15)
         RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
         self.buckets = RestConnection(self.master).get_buckets()
         self._load_all_buckets(self.master, gen, "create", 0)
@@ -2181,7 +2181,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         self.cluster.rebalance(servers, servers[2:], servers[:2],
                                services=add_node_services)
-        self.sleep(5)
+        self.sleep(15)
         self.backupset.cluster_host = servers[2]
         """ Upgrade is done """
 
