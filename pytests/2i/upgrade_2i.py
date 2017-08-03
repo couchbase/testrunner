@@ -293,11 +293,96 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                     bucket, index_name_list))
                 self._run_tasks([build_index_tasks])
             self.sleep(20)
-            self._verify_bucket_count_with_index_count()
-            self.multi_query_using_index()
-            self._execute_prepare_statement(prepare_statements)
+            if self.index_batch_size != 0:
+                count = 0
+                verify_items = False
+                while count < 15 and not verify_items:
+                    try:
+                        self._verify_bucket_count_with_index_count()
+                        verify_items = True
+                    except Exception, e:
+                        msg = "All Items didn't get Indexed"
+                        if msg in str(e) and count < 15:
+                            count += 1
+                            self.sleep(20)
+                        else:
+                            raise e
+                self.multi_query_using_index()
+                self._execute_prepare_statement(prepare_statements)
             if self.toggle_disable_upgrade:
                 self.disable_plasma_upgrade = not self.disable_plasma_upgrade
+
+    def test_downgrade_plasma_to_fdb_failover(self):
+        before_tasks = self.async_run_operations(buckets=self.buckets,
+                                                 phase="before")
+        self._run_tasks([before_tasks])
+        for server in self.servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+            self.upgrade_servers.append(server)
+        upgrade_threads = self._async_update(self.upgrade_to, self.servers)
+        for upgrade_thread in upgrade_threads:
+            upgrade_thread.join()
+        self.sleep(20)
+        self.add_built_in_server_user()
+        indexer_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(indexer_node)
+        rest.set_downgrade_storage_mode_with_rest(self.disable_plasma_upgrade)
+        failover_task = self.cluster.async_failover(
+                [self.master],
+                failover_nodes=[indexer_node],
+                graceful=False)
+        failover_task.result()
+        log.info("Node Failed over...")
+        rest = RestConnection(self.master)
+        nodes_all = rest.node_statuses()
+        for cluster_node in nodes_all:
+            if cluster_node.ip == indexer_node.ip:
+                log.info("Adding Back: {0}".format(indexer_node))
+                rest.add_back_node(cluster_node.id)
+                rest.set_recovery_type(otpNode=cluster_node.id,
+                                       recoveryType="full")
+        log.info("Adding node back to cluster...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+        rebalance.result()
+        self.sleep(20)
+        self._verify_indexer_storage_mode(indexer_node)
+        self.multi_query_using_index()
+
+    def test_downgrade_plasma_to_fdb_rebalance(self):
+        before_tasks = self.async_run_operations(buckets=self.buckets,
+                                                 phase="before")
+        self._run_tasks([before_tasks])
+        for server in self.servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+            self.upgrade_servers.append(server)
+        upgrade_threads = self._async_update(self.upgrade_to, self.servers)
+        for upgrade_thread in upgrade_threads:
+            upgrade_thread.join()
+        self.sleep(20)
+        self.add_built_in_server_user()
+        for indexer_node in self.nodes_in_list:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         [indexer_node], [],
+                                                         services=["index"])
+            rebalance.result()
+            rest = RestConnection(indexer_node)
+            rest.set_downgrade_storage_mode_with_rest(self.disable_plasma_upgrade)
+            deploy_node_info = ["{0}:{1}".format(indexer_node.ip,
+                                                         indexer_node.port)]
+            for bucket in self.buckets:
+                for query_definition in self.query_definitions:
+                    query_definition.index_name = query_definition.index_name + "_replica"
+                    self.create_index(bucket=bucket, query_definition=query_definition,
+                                      deploy_node_info=deploy_node_info)
+                    self.sleep(20)
+            self._verify_indexer_storage_mode(indexer_node)
+            self.multi_query_using_index()
+            self._remove_equivalent_indexes(indexer_node)
+            self.disable_plasma_upgrade = not self.disable_plasma_upgrade
 
     def test_upgrade_with_memdb(self):
         """
@@ -535,34 +620,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.multi_query_using_index(buckets=buckets, query_definitions=self.query_definitions)
         self._verify_gsi_rebalance()
 
-    def test_downgrade_plasma_to_fdb(self):
-        before_tasks = self.async_run_operations(buckets=self.buckets,
-                                                 phase="before")
-        self._run_tasks([before_tasks])
-        indexer_node = self.get_nodes_from_services_map(service_type="index")
-        rest = RestConnection(indexer_node)
-        rest.set_downgrade_storage_mode_with_rest(self.disable_plasma_upgrade)
-        failover_task = self.cluster.async_failover(
-                [self.master],
-                failover_nodes=[indexer_node],
-                graceful=False)
-        failover_task.result()
-        log.info("Node Failed over...")
-        rest = RestConnection(self.master)
-        nodes_all = rest.node_statuses()
-        for cluster_node in nodes_all:
-            if cluster_node.ip == indexer_node.ip:
-                log.info("Adding Back: {0}".format(indexer_node))
-                rest.add_back_node(cluster_node.id)
-                rest.set_recovery_type(otpNode=cluster_node.id,
-                                       recoveryType="full")
-        log.info("Adding node back to cluster...")
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-        rebalance.result()
-        self.sleep(20)
-        self._verify_indexer_storage_mode(indexer_node)
-        self.multi_query_using_index()
-
     def kv_mutations(self, docs=None):
         if not docs:
             docs = self.docs_per_day
@@ -736,7 +793,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             prepare_name_query[bucket.name] = {}
             for query_definition in self.query_definitions:
                 query = query_definition.generate_query(bucket=bucket)
-                name = "prepare_" + query_definition.index_name
+                name = "prepare_" + query_definition.index_name + bucket.name
                 query = "PREPARE " + name + " FROM " + query
                 result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
                 self.assertEqual(result['status'], 'success', 'Query was not run successfully')

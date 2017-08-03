@@ -674,8 +674,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.sleep(10)
             count += 1
         if not self._verify_items_count():
-            self.log.info("All Items didn't get Indexed...")
-            raise
+            raise Exception("All Items didn't get Indexed...")
         bucket_map = self.get_buckets_itemCount()
         for bucket in buckets:
             bucket_count = bucket_map[bucket.name]
