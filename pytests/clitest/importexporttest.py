@@ -1208,8 +1208,10 @@ class ImportExportTests(CliBaseTest):
                                     if "body" in key_value["json"]:
                                         self.fail("Failed to omit empty value field")
                     if self.infer_types:
-                        self.log.info("Check data type in value")
-                        output, error = shell.execute_command(curl_cmd)
+                        print_cmd = False
+                        if self.debug_logs:
+                            print_cmd = True
+                        output, error = shell.execute_command(curl_cmd, debug=print_cmd)
                         if output:
                             key_value = output[0]
                             key_value = ast.literal_eval(key_value)
