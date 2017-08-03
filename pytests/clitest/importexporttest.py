@@ -973,7 +973,7 @@ class ImportExportTests(CliBaseTest):
                         des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p '%s' " \
                                   "-b %s -d %s%s %s %s "\
-                                  " %s%s %s %s %s %s %s %s "\
+                                  " %s%s %s %s %s %s %s %s %s"\
                                        % (self.cli_command_path, cmd, self.cmd_ext,
                                           self.imex_type,
                                           url_format, server.ip, secure_port,
@@ -986,7 +986,7 @@ class ImportExportTests(CliBaseTest):
                                           field_separator_flag,
                                           limit_lines, skip_lines,
                                           omit_empty, infer_types,
-                                          secure_conn)
+                                          secure_conn, json_invalid_errors_file)
                     print "\ncommand format: ", imp_cmd_str
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
@@ -1032,12 +1032,11 @@ class ImportExportTests(CliBaseTest):
                         if self.json_invalid_errors:
                             output1, error1 = self.shell.execute_command("cat %s"
                                                     % json_invalid_errors_file[3:])
-                            """
-                            wait for bug MB-25230 fixed to get content in output
-                            """
                             if output1:
-                                print "Output: ",output1
-                                print "Error: ",error1
+                                self.log.info("\n** Invalid json line in error file **\n"
+                                              "=> %s" % output1)
+                                if '"name":: "pymc272"' not in output1[0]:
+                                    self.fail("Failed to write error json line to file")
                     elif self._check_output("successfully", output):
                         data_loaded = True
 
