@@ -56,7 +56,7 @@ class QueryTests(BaseTestCase):
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
         if self.primary_indx_type.lower() == "gsi":
-            self.gsi_type = self.input.param("gsi_type", None)
+            self.gsi_type = self.input.param("gsi_type", 'forestdb')
         else:
             self.gsi_type = None
         if self.input.param("reload_data", False):
