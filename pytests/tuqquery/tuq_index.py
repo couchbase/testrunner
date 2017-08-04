@@ -418,11 +418,11 @@ class QueriesViewsTests(QueryTests):
         self.query = "explain select join_day from default where join_day > 10 OR VMs[0].memory > 10"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertTrue("cover" in str(plan))
+        self.assertTrue("cover" not in str(plan))
         self.query = "explain select join_day from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
         res = self.run_cbq_query()
         plan = ExplainPlanHelper(res)
-        self.assertTrue("cover" not  in str(plan))
+        self.assertTrue("cover" not in str(plan))
         #self.assertEquals(plan['~children'][0]['~children'][0]['limit'],'10')
         self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
         res = self.run_cbq_query()
