@@ -252,7 +252,7 @@ class CBASBaseTest(BaseTestCase):
                 return True
 
     def connect_to_bucket(self, cbas_bucket_name, cb_bucket_password=None,
-                          validate_error_msg=False, cb_bucket_username=None):
+                          validate_error_msg=False, cb_bucket_username="Administrator"):
         """
         Connects to a CBAS bucket
         """

@@ -1001,7 +1001,10 @@ class RestConnection(object):
     def delete_active_request_on_cbas(self, client_context_id):
         api = self.cbas_base_url + "/analytics/admin/active_requests?client_context_id={0}".format(
             client_context_id)
-        headers = {'Content-type': 'application/json'}
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        headers = {'Content-Type': 'application/json',
+                'Authorization': 'Basic %s' % authorization,
+                'Accept': '*/*'}
 
         status, content, header = self._http_request(api, 'DELETE',
                                                      headers=headers,
