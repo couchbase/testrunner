@@ -1840,29 +1840,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             to access bucket and other tasks
         """
         print "************** cb version: ", self.cb_version
-        if "5" <= self.cb_version[:1]:
-            self.add_built_in_server_user()
-            for user in self.users_check_restore:
-                user_name = user.replace('[', '_').replace(']', '_')
-                testuser = [{'id': user_name, 'name': user_name,
-                             'password': 'password'}]
-                rolelist = [{'id': user_name, 'name': user_name,
-                             'roles': user}]
-
-                self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
-                                                                               self.master.ip))
-                RbacBase().create_user_source(testuser, 'builtin', self.master)
-
-                self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
-                                                                        testuser[0]["name"]))
-                RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
 
         backupsets = [self.backupset]
-        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
-            for user in self.users_check_restore:
-                new_backupset = copy.deepcopy(self.backupset)
-                new_backupset.restore_cluster_host_username = user.replace('[', '_').replace(']', '_')
-                backupsets.append(new_backupset)
+        
         for backupset in backupsets:
             self.backupset = backupset
             self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
