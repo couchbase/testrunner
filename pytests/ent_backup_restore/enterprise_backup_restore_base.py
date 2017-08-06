@@ -353,13 +353,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Finished taking backup  with args: {0}".format(args))
         return output, error
 
-    def backup_cluster_validate(self, skip_backup=False, repeats=1):
+    def backup_cluster_validate(self, skip_backup=False, repeats=1,
+                                validate_directory_structure=True):
         if not skip_backup:
             output, error = self.backup_cluster()
             if error or "Backup successfully completed" not in output[-1]:
                 self.fail("Taking cluster backup failed.")
         self.backup_list()
-        if repeats < 2:
+        if repeats < 2 and validate_directory_structure:
             status, msg = self.validation_helper.validate_backup()
             if not status:
                 self.fail(msg)

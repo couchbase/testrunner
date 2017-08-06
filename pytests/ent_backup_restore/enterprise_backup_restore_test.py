@@ -240,7 +240,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def _backup_restore_with_ops(self, exp=0, backup=True, compare_uuid=False,
                                  compare_function="==", replicas=False,
-                                 mode="memory", node=None, repeats=0):
+                                 mode="memory", node=None, repeats=0,
+                                 validate_directory_structure=True):
         self.ops_type = self.input.param("ops-type", "update")
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
                             end=self.num_items)
@@ -249,7 +250,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             node = self.master
         self._load_all_buckets(node, gen, self.ops_type, exp)
         if backup:
-            self.backup_cluster_validate(repeats=repeats)
+            self.backup_cluster_validate(repeats=repeats,
+                                         validate_directory_structure=validate_directory_structure)
         else:
             self.backup_restore_validate(compare_uuid=compare_uuid,
                                          seqno_compare_function=compare_function,
@@ -2210,8 +2212,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.add_built_in_server_user(node=self.backupset.cluster_host)
             for i in range(1, self.backupset.number_of_backups_after_upgrade + 2):
                 self.log.info("_backup_restore_with_ops #{0} started...".format(i))
-                self._backup_restore_with_ops(node=self.backupset.cluster_host,
-                                              repeats=1)
+                validate_dir_struct = True
+                if i > 2:
+                    validate_dir_struct = False
+                self._backup_restore_with_ops(node=self.backupset.cluster_host, repeats=1,
+                                              validate_directory_structure=validate_dir_struct)
             self.backup_list()
 
         """ merged after upgrade """
