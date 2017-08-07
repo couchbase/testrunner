@@ -653,6 +653,7 @@ class CBASBaseTest(BaseTestCase):
         self.failed_count = 0
         self.success_count = 0
         self.rejected_count = 0
+        self.error_count = 0
         # Run queries concurrently
         self.log.info("Running queries concurrently now...")
         threads = []
@@ -673,12 +674,8 @@ class CBASBaseTest(BaseTestCase):
             "%s queries submitted, %s failed, %s passed, %s rejected" % (
                 num_queries, self.failed_count,
                 self.success_count, self.rejected_count))
-
-        if self.failed_count + self.success_count + self.rejected_count != num_queries:
-            self.fail("Some queries errored out. Check logs.")
-
-        if self.failed_count > 0:
-            self.fail("Some queries failed.")
+        self.assertTrue(self.failed_count+self.error_count == 0,
+                        "Queries Failed:%s , Queries Error Out:%s"%(self.failed_count,self.error_count))
 
     def _run_query(self, query, mode, rest=None, validate_item_count=False, expected_count=0):
         # Execute query (with sleep induced)
@@ -739,6 +736,7 @@ class CBASBaseTest(BaseTestCase):
                     "Error 500 : Capacity cannot meet job requirement")
                 self.rejected_count += 1
             else:
+                self.error_count +=1
                 self.log.error(str(e))
 
     def verify_index_created(self, index_name, index_fields, dataset):
