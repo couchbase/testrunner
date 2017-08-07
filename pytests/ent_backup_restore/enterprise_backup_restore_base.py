@@ -371,7 +371,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
 
-    def backup_restore(self):
+    def backup_restore(self, expected_error=None):
         if self.restore_only:
             if self.create_fts_index:
                 self.backups.append("2017-05-18T13_40_30.842368123-07_00")
@@ -488,7 +488,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                    password_env)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if "Error restoring cluster" in output[0]:
+        if "Error restoring cluster" in output[0] and expected_error is None:
             self.fail("Failed to restore cluster")
         res = output
         res.extend(error)
@@ -508,7 +508,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 replicas=False,
                                 mode="memory",
                                 expected_error=None):
-        output, error =self.backup_restore()
+        output, error =self.backup_restore(expected_error=expected_error)
         if expected_error:
             output.extend(error)
             error_found = False
@@ -826,6 +826,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
             Compare content of of the list with sample output
         """
+        self.log.info("output=" + str(output))
+        self.log.info("source=" + str(source))
         for x in range(0, len(source)):
             if ' '.join(output[x].split()) != ' '.join(source[x].split()):
                 self.log.error("Element %s in output did not match " % x)

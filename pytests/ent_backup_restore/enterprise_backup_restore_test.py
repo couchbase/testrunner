@@ -425,7 +425,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         no_compression = self.get_database_file_info()
         self.log.info("\nDelete old backup and do backup again with compress flag")
         self.backup_create()
-        self.backupset.backup_compress = self.input.param("backup-compressed", False)
+        self.backupset.backup_compressed = self.input.param("backup-compressed", False)
         self.backup_cluster()
         with_compression = self.get_database_file_info()
         self.validate_backup_compressed_file(no_compression, with_compression)
@@ -826,17 +826,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
            few first lines to make sure manual page displayed.
         """
         display_option = self.input.param("display", "-h")
-        subcommand = ""
-        if self.input.param("subcommand", None) is not None:
-            subcommand = self.input.param("subcommand", None)
+        subcommand = self.input.param("subcommand", None)
+        if subcommand is None:
+            subcommand = ""
         cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
         cmd += " %s %s " % (subcommand, display_option)
-
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         output, error = shell.execute_command("%s " % (cmd))
+        shell.log_command_output(output, error)
         self.log.info("Verify print out help message")
         if display_option == "-h":
-            if subcommand is None:
+            if not subcommand:
                 content = ['cbbackupmgr [<command>] [<args>]', '',
                            '  backup    Backup a Couchbase cluster']
             else:
@@ -845,7 +845,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.validate_help_content(output[:3], content)
         elif display_option == "--help":
             content = None
-            if subcommand is None:
+            if not subcommand:
                 content = \
                     ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
                      '', '', '', 'NAME',
@@ -893,42 +893,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.do_restore:
             self.log.info("Restore with secure connection")
             self.backup_restore()
-
-    def test_restore_with_filter_regex(self):
-        """
-            1. Create a bucket
-            2. Load docs to bucket with key patterned
-            3. Backup docs
-            4. Delete bucket
-            5. Restore docs with regex
-            6. Verify only key or value in regex restored to bucket
-        """
-        key_name = "ent-backup"
-        if self.backupset.random_keys:
-            key_name = "random_keys"
-        self.validate_keys = self.input.param("validate_keys", False)
-        if self.validate_keys:
-            gen = BlobGenerator(key_name, "ent-backup-", self.value_size,
-                                end=self.num_items)
-        else:
-            gen = DocumentGenerator('random_keys', '{{"age": {0}}}', xrange(100),
-                                    start=0, end=self.num_items)
-
-        self._load_all_buckets(self.master, gen, "create", 0)
-        self.log.info("Start backup")
-        self.backup_create()
-        self.backup_cluster()
-        self.backup_restore()
-        self.merged = False
-        regex_check = self.backupset.filter_keys
-        if not self.backupset.filter_keys:
-            regex_check = self.backupset.filter_values
-        self.validate_backup_data(self.backupset.backup_host,
-                                  [self.backupset.restore_cluster_host],
-                                  key_name, False, False, "memory",
-                                  self.num_items, None,
-                                  validate_keys=self.validate_keys,
-                                  regex_pattern=regex_check)
 
     def test_backup_restore_with_nodes_reshuffle(self):
         """
