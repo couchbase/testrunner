@@ -146,13 +146,14 @@ class CBASClusterOperations(CBASBaseTest):
         
         otpnodes=[]
         nodes = self.rest.node_statuses()
-        for node in nodes:
-            if node.ip == self.rebalanceServers[0].ip:
-                otpnodes.append(node)
-                
-        self.add_node(node=self.rebalanceServers[1], rebalance=False)
+        if self.nodeType == "KV":
+            service = ["kv"]
+        else:
+            service = ["cbas"]
+        otpnodes.append(self.add_node(node=self.servers[1], services=service))
+        self.add_node(node=self.servers[3], services=service,rebalance=False)
         self.remove_node(otpnodes, wait_for_rebalance=self.wait_for_rebalance)
-        self.master = self.rebalanceServers[1]
+        
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create",
                                                self.num_items,
                                                self.num_items * 2)
