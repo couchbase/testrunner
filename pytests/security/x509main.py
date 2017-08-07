@@ -63,7 +63,7 @@ class x509main:
         for server in servers:
             x509main(server)._setup_node_certificates(reload_cert=reload_cert,host=server)
 
-    def _generate_cert(self,servers,root_cn='Root\ Authority',type='go',encryption="",key_length=1024):
+    def _generate_cert(self,servers,root_cn='Root\ Authority',type='openssl',encryption="",key_length=1024):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
         shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
