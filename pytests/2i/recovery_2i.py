@@ -491,7 +491,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._create_replica_indexes()
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
-                self.sleep(20)
+                self.sleep(60)
             mid_recovery_tasks = self.async_run_operations(phase="in_between")
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             post_recovery_tasks = self.async_run_operations(phase="after")
