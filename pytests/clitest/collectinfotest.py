@@ -2,7 +2,8 @@ import subprocess, time, os
 from subprocess import call
 from clitest.cli_base import CliBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
+
 from couchbase_helper.document import View
 
 LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log", "ddocs.log", "ini.log", "syslog.tar.gz",
@@ -87,12 +88,14 @@ class CollectinfoTests(CliBaseTest):
                     if self.node_down:
                         self.shell.start_server()
                     raise Exception("Command throw out error: %s " % output_line)
-        self.verify_results(self, self.log_filename)
-
-        if self.node_down:
-            if self.os == 'linux':
-                self.shell.start_server()
-                self.sleep(self.wait_timeout)
+        try:
+            self.verify_results(self, self.log_filename)
+        finally:
+            if self.node_down:
+                if self.os == 'linux':
+                    self.shell.start_server()
+                    rest = RestConnection(self.master)
+                    RestHelper(rest).is_ns_server_running(timeout_in_seconds=60)
 
     def test_cbcollectinfo_detect_container(self):
         """ this test only runs inside docker host and
@@ -177,6 +180,8 @@ class CollectinfoTests(CliBaseTest):
                 for output_line in output:
                     output_line = output_line.split()
                     file_size = int(output_line[0])
+                    if self.debug_logs:
+                        print "File size: ", file_size
                     if file_size == 0:
                         empty_logs = True
                         self.log.error("%s is empty" % (output_line[1]))
