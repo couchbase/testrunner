@@ -1,4 +1,3 @@
-
 import sys
 import urllib2
 import urllib
@@ -161,14 +160,24 @@ def main():
                             installParameters = data['installParameters']
                         else:
                             installParameters = 'None'
-
-
+                        if 'slave' in data:
+                            slave = data['slave']
+                        else:
+                            slave = 'P0'
+                        if 'owner' in data:
+                            owner = data['owner']
+                        else:
+                            owner = 'QE'
+                        if 'mailing_list' in data:
+                            mailing_list = data['mailing_list']
+                        else:
+                            mailing_list = 'qa@couchbase.com'
                         testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],
                                     'confFile':data['confFile'], 'iniFile':data['config'],
                                     'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
                                     'parameters':data['parameters'], 'initNodes':initNodes,
-                                    'installParameters':installParameters})
-
+                                    'installParameters':installParameters,
+                                    'slave': slave, 'owner': owner, 'mailing_list': mailing_list})
 
                 else:
                     print data['component'], data['subcomponent'], ' is not supported in this release'
@@ -202,7 +211,9 @@ def main():
     # this are VM/Docker dependent - or maybe not
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}&branch={10}'
+                         'iniFile={5}&parameters={6}&os={7}&initNodes={' \
+                         '8}&installParameters={9}&branch={10}&slave={' \
+                         '11}&owners={12}&mailing_list={13}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
 
@@ -290,11 +301,21 @@ def main():
 
 
 
-                        url = launchString.format(options.version, testsToLaunch[i]['confFile'],
-                                    descriptor, testsToLaunch[i]['component'], dashboardDescriptor,
-                                    testsToLaunch[i]['iniFile'],
-                                    urllib.quote( parameters ), options.os, testsToLaunch[i]['initNodes'],
-                                    testsToLaunch[i]['installParameters'], options.branch)
+                        url = launchString.format(options.version,
+                                                  testsToLaunch[i]['confFile'],
+                                                  descriptor,
+                                                  testsToLaunch[i]['component'],
+                                                  dashboardDescriptor,
+                                                  testsToLaunch[i]['iniFile'],
+                                                  urllib.quote(parameters),
+                                                  options.os,
+                                                  testsToLaunch[i]['initNodes'],
+                                                  testsToLaunch[i]['installParameters'],
+                                                  options.branch,
+                                                  testsToLaunch[i]['slave'],
+                                                  urllib.quote(testsToLaunch[i]['owner']),
+                                                  urllib.quote(
+                                                      testsToLaunch[i]['mailing_list']))
 
 
                         if options.serverType.lower() != 'docker':
