@@ -262,7 +262,7 @@ class QueryWhitelistTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(actual_curl['errors'][0]['msg'] == error_msg or
-                        actual_curl['errors'][0]['msg'] == error_msg == error_msg_bad_vm)
+                        actual_curl['errors'][0]['msg'] == error_msg_bad_vm)
 
         self.shell.create_whitelist(self.n1ql_certs_path, {"all_access": False,
                                                            "all_access": True})
