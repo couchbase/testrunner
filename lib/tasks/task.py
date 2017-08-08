@@ -28,7 +28,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException, AutoFailoverException
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
-from TestInput import TestInputServer
+from TestInput import TestInputServer, TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, COUCHBASE_FROM_VERSION_4
 from multiprocessing import Process, Manager, Semaphore
 
@@ -1016,7 +1016,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         # also check number of input generators isn't greater than
         # process_concurrency as too many generators become inefficient
         self.is_high_throughput_mode = False
-        if ALLOW_HTP:
+        if ALLOW_HTP and not TestInputSingleton.input.param("disable_HTP", False):
             self.is_high_throughput_mode = self.op_type == "create" and \
                 self.batch_size > 1 and \
                 len(self.generators) < self.process_concurrency
