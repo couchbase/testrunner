@@ -104,6 +104,9 @@ class CBASFunctionalTests(CBASBaseTest):
 
     def test_connect_bucket(self):
         # Create bucket on CBAS
+        if self.cb_bucket_password:
+            self.cb_server_ip=self.master.ip
+            
         self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
                                    cb_server_ip=self.cb_server_ip)
