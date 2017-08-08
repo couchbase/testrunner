@@ -397,7 +397,7 @@ class RemoteMachineShellConnection:
                                                  and sv in COUCHBASE_FROM_WATSON:
                         """from watson, systemd is used in centos 7, suse 12 """
                         log.info("Running systemd command on this server")
-                        o, r = self.execute_command("systemctl start couchbase-server")
+                        o, r = self.execute_command("systemctl start couchbase-server.service")
                         self.log_command_output(o, r)
                     else:
                         o, r = self.execute_command("/etc/init.d/couchbase-server start")
@@ -429,7 +429,7 @@ class RemoteMachineShellConnection:
                                                  and sv in COUCHBASE_FROM_WATSON:
                         """from watson, systemd is used in centos 7, suse 12 """
                         log.info("Running systemd command on this server")
-                        o, r = self.execute_command("systemctl stop couchbase-server")
+                        o, r = self.execute_command("systemctl stop couchbase-server.service")
                         self.log_command_output(o, r)
                     else:
                         o, r = self.execute_command("/etc/init.d/couchbase-server stop"\
@@ -3185,7 +3185,7 @@ class RemoteMachineShellConnection:
                                              and sv in COUCHBASE_FROM_WATSON:
                     """from watson, systemd is used in centos 7, suse 12 """
                     log.info("Running systemd command on this server")
-                    o, r = self.execute_command("systemctl stop couchbase-server")
+                    o, r = self.execute_command("systemctl stop couchbase-server.service")
                     self.log_command_output(o, r)
                 else:
                     o, r = self.execute_command("/etc/init.d/couchbase-server stop",\
@@ -3216,7 +3216,7 @@ class RemoteMachineShellConnection:
                        and sv in COUCHBASE_FROM_WATSON:
                     """from watson, systemd is used in centos 7, suse 12 """
                     log.info("Running systemd command on this server")
-                    o, r = self.execute_command("systemctl start couchbase-server")
+                    o, r = self.execute_command("systemctl start couchbase-server.service")
                     self.log_command_output(o, r)
                 else:
                     o, r = self.execute_command("/etc/init.d/couchbase-server start")
