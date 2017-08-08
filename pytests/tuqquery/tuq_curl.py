@@ -607,7 +607,7 @@ class QueryCurlTests(QueryTests):
         -Test with a max-time that will result in a timeout
         -Test with a max-time that will result in a successful transfer of data'''
     def test_max_time(self):
-        n1ql_query = 'select * from default'
+        n1ql_query = 'select * from default union select * from default'
         select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','max-time':1})" % (n1ql_query,self.username,self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
@@ -803,8 +803,8 @@ class QueryCurlTests(QueryTests):
 
     '''Test if a protected bucket can be accessed without giving its password'''
     def test_protected_bucket_noauth(self):
-        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[bucket0]." \
-                    "n1ql.select!execute.AddroleQuerySelect[bucket0]toallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunSELECTqueriesonthebucket0bucket." \
+                    "Addrolequery_selectonbucket0toallowthequerytorun."
         # The query that curl will send to couchbase
         n1ql_query = 'select * from bucket0 limit 5'
         # This is the query that the cbq-engine will execute
@@ -921,8 +921,8 @@ class QueryCurlTests(QueryTests):
     '''Test if a user without curl privileges can use curl and test if a user with curl privileges
        can use curl'''
     def test_curl_access(self):
-        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.n1ql.curl!execute.Addrole" \
-                    "QueryExternalAccesstoallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunqueriesusingtheCURL()function." \
+                    "Addrolequery_external_accesstoallowthequerytorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_curl' -p 'password' -q " %(self.master.ip,
                                                                                      self.n1ql_port)
         # The query that curl will send to couchbase
@@ -970,8 +970,8 @@ class QueryCurlTests(QueryTests):
     '''Test if you can insert curl with a role that does not have curl, with a role that has curl but
        no insert privileges, and a combination of the two roles.'''
     def test_insert_no_role(self):
-        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.n1ql.curl!execute." \
-                    "AddroleQueryExternalAccesstoallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunqueriesusingtheCURL()function." \
+                    "Addrolequery_external_accesstoallowthequerytorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_curl' -p 'password' -q " %(self.master.ip,
                                                                                      self.n1ql_port)
         n1ql_query = 'select * from \`beer-sample\` limit 1'
@@ -1010,8 +1010,8 @@ class QueryCurlTests(QueryTests):
 
     '''Test if curl privileges can be used to circumvent other privileges, (insert,update,delete)'''
     def test_circumvent_roles(self):
-        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.insert!" \
-                    "execute.AddroleQueryInsert[default]toallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesonthedefaultbucket." \
+                    "Addrolequery_insertondefaulttoallowthequerytorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'curl_no_insert' -p 'password' -q " % \
                                         (self.master.ip, self.n1ql_port)
         curl_query = "select curl("+ self.query_service_url+ ", "
@@ -1022,8 +1022,8 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
 
-        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.update!" \
-                    "execute.AddroleQueryUpdate[default]toallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunUPDATEqueriesonthedefaultbucket." \
+                    "Addrolequery_updateondefaulttoallowthequerytorun."
         query = 'select meta().id from default limit 1'
         result = self.run_cbq_query(query)
         docid = result['results'][0]['id']
@@ -1034,8 +1034,8 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg)
 
-        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.delete!" \
-                    "execute.AddroleQueryDelete[default]toallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunDELETEqueriesonthedefaultbucket." \
+                    "Addrolequery_deleteondefaulttoallowthequerytorun."
         options = "{'data':'statement=delete from default use keys \\\"" + docid +"\\\"" \
                   "returning meta().id, * '})"
         curl = self.shell.execute_commands_inside(cbqpath,curl_query+options,'', '', '','', '')

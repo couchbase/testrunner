@@ -520,8 +520,8 @@ class QueryMonitoringTests(QueryTests):
 
         for bucket in self.buckets:
             if test_type == "kill":
-                self.query = "select * from default union select * from default union select * from default" \
-                             "union select * from default d JOIN default def ON KEYS d.name "
+                self.query = "(select * from default union select * from default union select * from default) " \
+                             "union (select d from default d JOIN default def ON KEYS d.name)"
                 self.prepared_common_body()
 
                 self.query = "SELECT name, email FROM %s WHERE " % (bucket.name) + \
