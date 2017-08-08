@@ -1412,7 +1412,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         data_verified = False
         try:
             # Source validations
-            mutations_replicated &= self.__wait_for_outbound_mutations_zero(self.dest_master)
+            if self._replication_direction_str == "bidirection":
+                self.log.info("Only run in bidirection xdcr")
+                mutations_replicated &= self.__wait_for_outbound_mutations_zero(self.dest_master)
             self._verify_item_count(self.src_master, src_nodes, timeout=timeout)
             self._verify_data_all_buckets(self.src_master, max_verify=self.max_verify)
             # Dest validations
