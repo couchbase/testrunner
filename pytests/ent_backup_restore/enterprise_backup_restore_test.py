@@ -954,6 +954,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             4. Run backup with new user created
             5. Verify if backup command handles user role correctly
         """
+        all_buckets = self.input.param("all_buckets", False)
         if self.create_fts_index:
             gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0,
                                     end=self.num_items)
@@ -973,6 +974,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self._create_views()
         self.backup_create()
 
+        if all_buckets:
+            self.cluster_new_role = self.cluster_new_role + "[*]"
+
         self.log.info("\n***** Create new user: %s with role: %s to do backup *****"
                       % (self.cluster_new_user, self.cluster_new_role))
         testuser = [{"id": "%s" % self.cluster_new_user,
@@ -990,6 +994,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                     "data_dcp_reader[*]", "fts_searcher[*]",
                                     "fts_admin[*]", "query_manage_index[*]",
                                     "ro_admin"]
+
         try:
             status = self.add_built_in_server_user(testuser, rolelist)
             if not status:
@@ -1077,6 +1082,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             to /root or /cygdrive/c/Users/Administrator in backup host.
             Files location: 172.23.121.227:/root/entba*.zip
         """
+        all_buckets = self.input.param("all_buckets", False)
         self.log.info("Copy backup dataset to tmp dir")
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         shell.execute_command("rm -rf %s " % self.backupset.directory)
@@ -1098,6 +1104,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
 
         self.log.info("Restore data from backup files")
+
+        if all_buckets:
+            self.cluster_new_role = self.cluster_new_role + "[*]"
+
         self.log.info("\n***** Create new user: %s with role: %s to do backup *****"
                       % (self.cluster_new_user, self.cluster_new_role))
         testuser = [{"id": "%s" % self.cluster_new_user,
