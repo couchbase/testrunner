@@ -246,9 +246,12 @@ class Installer(object):
                     In spock from build 2924 and later release, we only support
                     msi installation method on windows
                 """
+                if "2k8" in info.windows_name:
+                    info.windows_name = 2008
+
                 if msi_build[0] in COUCHBASE_FROM_SPOCK:
                     info.deliverable_type = "msi"
-                elif "5" > msi_build[0] and int(info.windows_name) == 2016:
+                elif "5" > msi_build[0] and info.windows_name == 2016:
                     log.info("\n========\n"
                         "         Build version %s does not support on\n"
                         "         Windows Server 2016\n"
