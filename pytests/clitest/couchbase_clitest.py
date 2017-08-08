@@ -2597,10 +2597,10 @@ class XdcrCLITest(CliBaseTest):
         self.shell.copy_file_local_to_remote(xdcr_cert, self.root_path + xdcr_cert)
         os.system("rm -f %s " % xdcr_cert)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
-        if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                self.assertTrue(self._check_output("-----END CERTIFICATE-----", output))
+        if "4.6" <= self.cb_version:
+            self.assertTrue(self._check_output("-----END CERTIFICATE-----", output))
         else:
-           self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"]\
+            self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"]\
                                           .replace("PATH", xdcr_cert), output[0])
         self.shell.execute_command("rm {0}".format(xdcr_cert))
 
