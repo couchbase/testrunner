@@ -365,8 +365,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
@@ -839,9 +839,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if not subcommand:
                 content = ['cbbackupmgr [<command>] [<args>]', '',
                            '  backup    Backup a Couchbase cluster']
+            elif subcommand == "help":
+                content = ['cbbackupmgr help [<command>] [<args>]', '',
+                           '  archivelayout   View the archive directory layout structure']
             else:
                 content = ['cbbackupmgr %s [<args>]' % subcommand, '',
                            'Required Flags:']
+            self.log.info("output: " + str(output[:3]))
+            self.log.info("content: " + str(content))
             self.validate_help_content(output[:3], content)
         elif display_option == "--help":
             content = None
@@ -852,13 +857,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
                      '       cluster', '', 'SYNOPSIS',
                      '       cbbackupmgr [--version] [--help] <command> [<args>]']
+                self.validate_help_content(output[:10], content)
             else:
                 subcmd_cap = subcommand.upper()
                 content = \
                     ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
                      % (subcmd_cap, subcmd_cap),
                      '', '', '', 'NAME']
-            self.validate_help_content(output[:5], content)
+                self.validate_help_content(output[:5], content)
         shell.disconnect()
 
     def test_backup_restore_with_optional_flags(self):
@@ -2169,7 +2175,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error {0} cluster: dial tcp:".format(part_message) in output[0],
+        self.assertTrue("Error {0} cluster: Rest client error (GET http://abc:8091/pools): dial tcp:".
+                        format(part_message) in output[0],
                         "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster http://{2}:{3} --username abc \
                               --password {4}".format(self.backupset.directory,
