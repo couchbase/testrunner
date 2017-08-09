@@ -16,6 +16,8 @@ QUERY_TEMPLATE = "SELECT {0} FROM %s "
 class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def setUp(self):
         super(UpgradeSecondaryIndex, self).setUp()
+        self.initial_build_type = self.input.param('initial_build_type', None)
+        self.upgrade_build_type = self.input.param('upgrade_build_type', self.initial_build_type)
         self.disable_plasma_upgrade = self.input.param("disable_plasma_upgrade", False)
         self.rebalance_empty_node = self.input.param("rebalance_empty_node", True)
         self.num_plasma_buckets = self.input.param("standard_buckets", 1)
@@ -171,7 +173,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         before_tasks = self.async_run_operations(buckets=self.buckets,
                                                  phase="before")
         self._run_tasks([before_tasks])
-        self._install(self.nodes_in_list, version=self.upgrade_to)
+        community_to_enterprise = (self.upgrade_build_type == "enterprise" and self.initial_build_type == "community")
+        self._install(self.nodes_in_list, version=self.upgrade_to,community_to_enterprise=community_to_enterprise)
         prepare_statements = self._create_prepare_statement()
         for i in range(len(self.nodes_out_list)):
             node = self.nodes_out_list[i]
@@ -204,7 +207,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self._run_tasks([kv_ops, in_between_tasks])
             rebalance = self.cluster.async_rebalance(active_nodes, [], [node])
             rebalance.result()
-            if "index" in node_services:
+            if "index" in node_services_list:
                 self.disable_upgrade_to_plasma(self.nodes_in_list[i])
                 self._recreate_equivalent_indexes(self.nodes_in_list[i])
                 self.sleep(60)
