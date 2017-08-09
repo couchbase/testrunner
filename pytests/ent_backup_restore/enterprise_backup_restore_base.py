@@ -365,14 +365,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not status:
                 self.fail(msg)
             self.log.info(msg)
-        if not self.backupset.force_updates:
-            self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                          self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                            self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+        if not self.backupset.deleted_buckets:
+            if not self.backupset.force_updates:
+                self.store_vbucket_seqno()
+            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                              self.backup_validation_files_location)
+            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
+            self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                    self.backup_validation_files_location)
 
     def backup_restore(self):
         if self.restore_only:
@@ -543,7 +544,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         """ Add built-in user cbadminbucket to second cluster """
         self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
-        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets,
+        current_vseqno = {}
+        if not self.backupset.force_updates:
+            current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets,
                                                  self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
         status, msg = self.validation_helper.validate_restore(self.backupset.end,
@@ -656,6 +659,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_merge(self):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
+        if self.backupset.deleted_backups:
+            self.backupset.end -= len(self.backupset.deleted_backups)
         try:
             backup_start = self.backups[int(self.backupset.start) - 1]
         except IndexError:
@@ -1023,6 +1028,7 @@ class Backupset:
         self.deleted_buckets = []
         self.new_buckets = []
         self.flushed_buckets = []
+        self.deleted_backups = []
 
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
@@ -1725,14 +1731,13 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Delete an incr backup
         :return: Nothing
         """
-        backup_to_delete = self.backups.pop(self.backup_to_delete)
+        backup_to_delete = self.backups.pop(self.backup_to_delete - 1)
         self.log.info("Deleting backup " + backup_to_delete)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         o, e = conn.execute_command(
             "rm -rf " + self.backupset.directory + "/" + self.backupset.name + "/" + backup_to_delete)
         conn.log_command_output(o, e)
-        self.backupset.number_of_backups -= 1
-        self.backupset.end -= 1
+        self.backupset.deleted_backups.append(backup_to_delete)
         self.number_of_backups_taken -= 1
 
     def corrupt_backup(self):
@@ -1852,12 +1857,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
     def create_indexes(self):
         rest_src = RestConnection(self.backupset.cluster_host)
-        rest_src.add_node(self.servers[1].rest_username,
-                          self.servers[1].rest_password,
-                          self.servers[1].ip, services=['index', 'fts'])
-        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [],
-                                                 [])
-        rebalance.result()
 
         cmd = "cbindex -type create -bucket default -using plasma -index " \
               "age_idx -fields=age"
@@ -1866,7 +1865,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Index created" not in output[-1]:
+        if "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         cmd = "cbindex -type create -bucket default -using plasma -index " \
               "name_idx -fields=name"
@@ -1875,7 +1874,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Index created" not in output[-1]:
+        if "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
 
         index_definition = INDEX_DEFINITION
@@ -1920,7 +1919,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         rest_fts = RestConnection(self.backupset.cluster_host)
         try:
             self.log.info("Update fts index")
-            rest_fts.update_fts_index("age", index_definition)
+            rest_fts.update_fts_index("age1", index_definition)
         except Exception, ex:
             self.fail(ex)
 
@@ -1980,9 +1979,11 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     if params.__len__() == 2:
                         if params[1] == "ephemeral":
                             self.ephemeral = True
-                elif "delete_backup" in action:
+                elif "delete_bkup" in action:
+                    iterations = 1
                     self.backup_to_delete = int(params[0])
-                elif "corrupt_backup" in action:
+                elif "corrupt_bkup" in action:
+                    iterations = 1
                     self.backup_to_corrupt = int(params[0])
                 else:
                     if params[0].isdigit():
@@ -2039,8 +2040,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         "compact_buckets": compact_buckets,
         "compact_buckets_with_ops": compact_buckets_with_ops,
         "rollback": rollback,
-        "delete_backup": delete_backup,
-        "corrupt_backup": corrupt_backup,
+        "delete_bkup": delete_backup,
+        "corrupt_bkup": corrupt_backup,
         "create_indexes": create_indexes,
         "update_indexes": update_indexes
     }
