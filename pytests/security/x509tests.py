@@ -40,9 +40,14 @@ class x509tests(BaseTestCase):
 
     def _reset_original(self):
         self.log.info ("Reverting to original state - regenerating certificate and removing inbox folder")
+        tmp_path = "/tmp/abcd.pem"
         for servers in self.servers:
-            rest = RestConnection(servers)
-            rest.regenerate_cluster_certificate()
+            cli_command = "ssl-manage"
+            remote_client = RemoteMachineShellConnection(servers)
+            options = "--regenerate-cert={0}".format(tmp_path)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                                cluster_host=servers.ip, user="Administrator",
+                                                                password="password")
             x509main(servers)._delete_inbox_folder()
 
     def checkConfig(self, eventID, host, expectedResults):
@@ -111,14 +116,14 @@ class x509tests(BaseTestCase):
         self.add_built_in_server_user([{'id': bucket, 'name': bucket,'password': 'password'}], \
                                       [{'id': bucket, 'name': bucket,'roles': 'admin'}], self.master)
         connection_string = 'couchbases://'+ host_ip + '/' + bucket + '?certpath='+root_ca_path
-        print connection_string
+        self.log.info("Connection string is -{0}".format(connection_string))
         try:
             cb = Bucket(connection_string, password='password')
             if cb is not None:
                 result = True
                 return result, cb
         except Exception, ex:
-            print ex
+            self.log.info("Expection is  -{0}".format(ex))
             return result
 
     def test_basic_ssl_test(self):
@@ -613,7 +618,7 @@ class x509tests(BaseTestCase):
             if cb is not None:
                 result = True
         except Exception, ex:
-            print ex
+            self.log.info("Exception is -{0}".format(ex))
         self.assertTrue(result,"Cannot create a client connection with server")
 
         create_docs = Thread(name='create_docs', target=self.createBulkDocuments, args=(cb,))
@@ -675,14 +680,14 @@ class x509_upgrade(NewUpgradeBaseTest):
         self.add_built_in_server_user([{'id': bucket, 'name': bucket, 'password': 'password'}], \
                                       [{'id': bucket, 'name': bucket, 'roles': 'admin'}], self.master)
         connection_string = 'couchbases://'+ host_ip + '/' + bucket + '?certpath='+root_ca_path
-        print connection_string
+        self.log.info("Connection string is -{0}".format(connection_string))
         try:
             cb = Bucket(connection_string, passsword='password')
             if cb is not None:
                 result = True
                 return result, cb
         except Exception, ex:
-            print ex
+            self.log.info("Exception is  -{0}".format(ex))
             return result
 
 
