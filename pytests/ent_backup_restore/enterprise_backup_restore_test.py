@@ -847,6 +847,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if subcommand is None:
                 content = ['cbbackupmgr [<command>] [<args>]', '',
                            '  backup    Backup a Couchbase cluster']
+            elif subcommand == "help":
+                content = ['cbbackupmgr help [<command>] [<args>]', '',
+                           '  archivelayout   View the archive directory layout structure']
             else:
                 content = ['cbbackupmgr %s [<args>]' % subcommand, '',
                            'Required Flags:']
@@ -860,13 +863,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
                      '       cluster', '', 'SYNOPSIS',
                      '       cbbackupmgr [--version] [--help] <command> [<args>]']
+                self.validate_help_content(output[:10], content)
             else:
                 subcmd_cap = subcommand.upper()
                 content = \
                     ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
                      % (subcmd_cap, subcmd_cap),
                      '', '', '', 'NAME']
-            self.validate_help_content(output[:5], content)
+                self.validate_help_content(output[:5], content)
         shell.disconnect()
 
     def test_backup_restore_with_optional_flags(self):
@@ -1785,8 +1789,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
@@ -1802,8 +1806,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
