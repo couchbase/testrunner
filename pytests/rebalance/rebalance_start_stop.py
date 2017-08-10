@@ -237,8 +237,6 @@ class RebalanceStartStopTests(RebalanceBaseTest):
         self.shuffle_nodes_between_zones_and_rebalance()
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining=True, check_bucket_stats=False)
         self.sleep(30)
-        self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets,
-                                              path=None)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
         self.vb_distribution_analysis(servers=nodes, std=1.0, total_vbuckets=self.total_vbuckets)
