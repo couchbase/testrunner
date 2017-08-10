@@ -165,10 +165,8 @@ class rbacmain:
         return id, name, roles
 
     def _parse_get_user_response(self,response,user_id,user_name,roles):
-        print "Into user response"
         role_return = self._convert_user_roles_format(roles)
         result = False
-        print response
         for user in response:
             if  user['id'] == user_id:
                 if [item for item in user['roles'] if item in role_return]:
@@ -181,7 +179,6 @@ class rbacmain:
                 return result
 
     def _convert_user_roles_format(self,roles):
-        print "convert user roles"
         role_return = []
         temp_roles = roles.split(":")
         for temp in temp_roles:
@@ -195,45 +192,6 @@ class rbacmain:
     def returnUserList(self, Admin):
         Admin = (items.split(':') for items in Admin.split("?"))
         return list(Admin)
-
-
-    def _test_box_statistics(self):
-        process_dict = {}
-        process_name = "beam.smp"
-        process_data_collect = {}
-        proc_detail = {}
-        pid_detail = {}
-        pid_det_list = []
-        for server in self.servers:
-            shell = RemoteMachineShellConnection(server)
-            o,r = shell.execute_command("top -b -n 1 | grep " + process_name + " | cut -d ' ' -f2")
-            process_dict[process_name] = o
-
-        print process_dict
-
-        for items in process_dict: # Process Name
-            print process_dict[items]
-            for item in process_dict[items]: # PID
-                print item
-                pid_detail[item]={}
-            pid_det_list.append(pid_detail)
-        proc_detail[items] = pid_det_list
-        print proc_detail
-
-        j=1
-        for i in range(0,10):
-            for items in process_dict: # Process Name
-                #for item in process_dict[items]: # PID
-                for i in range(0,len(items)):
-                    o,r = shell.execute_command("top -b -n 1 -p " + item + " | cut -d ' ' -f3")
-                    print proc_detail[items]
-                    print proc_detail[items][i]
-                    #print proc_detail[items][j][item]
-                    #proc_detail[items][j][item].append(o)
-                    #j=j+1
-                j=0
-        print proc_detail
-
 
 
     def get_role_permission(self,permission_set):
@@ -280,9 +238,6 @@ class rbacmain:
         }
         permission = permission_set.split(":")
         perm_fun_map = permission_fun_map[permission[0]]
-        print perm_fun_map
-        print permission[1]
-        print type(permission[1])
         if permission[1] == 'True':
             http_code = [200,201]
         else:
@@ -297,7 +252,6 @@ class rbacmain:
         except:
             log.info("Default Bucket already exists")
         final_func = "rbacPermissionList()."+ func_name + "('" + user + "','" + password + "',host=self.master_ip,servers=self.servers,cluster=self.cluster,httpCode=" + str(http_code) +",user_role="+"'" + str(user_role)+"'" + ")"
-        print final_func
         flag = eval(final_func)
         return flag
 
@@ -433,7 +387,6 @@ class rbacmain:
             shell = RemoteMachineShellConnection(server)
             try:
                 for user in user_list:
-                    print user
                     if (user[0] != ''):
                         if (operation == "deluser"):
                             user_command = "userdel -r " + user[0]
