@@ -1459,7 +1459,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket edited"),
                             "Expected command to succeed")
             self.assertTrue(self.verifyBucketSettings(server, bucket_name, None, memory_quota,
-                                                      eviction_policy, replica_count, None, priority, enable_flush),
+                                eviction_policy, replica_count, None, priority, enable_flush),
                             "Bucket settings not set properly")
         else:
             # List buckets
