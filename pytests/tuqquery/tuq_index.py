@@ -121,7 +121,7 @@ class QueriesViewsTests(QueryTests):
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
             self.log.info(res)
-	    plan = ExplainPlanHelper(res)
+            plan = ExplainPlanHelper(res)
             self.assertTrue(plan["~children"][0]["index"] == "#primary",
                             "Type should be #primary, but is: %s" % plan)
 
@@ -306,7 +306,7 @@ class QueriesViewsTests(QueryTests):
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s ' % (bucket.name)
                 res = self.run_cbq_query()
                 self.log.info(res)
-		plan = ExplainPlanHelper(res)
+                plan = ExplainPlanHelper(res)
                 self.assertTrue(plan["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, plan))
             finally:
@@ -325,7 +325,7 @@ class QueriesViewsTests(QueryTests):
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s GROUP BY VMs' % (bucket.name)
                 res = self.run_cbq_query()
                 self.log.info(res)
-		plan = ExplainPlanHelper(res)
+                plan = ExplainPlanHelper(res)
                 self.assertTrue(plan["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, plan))
             finally:
@@ -343,7 +343,7 @@ class QueriesViewsTests(QueryTests):
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories FROM %s' % (bucket.name)
                 res = self.run_cbq_query()
-		plan = ExplainPlanHelper(res)
+                plan = ExplainPlanHelper(res)
                 self.assertTrue(plan["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, plan))
             finally:
@@ -474,8 +474,11 @@ class QueriesViewsTests(QueryTests):
                 self.query = "EXPLAIN select %s.name from %s UNNEST VMs as x where any i in default.VMs satisfies i.memory > 10 END" % (bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
-                result1 =plan['~children'][0]['scans'][0]['scan']['index']
-                self.assertTrue(result1==idx1)
+                result1 = plan['~children'][0]['scans'][0]['scan']['index']
+                result2 = plan['~children'][0]['scans'][1]['scan']['index']
+                self.assertTrue(result1==idx1 or result1 ==idx2)
+                self.assertTrue(result2==idx1 or result2 ==idx2)
+                self.assertTrue(result1 != result2)
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
@@ -1156,7 +1159,7 @@ class QueriesViewsTests(QueryTests):
                 self.run_cbq_query()
                 query = 'EXPLAIN ' % (self.query % (bucket.name, bucket.name, bucket.name))
                 res = self.run_cbq_query(query=query)
-		plan = ExplainPlanHelper(res)
+                plan = ExplainPlanHelper(res)
                 self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == 'IntersectScan',
                                         "Index should be intersect scan and is %s" % (plan))
                 actual_indexes = [scan['index'] for scan in plan["~children"][0]["~children"][0]['scans']]
