@@ -149,7 +149,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
 
     def offline_cluster_upgrade(self):
-
+        if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
+            self.log.info("Initial version greater than upgrade version - not supported")
+            return
         # install on src and dest nodes
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
@@ -304,6 +306,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         return True
 
     def online_cluster_upgrade(self):
+        if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
+            self.log.info("Initial version greater than upgrade version - not supported")
+            return
         self._install(self.servers[:self.src_init + self.dest_init])
         prev_initial_version = self.initial_version
         self.initial_version = self.upgrade_versions[0]
@@ -440,6 +445,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                         "error message not found as expected in " + str(node.ip))
 
     def incremental_offline_upgrade(self):
+        if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
+            self.log.info("Initial version greater than upgrade version - not supported")
+            return
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
         self._install(self.servers[:self.src_init + self.dest_init ])
         self.create_buckets()
@@ -618,6 +626,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def test_backward_compatibility(self):
         self.c1_version = self.initial_version
         self.c2_version = self.upgrade_versions[0]
+        if self.c1_version[:3] >= self.c2_version[:3]:
+            self.log.info("Initial version greater than upgrade version - not supported")
+            return
         # install older version on C1
         self._install(self.servers[:self.src_init])
         #install latest version on C2
