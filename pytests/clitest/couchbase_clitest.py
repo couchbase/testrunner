@@ -1531,6 +1531,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None,
                                                   None, init_enable_flush, None)
                 self.assertTrue(success, "Bucket not created during test setup")
+                """ Add built-in user for memcached authentication """
+                self.add_built_in_server_user(node=server)
 
                 MemcachedClientHelper.load_bucket_and_return_the_keys([server], name=bucket_name, number_of_threads=1,
                                                                       write_only=True, number_of_items=insert_keys,
