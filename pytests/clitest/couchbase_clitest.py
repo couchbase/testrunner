@@ -2088,6 +2088,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         invalid_recover_server = self.input.param("invalid-recover-server", None)
 
         server = copy.deepcopy(self.servers[0])
+        if len(self.servers) < 4:
+            mesg = "***\n Sever readd tests need minimum 4 servers to run\n***"
+            RemoteMachineShellConnection(server).stop_current_python_running(mesg)
 
         rest = RestConnection(server)
         rest.force_eject_node()
@@ -2096,7 +2099,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if servers > 0:
             servers_to_recover = []
             for idx in range(servers):
-                servers_to_recover.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+                servers_to_recover.append("%s:%s" % (self.servers[idx + 1].ip,
+                                                     self.servers[idx + 1].port))
             servers_to_recover = ",".join(servers_to_recover)
 
         if invalid_recover_server:
@@ -2104,19 +2108,21 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         servers_to_add = []
         for idx in range(init_num_servers - 1):
-            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip,
+                                             self.servers[idx + 1].port))
         servers_to_add = ",".join(servers_to_add)
 
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
-            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
+                                             server.rest_username,
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
             if init_num_servers > 1:
                 time.sleep(5)
-                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None,
-                                               None)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username,
+                                               server.rest_password, None, None, None)
                 self.assertTrue(errored, "Could not add initial servers")
                 _, _, errored = cli.rebalance(None)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
@@ -2132,10 +2138,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
-            self.assertTrue(self.verifyRecoveryType(server, servers_to_recover, "full"), "Servers not recovered")
+            self.assertTrue(self.verifyRecoveryType(server, servers_to_recover, "full"),
+                                                               "Servers not recovered")
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
-                            "Expected error message not found")
+                                                   "Expected error message not found")
 
     def test_change_admin_password_with_read_only_account(self):
         """ this test automation for bug MB-20170.
