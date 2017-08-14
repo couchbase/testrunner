@@ -175,7 +175,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._run_tasks([before_tasks])
         community_to_enterprise = (self.upgrade_build_type == "enterprise" and self.initial_build_type == "community")
         self._install(self.nodes_in_list, version=self.upgrade_to,community_to_enterprise=community_to_enterprise)
-        prepare_statements = self._create_prepare_statement()
         for i in range(len(self.nodes_out_list)):
             node = self.nodes_out_list[i]
             node_rest = RestConnection(node)
@@ -214,11 +213,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 self._verify_indexer_storage_mode(self.nodes_in_list[i])
             self._verify_bucket_count_with_index_count()
             self.multi_query_using_index()
-            try:
-                self._execute_prepare_statement(prepare_statements)
-            except Exception, ex:
-                msg = "queryport.indexNotFound"
-                self.assertIn(msg, str(ex), str(ex))
             if self.toggle_disable_upgrade:
                 self.disable_plasma_upgrade = not self.toggle_disable_upgrade
         after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
