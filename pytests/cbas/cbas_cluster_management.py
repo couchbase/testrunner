@@ -183,13 +183,9 @@ class CBASClusterManagement(CBASBaseTest):
             
             docs_to_verify = docs_to_verify + test_docs
             # Wait for the rebalance to be completed.
-            try:
-                result = self.rest.monitorRebalance()
-                self.assertTrue(result, "Rebalance operation failed after adding %s cbas nodes,"%self.cbas_servers)
-                self.log.info("successfully rebalanced cluster {0}".format(result))
-            except Exception as e:
-                self.log.info(15*"#"+"THIS IS A BUG: MB-25006. REMOVE THIS TRY-CATCH ONCE BUG IS FIXED."+15*"#")
-                pass
+            result = self.rest.monitorRebalance()
+            self.assertTrue(result, "Rebalance operation failed after adding %s cbas nodes,"%self.cbas_servers)
+            self.log.info("successfully rebalanced cluster {0}".format(result))
             
             self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], docs_to_verify, 300),
                             "Data ingestion could'nt complete after rebalance completion.")

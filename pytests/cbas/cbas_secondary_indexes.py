@@ -1,4 +1,7 @@
 from cbas_base import *
+from couchbase import FMT_BYTES
+import threading
+import random
 
 
 class CBASSecondaryIndexes(CBASBaseTest):
@@ -54,7 +57,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
     def test_create_index_without_if_not_exists(self):
         '''
@@ -81,7 +84,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
         # Create another index with same name
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
@@ -114,7 +117,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
         # Create another index with same name
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
@@ -123,7 +126,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
     def test_create_index_with_if_not_exists_different_fields(self):
         '''
@@ -150,7 +153,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, [index_field1],
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
         # Create another index with same name
         create_idx_statement = "create index {0} IF NOT EXISTS on {1}({2});".format(
@@ -162,7 +165,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
         # The index definition should be based on the older field, it should not change
         self.assertTrue(
             self.verify_index_created(self.index_name, [index_field1],
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
     def test_multiple_composite_index_with_overlapping_fields(self):
         '''
@@ -193,7 +196,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name + "1", index_fields1,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
         # Create another composite index with overlapping fields
         index_fields = ""
@@ -208,7 +211,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name + "2", index_fields2,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
     def test_create_index_non_empty_dataset(self):
         '''
@@ -246,7 +249,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
     def test_create_index_with_bucket_connected(self):
         '''
@@ -305,7 +308,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
         drop_idx_statement = "drop index {0}.{1};".format(
             self.cbas_dataset_name, self.index_name)
@@ -316,7 +319,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertFalse(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
     def test_drop_non_existing_index(self):
         '''
@@ -373,7 +376,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
         # Drop dataset
         self.drop_dataset(self.cbas_dataset_name)
@@ -381,7 +384,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
         # Check that the index no longer exists
         self.assertFalse(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
     def test_drop_non_empty_index(self):
         '''
@@ -410,7 +413,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertTrue(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
 
         # Connect to Bucket
         self.connect_to_bucket(cbas_bucket_name=
@@ -433,4 +436,344 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
         self.assertFalse(
             self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name))
+                                      self.cbas_dataset_name)[0])
+
+    def _direct_client(self, server, bucket, timeout=30):
+        # CREATE SDK CLIENT
+        if self.use_sdk_client:
+            try:
+                from sdk_client import SDKClient
+                scheme = "couchbase"
+                host = self.master.ip
+                if self.master.ip == "127.0.0.1":
+                    scheme = "http"
+                    host="{0}:{1}".format(self.master.ip,self.master.port)
+                return SDKClient(scheme=scheme,hosts = [host], bucket = bucket)
+            except Exception, ex:
+                self.log.error("cannot load sdk client due to error {0}".format(str(ex)))
+        # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
+        return self.direct_mc_bin_client(server, bucket, timeout= timeout)
+
+    def test_index_population(self):
+        '''
+        Steps :
+        1.
+        '''
+        # Create Index
+        search_by = self.input.param("search_by", '')
+        exp_number = self.input.param("exp_number", 0)
+        not_fit_value = self.input.param("not_fit_value", '')
+        expected_status = self.input.param("status", 'success')
+        binary = self.input.param("binary", False)
+        if ";" in not_fit_value:
+            not_fit_value = not_fit_value.split(';')
+
+        testuser = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'password': 'password'}]
+        rolelist = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'roles': 'admin'}]
+        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+        self.use_sdk_client =True
+        self.client = self._direct_client(self.master, self.cb_bucket_name).cb
+        k = 'test_index_population'
+
+        index_fields = ""
+        for index_field in self.index_fields:
+            index_fields += index_field + ","
+        index_fields = index_fields[:-1]
+
+        if binary:
+            self.client.upsert('utf16_doc', not_fit_value.encode('utf16'),  format=FMT_BYTES)
+        else:
+            self.client.upsert(k, {index_fields.split(":")[0] : not_fit_value})
+        create_idx_statement = "create index {0} on {1}({2});".format(
+            self.index_name, self.cbas_dataset_name, index_fields)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            create_idx_statement)
+
+        self.assertTrue(status == "success", "Create Index query failed")
+
+        self.assertTrue(
+            self.verify_index_created(self.index_name, self.index_fields,
+                                      self.cbas_dataset_name)[0])
+        self.connect_to_bucket(cbas_bucket_name=
+                                        self.cbas_bucket_name,
+                                        cb_bucket_password=self.cb_bucket_password)
+        self.sleep(20)
+
+        if isinstance(search_by, basestring):
+            statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name, index_fields.split(":")[0], search_by)
+        else:
+            statement = 'SELECT count(*) FROM `{0}` where {1}={2}'.format(self.cbas_dataset_name,
+                                                                            index_fields.split(":")[0], search_by)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, "success")
+        self.assertEquals(errors, None)
+        self.assertEquals(results, [{'$1': exp_number}])
+        statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name,
+                                                                        index_fields.split(":")[0], not_fit_value)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, expected_status)
+        if status == 'success':
+            self.assertEquals(errors, None)
+            self.assertEquals(results, [{'$1': 0}])
+
+    # https://issues.couchbase.com/browse/MB-25646
+    # https://issues.couchbase.com/browse/MB-25657
+    def test_index_population_thread(self):
+        def update_data(client, index_fields):
+            for _ in xrange(100):
+                if index_fields.split(":")[-1] == 'double':
+                    not_fit_value = random.choice([False, "sdfs", 11111])
+                elif index_fields.split(":")[-1] == 'string':
+                    not_fit_value = random.choice([False, 11111, 36.6])
+                elif index_fields.split(":")[-1] == 'bigint':
+                    not_fit_value = random.choice([False, "sdfs", 36.6])
+                perc = random.randrange(0, 100)
+                if perc > 75:
+                    # 25% with binary data
+                    client.upsert('utf16_doc', str(not_fit_value).encode('utf16'), format=FMT_BYTES)
+                elif perc < 10:
+                    # 10% field removed
+                    client.upsert(k, {index_fields.split(":")[0] + "_NEW_FIELD": not_fit_value})
+                else:
+                    client.upsert(k, {index_fields.split(":")[0]: not_fit_value})
+
+        # Create Index
+        search_by = self.input.param("search_by", '')
+        exp_number = self.input.param("exp_number", 0)
+        not_fit_value = self.input.param("not_fit_value", '')
+        expected_status = self.input.param("status", 'success')
+
+        if ";" in not_fit_value:
+            not_fit_value = not_fit_value.split(';')
+
+        testuser = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'password': 'password'}]
+        rolelist = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'roles': 'admin'}]
+        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+        self.use_sdk_client = True
+        self.client = self._direct_client(self.master, self.cb_bucket_name).cb
+        k = 'test_index_population_thread'
+
+        index_fields = ""
+        for index_field in self.index_fields:
+            index_fields += index_field + ","
+        index_fields = index_fields[:-1]
+
+        create_idx_statement = "create index {0} on {1}({2});".format(
+            self.index_name, self.cbas_dataset_name, index_fields)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            create_idx_statement)
+
+        self.assertTrue(status == "success", "Create Index query failed")
+
+        self.assertTrue(
+            self.verify_index_created(self.index_name, self.index_fields,
+                                      self.cbas_dataset_name)[0])
+        self.connect_to_bucket(cbas_bucket_name=
+                               self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+        self.sleep(10)
+
+        d = threading.Thread(name='daemon', target=update_data, args=(self.client, index_fields,))
+        d.setDaemon(True)
+        d.start()
+
+        for i in xrange(10):
+            if isinstance(search_by, basestring):
+                statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name,
+                                                                                index_fields.split(":")[0], search_by)
+            else:
+                statement = 'SELECT count(*) FROM `{0}` where {1}={2}'.format(self.cbas_dataset_name,
+                                                                              index_fields.split(":")[0], search_by)
+            status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+                statement)
+            self.assertEquals(status, "success")
+            self.assertEquals(errors, None)
+            self.assertEquals(results, [{'$1': exp_number}])
+            statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name,
+                                                                            index_fields.split(":")[0], not_fit_value)
+            status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+                statement)
+            self.assertEquals(status, expected_status)
+            if status == 'success':
+                self.assertEquals(errors, None)
+                self.assertEquals(results, [{'$1': 0}])
+
+    def test_index_population_where_statements(self):
+        exp_number = self.input.param("exp_number", 0)
+        where_statement = self.input.param("where_statement", '').replace('_EQ_', '=')
+
+        testuser = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'password': 'password'}]
+        rolelist = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'roles': 'admin'}]
+        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+        self.use_sdk_client = True
+        self.client = self._direct_client(self.master, self.cb_bucket_name).cb
+
+        index_fields = ""
+        for index_field in self.index_fields:
+            index_fields += index_field + ","
+        index_fields = index_fields[:-1]
+
+        create_idx_statement = "create index {0} on {1}({2});".format(
+            self.index_name, self.cbas_dataset_name, index_fields)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            create_idx_statement)
+
+        self.assertTrue(status == "success", "Create Index query failed")
+
+        self.assertTrue(
+            self.verify_index_created(self.index_name, self.index_fields,
+                                      self.cbas_dataset_name)[0])
+        self.connect_to_bucket(cbas_bucket_name=
+                               self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+        self.sleep(20)
+
+        statement = 'SELECT count(*) FROM `{0}` where {1};'.format(self.cbas_dataset_name, where_statement)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, "success")
+        self.assertEquals(errors, None)
+        self.assertEquals(results, [{'$1': exp_number}])
+
+    def test_index_population_joins(self):
+        exp_number = self.input.param("exp_number", 0)
+        self.index_name2 = self.input.param('index_name2', None)
+        self.index_fields2 = self.input.param('index_fields2', None)
+        if self.index_fields2:
+            self.index_fields2 = self.index_fields2.split("-")
+        statement = self.input.param("statement", '').replace('_EQ_', '=').replace('_COMMA_', ',')
+
+        testuser = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'password': 'password'}]
+        rolelist = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'roles': 'admin'}]
+        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+        self.use_sdk_client = True
+        self.client = self._direct_client(self.master, self.cb_bucket_name).cb
+
+        index_fields = ""
+        for index_field in self.index_fields:
+            index_fields += index_field + ","
+        index_fields = index_fields[:-1]
+
+        create_idx_statement = "create index {0} on {1}({2});".format(
+            self.index_name, self.cbas_dataset_name, index_fields)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            create_idx_statement)
+
+        self.assertTrue(status == "success", "Create Index query failed")
+
+        self.assertTrue(
+            self.verify_index_created(self.index_name, self.index_fields,
+                                      self.cbas_dataset_name)[0])
+
+        index_fields2 = ""
+        for index_field in self.index_fields2:
+            index_fields2 += index_field + ","
+        index_fields2 = index_fields2[:-1]
+
+        create_idx_statement = "create index {0} on {1}({2});".format(
+            self.index_name2, self.cbas_dataset_name, index_fields2)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            create_idx_statement)
+
+        self.assertTrue(status == "success", "Create Index query failed")
+
+        self.assertTrue(
+            self.verify_index_created(self.index_name2, self.index_fields2,
+                                      self.cbas_dataset_name)[0])
+
+        self.connect_to_bucket(cbas_bucket_name=
+                               self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+        self.sleep(20)
+
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, "success")
+        self.assertEquals(errors, None)
+        self.assertEquals(len(results), exp_number)
+
+    # https://issues.couchbase.com/browse/MB-25695
+    def test_index_metadata(self):
+        self.buckets = [Bucket(name="beer-sample")]
+        self.perform_doc_ops_in_all_cb_buckets(100000, "create", start_key=0, end_key=100000)
+        index_fields = ""
+        for index_field in self.index_fields:
+            index_fields += index_field + ","
+        index_fields = index_fields[:-1]
+        create_idx_statement = "create index {0} on {1}({2});".format(
+            self.index_name, self.cbas_dataset_name, index_fields)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            create_idx_statement)
+
+        self.assertTrue(status == "success", "Create Index query failed")
+
+        self.connect_to_bucket(cbas_bucket_name=
+                               self.cbas_bucket_name,
+                               cb_bucket_password=self.cb_bucket_password)
+
+        statement = 'SELECT count(*) FROM `{0}`'.format(self.cbas_dataset_name)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, "success")
+        self.assertEquals(errors, None)
+        self.assertEquals(results, [{'$1': 0}])
+
+        _, result = self.verify_index_created(self.index_name, self.index_fields,
+                                      self.cbas_dataset_name)
+
+        self.assertEquals(result[0]['Index']['DatasetName'], self.cbas_dataset_name)
+        self.assertEquals(result[0]['Index']['DataverseName'], 'Default')
+        self.assertEquals(result[0]['Index']['IndexName'], self.index_name)
+        self.assertEquals(result[0]['Index']['IndexStructure'], 'BTREE')
+        self.assertEquals(result[0]['Index']['IsPrimary'], False)
+        self.assertEquals(result[0]['Index']['PendingOp'], 0)  # shouldn't be 0?
+        self.assertEquals(result[0]['Index']['SearchKey'], [index_field.split(":")[:-1]])
+        self.assertEquals(result[0]['Index']['SearchKeyType'], index_field.split(":")[1:])
+
+        self.sleep(30)
+
+        _, result = self.verify_index_created(self.index_name, self.index_fields,
+                                              self.cbas_dataset_name)
+
+        self.assertEquals(result[0]['Index']['DatasetName'], self.cbas_dataset_name)
+        self.assertEquals(result[0]['Index']['DataverseName'], 'Default')
+        self.assertEquals(result[0]['Index']['IndexName'], self.index_name)
+        self.assertEquals(result[0]['Index']['IndexStructure'], 'BTREE')
+        self.assertEquals(result[0]['Index']['IsPrimary'], False)
+        self.assertEquals(result[0]['Index']['PendingOp'], 0)
+        self.assertEquals(result[0]['Index']['SearchKey'], [index_field.split(":")[:-1]])
+        self.assertEquals(result[0]['Index']['SearchKeyType'], index_field.split(":")[1:])
+
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, "success")
+        self.assertEquals(errors, None)
+        self.assertEquals(results, [{'$1': 107303}])
+
+        self.disconnect_from_bucket(cbas_bucket_name=
+                                    self.cbas_bucket_name)
+
+        drop_idx_statement = "drop index {0}.{1};".format(self.cbas_dataset_name, self.index_name)
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            drop_idx_statement)
+
+        _, result = self.verify_index_created(self.index_name, self.index_fields,
+                                              self.cbas_dataset_name)
+
+        self.assertEquals(result, [])
+
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, "success")
+        self.assertEquals(errors, None)
+        self.assertEquals(results, [{'$1': 107303}])
+
+        self.drop_dataset(self.cbas_dataset_name)
+
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(None, [])
+        self.assertEquals(errors, [
+            {u'msg': u'Cannot find dataset beer_ds in dataverse Default nor an alias with name beer_ds!', u'code': 1}])

@@ -54,13 +54,13 @@ class CBASBaseTest(BaseTestCase):
         self.skip_drop_dataset = self.input.param('skip_drop_dataset', False)
         self.query_id = self.input.param('query_id',None)
         self.mode = self.input.param('mode',None)
-        self.num_concurrent_queries = self.input.param('num_queries',5000)
+        self.num_concurrent_queries = self.input.param('num_queries', 5000)
         self.concurrent_batch_size = self.input.param('concurrent_batch_size', 100)
         self.compiler_param = self.input.param('compiler_param', None)
         self.compiler_param_val = self.input.param('compiler_param_val', None)
         self.expect_reject = self.input.param('expect_reject', False)
         self.expect_failure = self.input.param('expect_failure', False)
-        self.index_name = self.input.param('index_name',None)
+        self.index_name = self.input.param('index_name', None)
         self.index_fields = self.input.param('index_fields', None)
         if self.index_fields:
             self.index_fields = self.index_fields.split("-")
@@ -134,13 +134,9 @@ class CBASBaseTest(BaseTestCase):
         nodes = self.rest.node_statuses()
         started = self.rest.rebalance(otpNodes=[node.id for node in nodes])
         if started and wait_for_completion:
-            try:
-                result = self.rest.monitorRebalance()
-                self.assertTrue(result, "Rebalance operation failed after adding %s cbas nodes,"%self.cbas_servers)
-                self.log.info("successfully rebalanced cluster {0}".format(result))
-            except Exception as e:
-                self.log.info(15*"#"+"THIS IS A BUG: MB-25006. REMOVE THIS TRY-CATCH ONCE BUG IS FIXED."+15*"#")
-                pass
+            result = self.rest.monitorRebalance()
+            self.assertTrue(result, "Rebalance operation failed after adding %s cbas nodes,"%self.cbas_servers)
+            self.log.info("successfully rebalanced cluster {0}".format(result))
         else:
             self.assertTrue(started, "Rebalance operation started and in progress,"%self.cbas_servers)
         
@@ -478,7 +474,7 @@ class CBASBaseTest(BaseTestCase):
         except Exception as e:
             self.log.info(e.message)
 
-    def perform_doc_ops_in_all_cb_buckets(self, num_items, operation,start_key=0, end_key=1000):
+    def perform_doc_ops_in_all_cb_buckets(self, num_items, operation, start_key=0, end_key=1000):
         """
         Create/Update/Delete docs in all cb buckets
         :param num_items: No. of items to be created/deleted/updated
@@ -744,7 +740,7 @@ class CBASBaseTest(BaseTestCase):
 
         statement = "select * from Metadata.`Index` where DatasetName='{0}' and IsPrimary=False".format(
             dataset)
-        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+        status, metrics, errors, content, _ = self.execute_statement_on_cbas_via_rest(
             statement)
         if status != "success":
             result = False
@@ -752,7 +748,7 @@ class CBASBaseTest(BaseTestCase):
                           status)
         else:
             index_found = False
-            for index in results:
+            for index in content:
                 if index["Index"]["IndexName"] == index_name:
                     index_found = True
                     field_names = []
@@ -777,5 +773,4 @@ class CBASBaseTest(BaseTestCase):
                         self.log.info("Index fields not correct")
                     break
             result &= index_found
-        return result
-                
+        return result, content
