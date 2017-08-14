@@ -2425,7 +2425,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         output, error = remote_client.execute_couchbase_cli(
             cli_command=cli_command, options=options, cluster_host="127.0.0.1",
             cluster_port=8091, user="Administrator", password="password")
-        self.assertEqual(output, ['{"errors":{"_":"The password must be at least six characters."}}'])
+        self.assertEqual(output,
+                    ['{"errors":{"_":"The password must be at least 6 characters long."}}'])
         try:
             options = '--regenerate'
             outputs = []
