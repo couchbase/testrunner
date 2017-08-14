@@ -411,7 +411,7 @@ class CliBaseTest(BaseTestCase):
         settings = rest.get_global_index_settings()
 
         if storage_mode == "default":
-            storage_mode = "forestdb"
+            storage_mode = "plasma"
         elif storage_mode == "memopt":
             storage_mode = "memory_optimized"
 
