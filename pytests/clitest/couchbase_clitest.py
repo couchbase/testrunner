@@ -968,6 +968,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         compact_interval = self.input.param("compact_interval", None)
         from_period = self.input.param("from_period", None)
         to_period = self.input.param("to_period", None)
+        if compact_interval is None:
+            from_period = "0:0"
+            to_period = "0:0"
         enable_abort = self.input.param("enable_abort", 0)
         expect_error = self.input.param("expect-error", False)
         error_msg = self.input.param("error-msg", "")

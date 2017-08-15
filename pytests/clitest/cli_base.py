@@ -897,12 +897,11 @@ class CliBaseTest(BaseTestCase):
                         raise Exception(
                             "fromHour and fromMinute should be zero")
                 if compact_interval is None:
-                    if from_period != \
-                                            str(cc["interval"][
+                    if (from_period != str(cc["interval"][
                                                     "fromHour"]) + ":" + str(
-                                cc["interval"]["fromMinute"]) \
-                            and str(cc["interval"]["toHour"]) + ":" + str(
-                                cc["interval"]["toMinute"]):
+                                cc["interval"]["fromMinute"])) \
+                    and (to_period != str(cc["interval"]["toHour"]) + ":" + str(
+                                cc["interval"]["toMinute"])):
                         raise Exception(
                             "fromHour and fromMinute do not set correctly")
         return True
