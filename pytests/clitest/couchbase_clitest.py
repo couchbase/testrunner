@@ -706,7 +706,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if name and (name[0] == name[-1]) and name.startswith(("'", '"')):
             name = name[1:-1]
         if not index_storage_mode and services and "index" in services:
-            index_storage_mode = "forestdb"
+            index_storage_mode = "plasma"
         if not services:
             services = "data"
 
