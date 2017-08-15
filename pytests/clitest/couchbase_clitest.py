@@ -1829,6 +1829,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         init_num_servers = self.input.param("init-num-servers", 1)
 
         server = copy.deepcopy(self.servers[0])
+        if len(self.servers) < 4:
+            mesg = "***\n Collect logs start tests need minimum 4 servers to run\n***"
+            RemoteMachineShellConnection(server).stop_current_python_running(mesg)
 
         rest = RestConnection(server)
         rest.force_eject_node()
