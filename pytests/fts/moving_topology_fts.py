@@ -962,7 +962,7 @@ class MovingTopFTS(FTSBaseTest):
                                    args=())
         fail_thread.start()
         index = self._cb_cluster.get_fts_index_by_name('default_index_1')
-        new_plan_param = {"maxPartitionsPerPIndex": 2}
+        new_plan_param = {"maxPartitionsPerPIndex": 64}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
