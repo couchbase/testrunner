@@ -1585,14 +1585,17 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
-            _, _, success = cli.cluster_init(256, 256, None, init_services, init_index_storage_mode, None,
-                                             server.rest_username, server.rest_password, None)
+            _, _, success = cli.cluster_init(256, 256, None, init_services,
+                                             init_index_storage_mode, None,
+                                             server.rest_username, server.rest_password,
+                                             None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.server_add(server_to_add, server_username, server_password, group, services,
-                                      index_storage_mode)
+        stdout, _, _ = cli.server_add(server_to_add, server_username, server_password,
+                                                     group, services,
+                                                     index_storage_mode)
 
         if not services:
             services = "kv"
@@ -1610,8 +1613,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                             "Expected command to succeed")
             self.assertTrue(self.verifyPendingServer(server, server_to_add, group, services),
                             "Pending server has incorrect settings")
-            self.assertTrue(self.verifyIndexSettings(server, None, None, None, index_storage_mode, None, None),
-                            "Invalid index storage setting")
+            self.assertTrue(self.verifyIndexSettings(server, None, None, None,
+                                                     index_storage_mode, None, None),
+                                                     "Invalid index storage setting")
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
                             "Expected error message not found")
