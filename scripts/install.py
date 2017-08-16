@@ -60,7 +60,6 @@ Available keys:
  xdcr_upr=                  Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
  fts_query_limit=1000000    Set a limit for the max results to be returned by fts for any query
  change_indexer_ports=false Sets indexer ports values to non-default ports
- storage_mode=plasma        Sets indexer storage mode
 
 
 Examples:
@@ -542,11 +541,7 @@ class CouchbaseServerInstaller(Installer):
                                                 password=server.rest_password,
                                                         services=set_services)
                     if "index" in set_services:
-                        if "storage_mode" in params:
-                            storageMode = params["storage_mode"]
-                        else:
-                            storageMode = "plasma"
-                        rest.set_indexer_storage_mode(storageMode=storageMode)
+                        rest.set_indexer_storage_mode()
                     rest.init_cluster(username=server.rest_username,
                                          password=server.rest_password)
 
