@@ -3774,8 +3774,9 @@ class RestConnection(object):
         url = 'api/index/{0}?multiscancount=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
-        params = json.loads("{0}".format(body).replace('\'', '"').replace(
-            'True', 'true').replace('False', 'false'))
+        count_cmd_body = body.replace('\'', '"').replace('True', 'true').replace('False', 'false')
+        count_cmd_body = count_cmd_body.replace("~[]{}UnboundedtruenilNA~", "~[]{}UnboundedTruenilNA~")
+        params = json.loads(count_cmd_body)
         params = json.dumps(params).encode("ascii", "ignore").replace("\\\\", "\\")
         log.info(json.dumps(params).encode("ascii", "ignore"))
         status, content, header = self._http_request(api, 'GET', headers=headers,
