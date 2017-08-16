@@ -6,6 +6,7 @@ import httplib2
 import json
 import string
 import time
+import ast
 from optparse import OptionParser
 
 
@@ -33,7 +34,8 @@ def main():
 
     servers = json.loads(options.servers)
     addPoolServers = []
-    if options.addPoolServers:
+
+    if ast.literal_eval(options.addPoolServers) is not None:
         addPoolServers = json.loads(options.addPoolServers)
 
     f = open(options.inifile)
