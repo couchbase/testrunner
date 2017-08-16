@@ -30,6 +30,14 @@ def getNumberOfServers( iniFile):
     f.close()
     return contents.count('dynamic')
 
+def getNumberOfAddpoolServers(iniFile, addPoolId):
+    f = open(iniFile)
+    contents = f.read()
+    f.close()
+    try:
+        return contents.count(addPoolId)
+    except:
+        return 0
 
 def main():
 
@@ -41,6 +49,7 @@ def main():
     parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
     parser.add_option('-c','--component', dest='component', default=None)
     parser.add_option('-p','--poolId', dest='poolId', default='12hour')
+    parser.add_option('-a','--addPoolId', dest='addPoolId', default=None)
     parser.add_option('-t','--test', dest='test', default=False, action='store_true') # use the test Jenkins
     parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
@@ -172,13 +181,28 @@ def main():
                             mailing_list = data['mailing_list']
                         else:
                             mailing_list = 'qa@couchbase.com'
-                        testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],
-                                    'confFile':data['confFile'], 'iniFile':data['config'],
-                                    'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                                    'parameters':data['parameters'], 'initNodes':initNodes,
-                                    'installParameters':installParameters,
-                                    'slave': slave, 'owner': owner, 'mailing_list': mailing_list})
 
+                        # if there's an additional pool, get the number
+                        # of additional servers needed from the ini
+                        addPoolServerCount = getNumberOfAddpoolServers(
+                            data['config'],
+                            options.addPoolId)
+
+                        testsToLaunch.append({
+                            'component':data['component'],
+                            'subcomponent':data['subcomponent'],
+                            'confFile':data['confFile'],
+                            'iniFile':data['config'],
+                            'serverCount':getNumberOfServers(data['config']),
+                            'addPoolServerCount': addPoolServerCount,
+                            'timeLimit':data['timeOut'],
+                            'parameters':data['parameters'],
+                            'initNodes':initNodes,
+                            'installParameters':installParameters,
+                            'slave': slave,
+                            'owner': owner,
+                            'mailing_list': mailing_list
+                            })
                 else:
                     print data['component'], data['subcomponent'], ' is not supported in this release'
             else:
@@ -241,12 +265,37 @@ def main():
                 serverCount = int(content)
                 print time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available'
 
-
                 haveTestToLaunch = False
                 i = 0
                 while not haveTestToLaunch and i < len(testsToLaunch):
                     if testsToLaunch[i]['serverCount'] <= serverCount:
-                        haveTestToLaunch = True
+                        if testsToLaunch[i]['addPoolServerCount']:
+                            getAddPoolUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
+                            if options.serverType.lower() == 'docker':
+                                # may want to add OS at some point
+                                getAddPoolUrl = getAddPoolUrl + 'docker?os={0}&poolId={1}'.format(
+                                    options.os, options.addPoolId)
+                            else:
+                                getAddPoolUrl = getAddPoolUrl + '{0}?poolId={1}'.format(
+                                    options.os, options.addPoolId)
+
+                            response, content = httplib2.Http(
+                                timeout=60).request(getAddPoolUrl, 'GET')
+                            if response.status != 200:
+                                print time.asctime(time.localtime(
+                                    time.time())), 'invalid server response', content
+                                time.sleep(POLL_INTERVAL)
+                            elif int(content) == 0:
+                                print time.asctime(
+                                    time.localtime(time.time())),\
+                                    'no {0} VMs at this time'.format(options.addPoolId)
+                                i = i + 1
+                            else:
+                                print time.asctime( time.localtime(time.time()) ),\
+                                    "there are {0} {1} servers available".format(int(content), options.addPoolId)
+                                haveTestToLaunch = True
+                        else:
+                            haveTestToLaunch = True
                     else:
                         i = i + 1
 
@@ -279,12 +328,35 @@ def main():
                     print 'getServerURL', getServerURL
 
                     response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
-
-
                     print 'response.status', response, content
 
+                    # get additional pool servers as needed
+                    if testsToLaunch[i]['addPoolServerCount']:
+                        if options.serverType.lower() == 'docker':
+                             getServerURL = 'http://' + SERVER_MANAGER + \
+                                    '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
+                               format(descriptor,
+                                      testsToLaunch[i]['addPoolServerCount'],
+                                      options.os,
+                                      options.addPoolId)
 
-                    if response.status == 499:
+                        else:
+                            getServerURL = 'http://' + SERVER_MANAGER + \
+                                    '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
+                               format(descriptor,
+                                      testsToLaunch[i]['addPoolServerCount'],
+                                      testsToLaunch[i]['timeLimit'], \
+                                      options.os,
+                                      options.addPoolId)
+                        print 'getServerURL', getServerURL
+
+                        response2, content2 = httplib2.Http(timeout=60).request(getServerURL, 'GET')
+                        print 'response2.status', response2, content2
+
+
+                    if response.status == 499 or \
+                            (testsToLaunch[i]['addPoolServerCount'] and
+                            response2.status == 499):
                         time.sleep(POLL_INTERVAL) # some error checking here at some point
                     else:
                         # and send the request to the test executor
@@ -322,9 +394,17 @@ def main():
                             r2 = json.loads(content)
                             url = url + '&servers=' + urllib.quote(json.dumps(r2).replace(' ',''))
 
+                            if testsToLaunch[i]['addPoolServerCount']:
+                                addPoolServers = json.loads(content2)
+                                url = url + '&addPoolServerId=' +\
+                                      options.addPoolId +\
+                                      '&addPoolServers=' +\
+                                      urllib.quote(json.dumps(addPoolServers).
+                                                   replace(' ',''))
+
 
                         print '\n', time.asctime( time.localtime(time.time()) ), 'launching ', url
-
+                        print url
 
                         if options.noLaunch:
                             # free the VMs
@@ -357,15 +437,10 @@ def main():
             time.sleep(POLL_INTERVAL)
     #endwhile
 
-
-
     print '\n\n\ndone, everything is launched'
     for i in summary:
         print i['test'], 'was launched at', i['time']
     return
-
-
-
 
 
 if __name__ == "__main__":
