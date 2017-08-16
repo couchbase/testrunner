@@ -315,7 +315,7 @@ class OptionsRestTests(QueryTests):
 
             statement='EXPLAIN SELECT * FROM %s t1 WHERE job_title = "Engineer" and name in (SELECT name FROM %s where _type=$1 and name=$2)&args=["Support","employee-4"]'% (bucket.name,bucket.name)
             output = self.curl_helper(statement)
-            self.assertTrue(output['results'][0]['plan']['~children'][0]['index'] == 'def_name2')
+            self.assertTrue(output['results'][0]['plan']['~children'][0]['index'] == 'def_name')
 
             statement='SELECT * FROM %s t1 WHERE job_title = "Engineer" and name in (SELECT name FROM %s where _type=$1 and name=$2)&args=["Support","employee-4"]'% (bucket.name,bucket.name)
             actual_result = self.curl_helper(statement)
@@ -337,7 +337,7 @@ class OptionsRestTests(QueryTests):
             self.assertTrue(output['results'][0]['plan']['~children'][0]['~children'][0]['index'] == 'def_name2')
             statement = 'SELECT * FROM  (SELECT name FROM %s where job_title=$1 and name=$2) as name&args=["Support","employee-4"]'% (bucket.name)
             actual_result = self.curl_helper(statement)
-            self.assertTrue(output['metrics']['mutationCount'] == 144)
+            self.assertTrue(actual_result['metrics']['resultCount'] == 144)
 
 
 
