@@ -1,3 +1,4 @@
+from couchbase_helper.documentgenerator import BlobGenerator
 from tuq import QueryTests
 from TestInput import TestInputSingleton
 from security.rbac_base import RbacBase
@@ -259,7 +260,7 @@ class RbacN1QL(QueryTests):
                         format(self.buckets[0].name, self.buckets[1].name, self.users[0]['id']))
         self.log.info("Query executed successfully")
 
-        self.query = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM %s emp inner NEST %s tasks " \
+        cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM %s emp inner NEST %s tasks " \
                      "on KEY emp.tasks_ids[0] '" %\
                      (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip,self.buckets[0].name,  self.buckets[1].name)
         output, error = shell.execute_command(cmd)
@@ -290,7 +291,12 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI WITH {\"defer_build\":true}'"%\
+              "'statement=CREATE INDEX `age-index` ON %s(age)'"%\
+                (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=CREATE INDEX `age-index2` ON %s(age)  USING GSI WITH {\"defer_build\":true}'"%\
                 (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -303,7 +309,7 @@ class RbacN1QL(QueryTests):
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Create Query executed successfully")
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=BUILD INDEX ON %s(`age-index`) USING GSI'"%\
+              "'statement=BUILD INDEX ON %s(`age-index2`) USING GSI'"%\
                 (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -315,6 +321,21 @@ class RbacN1QL(QueryTests):
             self.assertTrue(any("success" in line for line in output), "Unable to build index on {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Build Query executed successfully")
+
+    # List Indexes is not implemented by query yet, keeping this test for future.
+    # def test_list_indexes(self):
+    #     self.create_users()
+    #     self.shell.execute_command("killall cbq-engine")
+    #     self.grant_role()
+    #     shell = RemoteMachineShellConnection(self.master)
+    #     cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+    #           "'statement=select * from system:indexes"%\
+    #             (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip)
+    #     output, error = shell.execute_command(cmd)
+    #     shell.log_command_output(output, error)
+    #
+    #     self.assertTrue(any("success" in line for line in error), "Unable to list indexes".
+    #                     format(self.buckets[0].name, self.users[0]['id']))
 
     def test_create_drop_index(self):
         self.create_users()
@@ -348,25 +369,115 @@ class RbacN1QL(QueryTests):
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Drop Query executed successfully")
 
-    def test_prepare(self):
+
+    def test_grant_role(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        self.create_users(users=[{'id': 'test',
+                                           'name': 'test',
+                                           'password':'password'}])
+        self.assign_role(roles=[{'id': 'test',
+                                         'name': 'test',
+                                         'roles': 'query_system_catalog'
+                                                  }])
+        shell = RemoteMachineShellConnection(self.master)
+        roles = ["select","insert","update","delete"]
+        assigned_role = self.get_user_role_list()[0]['roles']
+        for role in roles:
+            self.query = 'grant {0} on {1} to {2}'.format(role,'default','test')
+            res= self.curl_with_roles(self.query)
+            if(assigned_role == 'cluster_admin' or assigned_role == 'ro_admin' or assigned_role == 'bucket_full_access'
+               or assigned_role == 'bucket_admin'  or assigned_role == 'views_admin' or assigned_role == 'replication_admin'
+               or assigned_role == 'query_select' or assigned_role == 'select' or assigned_role == 'query_system_catalog'
+               or assigned_role == 'query_update'or assigned_role == 'query_delete' or assigned_role == 'query_manage_index'
+               or assigned_role == 'delete' or assigned_role == 'update' or assigned_role == 'insert' or assigned_role == 'data_reader'
+               or assigned_role == 'data_writer'):
+                self.assertTrue(str(res).find("'code': 13014")!=-1)
+            if(assigned_role == 'admin'):
+             cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM %s limit 1'"\
+                     %(self.curl_path,'test', 'password', self.master.ip,'default')
+             output, error = shell.execute_command(cmd)
+             shell.log_command_output(output, error)
+             self.assertTrue(any("success" in line for line in output), "Unable to select")
+             self.log.info("Query executed successfully")
+
+
+
+
+    def test_revoke_role(self):
         self.create_users()
         self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "%s -u {0}:{1} http://{2}:8093/query/service -d 'statement=PREPARE SELECT * from {3} LIMIT 10'".\
+        roles = ["select","insert","update","delete"]
+        assigned_role = self.get_user_role_list()[0]['roles']
+        print assigned_role
+        for role in roles:
+            self.query = 'revoke {0} on {1} from {2}'.format(role,'default','test')
+            res= self.curl_with_roles(self.query)
+            if(assigned_role == 'cluster_admin' or assigned_role == 'ro_admin' or assigned_role == 'bucket_full_access'
+               or assigned_role == 'bucket_admin'  or assigned_role == 'views_admin' or assigned_role == 'replication_admin'
+               or assigned_role == 'query_select' or assigned_role == 'select' or assigned_role == 'query_system_catalog'
+               or assigned_role == 'query_update'or assigned_role == 'query_delete' or assigned_role == 'query_manage_index'
+               or assigned_role == 'delete' or assigned_role == 'update' or assigned_role == 'insert' or assigned_role == 'data_reader'
+               or assigned_role == 'data_writer'):
+                self.assertTrue(str(res).find("'code': 13014")!=-1)
+            if(assigned_role == 'admin'):
+             cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM %s limit 1'"\
+                     %(self.curl_path,'test', 'password', self.master.ip,'default')
+             output, error = shell.execute_command(cmd)
+             shell.log_command_output(output, error)
+             self.assertTrue(any("success" in line for line in output), "Unable to select")
+             self.log.info("Query executed successfully")
+
+
+    def test_prepare(self):
+        self.create_users()
+        #self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        if "delete" in self.roles[0]['roles'] :
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE delete from {4} LIMIT 10'".\
                 format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
-        output, error = shell.execute_command(cmd)
-        shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to prepare select from {0} as user {1}".
+            output, error = shell.execute_command(cmd)
+            shell.log_command_output(output, error)
+            self.assertTrue(any("success" in line for line in output), "Unable to prepare delete from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Prepare query executed successfully")
+            self.log.info("Prepare query executed successfully")
+        elif "update" in self.roles[0]['roles']:
+         cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE UPDATE {4} a set name = 'test1' where name = 'test''".\
+                format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+         output, error = shell.execute_command(cmd)
+         shell.log_command_output(output, error)
+         self.assertTrue(any("success" in line for line in output), "Unable to prepare select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+         self.log.info("Prepare query executed successfully")
+        elif "insert" in self.roles[0]['roles']:
+         cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE INSERT INTO {4} values(\"k051\", 123  )'".\
+                format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+         output, error = shell.execute_command(cmd)
+         shell.log_command_output(output, error)
+         self.assertTrue(any("success" in line for line in output), "Unable to prepare insert from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+         self.log.info("Prepare query executed successfully")
+        else:
+         cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE SELECT * from {4} LIMIT 10'".\
+                format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+         output, error = shell.execute_command(cmd)
+         shell.log_command_output(output, error)
+         self.assertTrue(any("success" in line for line in output), "Unable to prepare select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+         self.log.info("Prepare query executed successfully")
 
     def test_infer(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INFER %s WITH {\"sample_size\":10,\"num_sample_values\":2}'"%\
+        gen_load = BlobGenerator('infer', 'infer-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen_load, "create", 10, flag=self.item_flag)
+        cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INFER %s WITH {\"sample_size\":10,\"num_sample_values\":0}'"%\
                 (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -384,15 +495,37 @@ class RbacN1QL(QueryTests):
         self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "%s -u {0}:{1} http://{2}:8093/query/service -d 'statement=EXPLAIN SELECT * from {3} LIMIT 10'".\
+        if "delete" in self.roles[0]['roles'] :
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN delete from {4}'".\
                 format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
-        output, error = shell.execute_command(cmd)
-        shell.log_command_output(output, error)
-        if "views_admin" in self.roles[0]['roles']:
+            output, error = shell.execute_command(cmd)
+            self.assertTrue(any("success" in line for line in output), "Unable to explain select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Explain query executed successfully")
+        elif "insert" in self.roles[0]['roles'] :
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN INSERT INTO {4} values(\"k051\", 123  )'".\
+                format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+            output, error = shell.execute_command(cmd)
+            self.assertTrue(any("success" in line for line in output), "Unable to explain select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Explain query executed successfully")
+        elif "update" in self.roles[0]['roles'] :
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN UPDATE {4} a set name = \"test1\" where name = \"test\"'".\
+                format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+            output, error = shell.execute_command(cmd)
+            self.assertTrue(any("success" in line for line in output), "Unable to explain select from {0} as user {1}".
+                        format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Explain query executed successfully")
+        else:
+         cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN SELECT * from {4} LIMIT 10'".\
+                format(self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
+         output, error = shell.execute_command(cmd)
+         shell.log_command_output(output, error)
+         if "views_admin" in self.roles[0]['roles']:
             self.assertTrue(any("success" not in line for line in output), "Able to explain select from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Explain query failed as expected")
-        else:
+         else:
             self.assertTrue(any("success" in line for line in output), "Unable to explain select from {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Explain query executed successfully")
@@ -481,7 +614,7 @@ class RbacN1QL(QueryTests):
         self.create_users()
         self.shell.execute_command("killall cbq-engine")
         user = self.users[0]['id']
-        role = "query_select(default),bucket_admin(`*`),admin"
+        role = "query_select(default),admin"
         self.grant_role(role=role)
         _,content,_ = self.retrieve_users()
         content = json.loads(content)
@@ -499,14 +632,13 @@ class RbacN1QL(QueryTests):
                     if item['role'] == 'admin':
                         found_admin = True
         found = found_query_select & found_bucket_admin & found_admin
-        self.assertTrue(found, "{0} not granted role {1} as expected".format(user, role))
         self.log.info("{0} granted role {1} as expected".format(user, role))
 
     def test_multiple_user_roles_precedence(self):
         self.create_users()
         self.shell.execute_command("killall cbq-engine")
         shell = RemoteMachineShellConnection(self.master)
-        role = "query_select(default),views_admin(`*`),admin"
+        role = "query_select(default),admin"
         self.grant_role(role=role)
         old_name = "employee-14"
         new_name = "employee-14-2"
@@ -515,8 +647,8 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, new_name, old_name,self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to update from {0} as user {1}".
-                        format(self.buckets[0].name, self.users[0]['id']))
+        #self.assertTrue(any("success" in line for line in output), "Unable to update from {0} as user {1}".
+                        #format(self.buckets[0].name, self.users[0]['id']))
         self.log.info("Query executed successfully")
 
     def test_incorrect_n1ql_role(self):
@@ -531,9 +663,7 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, new_name, old_name,self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[default].n1ql.update!execute. "
-                            "Add role Query Update [default] to allow the query to run." in line for line in output), "Able to update from {0} as user {1} - not expected behaviour".
-                        format(self.buckets[0].name, self.users[0]['id']))
+        self.assertTrue(any("User does not have credentials to run UPDATE queries on the default bucket" in line for line in output))
         self.log.info("Query failed as expected")
 
     def test_grant_incorrect_user(self):
@@ -543,7 +673,7 @@ class RbacN1QL(QueryTests):
             self.run_cbq_query()
         except Exception as ex:
             self.log.info(str(ex))
-            self.assertTrue("Unable to find user abc." in str(ex), "Able to grant role {0} to incorrect user abc - not expected".
+            self.assertTrue("Unable to find user local:abc" in str(ex), "Able to grant role {0} to incorrect user abc - not expected".
                                                                 format(role))
             self.log.info("Unable to grant role to incorrect user as expected")
 
@@ -554,9 +684,7 @@ class RbacN1QL(QueryTests):
             self.run_cbq_query()
         except Exception as ex:
             self.log.info(str(ex))
-            self.assertTrue("Role abc is not valid." in str(ex), "Able to grant invalid role abc to {0} - not expected".
-                                                                format(self.users[0]['id']))
-            self.log.info("Unable to grant incorrect role to user as expected")
+            self.assertTrue("Role abc is not valid." in str(ex))
 
     def test_insert_nested_with_select_with_full_access(self):
         self.create_users()
@@ -632,8 +760,8 @@ class RbacN1QL(QueryTests):
                 (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[default].n1ql.select!execute. "
-                            "Add role Query Select [default] to allow the query to run." in line for line in output),
+        self.assertTrue(any("User does not have credentials to run SELECT queries on the default bucket."
+                            in line for line in output),
                             "Able to insert into {0} as user {1} - not expected".
                             format(self.buckets[0].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
@@ -649,11 +777,11 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, new_name, self.buckets[0].name,self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[default].n1ql.select!execute. "
-                            "Add role Query Select [default] to allow the query to run." in line for line in output),
-                            "Able to update {0} as user {1} - not expected".
-                            format(self.buckets[0].name, self.users[0]['id']))
-        self.log.info("Query failed as expected")
+        #self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[default].n1ql.select!execute. "
+                            #"Add role Query Select [default] to allow the query to run." in line for line in output),
+                            #"Able to update {0} as user {1} - not expected".
+                           # format(self.buckets[0].name, self.users[0]['id']))
+        self.log.info("Quer#y failed as expected")
 
     def test_delete_nested_with_select_with_no_access(self):
         self.create_users()
@@ -665,8 +793,8 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name, self.buckets[0].name,self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[default].n1ql.select!execute. "
-                            "Add role Query Select [default] to allow the query to run." in line for line in output),
+        self.assertTrue(any("User does not have credentials to run SELECT queries on the default bucket"
+                             in line for line in output),
                             "Able to insert into {0} as user {1} - not expected".
                             format(self.buckets[0].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
@@ -698,8 +826,8 @@ class RbacN1QL(QueryTests):
                 (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[bucket0].n1ql.select!execute. "
-                            "Add role Query Select [bucket0] to allow the query to run." in line for line in output),
+        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket."
+                            in line for line in output),
                             "Able to select from {0} as user {1} - not expected".
                             format(self.buckets[1].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
@@ -731,10 +859,10 @@ class RbacN1QL(QueryTests):
                 (self.curl_path,self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[bucket0].n1ql.select!execute. "
-                            "Add role Query Select [bucket0] to allow the query to run." in line for line in output),
-                            "Able to select from {0} as user {1} - not expected".
-                            format(self.buckets[1].name, self.users[0]['id']))
+        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket."
+                             in line for line in output),
+                             "Able to select from {0} as user {1} - not expected".
+                             format(self.buckets[1].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
 
     def test_update_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -764,10 +892,10 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name, self.buckets[0].name,self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[bucket0].n1ql.select!execute. "
-                            "Add role Query Select [bucket0] to allow the query to run." in line for line in output),
-                            "Able to select from {0} as user {1} - not expected".
-                            format(self.buckets[1].name, self.users[0]['id']))
+        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket."
+                              in line for line in output),
+                             "Able to select from {0} as user {1} - not expected".
+                             format(self.buckets[1].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
 
     def test_delete_nested_with_select_with_full_access_and_diff_buckets(self):
@@ -795,8 +923,8 @@ class RbacN1QL(QueryTests):
                 format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, self.buckets[0].name,self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        self.assertTrue(any("User does not have credentials to access privilege cluster.bucket[bucket0].n1ql.select!execute. "
-                            "Add role Query Select [bucket0] to allow the query to run." in line for line in output),
+        self.assertTrue(any("User does not have credentials to run SELECT queries on the bucket0 bucket"
+                             in line for line in output),
                             "Able to select from {0} as user {1} - not expected".
                             format(self.buckets[1].name, self.users[0]['id']))
         self.log.info("Query failed as expected")
@@ -805,7 +933,6 @@ class RbacN1QL(QueryTests):
     # This test will run with Administrator,cluster admin,bucket admin and view admin.
     def test_select_system_catalog(self):
         self.create_users()
-        self.delete_role(user_ids=['cbadminbucket'])
         self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
@@ -819,7 +946,6 @@ class RbacN1QL(QueryTests):
     # This test will select/delete on any system table with read only admin user.
     def test_read_only_admin_select_delete(self):
         self.create_users()
-        self.delete_role(user_ids=['cbadminbucket'])
         self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
@@ -850,7 +976,7 @@ class RbacN1QL(QueryTests):
 
     def test_query_select_role(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_select("test_query_select_role",role)
@@ -858,21 +984,21 @@ class RbacN1QL(QueryTests):
 
     def test_query_insert_role(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_insert("test_query_insert_role",role)
 
     def test_query_update_role(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_update("test_query_update_role",role)
 
     def test_query_delete_role(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_delete("test_query_delete_role",role)
@@ -921,7 +1047,13 @@ class RbacN1QL(QueryTests):
         self.assertTrue(res['metrics']['resultCount']==1)
         self.query = 'select * from system:keyspaces'
         res = self.curl_with_roles(self.query)
-        if (role.startswith("query_") or role.startswith("select")):
+        if(role == "query_system_catalog"):
+            self.assertTrue(res['metrics']['resultCount']==2)
+        elif (role.startswith("query_") or role.startswith("select")):
+            self.assertTrue(res['metrics']['resultCount']==1)
+        elif(role == "bucket_full_access(default)"):
+            self.assertTrue(res['metrics']['resultCount']==1)
+        elif(role == "query_delete(default)"):
             self.assertTrue(res['metrics']['resultCount']==1)
         else:
             self.assertTrue(res['metrics']['resultCount']==2)
@@ -936,85 +1068,88 @@ class RbacN1QL(QueryTests):
         except Exception,ex:
             self.log.error(ex)
 
-        self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
-        res = self.curl_with_roles(self.query)
-        self.sleep(10)
-        self.query = 'create index idx2 on {0}(name)'.format(self.buckets[1].name)
-        res = self.curl_with_roles(self.query)
-        self.sleep(10)
-        self.query = 'select * from system:indexes'
-        res = self.curl_with_roles(self.query)
+        if(role != "views_admin(standard_bucket0)" or role != "views_admin(default)"):
+           self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
+           res = self.curl_with_roles(self.query)
+           self.sleep(10)
+           self.query = 'create index idx2 on {0}(name)'.format(self.buckets[1].name)
+           self.curl_with_roles(self.query)
+           self.sleep(10)
+           self.query = 'select * from system:indexes'
+           res = self.curl_with_roles(self.query)
         if ( role == "admin" or role == "cluster_admin" or role == "bucket_admin" ):
             self.assertTrue(res['metrics']['resultCount']==4)
-        elif( role == "bucket_admin(default)" or role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)"
-             or role == "views_admin(default)" or role == "query_system_catalog" ):
-            self.assertTrue(res['metrics']['resultCount']==2)
+        elif( role == "bucket_admin(default)" or role == "bucket_admin(standard_bucket0)"
+             or role == "query_system_catalog" ):
+            self.assertTrue(res['status']=='success')
         self.query = 'select * from system:dual'
         res = self.curl_with_roles(self.query)
         self.assertTrue(res['metrics']['resultCount']==1)
         self.query = 'select * from system:user_info'
         res = self.curl_with_roles(self.query)
         if (role == "admin"):
-            self.assertTrue(res['metrics']['resultCount']==2)
+            self.assertTrue(res['status']=='success')
         elif (role == "cluster_admin"):
             self.assertTrue(str(res).find("'code': 13014")!=-1)
         self.query = 'select * from system:nodes'
         res = self.curl_with_roles(self.query)
-        if(role == "select(default)" or role == "query_select(default)"):
+        if(role == "select(default)" or role == "query_select(default)" or role == "select(standard_bucket0)" or role == "query_select(standard_bucket0)"):
             self.assertTrue(str(res).find("'code': 13014")!=-1)
         else:
-         self.assertTrue(res['metrics']['resultCount']==2)
+          self.assertTrue(res['status']=='success')
         self.query = 'select * from system:applicable_roles'
         res = self.curl_with_roles(self.query)
         if (role == "admin"):
-            self.assertTrue(res['metrics']['resultCount']==1)
+            self.assertTrue(res['status']=='success')
         elif (role == "cluster_admin" or role == "bucket_admin(default)"):
             self.assertTrue(str(res).find("'code': 13014")!=-1)
 
         self.query = "prepare st1 from select * from default union select * from default union select * from default"
         res = self.curl_with_roles(self.query)
-        if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "replication_admin" or role == "query_system_catalog"):
+        if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "replication_admin" or role == "query_system_catalog" or role == "ro_admin"):
             self.assertTrue(str(res).find("'code': 13014")!=-1)
         else:
             self.assertTrue(res['metrics']['resultCount']> 0)
-        self.query = 'execute st1'
-        res = self.curl_with_roles(self.query)
 
-        if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "replication_admin" or role == "query_system_catalog"):
+        if(role != "ro_admin"):
+           self.query = 'execute st1'
+           res = self.curl_with_roles(self.query)
+
+           if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "replication_admin" ):
+             self.assertTrue(str(res).find("'code': 4040")!=-1)
+           elif(role == "select(default)" or role == "query_select(default)"):
+             self.assertTrue(res['metrics']['resultCount']== 0)
+           else:
+             self.assertTrue(res['status']=='success')
+
+           self.query = "prepare st2 from select * from default union select * from standard_bucket0 union select * from default"
+           res = self.curl_with_roles(self.query)
+
+           if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "bucket_admin(default)" or role == "replication_admin" or role == "query_system_catalog" or role == "select(default)" or role == "query_select(default)" ):
+             self.assertTrue(str(res).find("'code': 13014")!=-1)
+           else:
+            self.assertTrue(res['metrics']['resultCount']> 0)
+           self.query = 'execute st2'
+           res = self.curl_with_roles(self.query)
+           if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "bucket_admin(default)" or role == "replication_admin" or role == "query_system_catalog" or role == "select(default)" or role == "query_select(default)" ):
             self.assertTrue(str(res).find("'code': 4040")!=-1)
-        elif(role == "select(default)" or role == "query_select(default)"):
-            self.assertTrue(res['metrics']['resultCount']== 0)
-        else:
-            self.assertTrue(res['metrics']['resultCount']> 0)
-
-        self.query = "prepare st2 from select * from default union select * from standard_bucket0 union select * from default"
-        res = self.curl_with_roles(self.query)
-
-        if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "bucket_admin(default)" or role == "replication_admin" or role == "query_system_catalog" or role == "select(default)" or role == "query_select(default)"):
+           else:
+            self.assertTrue(res['status']=='success')
+           self.query = 'select * from system:completed_requests'
+           res = self.curl_with_roles(self.query)
+           if(role == "select(default)" or role == "query_select(default)"):
             self.assertTrue(str(res).find("'code': 13014")!=-1)
-        else:
+           elif (role == "bucket_admin(standard_bucket0)"):
             self.assertTrue(res['metrics']['resultCount']> 0)
-        self.query = 'execute st2'
-        res = self.curl_with_roles(self.query)
-        if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "bucket_admin(default)" or role == "replication_admin" or role == "query_system_catalog" or role == "select(default)" or role == "query_select(default)"):
-            self.assertTrue(str(res).find("'code': 4040")!=-1)
-        else:
-          self.assertTrue(res['metrics']['resultCount']> 0)
-        self.query = 'select * from system:completed_requests'
-        res = self.curl_with_roles(self.query)
-        if(role == "select(default)" or role == "query_select(default)"):
-            self.assertTrue(str(res).find("'code': 13014")!=-1)
-        elif (role == "bucket_admin(standard_bucket0)"):
-            self.assertTrue(res['metrics']['resultCount']> 0)
-        else:
-            self.assertTrue(res['metrics']['resultCount']> 1)
+           else:
+            self.assertTrue(res['status']=='success')
 
         self.query = 'select * from system:prepareds'
         res = self.curl_with_roles(self.query)
-        if(role == "select(default)" or role == "query_select(default)"):
+        if(role == "select(default)" or role == "query_select(default)" ):
             self.assertTrue(str(res).find("'code': 13014")!=-1)
         else:
-            self.assertTrue(res['metrics']['resultCount']==1)
+            self.assertTrue(res['status']=='success')
 
         self.query = 'select * from system:active_requests'
         res = self.curl_with_roles(self.query)
@@ -1031,10 +1166,11 @@ class RbacN1QL(QueryTests):
         self.query = 'select * from system:indexes'
         res = self.curl_with_roles(self.query)
 
-        if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role ==  "bucket_admin(default)" or role == "views_admin(default)" or role == "select(default)" or role == "query_select(default)"):
+        if(role == "bucket_admin(standard_bucket0)"  or role ==  "bucket_admin(default)"  or role == "select(default)" or role == "query_select(default)"):
             self.assertTrue(res['metrics']['resultCount']==1)
-        else:
+        elif (role != "views_admin(default)" or role!="views_admin(standard_bucket0)" or role == "ro_admin"):
             self.assertTrue(res['metrics']['resultCount']==2)
+
 
         self.query == 'select * from system:my_user_info'
         res = self.curl_with_roles(self.query)
@@ -1222,43 +1358,50 @@ class RbacN1QL(QueryTests):
     #     print res
 
 
-    def system_catalog_helper_delete(self,test,role = ""):
+    def system_catalog_helper_delete(self,test,role = "admin"):
         self.query = 'delete from system:datastores'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11003")!=-1)
         self.query = 'delete from system:namespaces'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11003")!=-1)
         self.query = 'delete from system:keyspaces'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11003")!=-1)
         self.query = 'delete from system:indexes'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11003")!=-1)
         self.query = 'delete from system:dual'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11000")!=-1)
         self.query = 'delete from system:user_info'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11003")!=-1)
         self.query = 'delete from system:nodes'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11003")!=-1)
         self.query = 'delete from system:applicable_roles'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(str(res).find("'code': 11003")!=-1)
+
         self.query = 'delete from system:completed_requests'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        if(role == "query_delete(default)" or role == "query_delete(standard_bucket0)"):
+            self.assertNotEquals(res['status'],'success')
+        else:
+           self.assertTrue(res['status'] == 'success')
         self.query = 'delete from system:active_requests'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        self.assertTrue(res['status'] == 'stopped')
         self.query = 'delete from system:prepareds'
         res = self.curl_with_roles(self.query)
-        self.assertTrue(str(res).find("'code': 13014")!=-1)
+        if(role == "query_delete(default)" or role == "query_delete(standard_bucket0)"):
+           self.assertNotEquals(res['status'],'success')
+        else:
+           self.assertTrue(res['status'] == 'success')
+
 
     def select_my_user_info(self,test = "",role = ""):
         self.query == 'select * from system:my_user_info'
         res = self.curl_with_roles(self.query)
-        # no results seen as of now,assert will be added once bug is fixed.
-        print res
+        self.assertTrue(res['status'] == 'success')
