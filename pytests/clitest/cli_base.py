@@ -1,5 +1,6 @@
 import random
 import time
+import json
 
 import logger
 from basetestcase import BaseTestCase
@@ -14,6 +15,7 @@ from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
 
 from couchbase_helper.cluster import Cluster
 from security.rbac_base import RbacBase
+from security.rbacmain import rbacmain
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 
@@ -610,21 +612,12 @@ class CliBaseTest(BaseTestCase):
                  ",".join(recovery_servers))
         return False
 
-    def verifyReadOnlyUser(self, server, username):
+    def verifyUserRoles(self, server, username, roles):
         rest = RestConnection(server)
-        ro_user, status = rest.get_ro_user()
-        if not status:
-            log.info("Getting the read only user failed")
-            return False
-
-        if ro_user.startswith('"') and ro_user.endswith('"'):
-            ro_user = ro_user[1:-1]
-
-        if ro_user != username:
-            log.info("Read only user name does not match (%s vs %s)", ro_user,
-                     username)
-            return False
-        return True
+        status, content, header = rbacmain(server)._retrieve_user_roles()
+        content = json.loads(content)
+        temp = rbacmain()._parse_get_user_response(content, username, username, roles)
+        return temp
 
     def verifyLdapSettings(self, server, admins, ro_admins, default, enabled):
         rest = RestConnection(server)

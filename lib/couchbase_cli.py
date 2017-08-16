@@ -525,7 +525,8 @@ class CouchbaseCLI:
         return stdout, stderr, self._was_success(stdout, "Notification "
                                                          "settings updated")
 
-    def user_manage(self, delete, list, set, ro_username, ro_password):
+    def user_manage(self, delete, list, set, rbac_username, rbac_password, roles,
+                    auth_domain):
         options = self._get_default_options()
         if delete:
             options += " --delete "
@@ -533,10 +534,14 @@ class CouchbaseCLI:
             options += " --list "
         if set:
             options += " --set "
-        if ro_username is not None:
-            options += " --ro-username " + str(ro_username)
-        if ro_password:
-            options += " --ro-password " + str(ro_password)
+        if rbac_username is not None:
+            options += " --rbac-username " + str(rbac_username)
+        if rbac_password:
+            options += " --rbac-password " + str(rbac_password)
+        if roles:
+            options += " --roles " + str(roles)
+        if auth_domain:
+            options += " --auth-domain " + str(auth_domain)
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("user-manage",
@@ -547,8 +552,7 @@ class CouchbaseCLI:
             return stdout, stderr, self._was_success(stdout, "Local read-only"
                                                              "user deleted")
         elif set:
-            return stdout, stderr, self._was_success(stdout, "Local read-only"
-                                                             "user deleted")
+            return stdout, stderr, self._was_success(stdout, "RBAC user set")
         else:
             return stdout, stderr, self._no_error_in_output(stdout)
 
