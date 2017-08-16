@@ -478,6 +478,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         for result in results:
             result.join()
+        self.sleep(60)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
