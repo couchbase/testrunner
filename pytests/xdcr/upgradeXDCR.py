@@ -78,18 +78,27 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             buckets = self.buckets_on_dest
         bucket_size = self._get_bucket_size(cluster.get_mem_quota(), len(buckets))
 
+        bucket_params = cluster._create_bucket_params(self, size=bucket_size,
+                                                      replicas=self.num_replicas)
+
         if "default" in buckets:
-            bucket_params = cluster._create_bucket_params(self, size=bucket_size,
-                                                              replicas=self.num_replicas)
-            cluster.create_default_bucket(bucket_params)
+            cluster.create_default_bucket(bucket_size=bucket_params['size'], num_replicas=bucket_params['replicas'],
+                                          eviction_policy=bucket_params['eviction_policy'],
+                                          bucket_priority=bucket_params['bucket_priority'], lww=bucket_params['lww'])
 
         sasl_buckets = len([bucket for bucket in buckets if bucket.startswith("sasl")])
         if sasl_buckets > 0:
-            cluster.create_sasl_buckets(bucket_size, num_buckets=sasl_buckets)
+            cluster.create_sasl_buckets(bucket_size=bucket_params['size'], num_buckets=sasl_buckets,
+                                        num_replicas=bucket_params['replicas'],
+                                        eviction_policy=bucket_params['eviction_policy'],
+                                        bucket_priority=bucket_params['bucket_priority'], lww=bucket_params['lww'])
 
         standard_buckets = len([bucket for bucket in buckets if bucket.startswith("standard")])
         if standard_buckets > 0:
-            cluster.create_standard_buckets(bucket_size, num_buckets=standard_buckets)
+            cluster.create_standard_buckets(bucket_size=bucket_params['size'], num_buckets=standard_buckets,
+                                            num_replicas=bucket_params['replicas'],
+                                            eviction_policy=bucket_params['eviction_policy'],
+                                            bucket_priority=bucket_params['bucket_priority'], lww=bucket_params['lww'])
 
 
     def _join_all_clusters(self):
