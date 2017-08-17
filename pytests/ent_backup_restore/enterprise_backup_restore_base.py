@@ -57,6 +57,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cluster_flag = "--host"
         self.backupset = Backupset()
         self.cmd_ext = ""
+        self.should_fail = False
         self.database_path = COUCHBASE_DATA_PATH
         self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
         self.debug_logs = self.input.param("debug-logs", False)
@@ -503,7 +504,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if "Error restoring cluster" in output[0]:
-            self.fail("Failed to restore cluster")
+            if not self.should_fail:
+                self.fail("Failed to restore cluster")
+            else:
+                self.log.info("This test is for negative test")
         res = output
         res.extend(error)
         error_str = "Error restoring cluster: Transfer failed. "\

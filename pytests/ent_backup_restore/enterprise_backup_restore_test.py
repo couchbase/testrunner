@@ -1129,7 +1129,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail("Fail to add user: %s with role: %s " \
                           % (self.cluster_new_user,
                              self.cluster_new_role))
-            output, error = self.backup_restore()
 
             users_can_restore_all = ["admin", "cluster_admin",
                                      "bucket_full_access[*]", "bucket_admin[*]",
@@ -1140,6 +1139,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                          "data_dcp_reader[*]", "fts_searcher[*]",
                                          "fts_admin[*]", "query_manage_index[*]",
                                          "replication_target[*]"]
+            if self.cluster_new_role in users_can_not_restore_all:
+                self.should_fail = True
+            output, error = self.backup_restore()
             success_msg = ['Restore completed successfully']
             fail_msg = "Error restoring cluster:"
             rest = RestConnection(self.master)
