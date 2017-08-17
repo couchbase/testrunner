@@ -659,7 +659,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             # Heal network partition and wait for some time to allow indexes
             # to get built automatically on that node
             self.stop_firewall_on_node(node_out)
-            self.sleep(180)
+            self.sleep(360)
 
             index_map = self.get_index_map()
             self.n1ql_helper.verify_replica_indexes_build_status(index_map,
@@ -2880,6 +2880,102 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not load_balanced and count != 3:
             self.fail("Load is not balanced amongst index replicas")
 
+    # Testcase for MB-23778
+    def test_load_balancing_with_replica_with_concurrent_querying_and_failover(
+            self):
+        hash_before = {}
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        select_query = "SELECT count(age) from default"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+        # start querying
+        t1 = Thread(target=self._run_use_index,
+                    args=(index_name_prefix, 100))
+        t1.start()
+        self.sleep(5)
+
+        # Get num_requests_completed per index before failover
+        self.log.info("======BEFORE=====")
+        index_stats = self.get_index_stats(perNode=True)
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(
+                    str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_request_served = \
+            index_stats[hostname]['default'][index_name][
+                "num_completed_requests"]
+            self.log.info("# Requests served by %s = %s" % (
+                index_name, num_request_served))
+            hash_before[index_name] = num_request_served
+
+        # Kill indexer process on one node
+        node_out = self.servers[self.node_out]
+        self._kill_all_processes_index(node_out)
+
+        self.sleep(10)
+        t1.join()
+
+        # Get num_requests_completed per index after failover
+        self.sleep(10)
+        self.log.info("======AFTER=====")
+        hash_after = {}
+        index_stats = self.get_index_stats(perNode=True)
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(
+                    str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_request_served = \
+            index_stats[hostname]['default'][index_name][
+                "num_completed_requests"]
+            self.log.info("# Requests served by %s = %s" % (
+                index_name, num_request_served))
+            hash_after[index_name] = num_request_served
+
+        # Validate
+        load_balanced = True
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(
+                    str(i))
+
+            if hash_after[index_name] <= hash_before[index_name]:
+                load_balanced = False
+
+        if not load_balanced:
+            self.fail("Load balancing not proper after failover")
+
     def _get_node_list(self, node_list=None):
         # 1. Parse node string
         if node_list:
@@ -2984,7 +3080,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         return output, error
 
     def _cbindex_create(self, node, index_name, fields,bucket="default", username="Administrator", password="password",num_replica=1):
-        cmd = """cbindex -type=create -auth '{0}:{1}' -bucket {2}  -index {3} -fields={4} -with '{{"num_replica":{5}}}'""".format(
+        cmd = """cbindex -type=create -auth '{0}:{1}' -bucket {2}  -index {3} -fields={4} -using gsi -with '{{"num_replica":{5}}}'""".format(
             username, password, bucket, index_name, fields, num_replica)
         self.log.info(cmd)
         remote_client = RemoteMachineShellConnection(node)
@@ -3146,4 +3242,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info(str(ex))
                 raise Exception("query with prepared statement failed")
             self.sleep(1)
+
+    def _kill_all_processes_index(self, server):
+        shell = RemoteMachineShellConnection(server)
+        shell.execute_command("killall indexer")
 
