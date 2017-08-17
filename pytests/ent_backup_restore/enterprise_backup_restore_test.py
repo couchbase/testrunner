@@ -59,6 +59,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(server)
             conn.extract_remote_info()
             conn.terminate_processes(conn.info, ["cbbackupmgr"])
+        self.bucket_helper = BucketOperationHelper()
 
     def tearDown(self):
         super(EnterpriseBackupRestoreTest, self).tearDown()
@@ -2134,7 +2135,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             5. Operation after upgrade cluster
             6. Restores data and validates
         """
-        self.bucket_helper = BucketOperationHelper()
         servers = copy.deepcopy(self.servers)
         self.vbuckets = self.initial_vbuckets
         if len(servers) != 4:
