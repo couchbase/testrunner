@@ -436,13 +436,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.disable_conf_res_restriction is not None:
             args += " --disable-conf-res-restriction {0}".format(
                 self.backupset.disable_conf_res_restriction)
+        filter_chars = {"star": "*", "dot": "."}
         if self.backupset.filter_keys:
-            if "star" in self.backupset.filter_keys:
-                self.backupset.filter_keys = self.backupset.filter_keys.replace("star", "*")
+            for key in filter_chars:
+                if key in self.backupset.filter_keys:
+                    self.backupset.filter_keys = self.backupset.filter_keys.replace(key,
+                                                                      filter_chars[key])
             args += " --filter-keys '{0}'".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
-            if "star" in self.backupset.filter_values:
-                self.backupset.filter_values = self.backupset.filter_values.replace("star", "*")
+            for key in filter_chars:
+                if key in self.backupset.filter_values:
+                    self.backupset.filter_values = self.backupset.filter_values.replace(key,
+                                                                          filter_chars[key])
             args += " --filter-values '{0}'".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
