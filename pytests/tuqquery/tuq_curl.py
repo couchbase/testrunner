@@ -970,8 +970,12 @@ class QueryCurlTests(QueryTests):
     '''Test if you can insert curl with a role that does not have curl, with a role that has curl but
        no insert privileges, and a combination of the two roles.'''
     def test_insert_no_role(self):
-        error_msg = "UserdoesnothavecredentialstorunqueriesusingtheCURL()function." \
-                    "Addrolequery_external_accesstoallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesonthedefaultbucket.Addrolequery_" \
+                    "insertondefaulttoallowthequerytorun."
+
+        error_msg2 = "UserdoesnothavecredentialstorunqueriesusingtheCURL()function.Addrole" \
+                    "query_external_accesstoallowthequerytorun."
+
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_curl' -p 'password' -q " %(self.master.ip,
                                                                                      self.n1ql_port)
         n1ql_query = 'select * from \`beer-sample\` limit 1'
@@ -981,10 +985,9 @@ class QueryCurlTests(QueryTests):
         returning ="returning meta().id, * "
         curl = self.shell.execute_commands_inside(cbqpath,insert_query+query+options+returning,'', '', '','', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
+        self.assertTrue(json_curl['errors'][0]['msg'] == error_msg
+                        or json_curl['errors'][0]['msg'] == error_msg2)
 
-        error_msg= "Userdoesnothavecredentialstoaccessprivilegecluster.bucket[default].n1ql.insert!" \
-                   "execute.AddroleQueryInsert[default]toallowthequerytorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'curl_no_insert' -p 'password' -q " % \
                                         (self.master.ip, self.n1ql_port)
         options = "{'data' : 'statement=%s','user':'curl_no_insert:password'}) curl_result " \
@@ -994,8 +997,6 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
 
-        error_msg = "Userdoesnothavecredentialstoaccessprivilegecluster.n1ql.curl!execute.Addrole" \
-                    "QueryExternalAccesstoallowthequerytorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -q -u 'no_curl' -p 'password'" % \
                                         (self.master.ip, self.n1ql_port)
         n1ql_query = 'select * from \`beer-sample\` limit 1'
