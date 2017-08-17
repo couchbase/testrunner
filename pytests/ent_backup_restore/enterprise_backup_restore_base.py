@@ -59,7 +59,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cmd_ext = ""
         self.database_path = COUCHBASE_DATA_PATH
         self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
-        self.debug_logs = self.input.param("debug_logs", False)
+        self.debug_logs = self.input.param("debug-logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.passwd_env = self.input.param("passwd-env", False)
         self.backupset.passwd_env_with_prompt = \
@@ -846,10 +846,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         for x in range(0, len(source)):
             output[x] = output[x].strip()
+            output[x] = " ".join(output[x].split())
+
             source[x] = source[x].strip()
+            source[x] = " ".join(source[x].split())
             if not isinstance(output[x], str):
                 continue
-            if " ".join(output[x].split()) != " ".join(source[x].split()):
+            if self.debug_logs:
+                print "\noutput:  ", output[x]
+                print "source:  ", source[x]
+            if output[x] != source[x]:
                 self.log.error("Element %s in output did not match " % x)
                 self.log.error("Output => %s != %s <= Source" % (output[x], source[x]))
                 raise Exception("Content does not match "

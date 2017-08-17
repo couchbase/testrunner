@@ -835,8 +835,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
            few first lines to make sure manual page displayed.
         """
         display_option = self.input.param("display", "-h")
-        subcommand = ""
-        if self.input.param("subcommand", None) is not None:
+
+        if self.input.param("subcommand", None) is None:
+            subcommand = ""
+        else:
             subcommand = self.input.param("subcommand", None)
         cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
         cmd += " %s %s " % (subcommand, display_option)
@@ -845,7 +847,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = shell.execute_command("%s " % (cmd))
         self.log.info("Verify print out help message")
         if display_option == "-h":
-            if subcommand is None:
+            if subcommand == "":
                 content = ['cbbackupmgr [<command>] [<args>]', '',
                            '  backup    Backup a Couchbase cluster']
             elif subcommand == "help":
@@ -857,7 +859,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.validate_help_content(output[:3], content)
         elif display_option == "--help":
             content = None
-            if subcommand is None:
+            if subcommand == "":
                 content = \
                     ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
                      '', '', '', 'NAME',
