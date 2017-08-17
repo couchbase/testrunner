@@ -49,6 +49,8 @@ class Lww(XDCRNewBaseTest):
             conn.log_command_output(output, error)
             output, error = conn.execute_command("/etc/init.d/ntpd start")
             conn.log_command_output(output, error)
+            output, error = conn.execute_command("systemctl start ntpd")
+            conn.log_command_output(output, error)            
             output, error = conn.execute_command("ntpdate -q " + ntp_server)
             conn.log_command_output(output, error)
 
@@ -58,6 +60,8 @@ class Lww(XDCRNewBaseTest):
             output, error = conn.execute_command("chkconfig ntpd off")
             conn.log_command_output(output, error)
             output, error = conn.execute_command("/etc/init.d/ntpd stop")
+            conn.log_command_output(output, error)
+            output, error = conn.execute_command("systemctl stop ntpd")
             conn.log_command_output(output, error)
 
     def _offset_wall_clock(self, cluster=None, offset_secs=0, inc=True, offset_drift=-1):
