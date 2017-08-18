@@ -202,7 +202,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             num_indexes=len(servers)*index_dist_factor
             self.query_definitions = self._create_query_definitions(index_count=num_indexes)
-            self.multi_query_using_index(buckets=self.buckets,
+            self.multi_create_using_index(buckets=self.buckets,
                                          query_definitions=self.query_definitions)
             index_map = self.get_index_stats(perNode=True)
             self.log.info(index_map)
@@ -257,7 +257,9 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         query_definitions = []
         for ctr in range(start,start+index_count):
             index_name = "index_name_{0}".format(ctr)
-            query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
-                    query_template = "SELECT * from %s WHERE join_yr == 2010 ", groups = [])
+            query_definition = QueryDefinition(index_name=index_name,
+                                               index_fields=["join_yr"],
+                                               query_template="SELECT * from %s WHERE join_yr == 2010 ",
+                                               groups=[])
             query_definitions.append(query_definition)
         return query_definitions
