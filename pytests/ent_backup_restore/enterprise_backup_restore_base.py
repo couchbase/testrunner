@@ -774,8 +774,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             for key in buckets_data[bucket.name]:
                 value = buckets_data[bucket.name][key]
                 if self.backupset.random_keys:
-                    value = ",".join(value.split(',')[4:7])
-                    value = value[1:-1]
+                    value = ",".join(value.split(',')[4:5])
                     value = value.replace('""', '"')
                 else:
                     value = ",".join(value.split(',')[4:5])
