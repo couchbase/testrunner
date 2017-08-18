@@ -254,7 +254,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, self)
 
     def store_vbucket_seqno(self):
-        vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets, self.skip_consistency, self.per_node)
+        vseqno = self.get_vbucket_seqnos(self.cluster_to_backup,
+                                         self.buckets,
+                                         self.skip_consistency, self.per_node)
         self.vbucket_seqno.append(vseqno)
 
     def backup_create(self, del_old_backup=True):
@@ -304,7 +306,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
-        if "4.6" <= RestConnection(self.backupset.cluster_host).get_nodes_version():
+        if "4.6" <= RestConnection(self.backupset.backup_host).get_nodes_version():
             self.cluster_flag = "--cluster"
 
         args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} --username"\
@@ -402,7 +404,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
-        if "4.6" <= RestConnection(self.backupset.restore_cluster_host).get_nodes_version():
+        if "4.6" <= RestConnection(self.backupset.backup_host).get_nodes_version():
             self.cluster_flag = "--cluster"
 
         args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4}"\
@@ -434,9 +436,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes {0}".format(self.backupset.disable_ft_indexes)
         if self.backupset.disable_data:
             args += " --disable-data {0}".format(self.backupset.disable_data)
-        if self.backupset.disable_conf_res_restriction is not None:
-            args += " --disable-conf-res-restriction {0}".format(
-                self.backupset.disable_conf_res_restriction)
+#        if self.backupset.disable_conf_res_restriction is not None:
+#            args += " --disable-conf-res-restriction {0}".format(
+#                self.backupset.disable_conf_res_restriction)
         filter_chars = {"star": "*", "dot": "."}
         if self.backupset.filter_keys:
             for key in filter_chars:

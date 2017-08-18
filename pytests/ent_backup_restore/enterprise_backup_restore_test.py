@@ -2074,6 +2074,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                  [])
         rebalance.result()
         RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.total_buckets = len(self.buckets)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster_validate()
@@ -2284,14 +2286,19 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         6. Retrieves cas and flgas of each doc on both cluster and restore host
            - validates if they are equal
         """
+        testuser = [{'id': 'default', 'name': 'default', 'password': 'password'}]
+        rolelist = [{'id': 'default', 'name': 'default', 'roles': 'admin'}]
+        self.add_built_in_server_user(testuser, rolelist)
+        print self.backupset.cluster_host.ip
         try:
             cb = Bucket('couchbase://' + self.backupset.cluster_host.ip + '/default',
-                        username=self.master.rest_username,
-                        password=self.master.rest_password)
+                                                                 password="password")
             if cb is not None:
-                self.log.info("Established connection to bucket on cluster host using python SDK")
+                self.log.info("Established connection to bucket on cluster host"
+                              " using python SDK")
             else:
-                self.fail("Failed to establish connection to bucket on cluster host using python SDK")
+                self.fail("Failed to establish connection to bucket on cluster host"
+                          " using python SDK")
         except Exception, ex:
             self.fail(str(ex))
         self.log.info("Loading bucket with data using python SDK")
@@ -2307,10 +2314,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self.backup_cluster_validate()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+        self.add_built_in_server_user(testuser, rolelist, self.backupset.restore_cluster_host)
         try:
             cb = Bucket('couchbase://' + self.backupset.restore_cluster_host.ip + '/default',
-                        username=self.master.rest_username,
-                        password=self.master.rest_password)
+                                                                         password="password")
             if cb is not None:
                 self.log.info("Established connection to bucket on restore host " \
                               "using python SDK")
