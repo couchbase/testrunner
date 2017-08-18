@@ -2125,7 +2125,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         for backupset in backupsets:
             self.backupset = backupset
             self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
-            self.bucket_helper.delete_bucket_or_assert(self.backupset.cluster_host,
+            BucketOperationHelper().delete_bucket_or_assert(self.backupset.cluster_host,
                                                        "default", self)
 
     def test_backup_restore_after_online_upgrade(self):
