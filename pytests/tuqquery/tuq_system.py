@@ -74,9 +74,7 @@ class SysCatalogTests(QueryTests):
     def test_memcached_buckets(self):
         self.query = "SELECT * FROM system:keyspaces"
         result = self.run_cbq_query()
-        print result
         self.assertTrue(result['metrics']['resultCount'] ==2)
         self.query = "SELECT count(*) as count FROM system:keyspaces"
         result = self.run_cbq_query()
-        print result
         self.assertTrue(result['results'][0]['count'] ==2)

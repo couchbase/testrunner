@@ -181,20 +181,17 @@ class QueryTests(BaseTestCase):
             logging.debug('event set: %s', event_is_set)
             if event_is_set:
                  result = self.run_cbq_query("select * from system:active_requests")
-                 print result
                  self.assertTrue(result['metrics']['resultCount'] == 1)
                  requestId = result['requestID']
-                 result = self.run_cbq_query('delete from system:active_requests where RequestId  =  "%s"' % requestId)
+                 self.run_cbq_query('delete from system:active_requests where RequestId  =  "%s"' % requestId)
                  time.sleep(20)
                  result = self.run_cbq_query('select * from system:active_requests  where RequestId  =  "%s"' % requestId)
                  self.assertTrue(result['metrics']['resultCount'] == 0)
                  result = self.run_cbq_query("select * from system:completed_requests")
-                 print result
                  requestId = result['requestID']
-                 result = self.run_cbq_query('delete from system:completed_requests where RequestId  =  "%s"' % requestId)
+                 self.run_cbq_query('delete from system:completed_requests where RequestId  =  "%s"' % requestId)
                  time.sleep(10)
                  result = self.run_cbq_query('select * from system:completed_requests where RequestId  =  "%s"' % requestId)
-                 print result
                  self.assertTrue(result['metrics']['resultCount'] == 0)
 
 
@@ -779,7 +776,7 @@ class QueryTests(BaseTestCase):
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
             if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
                 couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
-                print "PATH TO SHERLOCK: %s" % couchbase_path
+                self.log.info("PATH TO SHERLOCK: %s" % couchbase_path)
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
@@ -908,7 +905,7 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
                 res = self.run_cbq_query()
                 self.sleep(10)
-                print res
+                self.log.info(res)
                 if self.monitoring:
                     self.query = "delete from system:completed_requests"
                     self.run_cbq_query()
@@ -928,12 +925,12 @@ class QueryTests(BaseTestCase):
                 if self.monitoring:
                         self.query = "select * from system:active_requests"
                         result = self.run_cbq_query()
-                        print result
+                        self.log.info(result)
                         self.assertTrue(result['metrics']['resultCount'] == 1)
                         self.query = "select * from system:completed_requests"
                         time.sleep(20)
                         result = self.run_cbq_query()
-                        print result
+                        self.log.info(result)
 
 
 

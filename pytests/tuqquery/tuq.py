@@ -345,7 +345,6 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            print result
             self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
@@ -359,7 +358,6 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
 
 
     def test_any_external(self):
@@ -607,10 +605,9 @@ class QueryTests(BaseTestCase):
     def test_prepared_like_wildcards(self):
         if self.monitoring:
             self.query = "delete from system:prepareds"
-            result = self.run_cbq_query()
+            self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            print result
             self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
@@ -620,7 +617,6 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
 
 
     def test_between(self):
@@ -731,13 +727,11 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
             self.query = "delete from system:prepareds"
             self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==0)
-            print result
 
     def test_group_by_satisfy(self):
         for bucket in self.buckets:
@@ -918,7 +912,6 @@ class QueryTests(BaseTestCase):
             if self.monitoring:
                 self.query = 'select * from system:completed_requests'
                 result = self.run_cbq_query()
-                print result
                 requestID = result['requestID']
                 self.query = 'delete from system:completed_requests where requestID  =  "%s"' % requestID
                 self.run_cbq_query()
@@ -982,7 +975,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = 'select meta().cas from {0} order by meta().id limit 10'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            print actual_result
+            self.log.info(actual_result)
 
 
     def test_meta_negative(self):
@@ -1535,7 +1528,6 @@ class QueryTests(BaseTestCase):
             self.query = 'explain select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
             actual_result=self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            #print plan
             self.assertTrue("covers" in str(plan))
             self.assertTrue(plan['~children'][0]['index']=='ix1')
             self.query = 'select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
@@ -2312,7 +2304,6 @@ class QueryTests(BaseTestCase):
             self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            print result
             self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
@@ -2326,7 +2317,6 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
             name = result['results'][0]['prepareds']['name']
             self.query = 'delete from system:prepareds where name = "%s" '  % name
             result = self.run_cbq_query()
@@ -2593,8 +2583,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             self.log.info(res)
-	    plan = ExplainPlanHelper(res)
-            print plan['~children'][2]['~child']['~children'][0]['scan']['index']
+            plan = ExplainPlanHelper(res)
             self.assertTrue(plan['~children'][2]['~child']['~children'][0]['scan']['index'] == index,
                             "wrong index used")
 
@@ -2661,9 +2650,7 @@ class QueryTests(BaseTestCase):
 
     def test_clock_millis(self):
         self.query = "select clock_millis() as now"
-        now = time.time()
         res = self.run_cbq_query()
-        print res
         self.assertFalse("error" in str(res).lower())
 
 
@@ -2710,11 +2697,7 @@ class QueryTests(BaseTestCase):
 
     def test_now(self):
         self.query = "select now_str() as now"
-        now = datetime.datetime.now()
-        today = date.today()
         res = self.run_cbq_query()
-        print res
-        expected = "%s-%02d-%02dT" % (today.year, today.month, today.day,)
         self.assertFalse("error" in str(res).lower())
 
     def test_hours(self):

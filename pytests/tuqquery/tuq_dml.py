@@ -16,20 +16,19 @@ class DMLQueryTests(QueryTests):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.named_prepare = self.input.param("named_prepare", None)
-        print "-"*100
-        print "Temp process shutdown to debug MB-16888"
-        print "-"*100
-        print(self.shell.execute_command("ps aux | grep cbq"))
-        print(self.shell.execute_command("ps aux | grep indexer"))
+        # Temp process shutdown to debug MB-16888
+        self.log.info("-"*100)
+        self.log.info(self.shell.execute_command("ps aux | grep cbq"))
+        self.log.info(self.shell.execute_command("ps aux | grep indexer"))
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                   timeout=self.wait_timeout * 5)
         self.shell.execute_command("killall -9 cbq-engine")
         self.shell.execute_command("killall -9 indexer")
         self.sleep(60, 'wait for indexer')
-        print(self.shell.execute_command("ps aux | grep indexer"))
-        print(self.shell.execute_command("ps aux | grep cbq"))
-        print "-"*100
+        self.log.info(self.shell.execute_command("ps aux | grep indexer"))
+        self.log.info(self.shell.execute_command("ps aux | grep cbq"))
+        self.log.info("-"*100)
 
 ############################################################################################################################
 #
@@ -186,9 +185,6 @@ class DMLQueryTests(QueryTests):
             else:
                 self.query = "PREPARE %s" % self.query
             prepared = self.run_cbq_query(query=self.query)['results'][0]
-            print "------------------"
-            print "prepared : {0}".format(prepared)
-            print "------------------"
             actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
@@ -1319,7 +1315,7 @@ class DMLQueryTests(QueryTests):
 
     def _keys_are_deleted(self, keys):
         end_time = time.time() + TIMEOUT_DELETED
-        print("Checks for keys deleted ...")
+        #Checks for keys deleted ...
         while time.time() < end_time:
             for bucket in self.buckets:
                 self.query = 'select meta(%s).id from %s'  % (bucket.name, bucket.name)

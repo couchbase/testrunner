@@ -69,7 +69,6 @@ class AdvancedQueryTests(QueryTests):
                     if self.analytics:
                         self.query = '\quit'
                         o = self.run_cbq_query()
-                        print o
                     self.assertTrue(o is '')
                 finally:
                     shell.disconnect()
@@ -84,7 +83,6 @@ class AdvancedQueryTests(QueryTests):
                     if self.analytics:
                         self.query = '\quit1'
                         o = self.run_cbq_query()
-                        print o
                     self.assertTrue("Commanddoesnotexist" in o)
                 finally:
                     shell.disconnect()
@@ -97,11 +95,9 @@ class AdvancedQueryTests(QueryTests):
                     o = shell.execute_commands_inside('%s/cbq  -q -ne' % (self.path),'select * from %s' % bucket.name,'','','','','')
                     self.assertTrue("Notconnectedtoanycluster" in o)
                     o = shell.execute_commands_inside('%s/cbq -q -ne' % (self.path),'\SET','','','','','')
-                    print o
                     if self.analytics:
                         self.query = '\SET'
                         o = self.run_cbq_query()
-                        print o
                     self.assertTrue("histfileValue" in o)
                 finally:
                     shell.disconnect()
@@ -120,7 +116,6 @@ class AdvancedQueryTests(QueryTests):
                         self.run_cbq_query()
                         self.query = 'select * from %s ' %bucket.name
                         o = self.run_cbq_query()
-                        print o
                     self.assertTrue("timeout" in o)
                 finally:
                     shell.disconnect()
@@ -132,7 +127,7 @@ class AdvancedQueryTests(QueryTests):
             for bucket in self.buckets:
                 try:
                     if (bucket.saslPassword != ''):
-                        print('sasl')
+                        # sasl
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,bucket.saslPassword),'CREATE PRIMARY INDEX ON %s USING GSI' %bucket.name,'','','','','')
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,bucket.saslPassword),'select *,join_day from %s limit 10'%bucket.name,'','','','','')
@@ -141,7 +136,6 @@ class AdvancedQueryTests(QueryTests):
                             o = self.run_cbq_query()
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,'wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
-                        print o
                         self.assertTrue("AuthorizationFailed"  in o)
 
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,'','wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
@@ -183,7 +177,7 @@ class AdvancedQueryTests(QueryTests):
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -q -u=%s -p=%s' % (self.path,bucket.name,bucket.saslPassword),'select * from %s limit 10;' %bucket.name,'','','','','' )
                         self.assertTrue("requestID" in o)
-                        print('nonsasl')
+                        # nonsasl
                         o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,'Administrator','password'),'select * from default limit 10;','','','','','' )
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,bucket.name,bucket.saslPassword),'select * from default limit 10;' ,'','','','','' )
@@ -353,21 +347,18 @@ class AdvancedQueryTests(QueryTests):
                 queries = ["\ALIAS tempcommand create primary index on bucketname;","\\\\tempcommand;",'\ALIAS tempcommand2 select *,email from bucketname limit 10;',"\\\\tempcommand2;",'\ALIAS;','\echo \\\\tempcommand1;','\echo \\\\tempcommand2;']
                 o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 self.assertTrue("ERROR141:Aliasdoesnotexisttempcommand1" in o)
-                #print o
                 queries = ['\ALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand create primary index on bucketname;','\ALIAS tempcommand2 drop primary index on bucketname;','\\\\tempcommand;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;']
-                o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
-                #print o
+                self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 queries = ['\UNALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;']
                 o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 if type2.lower() == "windows":
-                   print o
+                   self.info.log(o)
                 else:
                     self.assertTrue("Aliasdoesnotexist" in o)
-                #print o
                 queries = ['\UNALIAS tempcommand;','\\\\tempcommand;']
                 o = self.shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 self.assertTrue("Aliasdoesnotexist" in o)
-                #print o
+
 
 
 

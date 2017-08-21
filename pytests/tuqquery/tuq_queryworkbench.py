@@ -38,7 +38,7 @@ class QueryWorkbenchTests(BaseTestCase):
                                    ramQuotaMB=int(self.buckets_ram[bucket_name]),
                                    replicaNumber=0,
                                    proxyPort=11218+i)
-            print self.servers[0]
+            self.log.info(self.servers[0])
             #bucket = self.src_cluster.get_bucket_by_name(bucket_name)
         time.sleep(20)
         #self.rest.create_bucket(bucket="default",

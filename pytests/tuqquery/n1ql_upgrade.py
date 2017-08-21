@@ -49,8 +49,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     pid = [item for item in cbq_engine.split(' ') if item][1]
                     self.shell.execute_command("kill -9 %s" % pid)
         self._start_command_line_query(self.servers[1])
-        o = self.shell.execute_command("ps -aef| grep cbq-engine")
-        print o
+        self.log.info(self.shell.execute_command("ps -aef| grep cbq-engine"))
         self.master = self.servers[1]
         getattr(self, method_name)()
 

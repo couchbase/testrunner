@@ -38,7 +38,7 @@ class Base64Tests(QueryTests):
                 self._verify_results(actual_result, expected_result)
             except Exception, ex:
                 self.query = "SELECT %s FROM %s" % (bucket.name, bucket.name)
-                print self.run_cbq_query()
+                self.run_cbq_query()
                 raise ex
 
     def test_negative_value(self):
