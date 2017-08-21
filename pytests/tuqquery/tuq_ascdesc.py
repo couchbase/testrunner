@@ -341,7 +341,7 @@ class AscDescTests(QueryTests):
                 self.query = 'explain select min(_id) from default where _id is not missing'
                 res = self.run_cbq_query()
                 plan = ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['limit'], '1')
+                self.assertTrue(plan['~children'][0]['limit']=='1' or plan['~children'][1]['limit']=='1')
                 self.query = 'select min(_id) from default where _id is not missing'
                 res = self.run_cbq_query()
                 self.assertEqual(res['results'], [{u'$1': u'query-testemployee10153.1877827-0'}])
