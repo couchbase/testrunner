@@ -833,7 +833,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['#operator']=='UnionScan')
-                self.assertTrue(plan['~children'][0]['scans'][0]['index']=='idx4')
+                self.assertTrue(plan['~children'][0]['scans'][0]['index']=='idx4' or plan['~children'][0]['scans'][1]['index']=='idx4')
                 self.query = 'explain SELECT meta().cas, meta().expiration,meta().id FROM default where meta().cas = 1487875768758304768 and meta().expiration > 0'
                 actual_result = self.run_cbq_query()
                 plan = ExplainPlanHelper(actual_result)
