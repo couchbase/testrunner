@@ -163,7 +163,7 @@ class QuerySubqueryTests(QueryTests):
         self.query = 'SELECT name, id FROM default WHERE EXISTS (SELECT 1 FROM default.VMs WHERE VMs.memory > 10 order by meta(default).id)' \
                      ' order by meta().id limit 2'
         actual_result = self.run_cbq_query()
-        print "test_correlated_queries_predicate_exists is {0}".format(actual_result['results'])
+        self.log.info("test_correlated_queries_predicate_exists is {0}".format(actual_result['results']))
         #self.assertTrue(actual_result['results']==[{u'id': u'352e1533-eabb-4fed-a4a4-2236f7a690c7', u'name': [{u'FirstName': u'employeefirstname-4'}, {u'MiddleName': u'employeemiddlename-4'}, {u'LastName': u'employeelastname-4'}]}, {u'id': u'c6326d5b-64e0-4f65-ab00-85465472774d', u'name': [{u'FirstName': u'employeefirstname-4'}, {u'MiddleName': u'employeemiddlename-4'}, {u'LastName': u'employeelastname-4'}]}])
 
     def test_correlated_queries_predicate_not_exists(self):
@@ -171,17 +171,17 @@ class QuerySubqueryTests(QueryTests):
                      ' WHERE VMs.memory < 10 order by meta(default).id) order by meta().id limit 2'
         self.run_cbq_query()
         actual_result = self.run_cbq_query()
-        print "test_correlated_queries_predicate_not_exists is {0}".format(actual_result['results'])
+        self.log.info("test_correlated_queries_predicate_not_exists is {0}".format(actual_result['results']))
         #self.assertTrue(actual_result['results']==[{u'id': u'00002fb9-7b42-45ae-b864-c21e87563dac'}, {u'id': u'0011e2e6-7788-4582-b6ac-4185549dc838'}])
 
     def test_correlated_queries_in_clause(self):
         self.query = 'SELECT name, id FROM default WHERE "windows" IN (SELECT RAW VMs.os FROM default.VMs) order by meta(default).id limit 2'
         actual_result = self.run_cbq_query()
-        print "test_correlated_queries_in_clause is {0}".format(actual_result['results'])
+        self.log.info("test_correlated_queries_in_clause is {0}".format(actual_result['results']))
         #self.assertTrue(actual_result['results']==[{u'id': u'feaa4880-b117-4de6-9b3c-d1dd21c64abe'}, {u'id': u'930e38d0-c35f-4e73-991e-db1a0758b8a9'}])
         self.query = 'SELECT name, id FROM default WHERE 10 < (SELECT RAW VMs.memory FROM default.VMs)  order by meta().id limit 2'
         actual_result = self.run_cbq_query()
-        print "test_correlated_queries_in_clause2 is {0}".format(actual_result['results'])
+        self.log.info("test_correlated_queries_in_clause2 is {0}".format(actual_result['results']))
         #self.assertTrue(actual_result['results']==[{u'id': u'00148e19-1203-4f48-aa3d-2751b57fec8d'}, {u'id': u'0018f09f-9726-4f6f-b872-afa3f7510254'}])
 
 

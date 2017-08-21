@@ -102,8 +102,7 @@ class AdvancedQueryTests(QueryTests):
                     o = self.execute_commands_inside(self.cbqpath,'\quit','','','','','','')
                     if self.analytics:
                         self.query = '\quit'
-                        o = self.run_cbq_query()
-                        print o
+                        self.run_cbq_query()
                     self.assertTrue(o is '')
                 finally:
                     shell.disconnect()
@@ -117,8 +116,7 @@ class AdvancedQueryTests(QueryTests):
                     o = self.execute_commands_inside(self.cbqpath,'\quit1','','','','','')
                     if self.analytics:
                         self.query = '\quit1'
-                        o = self.run_cbq_query()
-                        print o
+                        self.run_cbq_query()
                     self.assertTrue("Command does not exist" in o)
                 finally:
                     shell.disconnect()
@@ -133,8 +131,7 @@ class AdvancedQueryTests(QueryTests):
                     o = self.execute_commands_inside('%s/cbq -q -ne' % (self.path),'\SET','','','','','')
                     if self.analytics:
                         self.query = '\SET'
-                        o = self.run_cbq_query()
-                        print o
+                        self.run_cbq_query()
                     self.assertTrue("histfileValue" in o)
                 finally:
                     shell.disconnect()
@@ -153,8 +150,7 @@ class AdvancedQueryTests(QueryTests):
                     self.query = '\set -timeout "10ms"'
                     self.run_cbq_query()
                     self.query = 'select * from default'
-                    o = self.run_cbq_query()
-                    print o
+                    self.run_cbq_query()
                 self.assertTrue("timeout" in o)
             finally:
                 shell.disconnect()
@@ -167,7 +163,7 @@ class AdvancedQueryTests(QueryTests):
             for bucket in self.buckets:
                 try:
                     if (bucket.saslPassword != ''):
-                        print('sasl')
+                        #sasl
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,bucket.saslPassword),'CREATE PRIMARY INDEX ON %s USING GSI' %bucket.name,'','','','','')
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,bucket.saslPassword),'select *,join_day from %s limit 10'%bucket.name,'','','','','')
@@ -176,7 +172,6 @@ class AdvancedQueryTests(QueryTests):
                             o = self.run_cbq_query()
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,'wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
-                        print o
                         self.assertTrue("AuthorizationFailed"  in o)
 
                         o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,'','wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
@@ -218,7 +213,7 @@ class AdvancedQueryTests(QueryTests):
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -q -u=%s -p=%s' % (self.path,bucket.name,bucket.saslPassword),'select * from %s limit 10;' %bucket.name,'','','','','' )
                         self.assertTrue("requestID" in o)
-                        print('nonsasl')
+                        #nonsasl
                         o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,'Administrator','password'),'select * from default limit 10;','','','','','' )
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,bucket.name,bucket.saslPassword),'select * from default limit 10;' ,'','','','','' )
@@ -282,7 +277,6 @@ class AdvancedQueryTests(QueryTests):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             o = self.execute_commands_inside('%s/cbq --version' % (self.path),'','','','','','' )
-            print o
             o = self.execute_commands_inside('%s/cbq -s="\HELP VERSION"' % (self.path),'','','','','','' )
             print o
 

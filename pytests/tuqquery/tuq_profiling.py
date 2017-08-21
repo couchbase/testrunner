@@ -197,32 +197,31 @@ class QueryProfilingTests(QueryMonitoringTests):
         self.assertTrue('plan' in result['results'][0] and 'phaseTimes' in result['results'][0]['completed_requests'])
 
     def test_profiling_controls(self):
-        result = self.rest.get_query_admin_settings(self.master)
-        print result
+        self.rest.get_query_admin_settings(self.master)
         e = threading.Event()
         thread1 = threading.Thread(name='run_controlled_query', target=self.run_controlled_query,
                                    args=[self.servers[0]])
         thread1.start()
         e.set()
         result = self.run_cbq_query('select * from system:active_requests')
-        print (json.dumps(result, sort_keys=True, indent=3))
+        self.log.info(json.dumps(result, sort_keys=True, indent=3))
         thread1.join()
         result = self.run_cbq_query('select * from system:completed_requests')
-        print (json.dumps(result, sort_keys=True, indent=3))
+        self.log.info(json.dumps(result, sort_keys=True, indent=3))
 
         self.rest.set_profiling_controls(self.master, True)
         result = self.rest.get_query_admin_settings(self.master)
-        print result
+        self.log.info(result)
         e = threading.Event()
         thread1 = threading.Thread(name='run_controlled_query', target=self.run_controlled_query,
                                    args=[self.servers[0]])
         thread1.start()
         e.set()
         result = self.run_cbq_query('select * from system:active_requests')
-        print (json.dumps(result, sort_keys=True, indent=3))
+        self.log.info(json.dumps(result, sort_keys=True, indent=3))
         thread1.join()
         result = self.run_cbq_query('select * from system:completed_requests')
-        print (json.dumps(result, sort_keys=True, indent=3))
+        self.log.info(json.dumps(result, sort_keys=True, indent=3))
 
     def run_parallel_query(self, server):
         logging.info('parallel query is active')

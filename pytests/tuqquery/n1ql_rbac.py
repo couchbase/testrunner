@@ -41,49 +41,28 @@ class N1QLRBACTests(QueryTests):
         #Create an internal user with one role
         cmd = 'curl -X PUT http://%s:%s/settings/rbac/users/builtin/user1 -d "name=User1&roles=data_reader_writer[bucket2]&' \
                'password=pwd1" -u %s:%s'%(self.master.ip,self.port,self.username,self.password)
-        o =self.shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        string_curl = json.loads(new_curl)
-        print string_curl
+        self.shell.execute_command(cmd)
         #Create an external user with one role
         cmd = 'curl -X PUT http://%s:%s/settings/rbac/users/builtin/intuser -d "name=User2&roles=data_reader_writer[bucket2]' \
               '&password=pwd2" -u %s:%s'%(self.master.ip,self.port,self.username,self.password)
-        o =self.shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        string_curl = json.loads(new_curl)
-        print string_curl
+        self.shell.execute_command(cmd)
         #Query the list of users again
         cmd = 'curl http://%s:%s/settings/rbac/users -u %s:%s'%(self.master.ip,self.port,self.username,self.password)
-        o =self.shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        string_curl = json.loads(new_curl)
-        print string_curl
+        self.shell.execute_command(cmd)
         cmd = 'curl http://%s:%s/settings/rbac/users -u %s:%s'%(self.master.ip,self.port,'User1','pwd1')
-        o =self.shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        string_curl = json.loads(new_curl)
-        print string_curl
+        self.shell.execute_command(cmd)
         cmd = 'curl http://%s:%s/settings/rbac/users -u %s:%s'%(self.master.ip,self.port,'User2','pwd2')
-        o =self.shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        string_curl = json.loads(new_curl)
-        print string_curl
+        self.shell.execute_command(cmd)
 
 
     def test_users_crud_operation(self):
         #Query the list of users. It should be empty, returning an empty list, [ ]
         cmd = 'curl http://%s:%s/settings/rbac/users -u %s:%s'%(self.master.ip,self.port,self.username,self.password)
-        o =self.shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        string_curl = json.loads(new_curl)
-        print string_curl
+        self.shell.execute_command(cmd)
         #Create an internal user with one role:
         cmd = 'curl -X PUT http://%s:%s/settings/rbac/users/builtin/intuser -d "name=TestInternalUser&roles=' \
               'data_reader[bucket2]&password=pwintuser" -u %s:%s'%(self.master.ip,self.port,self.username,self.password)
-        o =self.shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        string_curl = json.loads(new_curl)
-        print string_curl
+        self.shell.execute_command(cmd)
         #Read the internal user
         cmd = 'curl http://%s:%s/settings/rbac/users/builtin/intuser -u %s:%s'%(self.master.ip,self.port,self.username,self.password)
         o =self.shell.execute_command(cmd)

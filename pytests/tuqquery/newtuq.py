@@ -163,7 +163,6 @@ class QueryTests(BaseTestCase):
             logging.debug('event set: %s', event_is_set)
             if event_is_set:
                 result = self.run_cbq_query("select * from system:active_requests")
-                print result
                 self.assertTrue(result['metrics']['resultCount'] == 1)
                 requestId = result['requestID']
                 result = self.run_cbq_query(
@@ -173,14 +172,12 @@ class QueryTests(BaseTestCase):
                     'select * from system:active_requests  where requestId  =  "%s"' % requestId)
                 self.assertTrue(result['metrics']['resultCount'] == 0)
                 result = self.run_cbq_query("select * from system:completed_requests")
-                print result
                 requestId = result['requestID']
                 result = self.run_cbq_query(
                     'delete from system:completed_requests where requestId  =  "%s"' % requestId)
                 time.sleep(10)
                 result = self.run_cbq_query(
                     'select * from system:completed_requests where requestId  =  "%s"' % requestId)
-                print result
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
 ##############################################################################################
@@ -412,8 +409,6 @@ class QueryTests(BaseTestCase):
             query_template = 'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' %(bucket.name) +\
                          'GROUP BY $obj0.$_obj0_int0 ORDER BY points'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            print "actual results are {0}".format(actual_result['results'])
-            print "expected results are {0}".format(expected_result)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_desc(self):
@@ -505,8 +500,6 @@ class QueryTests(BaseTestCase):
                                                                             bucket.name) +\
             ' WHERE $int1 >7 GROUP BY $int0, $int1 ORDER BY emp_per_month, $int1, $int0'  
             actual_result, expected_result = self.run_query_from_template(query_template)
-            print "Expected result is {0}".format(expected_result)
-            print "Actual result is {0}".format(actual_result)
             #self.assertTrue(len(actual_result['results'])== 0)
 
     def test_order_by_aggr_fn(self):
@@ -809,7 +802,6 @@ class QueryTests(BaseTestCase):
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
             if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
                 couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
-                print "PATH TO SHERLOCK: %s" % couchbase_path
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
@@ -938,7 +930,6 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
                 res = self.run_cbq_query()
                 self.sleep(10)
-                #print res
                 if self.monitoring:
                     self.query = "delete from system:completed_requests"
                     self.run_cbq_query()
@@ -958,12 +949,11 @@ class QueryTests(BaseTestCase):
                 if self.monitoring:
                         self.query = "select * from system:active_requests"
                         result = self.run_cbq_query()
-                        #print result
+
                         self.assertTrue(result['metrics']['resultCount'] == 1)
                         self.query = "select * from system:completed_requests"
                         time.sleep(20)
-                        result = self.run_cbq_query()
-                        #print result
+                        self.run_cbq_query()
 
 
 

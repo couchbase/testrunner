@@ -522,7 +522,6 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            print result
             self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
@@ -536,7 +535,6 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
 
     def test_any_external(self):
         for bucket in self.buckets:
@@ -804,7 +802,6 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            print result
             self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
@@ -814,7 +811,6 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
 
 
     def test_between(self):
@@ -923,13 +919,11 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
             self.query = "delete from system:prepareds"
             self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==0)
-            print result
 
     def test_group_by_satisfy(self):
         for bucket in self.buckets:
@@ -1110,7 +1104,6 @@ class QueryTests(BaseTestCase):
             if self.monitoring:
                 self.query = 'select * from system:completed_requests'
                 result = self.run_cbq_query()
-                print result
                 requestID = result['requestID']
                 self.query = 'delete from system:completed_requests where requestID  =  "%s"' % requestID
                 self.run_cbq_query()
@@ -2531,7 +2524,6 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            print result
             self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
@@ -2545,7 +2537,6 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
-            print result
             name = result['results'][0]['prepareds']['name']
             self.query = 'delete from system:prepareds where name = "%s" '  % name
             result = self.run_cbq_query()
@@ -2812,8 +2803,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             self.log.info(res)
-	    plan = ExplainPlanHelper(res)
-            print plan['~children'][2]['~child']['~children'][0]['scan']['index']
+            plan = ExplainPlanHelper(res)
             self.assertTrue(plan['~children'][2]['~child']['~children'][0]['scan']['index'] == index,
                             "wrong index used")
 
@@ -2880,9 +2870,7 @@ class QueryTests(BaseTestCase):
 
     def test_clock_millis(self):
         self.query = "select clock_millis() as now"
-        now = time.time()
         res = self.run_cbq_query()
-        print res
         self.assertFalse("error" in str(res).lower())
 
 
@@ -2932,7 +2920,6 @@ class QueryTests(BaseTestCase):
         now = datetime.datetime.now()
         today = date.today()
         res = self.run_cbq_query()
-        print res
         expected = "%s-%02d-%02dT" % (today.year, today.month, today.day,)
         self.assertFalse("error" in str(res).lower())
 

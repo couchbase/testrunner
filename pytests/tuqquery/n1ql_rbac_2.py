@@ -13,7 +13,6 @@ class RbacN1QL(QueryTests):
         super(RbacN1QL, self).setUp()
         users = TestInputSingleton.input.param("users", None)
         self.all_buckets = TestInputSingleton.input.param("all_buckets", False)
-        print users
         self.inp_users = []
         if users:
             self.inp_users = eval(eval(users))
@@ -412,7 +411,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         roles = ["select","insert","update","delete"]
         assigned_role = self.get_user_role_list()[0]['roles']
-        print assigned_role
+
         for role in roles:
             self.query = 'revoke {0} on {1} from {2}'.format(role,'default','test')
             res= self.curl_with_roles(self.query)
@@ -1032,7 +1031,6 @@ class RbacN1QL(QueryTests):
         new_list = [string.strip() for string in output]
         concat_string = ''.join(new_list)
         json_output=json.loads(concat_string)
-        print json_output
         try:
             return json_output
         except ValueError:

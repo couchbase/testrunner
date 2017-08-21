@@ -943,7 +943,6 @@ class QueriesViewsTests(QueryTests):
                     full_list = self.generate_full_docs_list(self.gens_load)
                     expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'], "join_day" : doc["join_day"]}
                                        for doc in full_list if doc['join_yr'] > 3]
-                    #import pdb;pdb.set_trace()
                     self._verify_results(sorted(res['results']), sorted(expected_result))
                     #self.assertTrue(len(res['results'])==10)
                     self.query = 'EXPLAIN SELECT name, join_day, join_yr FROM %s WHERE join_yr>3' % (bucket.name)
@@ -1161,13 +1160,10 @@ class QueriesViewsTests(QueryTests):
             query = 'EXPLAIN %s' % (query_temp)
             res = self.run_cbq_query(query=query)
             plan = ExplainPlanHelper(res)
-            print plan
             self.log.info('-'*100)
             if (query.find("CREATE INDEX") < 0):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
                         else plan["~children"][0]
-                print result
-                #import pdb;pdb.set_trace()
                 if not(result['scans'][0]['#operator']=='DistinctScan'):
                     if not (result["#operator"] == 'UnionScan'):
                         self.assertTrue(result["#operator"] == 'IntersectScan',
@@ -1188,11 +1184,7 @@ class QueriesViewsTests(QueryTests):
                     else:
                         actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
                                 for scan in result['scans']]
-
-                    print actual_indexes
-
                     actual_indexes = [x.encode('UTF8') for x in actual_indexes]
-
                     self.log.info('actual indexes "{0}"'.format(actual_indexes))
                     self.log.info('compared against "{0}"'.format(indexes_names))
                     self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))

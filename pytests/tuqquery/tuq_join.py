@@ -757,8 +757,6 @@ class JoinTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
             self._delete_ids(actual_result)
-            print json.JSONEncoder().encode(actual_result)
-
             actual_result = self.sort_nested_list(actual_result, key='task_name')
             actual_result = sorted(actual_result, key=lambda doc:
                                    self._get_for_sort(doc))
@@ -1021,9 +1019,7 @@ class JoinTests(QueryTests):
         self.query = "select 1"
         actual_result = self.run_cbq_query()
         actual_result = sorted(actual_result)
-        print actual_result
         self.query = "select 1 from system:dual"
         expected_result = self.run_cbq_query()
         expected_result = sorted(expected_result)
-        print expected_result
         self._verify_results(actual_result, expected_result)
