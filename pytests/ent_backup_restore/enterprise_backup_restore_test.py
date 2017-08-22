@@ -1102,6 +1102,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             fts = "-fts"
         if "-" in self.cluster_new_role:
             self.cluster_new_role = self.cluster_new_role.replace("-", ",")
+        """ Thing to do: Move entbackup* to S3 if tests run in server pools """
         shell.execute_command("cp -r entbackup%s %s/entbackup" % (fts, self.tmp_path))
         output, error = shell.execute_command("cd %s/backup/*/*/data; " \
                                               "unzip shar*.zip" \
@@ -1148,6 +1149,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             output, error = self.backup_restore()
             success_msg = ['Restore completed successfully']
             fail_msg = "Error restoring cluster:"
+
+            failed_persisted_bucket = []
+            ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
+                                                          "default", 'ep_queue_size',
+                                                          0, timeout_in_seconds=120)
+            if not ready:
+                failed_persisted_bucket.append("default")
+            if failed_persisted_bucket:
+                self.fail("Buckets %s did not persisted." % failed_persisted_bucket)
+
             rest = RestConnection(self.master)
             actual_keys = rest.get_active_key_count("default")
             print "\nActual keys in default bucket: %s \n" % actual_keys
