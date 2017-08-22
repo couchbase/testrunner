@@ -753,7 +753,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             for x in regex_backup_data[bucket.name]:
                                 print x
                     else:
-                        print "value of key in backup file  ",\
+                        if self.debug_logs:
+                            print "value of key in backup file  ",\
                                                       restore_file_data[bucket.name][key]
                         if pattern.search(restore_file_data[bucket.name][key]["Value"]):
                             regex_backup_data[bucket.name][key] = \
