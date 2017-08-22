@@ -11,6 +11,7 @@ import testconstants
 from datetime import date, timedelta
 import datetime
 import time
+import random
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_generators import JsonGenerator
 from basetestcase import BaseTestCase
@@ -1314,6 +1315,26 @@ class QueryTests(BaseTestCase):
 #
 #   AGGR FN
 ##############################################################################################
+
+    def test_agg_counters(self):
+        vals = []
+        keys = []
+        for i in range(10):
+            new_val = random.randint(0, 99)
+            new_counter = "counter_US"+str(i)
+            vals.append(new_val)
+            keys.append(new_counter)
+            self.query = 'INSERT INTO default VALUES ("%s",%s)' % (new_counter, new_val)
+            self.run_cbq_query()
+
+        self.query = 'SELECT sum(default) FROM default USE KEYS %s;' % (str(keys))
+        actual_results = self.run_cbq_query()
+        self.assertEqual(actual_results['results'][0]['$1'], sum(vals))
+
+        self.query = 'SELECT avg(default) FROM default USE KEYS %s;' % (str(keys))
+        actual_results = self.run_cbq_query()
+        self.assertEqual(actual_results['results'][0]['$1'], float(sum(vals)) / max(len(vals), 1))
+
 
     def test_sum(self):
         for bucket in self.buckets:
