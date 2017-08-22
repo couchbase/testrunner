@@ -233,9 +233,15 @@ class NodeHelper:
         if shell.extract_remote_info().type.lower() == OS.WINDOWS:
             time.sleep(wait_timeout * 5)
         else:
-            time.sleep(wait_timeout)
-        # disable firewall on these nodes
-        NodeHelper.disable_firewall(server)
+            time.sleep(wait_timeout/6)
+        while True:
+            try:
+                # disable firewall on these nodes
+                NodeHelper.disable_firewall(server)
+                break
+            except BaseException:
+                print "Node not reachable yet, will try after 10 secs"
+                time.sleep(10)
         # wait till server is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert(
             [server],
