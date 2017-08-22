@@ -753,7 +753,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             for x in regex_backup_data[bucket.name]:
                                 print x
                     else:
-                        print "value of key in backup file  ", restore_file_data[bucket.name][key]
+                        print "value of key in backup file  ",\
+                                                      restore_file_data[bucket.name][key]
                         if pattern.search(restore_file_data[bucket.name][key]["Value"]):
                             regex_backup_data[bucket.name][key] = \
                                          restore_file_data[bucket.name][key]
@@ -773,11 +774,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                               getReplica=getReplica,
                                                               mode=mode)
             buckets_data[bucket.name] = bucket_data[bucket.name]
+            to_element = 5
+            if self.backupset.filter_values:
+                to_element = 7
             for key in buckets_data[bucket.name]:
                 value = buckets_data[bucket.name][key]
                 if self.backupset.random_keys:
-                    value = ",".join(value.split(',')[4:5])
+                    value = ",".join(value.split(',')[4:to_element])
                     value = value.replace('""', '"')
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
                 else:
                     value = ",".join(value.split(',')[4:5])
                 buckets_data[bucket.name][key] = value
