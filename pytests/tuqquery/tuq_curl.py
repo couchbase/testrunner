@@ -995,7 +995,7 @@ class QueryCurlTests(QueryTests):
         returning ="returning meta().id, * "
         curl = self.shell.execute_commands_inside(cbqpath,insert_query+query+options+returning,'', '', '','', '')
         json_curl = self.convert_to_json(curl)
-        self.log.inf(json_curl)
+        self.log.info(json_curl)
         self.log.info(json_curl['errors'][0]['msg'])
         self.log.info(error_msg)
         #self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
@@ -1010,7 +1010,7 @@ class QueryCurlTests(QueryTests):
         returning ="returning meta().id, * "
         curl = self.shell.execute_commands_inside(cbqpath,insert_query+query+options+returning,'', '', '','', '')
         json_curl = self.convert_to_json(curl)
-        self.log.inf(json_curl)
+        self.log.info(json_curl)
         self.log.info(json_curl['errors'][0]['msg'])
         self.log.info(error_msg)
         #self.assertTrue(json_curl['errors'][0]['msg'] == error_msg)
