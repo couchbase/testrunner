@@ -202,7 +202,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             num_indexes=len(servers)*index_dist_factor
             self.query_definitions = self._create_query_definitions(index_count=num_indexes)
-            self.multi_create_using_index(buckets=self.buckets,
+            self.multi_create_index(buckets=self.buckets,
                                          query_definitions=self.query_definitions)
             index_map = self.get_index_stats(perNode=True)
             self.log.info(index_map)
