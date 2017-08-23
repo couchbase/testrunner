@@ -2453,6 +2453,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        cmd_test = cmd_to_test
         if cmd_to_test.startswith('"') and cmd_to_test.endswith('"'):
             cmd_test = cmd_to_test[1:-1]
         self.assertEqual(output[0], "cbbackupmgr {} [<args>]".format(cmd_test))
