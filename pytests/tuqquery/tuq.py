@@ -303,6 +303,11 @@ class QueryTests(BaseTestCase):
             else:
                 return substring
 
+    def run_regex_query(self, word, substring, regex_type = ''):
+        self.query = "select REGEXP_POSITION%s('%s', '%s')" % (regex_type, word, substring)
+        results = self.run_cbq_query()
+        return results['results'][0]['$1']
+
 
 ##############################################################################################
 #
@@ -4102,19 +4107,55 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_regex_position(self):
-        for bucket in self.buckets:
-            self.query = "select email from %s where REGEXP_POSITION(email, '-m..l*') = 10" % (bucket.name)
+        test_word = 'california'
+        for letter in test_word:
+            actual = self.run_regex_query(test_word, letter)
+            expected = test_word.find(letter)
+            self.assertEqual(actual, expected)
 
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            self.query = "select email from %s where REGEXP_POSITION(REVERSE(email), '*l..m-') = 10" % (bucket.name)
-            #actual_list1 = self.run_cbq_query()
-            #actual_result1 = sorted(actual_list1['results'])
-            expected_result = [{"email" : doc["email"]}
-                               for doc in self.full_list
-                               if doc['email'].find('-m') == 10]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
+        letter = ''
+        actual = self.run_regex_query(test_word, letter)
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+        letter = 'd'
+        actual = self.run_regex_query(test_word, letter)
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+    def test_regex_position0(self):
+        test_word = 'california'
+        for letter in test_word:
+            actual = self.run_regex_query(test_word, letter, regex_type = '0')
+            expected = test_word.find(letter)
+            self.assertEqual(actual, expected)
+
+        letter = ''
+        actual = self.run_regex_query(test_word, letter, regex_type = '0')
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+        letter = 'd'
+        actual = self.run_regex_query(test_word, letter, regex_type = '0')
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+    def test_regex_position1(self):
+        test_word = 'california'
+        for letter in test_word:
+            actual = self.run_regex_query(test_word, letter, regex_type = '1')
+            expected = test_word.find(letter) + 1
+            self.assertEqual(actual, expected)
+
+        letter = ''
+        actual = self.run_regex_query(test_word, letter, regex_type = '1')
+        expected = test_word.find(letter) + 1
+        self.assertEqual(actual, expected)
+
+        letter = 'd'
+        actual = self.run_regex_query(test_word, letter, regex_type = '1')
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
 
     def test_regex_replace(self):
         for bucket in self.buckets:
