@@ -384,7 +384,10 @@ class CBASBaseTest(BaseTestCase):
         """
         shell = RemoteMachineShellConnection(server)
 
-        output, error = shell.execute_command("""curl -v {0}""".format(handle))
+        output, error = shell.execute_command(
+            """curl -v {0} -u {1}:{2}""".format(handle,
+                                                self.cbas_node.rest_username,
+                                                self.cbas_node.rest_password))
 
         response = ""
         for line in output:
@@ -402,7 +405,9 @@ class CBASBaseTest(BaseTestCase):
         shell = RemoteMachineShellConnection(server)
 
         output, error = shell.execute_command(
-            """curl -v {0}""".format(handle))
+            """curl -v {0} -u {1}:{2}""".format(handle,
+                                                self.cbas_node.rest_username,
+                                                self.cbas_node.rest_password))
 
         response = ""
         for line in output:
