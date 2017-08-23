@@ -32,7 +32,25 @@ class CBASSecondaryIndexes(CBASBaseTest):
 
     def tearDown(self):
         super(CBASSecondaryIndexes, self).tearDown()
-
+    
+    def verify_index_used(self, statement, index_used=False, index_name=None):
+        statement = 'EXPLAIN %s'%statement
+        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
+            statement)
+        self.assertEquals(status, "success")
+        if status == 'success':
+            self.assertEquals(errors, None)
+            if index_used:
+                self.assertTrue("index-search" in str(results))
+                self.assertFalse("data-scan" in str(results))
+                self.log.info("INDEX-SEARCH is found in EXPLAIN hence indexed data will be scanned to serve %s"%statement)
+                if index_name:
+                    self.assertTrue(index_name in str(results))
+            else:
+                self.assertTrue("data-scan" in str(results))
+                self.assertFalse("index-search" in str(results))
+                self.log.info("DATA-SCAN is found in EXPLAIN hence index is not used to serve %s"%statement)
+ 
     def test_create_index(self):
         '''
         Steps :
@@ -460,12 +478,14 @@ class CBASSecondaryIndexes(CBASBaseTest):
         1.
         '''
         # Create Index
+#         to_verify=0
         search_by = self.input.param("search_by", '')
         exp_number = self.input.param("exp_number", 0)
         not_fit_value = self.input.param("not_fit_value", '')
         expected_status = self.input.param("status", 'success')
         binary = self.input.param("binary", False)
-        if ";" in not_fit_value:
+        index_used = self.input.param("index_used", False)
+        if ";" in str(not_fit_value):
             not_fit_value = not_fit_value.split(';')
 
         testuser = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'password': 'password'}]
@@ -483,7 +503,15 @@ class CBASSecondaryIndexes(CBASBaseTest):
         if binary:
             self.client.upsert('utf16_doc', not_fit_value.encode('utf16'),  format=FMT_BYTES)
         else:
-            self.client.upsert(k, {index_fields.split(":")[0] : not_fit_value})
+            if "." in index_fields.split(":")[0]:
+                self.client.upsert(k, {index_fields.split(":")[0].split(".")[0]:{index_fields.split(":")[0].split(".")[1] : not_fit_value}})
+            else:
+                self.client.upsert(k, {index_fields.split(":")[0] : not_fit_value})
+            
+        if index_fields.split(":")[1] == "string" and isinstance(not_fit_value,str) or \
+            index_fields.split(":")[1] == "double" and isinstance(not_fit_value,(float,int)) or \
+            index_fields.split(":")[1] == "bigint" and isinstance(not_fit_value,(float,int)):
+            index_used=True
         create_idx_statement = "create index {0} on {1}({2});".format(
             self.index_name, self.cbas_dataset_name, index_fields)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
@@ -509,18 +537,26 @@ class CBASSecondaryIndexes(CBASBaseTest):
         self.assertEquals(status, "success")
         self.assertEquals(errors, None)
         self.assertEquals(results, [{'$1': exp_number}])
-        statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name,
+        if isinstance(not_fit_value,str):
+            statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name,
+                                                                        index_fields.split(":")[0], not_fit_value)
+        else:
+            statement = 'SELECT count(*) FROM `{0}` where {1}={2}'.format(self.cbas_dataset_name,
                                                                         index_fields.split(":")[0], not_fit_value)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
             statement)
         self.assertEquals(status, expected_status)
         if status == 'success':
             self.assertEquals(errors, None)
-            self.assertEquals(results, [{'$1': 0}])
-
+            self.assertEquals(results, [{'$1': 1}])
+            
+        self.log.info("Verify whether statement %s used index or not. Indexed: %s"%(statement,index_fields))
+        self.verify_index_used(statement, index_used, self.index_name)
     # https://issues.couchbase.com/browse/MB-25646
     # https://issues.couchbase.com/browse/MB-25657
+    
     def test_index_population_thread(self):
+        to_verify = 0
         def update_data(client, index_fields):
             for _ in xrange(100):
                 if index_fields.split(":")[-1] == 'double':
@@ -532,13 +568,12 @@ class CBASSecondaryIndexes(CBASBaseTest):
                 perc = random.randrange(0, 100)
                 if perc > 75:
                     # 25% with binary data
-                    client.upsert('utf16_doc', str(not_fit_value).encode('utf16'), format=FMT_BYTES)
-                elif perc < 10:
+#                     client.upsert('utf16_doc', str(not_fit_value).encode('utf16'), format=FMT_BYTES)
+                    client.upsert(k, {index_fields.split(":")[0]: not_fit_value})
+                else:
                     # 10% field removed
                     client.upsert(k, {index_fields.split(":")[0] + "_NEW_FIELD": not_fit_value})
-                else:
-                    client.upsert(k, {index_fields.split(":")[0]: not_fit_value})
-
+                    
         # Create Index
         search_by = self.input.param("search_by", '')
         exp_number = self.input.param("exp_number", 0)
@@ -591,7 +626,11 @@ class CBASSecondaryIndexes(CBASBaseTest):
             self.assertEquals(status, "success")
             self.assertEquals(errors, None)
             self.assertEquals(results, [{'$1': exp_number}])
-            statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name,
+            if isinstance(not_fit_value,str):
+                statement = 'SELECT count(*) FROM `{0}` where {1}="{2}"'.format(self.cbas_dataset_name,
+                                                                            index_fields.split(":")[0], not_fit_value)
+            else:
+                statement = 'SELECT count(*) FROM `{0}` where {1}={2}'.format(self.cbas_dataset_name,
                                                                             index_fields.split(":")[0], not_fit_value)
             status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
                 statement)
@@ -599,11 +638,15 @@ class CBASSecondaryIndexes(CBASBaseTest):
             if status == 'success':
                 self.assertEquals(errors, None)
                 self.assertEquals(results, [{'$1': 0}])
+                
+            self.log.info("Verify whether statement %s used index or not. Indexed: %s"%(statement,index_fields))
+            self.verify_index_used(statement, index_used, self.index_name)
 
     def test_index_population_where_statements(self):
         exp_number = self.input.param("exp_number", 0)
         where_statement = self.input.param("where_statement", '').replace('_EQ_', '=')
-
+        index_used = self.input.param("index_used", False)
+        
         testuser = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'password': 'password'}]
         rolelist = [{'id': self.cb_bucket_name, 'name': self.cb_bucket_name, 'roles': 'admin'}]
         self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
@@ -637,6 +680,9 @@ class CBASSecondaryIndexes(CBASBaseTest):
         self.assertEquals(errors, None)
         self.assertEquals(results, [{'$1': exp_number}])
 
+        self.log.info("Verify whether statement %s used index or not. Indexed: %s"%(statement,index_fields))
+        self.verify_index_used(statement, index_used, self.index_name)
+            
     def test_index_population_joins(self):
         exp_number = self.input.param("exp_number", 0)
         self.index_name2 = self.input.param('index_name2', None)
@@ -695,6 +741,7 @@ class CBASSecondaryIndexes(CBASBaseTest):
         self.assertEquals(len(results), exp_number)
 
     # https://issues.couchbase.com/browse/MB-25695
+    
     def test_index_metadata(self):
         self.buckets = [Bucket(name="beer-sample")]
         self.perform_doc_ops_in_all_cb_buckets(100000, "create", start_key=0, end_key=100000)
@@ -712,28 +759,9 @@ class CBASSecondaryIndexes(CBASBaseTest):
         self.connect_to_bucket(cbas_bucket_name=
                                self.cbas_bucket_name,
                                cb_bucket_password=self.cb_bucket_password)
-
+        self.wait_for_ingestion_complete([self.cbas_dataset_name], 107303)
         statement = 'SELECT count(*) FROM `{0}`'.format(self.cbas_dataset_name)
-        status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            statement)
-        self.assertEquals(status, "success")
-        self.assertEquals(errors, None)
-        self.assertEquals(results, [{'$1': 0}])
-
-        _, result = self.verify_index_created(self.index_name, self.index_fields,
-                                      self.cbas_dataset_name)
-
-        self.assertEquals(result[0]['Index']['DatasetName'], self.cbas_dataset_name)
-        self.assertEquals(result[0]['Index']['DataverseName'], 'Default')
-        self.assertEquals(result[0]['Index']['IndexName'], self.index_name)
-        self.assertEquals(result[0]['Index']['IndexStructure'], 'BTREE')
-        self.assertEquals(result[0]['Index']['IsPrimary'], False)
-        self.assertEquals(result[0]['Index']['PendingOp'], 0)  # shouldn't be 0?
-        self.assertEquals(result[0]['Index']['SearchKey'], [index_field.split(":")[:-1]])
-        self.assertEquals(result[0]['Index']['SearchKeyType'], index_field.split(":")[1:])
-
-        self.sleep(30)
-
+#        
         _, result = self.verify_index_created(self.index_name, self.index_fields,
                                               self.cbas_dataset_name)
 
@@ -769,11 +797,9 @@ class CBASSecondaryIndexes(CBASBaseTest):
         self.assertEquals(status, "success")
         self.assertEquals(errors, None)
         self.assertEquals(results, [{'$1': 107303}])
-
         self.drop_dataset(self.cbas_dataset_name)
 
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
             statement)
-        self.assertEquals(None, [])
         self.assertEquals(errors, [
             {u'msg': u'Cannot find dataset beer_ds in dataverse Default nor an alias with name beer_ds!', u'code': 1}])
