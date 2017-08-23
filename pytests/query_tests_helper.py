@@ -148,6 +148,17 @@ class QueryHelperTests(BaseTestCase):
             bucket=bucket, use_gsi_for_secondary=self.use_gsi_for_secondary,
             deploy_node_info=deploy_node_info, defer_build=defer_build, num_replica=self.num_index_replicas)
         log.info(query)
+        # Define Helper Method which will be used for running n1ql queries, create index, drop index
+        self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                      max_verify=self.max_verify,
+                                      buckets=self.buckets,
+                                      item_flag=self.item_flag,
+                                      n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list,
+                                      log=self.log, input=self.input,
+                                      master=self.master,
+                                      use_rest=True
+                                      )
         create_index_task = self.cluster.async_create_index(
             server=self.n1ql_server, bucket=bucket, query=query,
             n1ql_helper=self.n1ql_helper,

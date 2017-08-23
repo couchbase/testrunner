@@ -189,6 +189,8 @@ class NewUpgradeBaseTest(QueryHelperTests):
                 set_services = services.split(",")
                 for i in range(1, len(set_services)):
                     self.cluster.rebalance([servers[0]], [servers[i]], [], use_hostnames=self.use_hostnames, services=[set_services[i]])
+                    self.sleep(60)
+
         self.buckets = []
         gc.collect()
         if self.input.param('extra_verification', False):
