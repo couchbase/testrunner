@@ -84,12 +84,12 @@ class AdvancedQueryTests(QueryTests):
                 try:
                     for url in pass_urls:
                         cmd = self.path+'cbq  -u=Administrator -p=password -e='+url[0]+' -no-ssl-verify=true'
-                        o = shell.execute_commands_inside(cmd, '', ['select * from system:nodes;', '\quit'], '', '', '', '')
+                        o = shell.execute_commands_inside(cmd, '', ['select * from system:nodes;', '\quit;'], '', '', '', '')
                         self.assertTrue(url[1] in o)
 
                     for url in fail_urls:
                         cmd = self.path+'cbq  -u=Administrator -p=password -e='+url+' -no-ssl-verify=true'
-                        o = shell.execute_commands_inside(cmd, '', ['select * from system:nodes;', '\quit'], '', '', '', '')
+                        o = shell.execute_commands_inside(cmd, '', ['select * from system:nodes;', '\quit;'], '', '', '', '')
                         self.assertTrue('status:FAIL' in o)
                 finally:
                     shell.disconnect()
@@ -418,7 +418,7 @@ class AdvancedQueryTests(QueryTests):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
-                queries = ['\SET -$join_day 2;','\SET -$project "AB";','prepare temp from select name, tasks_ids,join_day from bucketname where join_day>=$join_day and tasks_ids[0] IN (select ARRAY_AGG(DISTINCT task_name) as names from bucketname d use keys ["test_task-1", "test_task-2"] where project!=$project)[0].names;','execute temp;']
+                queries = ['\SET -$join_day 2;','\SET -$project "AB";','prepare temp from select name, tasks_ids,join_day from bucketname where join_day>=$join_day and tasks_ids[0] IN (select ARRAY_AGG(DISTINCT task_name) as names from bucketname d use keys ["test_task-1", "test_task-2"] where project!=$project)[0].names;','execute temp;','\quit;']
                 o = self.execute_commands_inside(self.cbqpath,'',queries,'','',bucket.name,'' )
                 # Test needs to be finished
 
