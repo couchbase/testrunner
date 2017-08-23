@@ -180,7 +180,7 @@ class NewUpgradeBaseTest(QueryHelperTests):
         if self.port and self.port != '8091':
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
-        self.sleep(7, "wait to make sure node is ready")
+        self.sleep(120, "wait to make sure node is ready")
         if len(servers) > 1:
             if services is None:
                 self.cluster.rebalance([servers[0]], servers[1:], [],
