@@ -2304,7 +2304,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         testuser = [{'id': 'default', 'name': 'default', 'password': 'password'}]
         rolelist = [{'id': 'default', 'name': 'default', 'roles': 'admin'}]
         self.add_built_in_server_user(testuser, rolelist)
-        print self.backupset.cluster_host.ip
         try:
             cb = Bucket('couchbase://' + self.backupset.cluster_host.ip + '/default',
                                                                  password="password")
@@ -2352,10 +2351,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Comparing cluster host data cas and flags against restore host data")
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
-            if self.backupset.force_updates:
-                if cluster_host_data[key]["cas"] == restore_host_data[key]["cas"]:
-                    self.fail("CAS not changed for key: {0}".format(key))
-            elif cluster_host_data[key]["cas"] != restore_host_data[key]["cas"]:
+            if cluster_host_data[key]["cas"] != restore_host_data[key]["cas"]:
                 self.fail("CAS mismatch for key: {0}".format(key))
             if cluster_host_data[key]["flags"] != restore_host_data[key]["flags"]:
                 self.fail("Flags mismatch for key: {0}".format(key))
@@ -2457,7 +2453,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "cbbackupmgr {} [<args>]".format(cmd_to_test))
+        if cmd_to_test.startswith('"') and cmd_to_test.endswith('"'):
+            cmd_test = cmd_to_test[1:-1]
+        self.assertEqual(output[0], "cbbackupmgr {} [<args>]".format(cmd_test))
         cmd = cmd_to_test + " --archive"
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -2532,10 +2530,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         part_message = "backing up"
-        if cmd_to_test == "restore":
+        if cmd_to_test.startswith('"') and cmd_to_test.endswith('"'):
+            cmd_test = cmd_to_test[1:-1]
+        if cmd_test == "restore":
             part_message = 'restoring'
-        self.assertTrue("Error {0} cluster: Backup Repository `abc` not found".format(part_message) in output[-1],
-                        "Expected error message not thrown")
+        self.assertTrue("Error {0} cluster: Backup Repository `abc` not found"\
+                        .format(part_message) in output[-1],
+                        "Expected error message not thrown. Actual output %s " % output[-1])
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster abc --username {2} \
                               --password {3}".format(self.backupset.directory,
                                                      self.backupset.name,
