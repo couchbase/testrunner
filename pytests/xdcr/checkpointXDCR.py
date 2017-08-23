@@ -267,7 +267,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
     """ Initial load, 3 further updates on same key onto vb0
         Note: Checkpointing happens during the second mutation,but only if it's time to checkpoint """
-    def mutate_and_checkpoint(self, n=3):
+    def mutate_and_checkpoint(self, n=3, skip_validation=False):
         count = 1
         # get vb0 active source node
         stats_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
@@ -294,8 +294,9 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                             stats_log)
                 if stats_count > 0:
                     self.log.info("Checkpoint recorded as expected")
-                    self.log.info("Validating latest checkpoint")
-                    self.get_and_validate_latest_checkpoint()
+                    if not skip_validation:
+                        self.log.info("Validating latest checkpoint")
+                        self.get_and_validate_latest_checkpoint()
                     break
                 else:
                     self.sleep(20, "Checkpoint not recorded yet, will check after 20s")
@@ -364,6 +365,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             else:
                 self.log.info("Current internal replication = UPR,hence vb_uuid did not change," \
                           "Subsequent _commit_for_checkpoints are expected to pass")
+            self.sleep(self._wait_timeout)
             self.verify_next_checkpoint_passes()
         else:
             self.dest_cluster.rebalance_out_master()
@@ -379,6 +381,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                                 "vb_uuid of vb0 is same before and after TAP rebalance")
                 self.read_chkpt_history_new_vb0node()
                 self.verify_next_checkpoint_fails_after_dest_uuid_change()
+                self.sleep(self._wait_timeout * 2)
                 self.verify_next_checkpoint_passes()
             else:
                 self.log.info("Current internal replication = UPR,hence destination vb_uuid did not change," \
@@ -525,6 +528,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.verify_next_checkpoint_passes()
         elif "source" in self._failover:
             self.failover_activevb0_node(self.src_master)
+            self.sleep(self._wait_timeout * 2)
             self.verify_next_checkpoint_passes()
         self.sleep(10)
         self.verify_revid()
@@ -534,7 +538,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         call is successful
     """
     def verify_next_checkpoint_fails_after_dest_uuid_change(self):
-        if not self.mutate_and_checkpoint(n=1):
+        if not self.mutate_and_checkpoint(n=1, skip_validation=True):
             self.log.info ("Checkpointing failed as expected after remote uuid change, not a bug")
             if not self.was_pre_rep_successful():
                 self.log.info("_pre_replicate following the failed checkpoint was unsuccessful, but this is expected")
