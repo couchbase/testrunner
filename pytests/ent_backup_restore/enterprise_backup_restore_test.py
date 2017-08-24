@@ -2221,8 +2221,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.sleep(15)
         self.backupset.cluster_host = servers[2]
         """ Upgrade is done """
-
-        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+        self.log.info("** Upgrade is done **")
+        healthy = False
+        timeout = 0
+        while not healthy:
+            healthy = RestHelper(RestConnection(self.backupset.cluster_host)).is_cluster_healthy()
+            if not healthy:
+                if timeout == 120:
+                    self.fail("Node %s is not ready after 2 mins" % self.backupset.cluster_host)
+                else:
+                    self.sleep(5, "Wait for server up ")
+                    timeout += 5
+            else:
+                healthy = True
+        if "5" <= RestConnection(servers[2]).get_nodes_version()[:1]:
             for user in self.users_check_restore:
                 user_name = user.replace('[', '_').replace(']', '_')
                 testuser = [{'id': user_name, 'name': user_name,
@@ -2239,12 +2251,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                                         testuser[0]["name"]))
                 status = RbacBase().add_user_role(rolelist, RestConnection(servers[2]), 'builtin')
                 self.log.info(status)
-
         if self.backupset.number_of_backups_after_upgrade:
             self.backupset.number_of_backups += \
                 self.backupset.number_of_backups_after_upgrade
-            if "5" <= self.cb_version[:1]:
-                self.add_built_in_server_user(node=self.backupset.cluster_host)
+            if "5" <= RestConnection(servers[2]).get_nodes_version()[:1]:
+                self.add_built_in_server_user(node=servers[2])
             for i in range(1, self.backupset.number_of_backups_after_upgrade + 2):
                 self.log.info("_backup_restore_with_ops #{0} started...".format(i))
                 validate_dir_struct = True
@@ -2262,7 +2273,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.backup_list()
 
         backupsets = [self.backupset]
-        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+        if "5" <= RestConnection(servers[2]).get_nodes_version()[:1]:
             for user in self.users_check_restore:
                 new_backupset = copy.deepcopy(self.backupset)
                 new_backupset.restore_cluster_host_username = user.replace('[', '_').replace(']', '_')
