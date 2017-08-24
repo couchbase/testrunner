@@ -429,12 +429,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        self.backupset.backup_compress = False
+        self.backupset.backup_compressed = False
         self.backup_cluster()
         no_compression = self.get_database_file_info()
         self.log.info("\nDelete old backup and do backup again with compress flag")
         self.backup_create()
-        self.backupset.backup_compress = self.input.param("backup-compressed", False)
+        self.backupset.backup_compressed = self.input.param("backup-compressed", False)
         self.backup_cluster()
         with_compression = self.get_database_file_info()
         self.validate_backup_compressed_file(no_compression, with_compression)
@@ -518,8 +518,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, _ = self.backup_restore()
         if output and "Error restoring cluster" not in output[0]:
             self.fail("Restore to non exist bucket should fail")
-        else:
-            self.fail("Need to check the output of restore command")
 
     def test_merge_backup_from_old_and_new_bucket(self):
         """

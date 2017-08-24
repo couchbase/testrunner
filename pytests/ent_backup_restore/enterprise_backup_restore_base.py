@@ -57,7 +57,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cluster_flag = "--host"
         self.backupset = Backupset()
         self.cmd_ext = ""
-        self.should_fail = False
+        self.should_fail = self.input.param("should-fail", False)
         self.database_path = COUCHBASE_DATA_PATH
         self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
         self.debug_logs = self.input.param("debug-logs", False)
@@ -533,6 +533,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             error_found = False
             if expected_error:
                 for line in output:
+                    if self.debug_logs:
+                        print "output from cmd: ", line
+                        print "expect error   : ", expected_error
                     if line.find(expected_error) != -1:
                         error_found = True
                         break
