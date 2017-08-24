@@ -150,6 +150,7 @@ class bidirectional(XDCRNewBaseTest):
 
         self.sleep(self._wait_timeout / 6)
         self.perform_update_delete()
+        self.sleep(300)
 
         self.verify_results()
 
@@ -341,7 +342,7 @@ class bidirectional(XDCRNewBaseTest):
                     self.dest_cluster.load_all_buckets_from_generator(kv_gen=c2_gen_update)
                 self.dest_cluster.load_all_buckets_from_generator(kv_gen=c2_gen_delete)
             # wait till we recreate deleted keys before we can delete/update
-            self.sleep(60)
+            self.sleep(300)
 
         self.verify_results()
 

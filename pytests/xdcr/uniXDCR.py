@@ -118,6 +118,8 @@ class unidirectional(XDCRNewBaseTest):
 
         NodeHelper.wait_warmup_completed(warmupnodes)
 
+        self.sleep(300)
+
         self.verify_results()
 
     def load_with_failover(self):
@@ -162,6 +164,8 @@ class unidirectional(XDCRNewBaseTest):
 
         self.sleep(self._wait_timeout / 6)
         self.perform_update_delete()
+
+        self.sleep(300)
 
         self.verify_results()
 
@@ -265,6 +269,7 @@ class unidirectional(XDCRNewBaseTest):
                 self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_delete)
                 self.sleep(5)
 
+        self.sleep(600)
         self.verify_results()
 
     def replication_while_rebooting_a_non_master_destination_node(self):
@@ -666,6 +671,7 @@ class unidirectional(XDCRNewBaseTest):
             self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
 
         conn.start_couchbase()
+        self.sleep(300)
         self.verify_results()
 
     def test_verify_mb19802_2(self):
@@ -686,6 +692,7 @@ class unidirectional(XDCRNewBaseTest):
             self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
             self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
 
+        self.sleep(300)
         self.verify_results()
 
     def test_verify_mb19697(self):
@@ -733,6 +740,7 @@ class unidirectional(XDCRNewBaseTest):
             self.log.info("counter goes backward, maybe due to the pipeline is restarted "
                                         "error message not found in " + str(node.ip))
 
+        self.sleep(300)
         self.verify_results()
 
     def test_verify_mb20463(self):
