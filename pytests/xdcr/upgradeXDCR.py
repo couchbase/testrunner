@@ -592,7 +592,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             itemPrefix = "loadFour" + _seq * 'a'
             gen_create4 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)
             self._load_bucket(bucket, self.src_master, gen_create4, 'create', exp=0)
-            self._wait_for_replication_to_catchup(timeout=600)
+
+        self._wait_for_replication_to_catchup(timeout=600)
         self.merge_all_buckets()
         self.verify_results()
         self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
