@@ -691,14 +691,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         nodes = []
         upto_seq = 100000
         self.log.info("Start compact each vbucket in bucket")
+
+        rest = RestConnection(self.master)
+        cluster_nodes = rest.get_nodes()
         for bucket in self.buckets:
-            """ get all nodes IP in cluster """
-            for node in bucket.nodes:
-                nodes.append(node.ip)
             found = self.get_info_in_database(self.backupset.cluster_host, bucket, "deleted")
             if found:
                 shell = RemoteMachineShellConnection(self.backupset.cluster_host)
-                shell.compact_vbuckets(len(bucket.vbuckets), nodes, upto_seq)
+                shell.compact_vbuckets(len(bucket.vbuckets), cluster_nodes, upto_seq)
             found = self.get_info_in_database(self.backupset.cluster_host, bucket, "deleted")
             if not found:
                 self.log.info("Load another docs to bucket %s " % bucket.name)
@@ -735,10 +735,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                     end=self.num_items)
         self._load_all_buckets(self.master, create_gen1, "create", 0)
         failed_persisted_bucket = []
-
-        cluster_nodes = None
+        rest = RestConnection(self.master)
+        cluster_nodes = rest.get_nodes()
         for bucket in self.buckets:
-            cluster_nodes = bucket.nodes
             ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
                                                           bucket.name, 'ep_queue_size',
                                                           0, timeout_in_seconds=120)
@@ -774,10 +773,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         ready = False
                         while not ready:
                             if not RestHelper(RestConnection(server)).is_ns_server_running():
-                                print "to sleep"
                                 self.sleep(10)
                             else:
-                                print "to true"
                                 ready = True
                         cmd = "%scbstats%s %s:11210 failovers -u %s -p %s | grep num_entries " \
                               "| awk%s '{print $2}' | grep -m 5 '4\|5\|6\|7'" \
@@ -1262,6 +1259,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
         self.log.info("Enabling firewall on restore host before restore")
         RemoteUtilHelper.enable_firewall(self.backupset.restore_cluster_host)
+        """ reset restore cluster to same services as backup cluster """
         try:
             output, error = self.backup_restore()
             self.assertTrue("getsockopt: connection refused" in output[0],
@@ -1272,6 +1270,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn.disable_firewall()
         self.log.info("Trying restore now")
         self.skip_buckets = False
+        """ Need to reset restore node with services the same as in backup cluster """
+        rest = RestConnection(self.backupset.restore_cluster_host)
+        rest.force_eject_node()
+
+        master_services = self.get_services([self.backupset.cluster_host],
+                                            self.services_init, start_node=0)
+        info = rest.get_nodes_self()
+        if info.memoryQuota and int(info.memoryQuota) > 0:
+            self.quota = info.memoryQuota
+        rest.init_node()
+        self.sleep(10)
         self.backup_restore_validate()
 
     def test_backup_restore_with_audit(self):
@@ -1561,6 +1570,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         try:
+            conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+            conn.pause_memcached()
+            self.sleep(10)
             backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
                                                               backup_host=self.backupset.backup_host,
                                                               directory=self.backupset.directory,
@@ -1569,12 +1581,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                               no_progress_bar=self.no_progress_bar,
                                                               cli_command_location=self.cli_command_location,
                                                               cb_version=self.cb_version)
+
             self.sleep(10)
-            conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-            conn.pause_memcached()
             output = backup_result.result(timeout=200)
             self.assertTrue(
-                "Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                "Error backing up cluster: Unable to find the latest vbucket sequence numbers." in output[0],
                 "Expected error message not thrown by Backup 180 seconds after memcached crash")
             self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
         except Exception as ex:
@@ -1582,6 +1593,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         finally:
             conn.unpause_memcached()
             self.sleep(30)
+            conn.disconnect()
 
     def test_restore_with_erlang_crash_and_restart(self):
         """
@@ -1807,9 +1819,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line).group()
-                if backup_name in self.backups:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
+                if self.debug_logs:
+                    print "backup name ", backup_name + "-07_00"
+                    print "backup set  ", self.backups
+                if backup_name + "-07_00" in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
         self.assertEqual(backup_count, len(self.backups), "Initial number of backups did not match")
@@ -1824,9 +1839,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line).group()
-                if backup_name in self.backups:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
+                if self.debug_logs:
+                    print "backup name ", backup_name + "-07_00"
+                    print "backup set  ", self.backups
+                if backup_name + "-07_00" in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
         self.assertEqual(backup_count, len(self.backups), "Merged number of backups did not match")
