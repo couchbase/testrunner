@@ -436,9 +436,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes {0}".format(self.backupset.disable_ft_indexes)
         if self.backupset.disable_data:
             args += " --disable-data {0}".format(self.backupset.disable_data)
-#        if self.backupset.disable_conf_res_restriction is not None:
-#            args += " --disable-conf-res-restriction {0}".format(
-#                self.backupset.disable_conf_res_restriction)
+        if self.backupset.disable_conf_res_restriction is not None:
+            args += " --disable-conf-res-restriction {0}".format(
+                self.backupset.disable_conf_res_restriction)
         filter_chars = {"star": "*", "dot": "."}
         if self.backupset.filter_keys:
             for key in filter_chars:
