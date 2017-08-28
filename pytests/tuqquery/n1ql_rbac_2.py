@@ -1392,11 +1392,9 @@ class RbacN1QL(QueryTests):
         self.query = 'delete from system:active_requests'
         res = self.curl_with_roles(self.query)
         self.assertTrue(res['status'] == 'stopped')
-        self.query = 'delete from system:prepareds'
-        res = self.curl_with_roles(self.query)
-        if(role == "query_delete(default)" or role == "query_delete(standard_bucket0)" or role == "bucket_full_access(default)"):
-            self.assertNotEquals(res['status'],'success')
-        else:
+        if(role != "query_delete(default)" and role != "query_delete(standard_bucket0)" and role != "bucket_full_access(default)" and role != "delete(default)"):
+            self.query = 'delete from system:prepareds'
+            res = self.curl_with_roles(self.query)
             self.assertTrue(res['status'] == 'success')
 
 
