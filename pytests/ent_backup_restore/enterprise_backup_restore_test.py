@@ -2098,6 +2098,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             3. Upgrades cluster to upgrade_version re-reates default bucket
             4. Restores data and validates
         """
+        upgrade_version = self.input.param("upgrade_version", "5.0.0-3330")
+        if upgrade_version == "5.0.0-3330":
+            self.fail("\n *** Need param 'upgrade_version=' to run")
+
         self._install(self.servers)
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
                             end=self.num_items)
@@ -2114,7 +2118,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         BucketOperationHelper.delete_bucket_or_assert(self.master, "default", self)
 
         """ Start to upgrade """
-        upgrade_version = self.input.param("upgrade_version", "5.0.0-3330")
         if self.force_version_upgrade:
             upgrade_version = self.force_version_upgrade
         upgrade_threads = self._async_update(upgrade_version=upgrade_version,
@@ -2131,8 +2134,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ Only server from Spock needs build in user
             to access bucket and other tasks
         """
-        print "************** cb version: ", self.cb_version
-        if "5" <= self.cb_version[:1]:
+        print "************** cb version: ", RestConnection(self.master).get_nodes_version()[:1]
+        if "5" <= RestConnection(self.master).get_nodes_version()[:1]:
             self.add_built_in_server_user()
             for user in self.users_check_restore:
                 user_name = user.replace('[', '_').replace(']', '_')
@@ -2150,7 +2153,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
 
         backupsets = [self.backupset]
-        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+        if "5" <= RestConnection(self.master).get_nodes_version()[:1]:
             for user in self.users_check_restore:
                 new_backupset = copy.deepcopy(self.backupset)
                 new_backupset.restore_cluster_host_username = user.replace('[', '_').replace(']', '_')
