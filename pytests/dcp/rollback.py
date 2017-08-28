@@ -68,7 +68,7 @@ class DCPRollBack(DCPBase):
 
         # stop persistence
         for bucket in self.buckets:
-            for s in self.servers:
+            for s in self.servers[:self.nodes_init]:
                 client = MemcachedClientHelper.direct_client(s, bucket)
                 try:
                     client.stop_persistence()
@@ -100,18 +100,24 @@ class DCPRollBack(DCPBase):
         time.sleep(5)
 
         # failover to the second node
-        rc = self.cluster.failover(self.servers, self.servers[0:1], graceful=True)
+        rc = self.cluster.failover(self.servers, self.servers[1:2], graceful=True)
         time.sleep(30)     # give time for the failover to complete
 
         # check the values, they should be what they were prior to the second update
-        client = MemcachedClientHelper.direct_client(self.servers[1], 'default')
+        client = MemcachedClientHelper.direct_client(self.servers[0], 'default')
         for k,v  in modified_kvs_active_on_node1.iteritems():
             rc = client.get( k )
             self.assertTrue( v == rc[2], 'Expected {0}, actual {1}'.format(v, rc[2]))
 
         # need to rebalance the node back into the cluster
         # def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
-        rc = self.cluster.rebalance(self.servers, self.servers[0:1],[])
+        rest_obj = RestConnection(self.servers[0])
+        node_id_for_recovery = "ns_1@" + self.servers[1].ip
+        status = rest_obj.add_back_node(node_id_for_recovery)
+        if status:
+            rest_obj.set_recovery_type(node_id_for_recovery,
+                                       recoveryType='delta')
+        rc = self.cluster.rebalance(self.servers[:self.nodes_init], [],[])
 
     """
     # MB-21568 sequence number is incorrect during a race between persistence and failover.
@@ -134,7 +140,7 @@ class DCPRollBack(DCPBase):
 
         # stop persistence
         for bucket in self.buckets:
-            for s in self.servers:
+            for s in self.servers[:self.nodes_init]:
                 client = MemcachedClientHelper.direct_client(s, bucket)
                 try:
                     client.stop_persistence()
