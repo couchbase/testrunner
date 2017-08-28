@@ -1345,6 +1345,10 @@ class QueryTests(BaseTestCase):
         actual_results = self.run_cbq_query()
         self.assertEqual(actual_results['results'][0]['$1'], float(sum(vals)) / max(len(vals), 1))
 
+        self.query = 'DELETE FROM default USE KEYS %s;' % (str(keys))
+        actual_results = self.run_cbq_query()
+        self.assertEqual(actual_results['results'], [])
+
 
     def test_sum(self):
         for bucket in self.buckets:
