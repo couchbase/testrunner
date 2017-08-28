@@ -1899,7 +1899,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
             # verify deleted/expired keys
             self._check_key_revId(self.src_deleted_keys[self.itr - self.num_valid_keys],
-                                  ignore_meta_data=['expiration'])
+                                  ignore_meta_data=['expiration','cas'])
         self.itr += 1
 
         # show progress of verification for every 50k items

@@ -36,6 +36,7 @@ class Rebalance(XDCRNewBaseTest):
 
             self.perform_update_delete()
 
+            self.sleep(150)
             self.verify_results()
         finally:
             pass
@@ -59,6 +60,7 @@ class Rebalance(XDCRNewBaseTest):
 
             self.perform_update_delete()
 
+            self.sleep(150)
             self.verify_results()
         finally:
             pass
@@ -110,6 +112,7 @@ class Rebalance(XDCRNewBaseTest):
 
             self.perform_update_delete()
 
+            self.sleep(150)
             self.verify_results()
         finally:
             pass
@@ -132,6 +135,7 @@ class Rebalance(XDCRNewBaseTest):
 
             self.perform_update_delete()
 
+            self.sleep(150)
             self.verify_results()
         finally:
             pass
@@ -153,6 +157,7 @@ class Rebalance(XDCRNewBaseTest):
 
             self.perform_update_delete()
 
+            self.sleep(150)
             self.verify_results()
         finally:
             pass
