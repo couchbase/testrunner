@@ -42,7 +42,12 @@ class CCCP(BaseTestCase):
         for task in tasks:
             if not task:
                 self.fail("no task to run")
-            task.result()
+            print "task  ", task
+            if self.ops == 'failover':
+                if not task:
+                    self.fail("Ops failover failed ")
+            else:
+                task.result()
         for bucket in self.buckets:
             config = RestConnection(self.master).get_bucket_CCCP(bucket)
             self.verify_config(config, bucket)
