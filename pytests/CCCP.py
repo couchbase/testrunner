@@ -42,7 +42,6 @@ class CCCP(BaseTestCase):
         for task in tasks:
             if not task:
                 self.fail("no task to run")
-            print "task  ", task
             if self.ops == 'failover':
                 if not task:
                     self.fail("Ops failover failed ")
