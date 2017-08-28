@@ -308,6 +308,11 @@ class QueryTests(BaseTestCase):
         results = self.run_cbq_query()
         return results['results'][0]['$1']
 
+    def run_position_query(self, word, substring, position_type = ''):
+        self.query = "select POSITION%s('%s', '%s')" % (position_type, word, substring)
+        results = self.run_cbq_query()
+        return results['results'][0]['$1']
+
 
 ##############################################################################################
 #
@@ -463,7 +468,7 @@ class QueryTests(BaseTestCase):
     def test_keywords(self):
         queries_errors = {'SELECT description as DESC FROM %s order by DESC' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
-    
+
     def test_distinct_negative(self):
         queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : ('syntax error', 3000),
                           'SELECT name FROM {0} GROUP BY DISTINCT name' : ('syntax error', 3000),
@@ -2374,7 +2379,7 @@ class QueryTests(BaseTestCase):
                                if doc['name'] == 'employee-4']
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
-            
+
             self.query = "SELECT name FROM %s WHERE " % (bucket.name)+\
             "name == 'employee-4'"
             actual_result = self.run_cbq_query()
@@ -3077,7 +3082,7 @@ class QueryTests(BaseTestCase):
                                    "join_yr" : doc['join_yr'],
                                     "join_mo": doc['join_mo'],
                                     "join_day": doc['join_day']} for doc in actual_result["results"]])
-    
+
                 expected_result = [{"date" : '%s-0%s-0%s' % (doc['join_yr'],
                                     doc['join_mo'], doc['join_day']),
                                     "join_yr" : doc['join_yr'],
@@ -3251,7 +3256,7 @@ class QueryTests(BaseTestCase):
     def test_split_where(self):
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s' % (bucket.name) +\
-            ' WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]' 
+            ' WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]'
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
@@ -3911,7 +3916,7 @@ class QueryTests(BaseTestCase):
         actual_list = self.run_cbq_query()
         expected_result = [{'$1': 60}]
         self._verify_results(actual_list['results'], expected_result)
-        
+
     def test_asin(self):
         self.query = "select degrees(asin(0.5))"
         actual_list = self.run_cbq_query()
@@ -4063,8 +4068,7 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            expected_result = [{"pos" : (doc["VMs"][1]["name"].find('vm'))}
-                               for doc in self.full_list]
+            expected_result = [{"pos" : (doc["VMs"][1]["name"].find('vm'))} for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
             self.query = "select POSITION(VMs[1].name, 'server') pos from %s" % (bucket.name)
@@ -4074,6 +4078,56 @@ class QueryTests(BaseTestCase):
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+            test_word = 'california'
+        for letter in test_word:
+            actual = self.run_position_query(test_word, letter)
+            expected = test_word.find(letter)
+            self.assertEqual(actual, expected)
+
+        letter = ''
+        actual = self.run_position_query(test_word, letter)
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+        letter = 'd'
+        actual = self.run_position_query(test_word, letter)
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+    def test_position0(self):
+        test_word = 'california'
+        for letter in test_word:
+            actual = self.run_position_query(test_word, letter, position_type = '0')
+            expected = test_word.find(letter)
+            self.assertEqual(actual, expected)
+
+        letter = ''
+        actual = self.run_position_query(test_word, letter, position_type = '0')
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+        letter = 'd'
+        actual = self.run_position_query(test_word, letter, position_type = '0')
+        expected = test_word.find(letter)
+        self.assertEqual(actual, expected)
+
+    def test_position1(self):
+        test_word = 'california'
+        for letter in test_word:
+            actual = self.run_position_query(test_word, letter, position_type = '1')
+            expected = test_word.find(letter) + 1
+            self.assertEqual(actual, expected)
+
+        letter = ''
+        actual = self.run_position_query(test_word, letter, position_type = '1')
+        expected = test_word.find(letter) + 1
+        self.assertEqual(actual, expected)
+
+        letter = 'd'
+        actual = self.run_position_query(test_word, letter, position_type = '1')
+        expected = test_word.find(letter) + 1
+        self.assertEqual(actual, expected)
 
     def test_regex_contains(self):
         for bucket in self.buckets:
