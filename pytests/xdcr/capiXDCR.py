@@ -176,9 +176,8 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         if not vb0_node:
             raise XDCRCheckpointException("Error determining the node containing active vb0")
         vb0_conn = RestConnection(vb0_node)
-        repl = vb0_conn.get_replication_for_buckets('default', 'default')
         try:
-            checkpoint_record = vb0_conn.get_recent_xdcr_vb_ckpt(repl['id'])
+            checkpoint_record = vb0_conn.get_recent_xdcr_vb_ckpt(repl_id)
             self.log.info("Checkpoint record : {0}".format(checkpoint_record))
         except Exception as e:
             raise XDCRCheckpointException("Error retrieving last checkpoint document - {0}".format(e))
@@ -236,10 +235,10 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
 
-        repl_id = self._start_es_replication(xdcr_params={'workerBatchSize':str(batch_count),
-                                                          'docBatchSizeKb':str(batch_size),
-                                                          'sourceNozzlePerNode':str(source_nozzle),
-                                                          'targetNozzlePerNode':str(target_nozzle)})
+        repl_id = self._start_es_replication(xdcr_params={"workerBatchSize": "{0}".format(str(batch_count)),
+                                                          "docBatchSizeKb": "{0}".format(str(batch_size)),
+                                                          "sourceNozzlePerNode": "{0}".format(str(source_nozzle)),
+                                                          "targetNozzlePerNode": "{0}".format(str(target_nozzle))})
 
         rest_conn = RestConnection(self.src_master)
 
@@ -272,7 +271,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.rebalance_in()
 
-        self._wait_for_es_replication_to_catchup(timeout=600)
+        self._wait_for_es_replication_to_catchup(timeout=900)
 
         self._verify_es_results()
 
@@ -289,7 +288,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.rebalance_out()
 
-        self._wait_for_es_replication_to_catchup(timeout=600)
+        self._wait_for_es_replication_to_catchup(timeout=900)
 
         self._verify_es_results()
 
@@ -337,7 +336,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
             rebalance = self.cluster.async_rebalance(self.src_cluster.get_nodes(), [], [])
             rebalance.result()
 
-        self._wait_for_es_replication_to_catchup(timeout=600)
+        self._wait_for_es_replication_to_catchup(timeout=900)
 
         self._verify_es_results()
 
