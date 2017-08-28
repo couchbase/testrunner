@@ -1047,8 +1047,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.master = self.servers[self.nodes_init]
         # Configure the nodes with services on the other cluster2
-        self.operations(self.servers[self.nodes_init:self.num_servers], services="kv,kv,index,n1ql")
-        self.sleep(timeout=300)
+        try:
+            self.operations(self.servers[self.nodes_init:self.num_servers], services="kv,kv,index,n1ql")
+            self.sleep(timeout=300)
+        except Exception, ex:
+            # do nothing, the bucket is created
+            self.log.info("bucket is created")
 
         # create a xdcr relationship between cluster1 and cluster2
         rest_src = RestConnection(self.servers[0])
@@ -1076,7 +1080,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed. See logs above!")
-                self.sleep(self.expire_time)
+                self.sleep(120)
                 self.cluster.rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
@@ -1885,7 +1889,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed. See logs above!")
-                self.sleep(self.expire_time)
+                self.sleep(120)
                 self.cluster.rebalance(self.servers[:6], [self.servers[6]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
@@ -1989,7 +1993,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed. See logs above!")
-                self.sleep(self.expire_time)
+                self.sleep(120)
                 self.cluster.rebalance(self.servers[:6], [self.servers[6]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
@@ -2093,7 +2097,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed. See logs above!")
-                self.sleep(self.expire_time)
+                self.sleep(120)
                 self.cluster.rebalance(self.servers[:6], [self.servers[6]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
