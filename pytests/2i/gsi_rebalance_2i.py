@@ -209,11 +209,21 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             if "Indexer Cannot Process Drop Index - Rebalance In Progress" not in str(ex):
                 self.fail("drop index did not fail with expected error : {0}".format(str(ex)))
         else:
-            self.fail("drop index did not fail as expected during rebalance")
+            log.info("drop index did not fail, check if the index is dropped in the retry mechanism")
         self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.sleep(120)
+        # Validate that the index is dropped after retry
+        try:
+            self._drop_index(self.query_definitions[0], self.buckets[0])
+        except Exception, ex:
+            log.info(str(ex))
+            if "not found" not in str(ex):
+                self.fail("drop index did not fail with expected error : {0}".format(str(ex)))
+        else:
+            self.fail("drop index did not fail, It should have as it would already have been deleted by retry")
 
     def test_bucket_delete_and_flush_when_gsi_rebalance_in_progress(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -478,7 +488,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         for result in results:
             result.join()
-        self.sleep(60)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
@@ -522,15 +531,24 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.sleep(30)
         services_in = ["index"]
-        self._create_index_with_defer_build()
+        self.run_operation(phase="before")
         # rebalance in a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                  [],
                                                  services=services_in)
         rebalance.result()
+        tasks = self.async_run_doc_ops()
         self.sleep(60)
         # start create index, build index and drop index
-        self._build_index(sleep=0)
+        # self._build_index(sleep=0)
+        for task in tasks:
+            task.result()
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(address) USING GSI WITH {'num_replica': 1}"
+        t1 = threading.Thread(target=self._create_replica_index, args=(create_index_query,))
+        t1.start()
+        self.sleep(2)
         # while create index is running ,rebalance out a indexer node
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [index_server])
@@ -541,23 +559,24 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         else:
             self.fail(
                 "rebalance did not fail during create index or create index completed before rebalance started")
+        t1.join()
         # do a cbindex move after a indexer failure
-        self.sleep(60)
-        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
-        indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
-        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
-        self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], no_of_indexes)
-        self.run_operation(phase="during")
-        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
-        # validate the results
-        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
-                                                      stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [self.servers[self.nodes_init]], [], swap_rebalance=True)
-        index_servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        # run a /cleanupRebalance after a rebalance failure
-        for index_server in index_servers:
-            output = self.rest.cleanup_indexer_rebalance(server=index_server)
-            log.info(output)
+        # self.sleep(60)
+        # map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        # indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
+        # self._cbindex_move(index_server, self.servers[self.nodes_init], indexes)
+        # self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], no_of_indexes)
+        # self.run_operation(phase="during")
+        # map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # # validate the results
+        # self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+        #                                               stats_map_before_rebalance, stats_map_after_rebalance,
+        #                                               [self.servers[self.nodes_init]], [], swap_rebalance=True)
+        # index_servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        # # run a /cleanupRebalance after a rebalance failure
+        # for index_server in index_servers:
+        #     output = self.rest.cleanup_indexer_rebalance(server=index_server)
+        #     log.info(output)
 
     def test_cbindex_move_after_kv_rebalance(self):
         self.run_operation(phase="before")
@@ -1272,7 +1291,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # rebalance out a indexer node
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-            self.sleep(2)
+            self.sleep(5)
             # reboot a kv node during gsi rebalance
             self.reboot_node(kv_server[1])
             reached = RestHelper(self.rest).rebalance_reached()
@@ -2519,3 +2538,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         shell = RemoteMachineShellConnection(server)
         shell.kill_cbft_process()
         shell.disconnect()
+
+    def _create_replica_index(self, query):
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
