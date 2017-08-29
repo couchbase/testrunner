@@ -153,7 +153,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._verify_es_results()
 
     def test_capi_with_checkpointing(self):
-        repl_id = self._start_es_replication(xdcr_params={"checkpointInterval":60})
+        repl_id = self._start_es_replication(xdcr_params={"checkpointInterval":"60"})
 
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
@@ -235,12 +235,14 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
 
-        repl_id = self._start_es_replication(xdcr_params={"workerBatchSize": "{0}".format(str(batch_count)),
-                                                          "docBatchSizeKb": "{0}".format(str(batch_size)),
-                                                          "sourceNozzlePerNode": "{0}".format(str(source_nozzle)),
-                                                          "targetNozzlePerNode": "{0}".format(str(target_nozzle))})
+        repl_id = self._start_es_replication()
 
         rest_conn = RestConnection(self.src_master)
+
+        rest_conn.set_xdcr_param('default', 'default', 'workerBatchSize', batch_count)
+        rest_conn.set_xdcr_param('default', 'default', 'docBatchSizeKb', batch_size)
+        rest_conn.set_xdcr_param('default', 'default', 'sourceNozzlePerNode', source_nozzle)
+        rest_conn.set_xdcr_param('default', 'default', 'targetNozzlePerNode', target_nozzle)
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
@@ -335,8 +337,6 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
                     rest_conn.add_back_node(otpNode=node.id)
             rebalance = self.cluster.async_rebalance(self.src_cluster.get_nodes(), [], [])
             rebalance.result()
-
-        self._wait_for_es_replication_to_catchup(timeout=900)
 
         self._verify_es_results()
 
@@ -506,6 +506,8 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         conn.stop_couchbase()
         conn.start_couchbase()
 
+        self.sleep(30)
+
         self._wait_for_es_replication_to_catchup()
 
         self._verify_es_results(bucket=bucket)
@@ -528,6 +530,8 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         conn.kill_erlang()
         conn.start_couchbase()
 
+        self.sleep(30)
+
         self._wait_for_es_replication_to_catchup()
 
         self._verify_es_results(bucket=bucket)
@@ -549,6 +553,8 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         conn = RemoteMachineShellConnection(self.src_master)
         conn.pause_memcached()
         conn.unpause_memcached()
+
+        self.sleep(30)
 
         self._wait_for_es_replication_to_catchup()
 
