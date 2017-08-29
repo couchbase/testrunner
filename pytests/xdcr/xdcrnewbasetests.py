@@ -3504,3 +3504,23 @@ class XDCRNewBaseTest(unittest.TestCase):
             error_logger = self.check_errors_in_goxdcr_logs()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
+                
+    def wait_service_started(self, server, wait_time=120):
+        shell = RemoteMachineShellConnection(server)
+        type = shell.extract_remote_info().distribution_type
+        if type.lower() == 'windows':
+            cmd = "sc query CouchbaseServer | grep STATE"
+        else:
+            cmd = "service couchbase-server status"
+        now = time.time()
+        while time.time() - now < wait_time:
+            output, error = shell.execute_command(cmd)
+            if str(output).lower().find("running") != -1:
+                self.log.info("Couchbase service is running")
+                shell.disconnect()
+                return
+            else:
+                self.log.warn("couchbase service is not running. {0}".format(output))
+                self.sleep(10)
+        shell.disconnect()
+        self.fail("Couchbase service is not running after {0} seconds".format(wait_time))

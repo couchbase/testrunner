@@ -1833,6 +1833,7 @@ class RestConnection(object):
         """
         api = self.baseUrl + 'pools/default/buckets/{0}/stats?zoom={1}'.format(bucket, zoom)
         status, content, header = self._http_request(api)
+        log.info(json.loads(content))
         return json.loads(content)
 
 
