@@ -752,7 +752,7 @@ class RebalanceHelper():
         nodes = rest.node_statuses()
         picked = []
         for node_for_stat in nodes:
-            if node_for_stat.ip != master.ip or  str(node_for_stat.port) != master.port :
+            if (node_for_stat.ip != master.ip or  str(node_for_stat.port) != master.port) and node_for_stat.replication > 0:
                 if target_node ==  None:
                     picked.append(node_for_stat)
                 elif target_node.ip == node_for_stat.ip:
