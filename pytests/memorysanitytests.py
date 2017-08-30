@@ -66,7 +66,7 @@ class MemorySanity(BaseTestCase):
             self.log.info('Buckets are loaded, waiting for stats')
             self._wait_for_stats_all_buckets(self.servers)
             self.log.info('Have the stats, sleeping for 30 seconds')
-            self.sleep(30)
+            self.sleep(60)
             for bucket in self.buckets:
                 mem_usage[bucket.name] = rest.fetch_bucket_stats(bucket.name)["op"]["samples"]["mem_used"][-1]
                 self.log.info("Memory used after attempt {0} = {1}, Difference from initial snapshot: {2}" \
