@@ -184,7 +184,7 @@ class CBASBaseTest(BaseTestCase):
         """ check for load data into travel-sample bucket """
         if total_items:
             import time
-            end_time = time.time() + 300
+            end_time = time.time() + 600
             while time.time() < end_time:
                 self.sleep(10)
                 num_actual = 0
