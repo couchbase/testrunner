@@ -839,6 +839,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         cmd += " %s %s " % (subcommand, display_option)
 
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+        self.log.info("check if man installed on vm?")
+        check_man = "man%s -h" % (self.cmd_ext)
+        out_cm, err_cm = shell.execute_command(check_man)
+        if not out_cm:
+            self.log.info("man page does not install man page on vm"
+                          " Let do install it now")
+            info_cm = shell.extract_remote_info()
+            if info_cm.type.lower() == "linux" and not self.nonroot:
+                if "centos" in info_cm.distribution_version.lower():
+                    shell.execute_command("yum install -y man")
+
         output, error = shell.execute_command("%s " % (cmd))
         self.log.info("Verify print out help message")
         if display_option == "-h":
