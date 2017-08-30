@@ -1115,6 +1115,8 @@ class Lww(XDCRNewBaseTest):
         self.sleep(5)
         conn.start_couchbase()
         self.wait_service_started(self.c1_cluster.get_master_node())
+        self.sleep(120, "Slepping so that vBuckets are ready and to avoid \
+        MemcachedError: Memcached error #1 'Not found':   for vbucket :0")
         self.verify_results()
 
     def test_lww_with_erlang_restart_at_master(self):
@@ -1143,6 +1145,8 @@ class Lww(XDCRNewBaseTest):
         conn.kill_erlang()
         conn.start_couchbase()
         self.wait_service_started(self.c1_cluster.get_master_node())
+        self.sleep(120, "Slepping so that vBuckets are ready and to avoid \
+        MemcachedError: Memcached error #1 'Not found':   for vbucket :0")
         self.verify_results()
 
     def test_lww_with_memcached_restart_at_master(self):
