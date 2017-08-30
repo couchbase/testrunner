@@ -11,7 +11,7 @@ from ent_backup_restore.validation_helpers.backup_restore_validations \
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, RestHelper, Bucket
+from membase.api.rest_client import RestHelper, Bucket as CBBucket
 from couchbase_helper.document import View
 from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
@@ -1655,7 +1655,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             bucket_tasks.append(
                 self.cluster.async_create_standard_bucket(name=name, port=port,
                                                           bucket_params=bucket_params))
-            bucket = Bucket(name=name, authType=None, saslPassword=None,
+            bucket = CBBucket(name=name, authType=None, saslPassword=None,
                             num_replicas=self.num_replicas,
                             bucket_size=self.bucket_size,
                             port=port, master_id=server_id,

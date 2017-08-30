@@ -253,6 +253,9 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 except Exception, e:
                     raise e
 
+            if not start_json or not end_json:
+                return
+
             for i in range(0, int(self.vbuckets)):
                 start_seqno = start_json['{0}'.format(i)]['last']['log']['log'][0]['seqno']
                 start_uuid =  start_json['{0}'.format(i)]['last']['log']['log'][0]['uuid']
