@@ -1138,6 +1138,100 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             else:
                 self.log.info(str(ex))
 
+    # This test is for MB-25609 : Fix wait for index build in rebalancer for replica repair
+    def test_rebalance_in_out_same_node_with_deferred_and_non_deferred_indexes(self):
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_non_deferred_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_non_deferred_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_non_deferred_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Index creation Failed : %s", str(ex))
+
+        create_deferred_index_query = "CREATE INDEX " + index_name_prefix + "_deferred ON default(age) USING GSI  WITH {{'nodes': {0},'defer_build':true}};".format(
+            nodes)
+        self.log.info(create_deferred_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_deferred_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Index creation Failed : %s", str(ex))
+
+        self.sleep(30)
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        self.log.info(index_map_before_rebalance)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map_before_rebalance,
+                                                    len(nodes) - 1, nodes)
+
+        node_out = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        index_map_after_rebalance1 = self.get_index_map()
+        stats_map_after_rebalance1 = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance1,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance1,
+                [],
+                [node_out])
+        except Exception, ex:
+            self.log.info(str(ex))
+            if "some indexes are missing after rebalance" not in str(ex):
+                self.fail(
+                    "Error in index distribution post rebalance : ".format(
+                        str(ex)))
+            else:
+                self.log.info(str(ex))
+
+        node_in = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [node_in], [],
+                                                 services=["index"])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        index_map_after_rebalance2 = self.get_index_map()
+        stats_map_after_rebalance2 = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance2,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance2,
+                [node_in],
+                [])
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "Error in index distribution post rebalance : ".format(
+                        str(ex)))
+            else:
+                self.log.info(str(ex))
+
     def test_replica_movement_with_rebalance_out_and_server_groups(self):
         nodes = self._get_node_list()
         self.log.info(nodes)
