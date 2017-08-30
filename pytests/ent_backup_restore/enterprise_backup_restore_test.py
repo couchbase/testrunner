@@ -856,19 +856,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             content = None
             if subcommand == "":
                 content = \
-                    ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
-                     '', '', '', 'N\x08NA\x08AM\x08ME\x08E',
-                     '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
-                     '       cluster', '', 'S\x08SY\x08YN\x08NO\x08OP\x08PS\x08SI\x08IS\x08S',
-                     '       cbbackupmgr [--version] [--help] <command> [<args>]']
-                self.validate_help_content(output[:10], content)
+                    ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)']
+                self.validate_help_content(output, content)
             else:
                 subcmd_cap = subcommand.upper()
                 content = \
                     ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
-                     % (subcmd_cap, subcmd_cap),
-                     '', '', '', 'N\x08NA\x08AM\x08ME\x08E']
-                self.validate_help_content(output[:5], content)
+                     % (subcmd_cap, subcmd_cap)]
+                self.validate_help_content(output, content)
         shell.disconnect()
 
     def test_backup_restore_with_optional_flags(self):
