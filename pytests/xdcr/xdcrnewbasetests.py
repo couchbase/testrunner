@@ -3366,7 +3366,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.fail("Replication restarted on one of the nodes, scroll above"
                       "for reason")
 
-    def _wait_for_replication_to_catchup(self, timeout=300):
+    def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute"):
 
         _count1 = _count2 = 0
         for cb_cluster in self.__cb_clusters:
@@ -3381,8 +3381,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 rest2 = RestConnection(remote_cluster.get_dest_cluster().get_master_node())
                 for bucket in cb_cluster.get_buckets():
                     while time.time() < end_time :
-                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
+                        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
