@@ -163,8 +163,6 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
 
-        self._wait_for_es_replication_to_catchup()
-
         self.sleep(120)
 
         vb0_node = None
@@ -255,8 +253,6 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
             NodeHelper.enable_firewall(self.dest_cluster.get_master_node())
             self.sleep(120)
             NodeHelper.disable_firewall(self.dest_cluster.get_master_node())
-
-        self._wait_for_es_replication_to_catchup()
 
         self._verify_es_results()
 
