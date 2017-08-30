@@ -839,17 +839,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         cmd += " %s %s " % (subcommand, display_option)
 
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
-        self.log.info("check if man installed on vm?")
-        check_man = "man%s -h" % (self.cmd_ext)
-        out_cm, err_cm = shell.execute_command(check_man)
-        if not out_cm:
-            self.log.info("man page does not install man page on vm"
-                          " Let do install it now")
-            info_cm = shell.extract_remote_info()
-            if info_cm.type.lower() == "linux" and not self.nonroot:
-                if "centos" in info_cm.distribution_version.lower():
-                    shell.execute_command("yum install -y man")
-
         output, error = shell.execute_command("%s " % (cmd))
         self.log.info("Verify print out help message")
         if display_option == "-h":
@@ -868,9 +857,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if subcommand == "":
                 content = \
                     ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
-                     '', '', '', 'NAME',
+                     '', '', '', 'N\x08NA\x08AM\x08ME\x08E',
                      '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
-                     '       cluster', '', 'SYNOPSIS',
+                     '       cluster', '', 'S\x08SY\x08YN\x08NO\x08OP\x08PS\x08SI\x08IS\x08S',
                      '       cbbackupmgr [--version] [--help] <command> [<args>]']
                 self.validate_help_content(output[:10], content)
             else:
@@ -878,7 +867,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 content = \
                     ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
                      % (subcmd_cap, subcmd_cap),
-                     '', '', '', 'NAME']
+                     '', '', '', 'N\x08NA\x08AM\x08ME\x08E']
                 self.validate_help_content(output[:5], content)
         shell.disconnect()
 

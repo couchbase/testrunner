@@ -4030,6 +4030,24 @@ class RemoteMachineShellConnection:
                     else:
                         log.info("no need to install pkgconfig")
 
+    def check_man_page(self):
+        log.info("check if man installed on vm?")
+        info_cm = self.extract_remote_info()
+        man_installed = False
+        if info_cm.type.lower() == "linux" and not self.nonroot:
+            if "centos 7" in info_cm.distribution_version.lower():
+                out_cm, err_cm = self.execute_command("rpm -qa | grep 'man-db'")
+                if out_cm:
+                    man_installed = True
+            elif "centos 6" in info_cm.distribution_version.lower():
+                out_cm, err_cm = self.execute_command("rpm -qa | grep 'man-1.6'")
+                if out_cm:
+                    man_installed = True
+            if not man_installed:
+                log.info("man page does not install man page on vm %s"
+                              " Let do install it now" % self.ip)
+                self.execute_command("yum install -y man")
+
     def install_missing_lib(self):
         if self.info.deliverable_type == "deb":
             for lib_name in MISSING_UBUNTU_LIB:

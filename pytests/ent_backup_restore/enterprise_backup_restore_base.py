@@ -873,8 +873,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not isinstance(output[x], str):
                 continue
             if self.debug_logs:
-                print "\noutput:  ", output[x]
-                print "source:  ", source[x]
+                print "\noutput:  ", repr(output[x])
+                print "source:  ", repr(source[x])
             if output[x] != source[x]:
                 self.log.error("Element %s in output did not match " % x)
                 self.log.error("Output => %s != %s <= Source" % (output[x], source[x]))
