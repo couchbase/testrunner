@@ -301,10 +301,10 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
                 check_rblnc = RestConnection(self.master).monitorRebalance(
                     stop_if_loop=True)
                 self.assertTrue(check_rblnc, msg=msg)
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()
-            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             #check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
@@ -450,6 +450,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_autofailover(self):
         pre_recovery_tasks = self.async_run_operations(phase="before")
+        mid_recovery_tasks = []
         self._run_tasks([pre_recovery_tasks])
         self._start_disk_writes_for_plasma()
         kvOps_tasks = self._run_kvops_tasks()
@@ -463,11 +464,25 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
             remote = RemoteMachineShellConnection(servr_out[0])
             remote.stop_server()
             self.sleep(10)
-            mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            try:
+                mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            except Exception, ex:
+                if " Indexer will retry building index at later time" not in str(ex):
+                    log.info("build index failed with some unexpected error : {0}".format(str(ex)))
+            else:
+                log.info("Build index did not fail")
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()
+            self.sleep(60)
+            try:
+                mid_recovery_tasks = self.async_run_operations(phase="in_between")
+            except Exception, ex:
+                if "is being built" not in str(ex):
+                    log.info("build index failed with some unexpected error : {0}".format(str(ex)))
+            else:
+                log.info("Build index did not fail")
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             #check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
