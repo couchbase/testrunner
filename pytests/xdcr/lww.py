@@ -2422,7 +2422,7 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
-
+        self.sleep(300)
         self._wait_for_replication_to_catchup(fetch_bucket_stats_by="hour")
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
@@ -2524,7 +2524,7 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
-
+        self.sleep(300)
         self._wait_for_replication_to_catchup(fetch_bucket_stats_by="hour")
 
         max_cas_c2_after = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
