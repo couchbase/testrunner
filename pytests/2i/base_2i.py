@@ -652,9 +652,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         for bucket_name in index_map.keys():
             self.log.info("Bucket: {0}".format(bucket_name))
             for index_name, index_val in index_map[bucket_name].iteritems():
+                self.log.info("Index: {0}".format(index_name))
                 self.log.info("number of docs pending: {0}".format(index_val["num_docs_pending"]))
-                self.log.info("number of docs queued: {0}".format(index_val["num_docs_pending"]))
-                if index_val["num_docs_pending"] and index_val["num_docs_pending"]:
+                self.log.info("number of docs queued: {0}".format(index_val["num_docs_queued"]))
+                if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
                     return False
         return True
 
