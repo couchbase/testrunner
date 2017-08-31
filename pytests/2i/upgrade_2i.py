@@ -520,7 +520,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  [node], [],
                                                  services=node_services)
                 rebalance.result()
-                self.sleep(60)
+                self.sleep(100)
                 node_version = RestConnection(node).get_nodes_versions()
                 log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
                 ops_map = self.generate_operation_map("in_between")
@@ -565,21 +565,30 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         3. Verify the api returned
         :return:
         """
+        old_api = False
+        node_map = self._get_nodes_with_version()
+        log.info(node_map)
+        for node, vals in node_map.iteritems():
+            if vals["version"] < "5":
+                old_api = True
+                break
         create_index_query_age = "CREATE INDEX verify_api ON default(age DESC)"
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query_age,
                                            server=self.n1ql_node)
         except Exception, ex:
-            old_api = False
-            node_map = self._get_nodes_with_version()
-            log.info(node_map)
-            for node, vals in node_map.iteritems():
-                if vals["version"] < "5":
-                    old_api = True
-                    msg = "'syntax error - at DESC'"
+            if old_api:
+                msgs = ["'syntax error - at DESC'",
+                    "This option is enabled after cluster is fully upgraded and there is no failed node"]
+                desc_error_hit = False
+                for msg in msgs:
                     if msg in str(ex):
+                        desc_error_hit = True
                         break
-            if not old_api:
+                if not desc_error_hit:
+                    log.info(str(ex))
+                    raise
+            else:
                 log.info(str(ex))
                 raise
 
