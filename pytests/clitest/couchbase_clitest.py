@@ -11,6 +11,7 @@ from clitest.cli_base import CliBaseTest
 from couchbase_cli import CouchbaseCLI
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from security.rbacmain import rbacmain
+from security.rbac_base import RbacBase
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -3050,6 +3051,18 @@ class XdcrCLITest(CliBaseTest):
         options += (" --filter-expression=\'{0}\'".format(filter_expression), "")[filter_expression is None]
         options += (" --checkpoint-interval=\'{0}\'".format(checkpoint_interval), "")[timeout_perc_cap is None]
 
+        # Add built-in user to dest_nodes
+        testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.dest_nodes[0])
+
+        time.sleep(10)
+
+        # Assign user to role
+        role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
+        RbacBase().add_user_role(role_list, RestConnection(self.dest_nodes[0]), 'builtin')
+
+        time.sleep(10)
+
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         if from_bucket:
             bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
@@ -3057,10 +3070,12 @@ class XdcrCLITest(CliBaseTest):
                                                               enable_replica_index=self.enable_replica_index)
             self.cluster.create_default_bucket(bucket_params)
         if to_bucket:
-            bucket_params = self._create_bucket_params(server=self.servers[xdcr_hostname], size=self.bucket_size,
+            bucket_params = self._create_bucket_params(server=self.dest_nodes[0], size=self.bucket_size,
                                                               replicas=self.num_replicas,
                                                               enable_replica_index=self.enable_replica_index)
             self.cluster.create_default_bucket(bucket_params)
+
+        self.sleep(10)
         output, _ = self.__execute_cli(cli_command, options)
         if not error_expected:
             self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
@@ -3103,6 +3118,10 @@ class XdcrCLITest(CliBaseTest):
                 options += (" --xdcr-replicator={0}".format(replicator))
                 output, _ = self.__execute_cli(cli_command, options)
                 self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["delete"], output[0])
+
+        # Remove rbac users in dest_nodes
+        role_del = ['cbadminbucket']
+        RbacBase().remove_user_role(role_del, RestConnection(self.dest_nodes[0]))
 
     def testSSLManage(self):
         '''ssl-manage OPTIONS:
