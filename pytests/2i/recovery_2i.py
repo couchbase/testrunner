@@ -307,10 +307,10 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 check_rblnc = RestConnection(self.master).monitorRebalance(
                     stop_if_loop=True)
                 self.assertTrue(check_rblnc, msg=msg)
+            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init], [], servr_out)
             rebalance.result()
-            self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             #check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
