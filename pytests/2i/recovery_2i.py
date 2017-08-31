@@ -203,6 +203,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             raise
 
     def test_server_crash(self):
+        if self.doc_ops:
+            return
         pre_recovery_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_recovery_tasks])
         self.get_dgm_for_plasma()
