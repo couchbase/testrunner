@@ -353,6 +353,7 @@ class AutoFailoverBaseTest(BaseTestCase):
             task.result()
         except Exception, e:
             self.fail("Exception: {}".format(e))
+        self.disable_firewall()
 
     def bring_back_failed_nodes_up(self):
         """
