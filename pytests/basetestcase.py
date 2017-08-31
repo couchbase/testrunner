@@ -111,7 +111,10 @@ class BaseTestCase(unittest.TestCase):
             self.parallelism = self.input.param("parallelism",False)
             if self.default_bucket:
                 self.default_bucket_name = "default"
+            self.skip_standard_buckets = self.input.param("skip_standard_buckets", False)
             self.standard_buckets = self.input.param("standard_buckets", 0)
+            if self.skip_standard_buckets:
+                self.standard_buckets = 0
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.num_buckets = self.input.param("num_buckets", 0)
             self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
