@@ -707,12 +707,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
         return True, output, "Merging backup succeeded"
 
-    def backup_merge_validate(self, repeats=1):
+    def backup_merge_validate(self, repeats=1, skip_validation=False):
         status, output, message = self.backup_merge()
         if not status:
             self.fail(message)
 
-        if repeats < 2:
+        if repeats < 2 and not skip_validation:
             self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                               self.backup_validation_files_location)
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
@@ -1118,6 +1118,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.backup_to_delete = 0
         self.skip_restore_indexes = self.input.param("skip_restore_indexe", False)
         self.overwrite_indexes = self.input.param("overwrite_indexes", False)
+        self.skip_validation = self.input.param("skip_validation", False)
 
     def tearDown(self):
         super(EnterpriseBackupMergeBase, self).tearDown()
@@ -1317,7 +1318,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Merge all the existing backups in the backupset.
         :return: Nothing
         """
-        self.backup_merge_validate(repeats=self.number_of_repeats)
+        self.backup_merge_validate(repeats=self.number_of_repeats, skip_validation=self.skip_validation)
 
     def merge_with_ops(self):
         """
@@ -1409,8 +1410,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                                         backups=self.backups,
                                                         directory=self.backupset.directory, name=self.backupset.name,
                                                         cli_command_location=self.cli_command_location,
-                                                        start=int(self.backupset.start) - 1,
-                                                        end=int(self.backupset.end) - 1
+                                                        start=int(self.backupset.start),
+                                                        end=int(self.backupset.end)
                                                         )
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         conn.stop_couchbase()
@@ -1887,9 +1888,14 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
     def create_indexes(self):
         rest_src = RestConnection(self.backupset.cluster_host)
+        rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                          self.servers[1].ip, services=['index','fts'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
+        rebalance.result()
 
         cmd = "cbindex -type create -bucket default -using plasma -index " \
-              "age_idx -fields=age"
+              "age_idx -fields=age -auth {0}:{1}".format(self.servers[0].rest_username,
+                                                         self.servers[0].rest_password,)
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
@@ -1898,7 +1904,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         if "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         cmd = "cbindex -type create -bucket default -using plasma -index " \
-              "name_idx -fields=name"
+              "name_idx -fields=name -auth {0}:{1}".format(self.servers[0].rest_username,
+                                                           self.servers[0].rest_password,)
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
@@ -1909,9 +1916,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
         index_definition = INDEX_DEFINITION
         index_name = index_definition['name'] = "age"
+        rest_fts = RestConnection(self.servers[1])
         try:
             self.log.info("Create fts index")
-            rest_src.create_fts_index(index_name, index_definition)
+            rest_fts.create_fts_index(index_name, index_definition)
         except Exception, ex:
             self.fail(ex)
 
@@ -1924,9 +1932,34 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                                      [])
             rebalance.result()
 
+            rest_helper = RestHelper(rest_src)
+            ram_size = rest_src.get_nodes_self().memoryQuota
+            bucket_size = self._get_bucket_size(ram_size, self.total_buckets)
+            for bucket in self.buckets:
+                bucket_name = bucket.name
+                if not rest_helper.bucket_exists(bucket_name):
+                    self.log.info("Creating bucket {0} in restore host {1}"
+                                              .format(bucket_name,
+                                              self.backupset.restore_cluster_host.ip))
+                    if self.bucket_type == "ephemeral":
+                        self.eviction_policy = "noEviction"
+                    rest_src.create_bucket(bucket=bucket_name,
+                                            ramQuotaMB=bucket_size,
+                                            authType=bucket.authType if bucket.authType else 'none',
+                                            bucketType=self.bucket_type,
+                                            proxyPort=bucket.port,
+                                            saslPassword=bucket.saslPassword,
+                                            evictionPolicy=self.eviction_policy,
+                                            lww=self.lww_new)
+                    bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
+                    if not bucket_ready:
+                        self.fail("Bucket %s not created after 120 seconds."
+                                  % bucket_name)
+
             if self.overwrite_indexes:
                 cmd = "cbindex -type create -bucket default -using plasma -index " \
-                      "age_idx1 -fields=age"
+                      "age_idx1 -fields=age -auth {0}:{1}".format(self.servers[0].rest_username,
+                                                         self.servers[0].rest_password,)
                 remote_client = RemoteMachineShellConnection(
                     self.backupset.restore_cluster_host)
                 command = "{0}/{1}".format(self.cli_command_location, cmd)
@@ -1936,17 +1969,18 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     self.fail("GSI index cannot be created")
 
                 index_definition = INDEX_DEFINITION
-                index_name = index_definition['name'] = "age1"
+                index_name = index_definition['name'] = "age"
+                rest_fts = RestConnection(self.servers[2])
                 try:
                     self.log.info("Create fts index")
-                    rest_src.create_fts_index(index_name, index_definition)
+                    rest_fts.create_fts_index(index_name, index_definition)
                 except Exception, ex:
                     self.fail(ex)
 
     def update_indexes(self):
         index_definition = INDEX_DEFINITION
         index_definition['name'] = "age1"
-        rest_fts = RestConnection(self.backupset.cluster_host)
+        rest_fts = RestConnection(self.servers[2])
         try:
             self.log.info("Update fts index")
             rest_fts.update_fts_index("age1", index_definition)

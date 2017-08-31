@@ -253,7 +253,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 except Exception, e:
                     raise e
 
-            if not start_json or not end_json:
+            if not start_json or not end_json or not merge_json:
                 return
 
             for i in range(0, int(self.vbuckets)):
