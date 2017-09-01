@@ -975,6 +975,9 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
             seek = content.get("Seek", None)
             filters = content.get("Filter", None)
             if seek:
+                if len(seek) < len(index_fields):
+                    if len(multiscan_result) != 0:
+                        return False
                 temp_doc_list = copy.deepcopy(doc_list)
                 for doc in temp_doc_list:
                     if doc["key"] != seek:
