@@ -111,12 +111,13 @@ class DCPRollBack(DCPBase):
 
         # need to rebalance the node back into the cluster
         # def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
-        nodes_all = self.rest.node_statuses()
-        for node in nodes_all:
-            if node.ip == self.server[1].ip:
-                break
 
         rest_obj = RestConnection(self.servers[0])
+        nodes_all = rest_obj.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                break
+
         node_id_for_recovery = node.id
         status = rest_obj.add_back_node(node_id_for_recovery)
         if status:
