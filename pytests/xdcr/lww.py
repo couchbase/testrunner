@@ -1174,7 +1174,7 @@ class Lww(XDCRNewBaseTest):
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn.pause_memcached()
         conn.unpause_memcached()
-
+        self.sleep(300,"Wait such that any replication happening should get completed after memcached restart.")
         self.verify_results()
 
     def test_seq_upd_on_bi_with_target_clock_faster(self):
