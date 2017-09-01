@@ -216,33 +216,46 @@ class AscDescTests(QueryTests):
 
     def test_prepared_statements(self):
         for bucket in self.buckets:
-            self.query = "create index idx_cover_asc on %s(_id asc, VMs[0].RAM asc)" % (bucket.name)
-            self.run_cbq_query()
-            self.query = "PREPARE ascdescquery1 FROM SELECT * from default WHERE _id is not null order by _id asc limit 2"
-            res = self.run_cbq_query()
-            self.assertTrue("idx_cover_asc" in str(res['results'][0]))
-            actual_result = self.run_cbq_query(query='ascdescquery1', is_prepared=True)
-            self.assertEqual(actual_result['results'][0]['default']['name'], [{u'FirstName': u'employeefirstname-9'}, {u'MiddleName': u'employeemiddlename-9'}, {u'LastName': u'employeelastname-9'}])
-            self.query = "drop index default.idx_cover_asc"
-            self.run_cbq_query()
-            self.query = "drop primary index on default"
-            self.run_cbq_query()
-            self.query = "create index idx_cover_desc on %s(_id desc, VMs[0].RAM desc) " % (bucket.name)
-            self.run_cbq_query()
-            self.query = "PREPARE ascdescquery2 FROM SELECT * from default WHERE _id is not null order by _id desc limit 2"
-            res = self.run_cbq_query()
-            self.assertTrue("idx_cover_desc" in str(res['results'][0]))
-            actual_result = self.run_cbq_query(query='ascdescquery2', is_prepared=True)
-            self.assertEqual(actual_result['results'][0]['default']['name'], [{u'FirstName': u'employeefirstname-24'}, {u'MiddleName': u'employeemiddlename-24'}, {u'LastName': u'employeelastname-24'}])
-            self.query = "create primary index on default"
-            self.run_cbq_query()
+            created_indexes = []
             try:
-                self.run_cbq_query(query='ascdescquery1', is_prepared=True)
-            except Exception, ex:
-               self.assertTrue(str(ex).find("Index Not Found - cause: queryport.indexNotFound") != -1,
-                              "Error message is %s." % str(ex))
-            else:
-                self.fail("Error message expected")
+                self.query = "create index idx_cover_asc on %s(_id asc, VMs[0].RAM asc)" % (bucket.name)
+                created_indexes.append('idx_cover_asc')
+                self.run_cbq_query()
+                self.query = "PREPARE ascdescquery1 FROM SELECT * from default WHERE _id is not null order by _id asc limit 2"
+                res = self.run_cbq_query()
+                self.assertTrue("idx_cover_asc" in str(res['results'][0]))
+                actual_result = self.run_cbq_query(query='ascdescquery1', is_prepared=True)
+                self.assertEqual(actual_result['results'][0]['default']['name'], [{u'FirstName': u'employeefirstname-9'}, {u'MiddleName': u'employeemiddlename-9'}, {u'LastName': u'employeelastname-9'}])
+                self.query = "drop index default.idx_cover_asc"
+                self.run_cbq_query()
+                created_indexes.remove('idx_cover_asc')
+                self.query = "drop primary index on default"
+                self.run_cbq_query()
+                self.query = "create index idx_cover_desc on %s(_id desc, VMs[0].RAM desc) " % (bucket.name)
+                self.run_cbq_query()
+                created_indexes.append('idx_cover_desc')
+                self.query = "PREPARE ascdescquery2 FROM SELECT * from default WHERE _id is not null order by _id desc limit 2"
+                res = self.run_cbq_query()
+                self.assertTrue("idx_cover_desc" in str(res['results'][0]))
+                actual_result = self.run_cbq_query(query='ascdescquery2', is_prepared=True)
+                self.assertEqual(actual_result['results'][0]['default']['name'], [{u'FirstName': u'employeefirstname-24'}, {u'MiddleName': u'employeemiddlename-24'}, {u'LastName': u'employeelastname-24'}])
+                self.query = "drop index default.idx_cover_desc"
+                self.run_cbq_query()
+                created_indexes.remove('idx_cover_desc')
+                self.query = "create primary index on default"
+                self.run_cbq_query()
+                try:
+                    self.run_cbq_query(query='ascdescquery1', is_prepared=True)
+                except Exception, ex:
+                   self.assertTrue(str(ex).find("Index Not Found - cause: queryport.indexNotFound") != -1,
+                                  "Error message is %s." % str(ex))
+                else:
+                    self.fail("Error message expected")
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     #This test creates asc,desc index on meta and use it in predicate and order by
     def test_meta(self):
