@@ -73,6 +73,14 @@ class nwusage(XDCRNewBaseTest):
                 else:
                     self.fail("Bandwidth Throttler not enabled on replication")
 
+    def _get_current_time(self, server):
+        shell = RemoteMachineShellConnection(server)
+        command = "date +'%Y-%m-%dT%H:%M:%S'"
+        output, error = shell.execute_command(command)
+        shell.log_command_output(output, error)
+        curr_time = output[0].strip()
+        return curr_time
+
     def test_nwusage_with_unidirection(self):
         self.setup_xdcr()
         self.sleep(60)
@@ -234,7 +242,7 @@ class nwusage(XDCRNewBaseTest):
 
         self.sleep(30)
         self._set_nwusage_limit(self.src_cluster, 0)
-        event_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        event_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Network limit reset to 0 at {0}".format(event_time))
 
         for task in tasks:
@@ -260,13 +268,13 @@ class nwusage(XDCRNewBaseTest):
         self.sleep(15)
 
         self.src_cluster.failover_and_rebalance_nodes()
-        failover_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        failover_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Node failed over at {0}".format(failover_time))
 
         self.sleep(15)
 
         self.src_cluster.rebalance_in()
-        node_back_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        node_back_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Node added back at {0}".format(node_back_time))
 
         self._wait_for_replication_to_catchup()
@@ -294,13 +302,13 @@ class nwusage(XDCRNewBaseTest):
 
         nw_limit = self._input.param("nw_limit", 1)
         self._set_nwusage_limit(self.src_cluster, nw_limit)
-        bw_enable_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        bw_enable_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Bandwidth throttler enabled at {0}".format(bw_enable_time))
 
         self.sleep(60)
 
         self.src_cluster.rebalance_in()
-        node_back_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        node_back_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Node added back at {0}".format(node_back_time))
 
         self._wait_for_replication_to_catchup(timeout=600)
@@ -334,7 +342,7 @@ class nwusage(XDCRNewBaseTest):
         self.sleep(30)
         task = self.cluster.async_rebalance(self.src_cluster.get_nodes(), [], [])
         task.result()
-        failover_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        failover_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Node auto failed over at {0}".format(failover_time))
         FloatingServers._serverlist.append(self._input.servers[1])
 
@@ -344,7 +352,7 @@ class nwusage(XDCRNewBaseTest):
         shell.disable_firewall()
         self.sleep(45)
         self.src_cluster.rebalance_in()
-        node_back_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        node_back_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Node added back at {0}".format(node_back_time))
 
         self._wait_for_replication_to_catchup(timeout=600)
@@ -379,7 +387,7 @@ class nwusage(XDCRNewBaseTest):
 
         nw_limit = self._input.param("nw_limit", 1)
         self._set_nwusage_limit(self.src_cluster, nw_limit)
-        bw_enable_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        bw_enable_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Bandwidth throttler enabled at {0}".format(bw_enable_time))
 
         self.sleep(60)
@@ -388,7 +396,7 @@ class nwusage(XDCRNewBaseTest):
         shell.disable_firewall()
         self.sleep(30)
         self.src_cluster.rebalance_in()
-        node_back_time = time.strftime('%Y-%m-%dT%H:%M:%S')
+        node_back_time = self._get_current_time(self.src_cluster.get_master_node())
         self.log.info("Node added back at {0}".format(node_back_time))
 
         self._wait_for_replication_to_catchup(timeout=600)
