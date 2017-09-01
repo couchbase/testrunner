@@ -115,6 +115,7 @@ class BaseTestCase(unittest.TestCase):
             self.standard_buckets = self.input.param("standard_buckets", 0)
             if self.skip_standard_buckets:
                 self.standard_buckets = 0
+                BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.num_buckets = self.input.param("num_buckets", 0)
             self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
