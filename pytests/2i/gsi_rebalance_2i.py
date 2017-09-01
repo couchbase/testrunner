@@ -643,9 +643,13 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         to_add_nodes = [self.servers[self.nodes_init]]
         services_in = ["kv"]
         # start create index and build index
-        t1 = threading.Thread(target=self.run_operation, args=("before",))
+        t0 = threading.Thread(target= self.run_operation, args=("before",))
+        t0.start()
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(address) USING GSI WITH {'num_replica': 1}"
+        t1 = threading.Thread(target=self._create_replica_index, args=(create_index_query,))
         t1.start()
-        self.sleep(2)
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [],
                                                      services=services_in)
@@ -659,6 +663,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         else:
             self.fail("indexer rebalance succeeded when it should have failed")
         t1.join()
+        t0.join()
         self.run_operation(phase="after")
         kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         # kv node should succeed
