@@ -2210,7 +2210,7 @@ class CouchbaseCluster:
         for task in tasks:
             task.result(timeout)
 
-    def verify_items_count(self, timeout=300):
+    def verify_items_count(self, timeout=600):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
         """
         active_key_count_passed = True
@@ -2227,7 +2227,14 @@ class CouchbaseCluster:
             while True:
                 try:
                     active_keys = int(rest.get_active_key_count(bucket.name))
-                    if active_keys != items:
+                except Exception as e:
+                    self.__log.error(e)
+                    bucket_info = rest.get_bucket_json(bucket.name)
+                    nodes = bucket_info["nodes"]
+                    active_keys = 0
+                    for node in nodes:
+                        active_keys += node["interestingStats"]["curr_items"]
+                if active_keys != items:
                         self.__log.warn("Not Ready: vb_active_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                  % (active_keys, items, self.__name, bucket.name))
@@ -2238,14 +2245,11 @@ class CouchbaseCluster:
                             active_key_count_passed = False
                             break
                         continue
-                    else:
-                        self.__log.info("Saw: vb_active_curr_items %s == "
-                                "%s expected on %s, %s bucket"
-                                % (active_keys, items, self.__name, bucket.name))
-                        break
-                except Exception as e:
-                    self.__log.error(e)
-
+                else:
+                    self.__log.info("Saw: vb_active_curr_items %s == "
+                            "%s expected on %s, %s bucket"
+                            % (active_keys, items, self.__name, bucket.name))
+                    break
         # check replica count
         curr_time = time.time()
         end_time = curr_time + timeout
@@ -2260,25 +2264,30 @@ class CouchbaseCluster:
             while True:
                 try:
                     replica_keys = int(rest.get_replica_key_count(bucket.name))
-                    if replica_keys != items:
-                        self.__log.warn("Not Ready: vb_replica_curr_items %s == "
-                                "%s expected on %s, %s bucket"
-                                 % (replica_keys, items ,self.__name, bucket.name))
-                        time.sleep(3)
-                        if time.time() > end_time:
-                            self.__log.error(
-                            "ERROR: Timed-out waiting for replica item count to match")
-                            replica_key_count_passed = False
-                            self.run_cbvdiff()
-                            break
-                        continue
-                    else:
-                        self.__log.info("Saw: vb_replica_curr_items %s == "
-                                "%s expected on %s, %s bucket"
-                                % (replica_keys, items, self.__name, bucket.name))
-                        break
                 except Exception as e:
                     self.__log.error(e)
+                    bucket_info = rest.get_bucket_json(bucket.name)
+                    nodes = bucket_info["nodes"]
+                    replica_keys = 0
+                    for node in nodes:
+                        replica_keys += node["interestingStats"]["vb_replica_curr_items"]
+                if replica_keys != items:
+                    self.__log.warn("Not Ready: vb_replica_curr_items %s == "
+                            "%s expected on %s, %s bucket"
+                             % (replica_keys, items ,self.__name, bucket.name))
+                    time.sleep(3)
+                    if time.time() > end_time:
+                        self.__log.error(
+                        "ERROR: Timed-out waiting for replica item count to match")
+                        replica_key_count_passed = False
+                        self.run_cbvdiff()
+                        break
+                    continue
+                else:
+                    self.__log.info("Saw: vb_replica_curr_items %s == "
+                            "%s expected on %s, %s bucket"
+                            % (replica_keys, items, self.__name, bucket.name))
+                    break
         return active_key_count_passed, replica_key_count_passed
 
     def run_cbvdiff(self):
@@ -3381,8 +3390,23 @@ class XDCRNewBaseTest(unittest.TestCase):
                 rest2 = RestConnection(remote_cluster.get_dest_cluster().get_master_node())
                 for bucket in cb_cluster.get_buckets():
                     while time.time() < end_time :
-                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
-                        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
+                        try:
+                            _count1 = rest1.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
+                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
+                        except Exception as e:
+                            self.__log.warn(e)
+                            self.__log.info("Trying other method to fetch bucket current items")
+                            bucket_info1 = rest1.get_bucket_json(bucket.name)
+                            nodes = bucket_info1["nodes"]
+                            _count1 = 0
+                            for node in nodes:
+                                _count1 += node["interestingStats"]["curr_items"]
+                            
+                            bucket_info2 = rest2.get_bucket_json(bucket.name)
+                            nodes = bucket_info1["nodes"]
+                            _count2 = 0
+                            for node in nodes:
+                                _count2 += node["interestingStats"]["curr_items"]
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
