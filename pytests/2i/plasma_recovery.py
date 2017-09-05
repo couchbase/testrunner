@@ -595,6 +595,7 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
             log.info("==== Cluster in healthy state ====")
             self.sleep(180)
             self._check_all_bucket_items_indexed()
+            self.sleep(180)
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception, ex:

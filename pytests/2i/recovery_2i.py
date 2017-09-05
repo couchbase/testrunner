@@ -585,6 +585,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.sleep(180)
         self._check_all_bucket_items_indexed()
         post_recovery_tasks = self.async_run_operations(phase="after")
+        self.sleep(180)
         self._run_tasks([post_recovery_tasks])
 
     def test_partial_rollback(self):
