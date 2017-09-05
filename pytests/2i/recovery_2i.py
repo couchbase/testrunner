@@ -582,6 +582,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         msg = "Cluster not in Healthy state"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("==== Cluster in healthy state ====")
+        self.sleep(180)
         self._check_all_bucket_items_indexed()
         post_recovery_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_recovery_tasks])
