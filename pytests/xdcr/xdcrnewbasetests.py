@@ -399,15 +399,27 @@ class NodeHelper:
                      + '/goxdcr.log*'
 
         shell = RemoteMachineShellConnection(server)
-        matches = []
-        if print_matches:
-            matches, err = shell.execute_command("zgrep \"{0}\" {1}".
-                                        format(str, goxdcr_log))
-            if matches:
-                NodeHelper._log.info(matches)
+        info = shell.extract_remote_info().type.lower()
+        if info == "windows":
+            matches = []
+            if print_matches:
+                matches, err = shell.execute_command("grep \"{0}\" {1}".
+                                            format(str, goxdcr_log))
+                if matches:
+                    NodeHelper._log.info(matches)
 
-        count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                        format(str, goxdcr_log))
+            count, err = shell.execute_command("grep \"{0}\" {1} | wc -l".
+                                            format(str, goxdcr_log))
+        else:
+            matches = []
+            if print_matches:
+                matches, err = shell.execute_command("zgrep \"{0}\" {1}".
+                                                     format(str, goxdcr_log))
+                if matches:
+                    NodeHelper._log.info(matches)
+
+            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                               format(str, goxdcr_log))
         if isinstance(count, list):
             count = int(count[0])
         else:
