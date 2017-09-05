@@ -1920,7 +1920,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
-        self.backupset.end = randrange(self.backupset.start,
+        if int(self.backupset.number_of_backups) == 2:
+            self.backupset.end = 2
+        elif int(self.backupset.number_of_backups) > 2:
+            self.backupset.end = randrange(self.backupset.start,
                                        self.backupset.number_of_backups + 1)
         self.merged = True
         status, output, _ = self.backup_merge()

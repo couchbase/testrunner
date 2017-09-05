@@ -5,6 +5,7 @@ import urllib
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
+from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.documentgenerator import BlobGenerator,DocumentGenerator
 from ent_backup_restore.validation_helpers.backup_restore_validations \
                                                  import BackupRestoreValidations
@@ -794,6 +795,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 buckets_data[bucket.name][key] = value
             self.log.info("*** Compare data in bucket and in backup file of bucket %s ***"
                                                                             % bucket.name)
+            failed_persisted_bucket = []
+            ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
+                                                          bucket.name, 'ep_queue_size',
+                                                          0, timeout_in_seconds=120)
+            if not ready:
+                failed_persisted_bucket.append(bucket.name)
+            if failed_persisted_bucket:
+                self.fail("Buckets %s did not persisted." % failed_persisted_bucket)
             count = 0
             key_count = 0
             for key in buckets_data[bucket.name]:
