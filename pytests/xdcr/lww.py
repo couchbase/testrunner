@@ -1115,7 +1115,7 @@ class Lww(XDCRNewBaseTest):
         self.sleep(5)
         conn.start_couchbase()
         self.wait_service_started(self.c1_cluster.get_master_node())
-        self.sleep(120, "Slepping so that vBuckets are ready and to avoid \
+        self.sleep(600, "Slepping so that vBuckets are ready and to avoid \
         MemcachedError: Memcached error #1 'Not found':   for vbucket :0")
         self.verify_results()
 
@@ -1145,7 +1145,7 @@ class Lww(XDCRNewBaseTest):
         conn.kill_erlang()
         conn.start_couchbase()
         self.wait_service_started(self.c1_cluster.get_master_node())
-        self.sleep(120, "Slepping so that vBuckets are ready and to avoid \
+        self.sleep(600, "Slepping so that vBuckets are ready and to avoid \
         MemcachedError: Memcached error #1 'Not found':   for vbucket :0")
         self.verify_results()
 
@@ -1174,7 +1174,7 @@ class Lww(XDCRNewBaseTest):
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn.pause_memcached()
         conn.unpause_memcached()
-        self.sleep(300,"Wait such that any replication happening should get completed after memcached restart.")
+        self.sleep(600,"Wait such that any replication happening should get completed after memcached restart.")
         self.verify_results()
 
     def test_seq_upd_on_bi_with_target_clock_faster(self):
@@ -1482,7 +1482,7 @@ class Lww(XDCRNewBaseTest):
 
         task = self.c1_cluster.async_rebalance_in()
         task.result()
-
+        self.sleep(300)
         self.verify_results()
 
     def test_lww_while_failover_node_at_src(self):
@@ -1524,7 +1524,7 @@ class Lww(XDCRNewBaseTest):
                     src_conn.add_back_node(otpNode=node.id)
             rebalance = self.cluster.async_rebalance(self.c1_cluster.get_nodes(), [], [])
             rebalance.result()
-
+        self.sleep(300)
         self.verify_results()
 
     def test_lww_with_rebalance_in_and_simult_upd_del(self):
