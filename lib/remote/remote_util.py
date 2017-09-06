@@ -37,7 +37,7 @@ from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
 from testconstants import WIN_COUCHBASE_BIN_PATH,\
                           WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
-from testconstants import WIN_TMP_PATH
+from testconstants import WIN_TMP_PATH, WIN_TMP_PATH_RAW
 
 from testconstants import MAC_CB_PATH, MAC_COUCHBASE_BIN_PATH
 
@@ -1098,7 +1098,9 @@ class RemoteMachineShellConnection:
         sftp = self._ssh_client.open_sftp()
         try:
             sftp.get(rem_path, des_path)
-        except IOError:
+        except IOError as e:
+            if e:
+                print e
             log.error('Can not copy file')
         finally:
             sftp.close()
@@ -3499,12 +3501,12 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
-    def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator", password="password", getReplica=False, mode="memory"):
+    def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator",
+                                      password="password", getReplica=False, mode="memory"):
         self.extract_remote_info()
         temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
-            return "",{}
-            temp_path = testconstants.WIN_TMP_PATH
+            temp_path = WIN_TMP_PATH
         replicaOption = ""
         prefix = str(uuid.uuid1())
         fileName = prefix + ".csv"
@@ -3532,6 +3534,8 @@ class RemoteMachineShellConnection:
 
             genFileName = prefix + suffix
             csv_path = temp_path + fileName
+            if self.info.type.lower() == 'windows':
+                csv_path = WIN_TMP_PATH_RAW + fileName
             path = temp_path + genFileName
             dest_path = "/tmp/" + fileName
             destination = "csv:" + csv_path
