@@ -3406,8 +3406,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                             _count1 = rest1.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
                             _count2 = rest2.fetch_bucket_stats(bucket=bucket.name,zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
                         except Exception as e:
-                            self.__log.error(e)
-                            self.__log.info("Trying other method to fetch bucket current items")
+                            self.log.warn(e)
+                            self.log.info("Trying other method to fetch bucket current items")
                             bucket_info1 = rest1.get_bucket_json(bucket.name)
                             nodes = bucket_info1["nodes"]
                             _count1 = 0
