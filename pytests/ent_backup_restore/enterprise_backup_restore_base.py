@@ -896,6 +896,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             This will get certificate info from cluster
         """
         cert_file_location = self.root_path + "cert.pem"
+        if self.os_name == "windows":
+            cert_file_location = WIN_TMP_PATH_RAW + "cert.pem"
         shell = RemoteMachineShellConnection(server_host)
         cmd = "%s/couchbase-cli ssl-manage -c %s:8091 -u Administrator -p password "\
               " --cluster-cert-info > %s" % (self.cli_command_location,
