@@ -1010,11 +1010,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if fail_msg not in output[0]:
                     self.fail("cbbackupmgr failed to block user to backup")
             if self.cluster_new_role == "views_admin[*]":
-                self.assertTrue("Error backing up cluster: Unable to find" in output[0],
+                self.assertTrue("Error backing up cluster: Invalid permissions" in output[0],
                                 "Expected error message not thrown")
-                # remove comment when ticket MB-25767 is fixed.
-                #self.assertTrue("Error backing up cluster: Invalid permissions" in output[0],
-                #                "Expected error message not thrown")
             status, _, message = self.backup_list()
             if not status:
                 self.fail(message)
