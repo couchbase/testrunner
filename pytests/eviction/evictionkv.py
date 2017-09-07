@@ -13,6 +13,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
+from numpy import float_
 
 
 class EvictionKV(EvictionBase):
@@ -84,34 +85,34 @@ class EvictionKV(EvictionBase):
 
         # we want to have keys expire after all the key are initialized, thus the below parameter
         init_time_delay = self.input.param("init_time_delay", 30)
-        test_time_in_minutes = self.input.param("test_time_in_minutes", 30)
-
+        initial_key_set_time = []
         # rampup - create a certain number of keys
         float_creation_chunks = key_float / keys_expired_per_interval
-        print 'float_creation_chunks', float_creation_chunks
+
         for i in range(float_creation_chunks):
-            # print 'setting', keys_expired_per_interval, ' keys to expire in', expiry_time * (i+1)
             for j in range(keys_expired_per_interval):
                 key = str(uuid.uuid4()) + str(i) + str(j)
                 client.set(key, init_time_delay + expiry_time * (i + 1), 0, key)
-
-        for i in range(test_time_in_minutes * 60 / expiry_time):
-
+            #pause before second chunk gets set 
+            time.sleep(0.01)
+            initial_key_set_time.append(time.time())
+        self.sleep(init_time_delay + expiry_time - (time.time() - initial_key_set_time[0]),
+                   "Waiting for first chunk to expire")
+        for chunk in range(float_creation_chunks):
             key_set_time = int(time.time())
 
-            # ClusterOperationHelper.set_expiry_pager_sleep_time(self.master, 'default')
-            # testuuid = uuid.uuid4()
             keys = ["key_%s_%d" % (uuid.uuid4(), i) for i in range(keys_expired_per_interval)]
-            self.log.info("pushing keys with expiry set to {0}".format(expiry_time))
+            self.log.info("pushing keys with expiry set to {0}".format(expiry_time * float_creation_chunks))
             for key in keys:
                 try:
-                    client.set(key, expiry_time + key_float / expiry_time, 0, key)
+                    client.set(key, expiry_time * float_creation_chunks, 0, key)
                 except mc_bin_client.MemcachedError as error:
                     msg = "unable to push key : {0} to bucket : {1} error : {2}"
                     self.log.error(msg.format(key, client.vbucketId, error.status))
                     self.fail(msg.format(key, client.vbucketId, error.status))
-            self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry_time))
-            self.log.info('sleeping {0} seconds'.format(expiry_time - (time.time() - key_set_time)))
+            #Buffer for the keys to get initialize
+            time.sleep(5)
+            self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry_time * float_creation_chunks))
 
             compacted = self.cluster.compact_bucket(self.master, 'default')
             # have the compactor do the expiry
@@ -121,8 +122,8 @@ class EvictionKV(EvictionBase):
             else:
                 self.assertTrue(compacted, msg="unable compact_bucket")
             self.cluster.wait_for_stats([self.master], "default", "", "curr_items", "==", key_float, timeout=30)
-            time.sleep(exp_time)
-            
+            exp_time = expiry_time - (time.time() - key_set_time)
+            self.sleep(exp_time)
 
     def test_verify_expiry(self):
         """
