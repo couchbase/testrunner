@@ -33,6 +33,10 @@ class DCPRollBack(DCPBase):
     """
 
     def replicate_correct_data_after_rollback(self):
+        '''
+        @attention: This test case has some issue with docker runs. It
+        passes without any issue on VMs.
+        '''
 
         NUMBER_OF_DOCS = 10000
 
