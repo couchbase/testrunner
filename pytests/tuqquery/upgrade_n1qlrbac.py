@@ -11,24 +11,23 @@ from remote.remote_util import RemoteMachineShellConnection
 
 log = logging.getLogger(__name__)
 
-class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
+class UpgradeN1QLRBAC(RbacN1QL, NewUpgradeBaseTest):
     def setUp(self):
+        self.array_indexing = False
         super(UpgradeN1QLRBAC, self).setUp()
         self.initial_version = self.input.param('initial_version', '4.6.0-3653')
         self.upgrade_to = self.input.param("upgrade_to")
-        self.bucket_size = 100
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
+        self.n1ql_helper = N1QLHelper(version=self.version, shell=self.shell,
+            use_rest=self.use_rest, max_verify=self.max_verify,
+            buckets=self.buckets, item_flag=self.item_flag,
+            n1ql_port=self.n1ql_port, full_docs_list=[],
+            log=self.log, input=self.input, master=self.master)
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        log.info(self.n1ql_node)
         if self.ddocs_num:
             self.create_ddocs_and_views()
             gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
             self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
-        self.n1ql_helper = N1QLHelper(version=self.version, shell=self.shell,
-            use_rest=self.use_rest, max_verify=self.max_verify,
-            buckets=self.buckets, item_flag=self.item_flag,
-            n1ql_port=self.n1ql_port, full_docs_list=self.full_docs_list,
-            log=self.log, input=self.input, master=self.master)
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.log.info(self.n1ql_node)
 
     def tearDown(self):
         super(UpgradeN1QLRBAC, self).tearDown()
@@ -41,31 +40,20 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         sasl and non sasl buckets.
         3. We also use pre-upgrade users for the query with indexes.
         """
-        self.bucket_size = 100
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
+
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query)
         # create users before upgrade via couchbase-cli
         self.create_users_before_upgrade_non_ldap()
         self._perform_offline_upgrade()
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
-        # create secondary index on standard_bucket
-        self.query = 'create index idx2 on {0}(meta().id)'.format('standard_bucket0')
-        self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         #verify number of buckets after upgrade
         self.assertTrue(len(self.buckets)==2)
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
         # verify number of users after upgrade
-        self.assertTrue(actual_result['metrics']['resultCount'] == 9)
+        self.log.error(actual_result['metrics']['resultCount'])
+        self.assertEqual(actual_result['metrics']['resultCount'] , 9)
         self.create_users(users=[{'id': 'john',
                                            'name': 'john',
                                            'password':'password'}])
@@ -74,6 +62,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.assertTrue(actual_result['status'] == 'success')
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
+        self.log.error(actual_result['metrics']['resultCount'])
         self.assertTrue(actual_result['metrics']['resultCount'] == 10)
 
         self.create_users(users=[{'id': 'johnClusterAdmin',
@@ -85,7 +74,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
         self.assertTrue(actual_result['metrics']['resultCount'] == 11)
-        self.query = "GRANT {0} on {2} to {1}".format("bucket_admin",'standard_bucket0 ','standard_bucket0')
+        self.query = "GRANT {0} on {2} to {1}".format("bucket_admin",'standard_bucket0','standard_bucket0')
         actual_result = self.run_cbq_query(query = self.query)
         self.assertTrue(actual_result['status'] == 'success')
         self.shell = RemoteMachineShellConnection(self.master)
@@ -123,12 +112,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         3. We also change permissions on new users and verify queries accordingly.
         :return:
         """
-        self.bucket_size = 100
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
+
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query)
@@ -136,20 +120,8 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.create_users_before_upgrade_non_ldap()
         self._perform_offline_upgrade()
         self.sleep(20)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
-        # create secondary index on standard_bucket
-        self.query = 'create index idx2 on {0}(meta().id)'.format('standard_bucket0')
-        self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         #verify number of buckets after upgrade
         self.assertTrue(len(self.buckets)==2)
-
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         self.query_select_insert_update_delete_helper()
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
@@ -168,7 +140,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
                         format('standard_bucket0', 'johnClusterAdmin'))
-        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:my_user_info'".format('johnClusterAdmin','password', self.master.ip, 'standard_bucket0',self.curl_path)
+        cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:my_user_info'".format('johnClusterAdmin','password', self.master.ip, self.curl_path)
         output, error = self.shell.execute_command(cmd)
         self.shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
@@ -183,20 +155,10 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         2. It might fail based on implementation details from dev.
         :return:
         """
-        self.bucket_size = 100
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query)
         self._perform_offline_upgrade()
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         self.create_and_verify_system_catalog_users_helper()
         self.check_system_catalog_helper()
 
@@ -207,12 +169,6 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         Permissions for the users created before upgrade are changed after upgrade to new query based permissions in
         change_pre_upgrade_users_permissions.
         """
-        self.bucket_size = 100
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query)
@@ -220,13 +176,13 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.sleep(20)
         self.query = 'select * from system:user_info'
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 4)
+        self.assertTrue(actual_result['metrics']['resultCount'] == 5)
         self.verify_pre_upgrade_users_permissions_helper()
         self.change_and_verify_pre_upgrade_ldap_users_permissions()
         self.query_select_insert_update_delete_helper()
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 11)
+        self.assertTrue(actual_result['metrics']['resultCount'] == 12)
         self.check_permissions_helper()
         self.change_permissions_and_verify_new_users()
 
@@ -236,12 +192,6 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         # permissions after upgrade and verifies the number of users created are correct.
         # It also verifies the queries use the correct index for sasl buckets after online upgrade.
         """
-        self.bucket_size = 100
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query)
@@ -249,82 +199,44 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.create_users_before_upgrade_non_ldap()
         self._perform_online_upgrade_with_rebalance()
         self.sleep(20)
-        self.bucket_size = 100
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         #verify number of buckets after upgrade
         self.assertTrue(len(self.buckets)==1)
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
+        self.log.error(actual_result['metrics']['resultCount'])
         #verify number of users after upgrade
-        self.assertTrue(actual_result['metrics']['resultCount'] == 7)
-        self.query = 'create primary index on {0}'.format('default')
-        self.run_cbq_query(query = self.query)
-        self.query = 'create index idx on {0}(meta().id)'.format('default')
-        self.run_cbq_query(query = self.query)
-        self.query = 'select * from system:user_info'
+        self.assertTrue(actual_result['metrics']['resultCount'] == 20)
+        self.shell = RemoteMachineShellConnection(self.master)
+        self.create_users(users=[{'id': 'johnClusterAdmin',
+                                           'name': 'john',
+                                           'password':'password'}])
+        self.query = "GRANT {0} to {1}".format("cluster_admin",'johnClusterAdmin')
         actual_result = self.run_cbq_query(query = self.query)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 7)
+        self.assertTrue(actual_result['status'] == 'success')
+        self.create_users(users=[{'id': 'john_admin',
+                                           'name': 'john_admin',
+                                           'password':'password'}])
+        self.query = "GRANT {0} to {1}".format("cluster_admin",'john_admin')
+        actual_result = self.run_cbq_query(query = self.query)
+        self.assertTrue(actual_result['status'] == 'success')
         for bucket in self.buckets:
-         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"test\", { \"value1\": \"one1\" })'"%\
-                (self.curl_path,'john_insert', 'password', self.master.ip, bucket.name)
-         output, error = self.shell.execute_command(cmd)
-         self.shell.log_command_output(output, error)
-         self.assertTrue(any("success" in line for line in output), "Unable to insert into {0} as user {1}".
-                        format(bucket.name, 'johnInsert'))
-         log.info("Query executed successfully")
-         old_name = "employee-14"
-         new_name = "employee-14-2"
-         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'".\
-                format('john_update', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
-         output, error = self.shell.execute_command(cmd)
-         self.shell.log_command_output(output, error)
-         self.assertTrue(any("success" in line for line in output), "Unable to update into {0} as user {1}".
-                        format(bucket.name, 'johnUpdate'))
-         log.info("Query executed successfully")
-         del_name = "employee-14"
-         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM {3} a WHERE name = '{4}''".\
-                format('john_delete', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
-         output, error = self.shell.execute_command(cmd)
-         self.shell.log_command_output(output, error)
-         self.assertTrue(any("success" in line for line in output), "Unable to delete from {0} as user {1}".
-                        format(bucket.name, 'john_delete'))
-         log.info("Query executed successfully")
-        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} use index(idx) where meta().id > 0 " \
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} use index(idx) where meta().id > 0 " \
                   "LIMIT 10'".\
-                format('john_bucket_admin','password', self.master.ip, 'default',self.curl_path)
-        output, error = self.shell.execute_command(cmd)
-        self.shell.log_command_output(output, error)
-        self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                        format('default', 'john_bucket_admin'))
-        for bucket in self.buckets:
-         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"test2\", { \"value1\": \"one1\" })'"%\
-                (self.curl_path,'cbadminbucket', 'password', self.master.ip, bucket.name)
-         output, error = self.shell.execute_command(cmd)
-         self.shell.log_command_output(output, error)
-         self.assertTrue(any("success" in line for line in output), "Unable to insert into {0} as user {1}".
-                        format(bucket.name, 'johnInsert'))
-         log.info("Query executed successfully")
-         old_name = "employee-14"
-         new_name = "employee-14-2"
-         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'".\
-                format('cbadminbucket', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
-         output, error = self.shell.execute_command(cmd)
-         self.shell.log_command_output(output, error)
-         self.assertTrue(any("success" in line for line in output), "Unable to update into {0} as user {1}".
-                        format(bucket.name, 'johnUpdate'))
-         log.info("Query executed successfully")
+                format('johnClusterAdmin','password', self.master.ip, bucket.name,self.curl_path)
+            self.sleep(10)
+            output, error = self.shell.execute_command(cmd)
+            self.shell.log_command_output(output, error)
+            self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+                        format(bucket.name, 'johnClusterAdmin'))
+            # use pre-upgrade users
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} use index(idx) where meta().id > 0 " \
+                  "LIMIT 10'".\
+                format('john_admin','password', self.master.ip, bucket.name,self.curl_path)
+            output, error = self.shell.execute_command(cmd)
+            self.shell.log_command_output(output, error)
+            self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+                          format(bucket.name, 'john_admin'))
 
-    def test_dummy(self):
-        self._perform_online_upgrade_with_failover()
-        self.upgrade_servers = self.servers
 
     def test_online_upgrade_with_rebalance_with_system_catalog(self):
         """
@@ -332,11 +244,6 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         It might fail based on implementation details from dev.
         :return:
         """
-        self.bucket_size = 100
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         self._perform_online_upgrade_with_rebalance()
         self.create_and_verify_system_catalog_users_helper()
         self.check_system_catalog_helper()
@@ -348,36 +255,27 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         Permissions for the users created before upgrade are changed after upgrade to new query based permissions in
         change_pre_upgrade_users_permssions.
         """
-        self.bucket_size = 100
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query)
         # create ldap users before upgrade
         self.create_ldap_auth_helper()
+        self.sleep(20)
         self._perform_online_upgrade_with_rebalance()
         self.sleep(20)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
+        for bucket in self.buckets:
+         self.query = 'create primary index on {0}'.format(bucket.name)
+         self.run_cbq_query(query = self.query)
         self.query = 'select * from system:user_info'
-        actual_result = self.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 7)
-        self.query = 'create primary index on {0}'.format('standard_bucket0')
-        self.run_cbq_query(query = self.query)
-        self.query = 'create primary index on {0}'.format('default')
-        self.run_cbq_query(query = self.query)
-        self.verify_pre_upgrade_users_permissions_helper()
+        actual_result = self.run_cbq_query(query = self.query)
+        self.assertEqual(actual_result['metrics']['resultCount'], 7,
+                         "actual result is {0}".format(actual_result))
+        self.verify_pre_upgrade_users_permissions_helper(test= 'online_upgrade')
         self.query_select_insert_update_delete_helper()
         self.query = 'select * from system:user_info'
-        actual_result = self.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 14)
-        self.check_permissions_helper()
-        self.change_permissions_and_verify_new_users()
+        actual_result = self.run_cbq_query(query = self.query)
+        self.assertEqual(actual_result['metrics']['resultCount'], 14,
+                         "actual result is {0}".format(actual_result))
 
     def test_online_upgrade_with_failover_with_rbac(self):
         """
@@ -385,28 +283,23 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         # permissions after upgrade and verifies the number of users created are correct.
         # It also verifies the queries use the correct index for sasl buckets after online upgrade.
         """
-        self.bucket_size = 100
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
          # create users before upgrade via couchbase-cli
         self.create_users_before_upgrade_non_ldap()
-        self._perform_online_upgrade_with_rebalance()
+        self._perform_online_upgrade_with_failover()
         self.sleep(20)
-        self.bucket_size = 100
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         #verify number of buckets after upgrade
+        self.assertTrue(len(self.buckets)==2)
         self.query = 'select * from system:user_info'
-        actual_result = self.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 7)
-        self.query_select_insert_update_delete_helper_default()
+        actual_result = self.run_cbq_query(query = self.query)
+        self.assertEqual(actual_result['metrics']['resultCount'], 23,
+                           "actual result is {0}".format(actual_result))
+        self.query_select_insert_update_delete_helper()
         self.query = 'select * from system:user_info'
-        actual_result = self.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 14)
+        actual_result = self.run_cbq_query(query = self.query)
+        self.assertEqual(actual_result['metrics']['resultCount'], 23,
+                           "actual result is {0}".format(actual_result))
+        self.check_permissions_helper()
+        self.change_permissions_and_verify_new_users()
 
 
     def test_online_upgrade_with_failover_with_system_catalog(self):
@@ -418,16 +311,8 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query, server = self.n1ql_node)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         self._perform_online_upgrade_with_rebalance()
         self.sleep(20)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         self.create_and_verify_system_catalog_users_helper()
         self.check_system_catalog_helper()
 
@@ -438,10 +323,6 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         Permissions for the users created before upgrade are changed after upgrade to new query based permissions in
         change_pre_upgrade_users_permssions.
         """
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('pre-upgrade', 'preupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         for bucket in self.buckets:
             self.query = 'create index idx on {0}(meta().id)'.format(bucket.name)
             self.run_cbq_query(query = self.query)
@@ -449,19 +330,14 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.create_ldap_auth_helper()
         self._perform_online_upgrade_with_failover()
         self.sleep(20)
-        if self.ddocs_num:
-            self.create_ddocs_and_views()
-            gen_load = BlobGenerator('post-upgrade', 'postupgrade-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.assertTrue(actual_result['resultCount'] == 6)
-        self.verify_pre_upgrade_users_permissions_helper()
+        self.assertEqual(actual_result['metrics']['resultCount'],10)
         self.change_and_verify_pre_upgrade_ldap_users_permissions()
         self.query_select_insert_update_delete_helper()
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
-        self.assertTrue(actual_result['metrics']['resultCount'] == 13)
+        self.assertEqual(actual_result['metrics']['resultCount'], 17)
         self.check_permissions_helper()
         self.change_permissions_and_verify_new_users()
 
@@ -487,10 +363,6 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.create_users(users=[{'id': 'john_bucket_admin',
                                            'name': 'johnBucketAdmin',
                                            'password':'password'}])
-        self.query = "GRANT {0} to {1}".format("replication_admin",'john_rep')
-        self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.query = "GRANT {0} on standard_bucket0 to {1}".format("query_select",'john_select2')
-        self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         for bucket in self.buckets:
             self.query = "GRANT {0} on {2} to {1}".format("query_insert",'john_insert',bucket.name)
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
@@ -501,6 +373,10 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
             self.query = "GRANT {0} on {2} to {1}".format("query_select",'john_select',bucket.name)
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.query = "GRANT {0} on {2} to {1}".format("bucket_admin",'john_bucket_admin',bucket.name)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.query = "GRANT {0} to {1}".format("replication_admin",'john_rep')
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.query = "GRANT {0} on {2} to {1}".format("query_select",'john_select2',bucket.name)
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
 
     def query_select_insert_update_delete_helper_default(self):
@@ -559,10 +435,10 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                         format(bucket.name, 'john_delete'))
          log.info("Query executed successfully")
          cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'".\
-                format('john_select2', 'password', self.master.ip,'standard_bucket0',self.curl_path)
+                format('john_select2', 'password', self.master.ip,bucket.name,self.curl_path)
          output, error = self.shell.execute_command(cmd)
          self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                        format('standard_bucket0', 'john_select2'))
+                        format(bucket.name, 'john_select2'))
 
     def create_and_verify_system_catalog_users_helper(self):
         self.create_users(users=[{'id': 'john_system',
@@ -694,53 +570,54 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
     def change_and_verify_pre_upgrade_ldap_users_permissions(self):
         for bucket in self.buckets:
             # change permission of john_bucketadmin1 and verify its able to execute the correct query.
-            self.query = "GRANT {0} on {1} to {2}".format("query_select",bucket.name,'standard_bucket0')
-            self.run_cbq_query(query = self.query)
+            self.query = "GRANT {0} on {1} to {2}".format("query_select",bucket.name,'bucket0')
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'".\
-                    format('standard_bucket0', 'password', self.master.ip,bucket.name,self.curl_path)
+                    format('bucket0', 'password', self.master.ip,bucket.name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                            format(bucket.name, 'standard_bucket0'))
+                            format(bucket.name, 'bucket0'))
 
             # change permission of john_bucketadminAll and verify its able to execute the correct query.
-            self.query = "GRANT {0} on {1} to {2}".format("query_insert",bucket.name,'standard_bucket0')
-            self.run_cbq_query(query = self.query)
-            cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" })'" %(self.curl_path,'standard_bucket0', 'password',self.master.ip,bucket.name)
+            self.query = "GRANT {0} on {1} to {2}".format("query_insert",bucket.name,'bucket0')
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+            cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" })'" %(self.curl_path,'bucket0', 'password',self.master.ip,bucket.name)
             output, error = self.shell.execute_command(cmd)
             self.assertTrue(any("success" in line for line in output), "Unable to insert into {0} as user {1}".
-                            format(bucket.name, 'standard_bucket0'))
+                            format(bucket.name, 'bucket0'))
 
             # change permission of cluster_user and verify its able to execute the correct query.
-            self.query = "GRANT {0} on {1} to {2}".format("query_update",bucket.name,'standard_bucket0')
-            self.run_cbq_query(query = self.query)
+            self.query = "GRANT {0} on {1} to {2}".format("query_update",bucket.name,'bucket0')
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             old_name = "employee-14"
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
-                  "name = '{5}' limit 1'".format('standard_bucket0', 'password',self.master.ip,bucket.name,new_name, old_name,self.curl_path)
+                  "name = '{5}' limit 1'".format('bucket0', 'password',self.master.ip,bucket.name,new_name, old_name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.assertTrue(any("success" in line for line in output), "Unable to update  {0} as user {1}".
-                            format(bucket.name, 'standard_bucket0'))
-
-            #change permission of read_user and verify its able to execute the correct query.
-            self.query = "GRANT {0} on {1} to {2}".format("query_delete",bucket.name,'standard_bucket0')
-            self.run_cbq_query(query = self.query)
+                            format(bucket.name, 'bucket0'))
+            #change permission of bucket0 and verify its able to execute the correct query.
+            self.query = "GRANT {0} on {1} to {2}".format("query_delete",bucket.name,'bucket0')
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
               "'statement=DELETE FROM {3} a WHERE name = '{4}''".\
-                format('standard_bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+                format('bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.shell.log_command_output(output, error)
-            self.assertTrue(any("success" in line for line in output))
+            self.assertTrue(any("success" in line for line in output), "Unable to delete from {0} as user {1}".
+                       format(bucket.name, 'bucket0'))
             log.info("Query executed successfully")
 
-            # change permission of cadmin user and verify its able to execute the correct query.
+            # change permission of cbadminbucket user and verify its able to execute the correct query.
             self.query = "GRANT {0} to {1}".format("query_system_catalog",'cbadminbucket')
-            self.run_cbq_query(query = self.query)
-            cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'".\
-                format('cbadminbucket','password', self.master.ip, self.curl_path)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'".\
+                format('cbadminbucket','password', self.master.ip, bucket.name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.shell.log_command_output(output, error)
-            self.assertTrue(any("success" in line for line in output))
+            self.assertTrue(any("success" in line for line in output), "Unable to select from system:keyspaces as user {0}".format('cbadminbucket'))
+
 
     def create_ldap_auth_helper(self):
         """
@@ -761,51 +638,56 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         RbacBase().add_user_role(rolelist, RestConnection(self.master), 'ldap')
 
 
-    def verify_pre_upgrade_users_permissions_helper(self):
+    def verify_pre_upgrade_users_permissions_helper(self,test = ''):
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'".\
-                    format('standard_bucket0', 'password', self.master.ip,'standard_bucket0',self.curl_path)
+                    format('bucket0', 'password', self.master.ip,'bucket0',self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.shell.log_command_output(output, error)
             self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                            format('standard_bucket0', 'standard_bucket0'))
-            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'".\
-                    format('cbadminbucket', 'password', self.master.ip,'standard_bucket0',self.curl_path)
+                            format('bucket0', 'bucket0'))
+            if test == 'online_upgrade':
+                cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'".\
+                    format('cbadminbucket', 'password', self.master.ip,'default',self.curl_path)
+            else:
+                cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'".\
+                    format('cbadminbucket', 'password', self.master.ip,'bucket0',self.curl_path)
+
             output, error = self.shell.execute_command(cmd)
             self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                            format('standard_bucket0', 'cbadminbucket'))
+                             format('bucket0', 'cbadminbucket'))
             cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'".\
                     format('cbadminbucket', 'password', self.master.ip,self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                            format('system:keyspaces', 'cbadminbucket'))
+                             format('system:keyspaces', 'cbadminbucket'))
 
             for bucket in self.buckets:
              cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
                   "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"5\", { \"value1\": \"one1\" })'"%\
-                    (self.curl_path,'standard_bucket0', 'password', self.master.ip, bucket.name)
+                    (self.curl_path,'bucket0', 'password', self.master.ip, bucket.name)
              output, error = self.shell.execute_command(cmd)
              self.shell.log_command_output(output, error)
              self.assertTrue(any("success" in line for line in output), "Unable to insert into {0} as user {1}".
-                            format(bucket.name, 'standard_bucket0'))
+                            format(bucket.name, 'bucket0'))
              log.info("Query executed successfully")
              old_name = "employee-14"
              new_name = "employee-14-2"
              cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'".\
-                    format('standard_bucket0', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
+                    format('bucket0', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
              output, error = self.shell.execute_command(cmd)
              self.shell.log_command_output(output, error)
              self.assertTrue(any("success" in line for line in output), "Unable to update into {0} as user {1}".
-                            format(bucket.name, 'standard_bucket0'))
+                            format(bucket.name, 'bucket0'))
              log.info("Query executed successfully")
              del_name = "employee-14"
              cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "'statement=DELETE FROM {3} a WHERE name = '{4}''".\
-                    format('standard_bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+                    format('bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
              output, error = self.shell.execute_command(cmd)
              self.shell.log_command_output(output, error)
              self.assertTrue(any("success" in line for line in output), "Unable to delete from {0} as user {1}".
-                           format(bucket.name, 'standard_bucket0'))
+                           format(bucket.name, 'bucket0'))
              log.info("Query executed successfully")
 
     def use_pre_upgrade_users_post_upgrade(self):
@@ -829,27 +711,27 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                         format(bucket.name, 'johnUpdate'))
          log.info("Query executed successfully")
          cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'".\
-                format('bucket0', 'password', self.master.ip,'standard_bucket0',self.curl_path)
+                format(bucket.name, 'password', self.master.ip,bucket.name,self.curl_path)
          output, error = self.shell.execute_command(cmd)
          self.shell.log_command_output(output, error)
          self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                        format(bucket.name, 'standard_bucket0'))
+                        format(bucket.name, bucket.name))
 
 
     def change_permissions_and_verify_pre_upgrade_users(self):
         for bucket in self.buckets:
             # change permission of john_cluster and verify its able to execute the correct query.
-            self.query = "GRANT {0} on {1} to {2}".format("query_select",bucket.name,'standard_bucket0')
-            self.run_cbq_query(query = self.query)
+            self.query = "GRANT {0} on {1} to {2}".format("query_select",bucket.name,bucket.name)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'".\
-                    format('standard_bucket0', 'password', self.master.ip,bucket.name,self.curl_path)
+                    format(bucket.name, 'password', self.master.ip,bucket.name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
-                            format(bucket.name, 'standard_bucket0'))
+                            format(bucket.name, bucket.name))
 
             # change permission of ro_non_ldap and verify its able to execute the correct query.
             self.query = "GRANT {0} on {1} to {2}".format("query_update",bucket.name,'cbadminbucket')
-            self.run_cbq_query(query = self.query)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             old_name = "employee-14"
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
@@ -860,7 +742,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
 
             # change permission of john_admin and verify its able to execute the correct query.
             self.query = "GRANT {0} on {1} to {2}".format("query_delete",bucket.name,'cbadminbucket')
-            self.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
               "'statement=DELETE FROM {3} a WHERE name = '{4}''".\
@@ -871,8 +753,8 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                         format(bucket.name, 'cbadminbucket'))
             log.info("Query executed successfully")
             # change permission of bob user and verify its able to execute the correct query.
-            self.query = "GRANT {0} to {1}".format("query_system_catalog",'cbadminbucket')
-            self.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.query = "GRANT {0} to {1}".format("query_system_catalog","cbadminbucket")
+            self.run_cbq_query(query = self.query)
             cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'".\
                 format('cbadminbucket','password', self.master.ip, self.curl_path)
             output, error = self.shell.execute_command(cmd)
@@ -884,7 +766,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         for bucket in self.buckets:
             # change permission of john_insert and verify its able to execute the correct query.
             self.query = "GRANT {0} on {1} to {2}".format("bucket_admin",bucket.name,'john_insert')
-            self.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'".\
                     format('john_insert', 'password', self.master.ip,bucket.name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
@@ -893,7 +775,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
 
             # change permission of john_update and verify its able to execute the correct query.
             self.query = "GRANT {0} on {1} to {2}".format("query_insert",bucket.name,'john_update')
-            self.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=INSERT INTO {3} values(\"k055\", 123  )' " \
                   .format('john_update', 'password',self.master.ip,bucket.name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
@@ -902,7 +784,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
 
             # change permission of john_select and verify its able to execute the correct query.
             self.query = "GRANT {0} to {1}".format("cluster_admin",'john_select')
-            self.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             old_name = "employee-14"
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
@@ -919,7 +801,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
 
             # change permission of john_select2 and verify its able to execute the correct query.
             self.query = "GRANT {0} on {1} to {2}".format("query_delete",bucket.name,'john_select2')
-            self.run_cbq_query(query = self.query)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
               "'statement=DELETE FROM {3} a WHERE name = '{4}''".\
@@ -932,7 +814,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
 
             # change permission of john_delete and verify its able to execute the correct query.
             self.query = "GRANT {0} on {1} to {2}".format("query_select",bucket.name,'john_delete')
-            self.run_cbq_query(query = self.query)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'".\
                     format('john_delete', 'password', self.master.ip,bucket.name,self.curl_path)
             output, error = self.shell.execute_command(cmd)
@@ -1002,6 +884,8 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
         self.sleep(20)
         self.upgrade_servers = self.servers
 
+
+
     def _perform_online_upgrade_with_rebalance(self):
         self.nodes_upgrade_path = self.input.param("nodes_upgrade_path", "").split("-")
         for service in self.nodes_upgrade_path:
@@ -1012,6 +896,14 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                 node_info = "{0}:{1}".format(node.ip, node.port)
                 node_services_list = node_rest.get_nodes_services()[node_info]
                 node_services = [",".join(node_services_list)]
+                if "n1ql" in node_services_list:
+                    n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql",
+                                                              get_all_nodes=True)
+                    if len(n1ql_nodes) > 1:
+                        for n1ql_node in n1ql_nodes:
+                            if node.ip != n1ql_node.ip:
+                                self.n1ql_node = n1ql_node
+                                break
                 log.info("Rebalancing the node out...")
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
                 rebalance.result()
@@ -1024,7 +916,6 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                 for th in upgrade_th:
                      th.join()
                 log.info("==== Upgrade Complete ====")
-                self.upgrade_servers.append(node)
                 log.info("Adding node back to cluster...")
                 rebalance = self.cluster.async_rebalance(active_nodes,
                                                  [node], [],
@@ -1047,7 +938,7 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                 log.info("Rebalancing the node out...")
                 failover_task = self.cluster.async_failover([self.master],
                                                             failover_nodes=[node],
-                                                            graceful=True)
+                                                            graceful=False)
                 failover_task.result()
                 active_nodes = []
                 for active_node in self.servers:
@@ -1058,7 +949,6 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                 for th in upgrade_th:
                      th.join()
                 log.info("==== Upgrade Complete ====")
-                self.upgrade_servers.append(node)
                 self.sleep(30)
                 log.info("Adding node back to cluster...")
                 rest = RestConnection(self.master)
@@ -1066,9 +956,9 @@ class UpgradeN1QLRBAC(NewUpgradeBaseTest, RbacN1QL):
                 for cluster_node in nodes_all:
                     if cluster_node.ip == node.ip:
                         log.info("Adding Back: {0}".format(node))
+                        rest.add_back_node(cluster_node.id)
                         rest.set_recovery_type(otpNode=cluster_node.id,
                                                recoveryType="full")
-                        rest.add_back_node(cluster_node.id)
                 log.info("Adding node back to cluster...")
                 rebalance = self.cluster.async_rebalance(active_nodes, [], [])
                 rebalance.result()
