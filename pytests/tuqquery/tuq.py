@@ -41,8 +41,11 @@ def PreparePlanHelper(res):
 
 class QueryTests(BaseTestCase):
     def setUp(self):
-        if not self._testMethodName == 'suite_setUp':
+        if not self._testMethodName == 'suite_setUp' and \
+                        str(self.__class__).find('upgrade_n1qlrbac') == -1:
             self.skip_buckets_handle = True
+        else:
+            self.skip_buckets_handle = False
         super(QueryTests, self).setUp()
         if self.input.param("force_clean", False):
             self.skip_buckets_handle = False
