@@ -96,7 +96,7 @@ class QueryMonitoringTests(QueryTests):
 
     def run_parallel_query(self, server):
         logging.info('parallel query is active')
-        query = 'select * from default'
+        query = "(select * from default) union (select d from default d JOIN default def ON KEYS d.name)"
         self.run_cbq_query(query, server=server)
 
     '''Run basic cluster monitoring checks (outlined in the helper function) by executing 2 queries in parallel, must be
@@ -472,36 +472,17 @@ class QueryMonitoringTests(QueryTests):
         node3 = self.run_cbq_query()
         self.assertTrue(node3['metrics']['resultCount'] == 0)
 
-    '''Checks if a prepared request can be killed from system:active_requests:
-            -Check if the request can be killed by its requestId
-            -Check if the request can be killed by its name.
-            -Check if requests can be killed by node.'''
-    def test_prepared_kill_request(self):
-        self.test_prepared_common_body("kill")
-        # Check that both prepareds are in system:prepareds
-        self.query = "select * from system:prepareds"
-        result = self.run_cbq_query()
-        self.assertTrue(result['metrics']['resultCount'] == 2)
+    def test_prepared_check_requestId(self):
+        self.test_prepared_kill(self.run_check_requestId)
 
-        name = result['results'][0]['prepareds']['name']
-        secondname = result['results'][1]['prepareds']['name']
+    def test_prepared_kill_by_requestId(self):
+        self.test_prepared_kill(self.run_kill_prepared_by_requestId)
 
-        e = threading.Event()
-        thread1 = threading.Thread(name='run_kill_request', target=self.run_kill_prepared_request,
-                                   args=(e, 2))
-        thread2 = threading.Thread(name='run_prepared', target=self.execute_prepared, args=(name, self.servers[0]))
-        thread3 = threading.Thread(name='run_prepared', target=self.execute_prepared,
-                                   args=(secondname, self.servers[1]))
-        thread1.start()
-        thread2.start()
-        thread3.start()
+    def test_prepared_kill_by_name(self):
+        self.test_prepared_kill(self.run_kill_prepared_by_name)
 
-        e.set()
-
-        thread1.join(100)
-        thread2.join(100)
-        thread3.join(100)
-        self.assertFalse(self.threadFailure)
+    def test_prepared_kill_by_node(self):
+        self.test_prepared_kill(self.run_kill_prepared_by_node)
 
 ##############################################################################################
 #
@@ -519,34 +500,10 @@ class QueryMonitoringTests(QueryTests):
         self.assertTrue(result['metrics']['resultCount'] == 0)
 
         for bucket in self.buckets:
-            if test_type == "kill":
-                self.query = "(select * from default union select * from default union select * from default) " \
-                             "union (select d from default d JOIN default def ON KEYS d.name)"
-                self.prepared_common_body()
-
-                self.query = "SELECT name, email FROM %s WHERE " % (bucket.name) + \
-                             "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                 bucket.name) + \
-                             " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)" % (
-                                 bucket.name) + \
-                             "AND  NOT (job_title = 'Sales') ORDER BY name"
-                self.prepared_common_body(server=self.servers[1])
-            else:
-                self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                             "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' end)" % (
-                                                                    bucket.name) +\
-                             "AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 end) " % (
-                                                                bucket.name) +\
-                             "AND  NOT (job_title = 'Sales') ORDER BY name"
-                self.prepared_common_body()
-
-                self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                             "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                          bucket.name) +\
-                            " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
-                                                                    bucket.name) +\
-                            "AND  NOT (job_title = 'Sales') ORDER BY name"
-                self.prepared_common_body(server=self.servers[1])
+            self.query = "(select * from default union select * from default union select * from default) " \
+                         "union (select d from default d JOIN default def ON KEYS d.name)"
+            self.prepared_common_body()
+            self.prepared_common_body(server=self.servers[1])
 
     def run_simple_monitoring_prepared_check(self, e, t):
         while not e.isSet():
@@ -587,7 +544,39 @@ class QueryMonitoringTests(QueryTests):
                     self.log.info(json.dumps(result, sort_keys=True, indent=3))
                     return
 
-    def run_kill_prepared_request(self, e, t):
+    '''Checks if a prepared request can be killed from system:active_requests:
+            -Check if the request can be killed by its requestId
+            -Check if the request can be killed by its name.
+            -Check if requests can be killed by node.'''
+    def test_prepared_kill(self,test_to_run):
+        self.test_prepared_common_body("kill")
+        # Check that both prepareds are in system:prepareds
+        self.query = "select * from system:prepareds"
+        result = self.run_cbq_query()
+        self.assertTrue(result['metrics']['resultCount'] == 2)
+
+        name = result['results'][0]['prepareds']['name']
+        secondname = result['results'][1]['prepareds']['name']
+
+        e = threading.Event()
+        thread1 = threading.Thread(name='run_prepared_test', target=test_to_run,
+                                   args=(e, 2))
+        thread2 = threading.Thread(name='run_prepared', target=self.execute_prepared, args=(name, self.servers[0]))
+        thread3 = threading.Thread(name='run_prepared', target=self.execute_prepared,
+                                   args=(secondname, self.servers[1]))
+        thread1.start()
+        thread2.start()
+        thread3.start()
+
+        e.set()
+
+        thread1.join(100)
+        thread2.join(100)
+        thread3.join(100)
+        self.assertFalse(self.threadFailure)
+
+    '''Helper to check if a prepared statement can be accessed by its requestId'''
+    def run_check_requestId(self, e, t):
         while not e.isSet():
             logging.debug('wait_for_event_timeout starting')
             event_is_set = e.wait(t)
@@ -605,49 +594,75 @@ class QueryMonitoringTests(QueryTests):
                     self.log.info(json.dumps(result, sort_keys=True, indent=3))
                     return
 
+    '''Helper to check if a prepared statement can be killed by its requestId'''
+    def run_kill_prepared_by_requestId(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                result = self.run_cbq_query('select * from system:active_requests')
+                requestId = result['results'][0]['active_requests']['requestId']
+
                 # check if a query can be killed from system:active_requests using its requestId
                 logging.info("CHECKING IF A QUERY CAN BE KILLED BY REQUESTID")
-                self.run_cbq_query('delete from system:active_requests where requestId  =  "%s"' % requestId)
-                result = self.run_cbq_query('select * from system:active_requests  where requestId  =  "%s"'
-                                            % requestId)
+                self.run_cbq_query(
+                    'delete from system:active_requests where requestId  =  "%s"' % requestId)
+                result = self.run_cbq_query(
+                    'select * from system:active_requests  where requestId  =  "%s"'
+                    % requestId)
                 if not result['metrics']['resultCount'] == 0:
-                    self.threadFailure = True
-                    logging.error('THE QUERY FOR requestId "%s" WAS NOT KILLED AND IS STILL IN ACTIVE_REQUESTS'
-                                  % requestId)
-                    return
-
-                result = self.run_cbq_query('select * from system:active_requests')
-                if not result['metrics']['resultCount'] == 2:
                     self.threadFailure = True
                     logging.error(
-                        'NOT ALL ACTIVE QUERIES ARE IN ACTIVE_REQUESTS, THERE SHOULD BE 2 QUERIES ACTIVE. %s'
-                        ' QUERIES ARE ACTIVE.' % result['metrics']['resultCount'])
+                        'THE QUERY FOR requestId "%s" WAS NOT KILLED AND IS STILL IN ACTIVE_REQUESTS'
+                        % requestId)
                     self.log.info(json.dumps(result, sort_keys=True, indent=3))
                     return
 
+    '''Helper to check if a prepared statement can be killed by its preparedName'''
+    def run_kill_prepared_by_name(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                result = self.run_cbq_query('select * from system:active_requests')
                 # Check if a request can be killed by query name
                 logging.info("CHECKING IF A QUERY CAN BE KILLED BY NAME")
-                preparedName = result['results'][1]['active_requests']['preparedName']
-                self.run_cbq_query('delete from system:active_requests where preparedName  =  "%s"' % preparedName)
-                result = self.run_cbq_query('select * from system:active_requests  where preparedName  =  "%s"'
-                                            % preparedName)
+                preparedName = result['results'][2]['active_requests']['preparedName']
+                self.run_cbq_query(
+                    'delete from system:active_requests where preparedName  =  "%s"' % preparedName)
+                result = self.run_cbq_query(
+                    'select * from system:active_requests  where preparedName  =  "%s"'
+                    % preparedName)
                 if not result['metrics']['resultCount'] == 0:
                     self.threadFailure = True
-                    logging.error('THE QUERY FOR name "%s" WAS NOT KILLED AND IS STILL IN ACTIVE_REQUESTS'
-                                  % preparedName)
+                    logging.error(
+                        'THE QUERY FOR name "%s" WAS NOT KILLED AND IS STILL IN ACTIVE_REQUESTS'
+                        % preparedName)
                     self.log.info(json.dumps(result, sort_keys=True, indent=3))
                     return
 
+    '''Helper to check if a prepared statement/multiple prepared statements can be killed by node'''
+    def run_kill_prepared_by_node(self,e,t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
                 self.query = "select * from system:prepareds"
                 result = self.run_cbq_query()
                 name = result['results'][0]['prepareds']['name']
                 secondname = result['results'][1]['prepareds']['name']
 
-                thread1 = threading.Thread(name='run_prepared', target=self.execute_prepared,
+                thread1 = threading.Thread(name='run_prepared',
+                                           target=self.execute_prepared,
                                            args=(name, self.servers[0]))
-                thread2 = threading.Thread(name='run_prepared', target=self.execute_prepared,
+                thread2 = threading.Thread(name='run_prepared',
+                                           target=self.execute_prepared,
                                            args=(name, self.servers[0]))
-                thread3 = threading.Thread(name='run_prepared', target=self.execute_prepared,
+                thread3 = threading.Thread(name='run_prepared',
+                                           target=self.execute_prepared,
                                            args=(secondname, self.servers[1]))
 
                 thread1.start()
@@ -656,24 +671,30 @@ class QueryMonitoringTests(QueryTests):
 
                 # Check if a request can be killed by query node
                 logging.info("CHECKING IF A QUERY CAN BE KILLED BY NODE")
-                self.run_cbq_query('delete from system:active_requests where node  =  "%s:%s"'
-                                   % (self.servers[0].ip,self.servers[0].port))
-                result = self.run_cbq_query('select * from system:active_requests  where node  =  "%s:%s"'
-                                            % (self.servers[0].ip,self.servers[0].port))
-                if not result['metrics']['resultCount'] == 1:
+                time.sleep(0.3)
+                self.run_cbq_query(
+                    'delete from system:active_requests where node  =  "%s:%s"'
+                    % (self.servers[0].ip, self.servers[0].port))
+                result = self.run_cbq_query(
+                    'select * from system:active_requests  where node  =  "%s:%s"'
+                    % (self.servers[0].ip, self.servers[0].port), server=self.servers[1])
+                if not result['metrics']['resultCount'] == 0:
                     self.threadFailure = True
                     logging.error('THE QUERIES FOR node "%s" WERE NOT KILLED AND ARE STILL IN ACTIVE_REQUESTS'
                                   % self.servers[0].ip)
                     self.log.info(json.dumps(result, sort_keys=True, indent=3))
                     return
 
-                result = self.run_cbq_query("select * from system:active_requests")
+                result = self.run_cbq_query(
+                    'select * from system:active_requests  where node  =  "%s:%s"'
+                    % (self.servers[1].ip, self.servers[1].port))
                 if not result['metrics']['resultCount'] == 2:
-                    self.threadFailure = True
-                    logging.error('THE QUERIES FOR node "%s" WERE NOT KILLED AND ARE STILL IN ACTIVE_REQUESTS'
-                                  % self.servers[0].ip)
-                    self.log.info(json.dumps(result, sort_keys=True, indent=3))
-                    return
+                     self.threadFailure = True
+                     logging.error(
+                        'THE QUERIES FOR node "%s" SHOULD NOT HAVE BEEN KILLED'
+                         % self.servers[1].ip)
+                     self.log.info(json.dumps(result, sort_keys=True, indent=3))
+                     return
 
 ##############################################################################################
 #
@@ -714,8 +735,8 @@ class QueryMonitoringTests(QueryTests):
         for i in range(num_entries*2):
             self.run_cbq_query('select * from default')
 
+        time.sleep(1)
         result = self.run_cbq_query('select * from system:completed_requests')
-        self.log.info(json.dumps(result, sort_keys=True, indent=3))
         self.assertTrue(result['metrics']['resultCount'] == 10)
 
         # negative should disable the limit
@@ -727,6 +748,7 @@ class QueryMonitoringTests(QueryTests):
         for i in range(100):
             self.run_cbq_query('select * from default')
 
+        time.sleep(1)
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertTrue(result['metrics']['resultCount'] == 110)
 

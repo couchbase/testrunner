@@ -594,12 +594,15 @@ class QueryCurlTests(QueryTests):
         -Test with a max-time that will result in a successful transfer of data'''
     def test_max_time(self):
         n1ql_query = 'select * from default union select * from default'
-        select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','max-time':1})" % (n1ql_query,self.username,self.password)
+        select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','max-time':1})" \
+                                                                 % (n1ql_query,self.username,self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['errors'][0]['msg'], 'Errorevaluatingprojection.-cause:curl:Timeoutwasreached')
 
-        select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','max-time':5})" % (n1ql_query,self.username,self.password)
+        n1ql_query = 'select * from default'
+        select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','max-time':5})" \
+                                                                 % (n1ql_query,self.username,self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['results'][0]['$1']['metrics']['resultCount'], 2016 * self.docs_per_day)
