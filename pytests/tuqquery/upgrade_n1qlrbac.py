@@ -337,8 +337,7 @@ class UpgradeN1QLRBAC(RbacN1QL, NewUpgradeBaseTest):
         self.query_select_insert_update_delete_helper()
         self.query = 'select * from system:user_info'
         actual_result = self.run_cbq_query(query = self.query)
-        self.log.error(actual_result['metrics']['resultCount'])
-        #self.assertEqual(actual_result['metrics']['resultCount'], 17)
+        self.assertEqual(actual_result['metrics']['resultCount'], 23)
         self.check_permissions_helper()
         self.change_permissions_and_verify_new_users()
 
