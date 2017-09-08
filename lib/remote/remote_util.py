@@ -27,7 +27,7 @@ from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_FROM_VERSION_3,\
                           COUCHBASE_FROM_SPOCK, SYSTEMD_SERVER
-from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import COUCHBASE_RELEASE_VERSIONS_3, CB_RELEASE_BUILDS
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK
@@ -38,6 +38,7 @@ from testconstants import WIN_COUCHBASE_BIN_PATH,\
                           WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH, WIN_TMP_PATH_RAW
+from testconstants import WIN_UNZIP
 
 from testconstants import MAC_CB_PATH, MAC_COUCHBASE_BIN_PATH
 
@@ -2142,10 +2143,10 @@ class RemoteMachineShellConnection:
             exist = self.file_exists(version_path, VERSION_FILE)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
-                cb_releases_version = ["2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
-                                       "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1",
-                                       "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
-                                       "3.1.3", "3.1.5"]
+                cb_releases_version = []
+                for x in CB_RELEASE_BUILDS:
+                    if int(CB_RELEASE_BUILDS[x]):
+                        cb_releases_version.append(x)
 
                 build_name, short_version, full_version = \
                     self.find_build_version(version_path, VERSION_FILE, product)
@@ -3554,7 +3555,6 @@ class RemoteMachineShellConnection:
                 os.remove(dest_path)
         return headerInfo, bucketMap
 
-    def execute_cbtransfer(self, source, destination, command_options=''):
         transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             transfer_command = '/home/%s%scbtransfer' % (self.username,
@@ -3938,6 +3938,26 @@ class RemoteMachineShellConnection:
                 success = True
                 self.log_command_output(o, r)
         return success
+
+    def check_cmd(self, cmd):
+        """
+           Some tests need some commands to run.
+           Copy or install command in server if they are not available
+        """
+        out, err = self.execute_command(cmd)
+        if self.info.type.lower() == 'windows':
+            wget = "/cygdrive/c/automation/wget.exe"
+            if out and "UnZip 5.52 of 28 February 2005, by Info-ZIP" in out[0]:
+                log.info("unzip command is ready")
+            elif err and "command not found" in err[0]:
+                self.execute_command("cd /bin; %s --no-check-certificate -q %s "
+                                                             % (wget, WIN_UNZIP))
+                out, err = self.execute_command(cmd)
+                if out and "UnZip 5.52 of 28 February 2005, by Info-ZIP" in out[0]:
+                    log.info("unzip command is ready")
+                else:
+                    mesg = "Failed to download %s " % cmd
+                    self.stop_current_python_running(mesg)
 
     def check_openssl_version(self, deliverable_type, openssl, version):
 
