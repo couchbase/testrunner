@@ -3555,6 +3555,7 @@ class RemoteMachineShellConnection:
                 os.remove(dest_path)
         return headerInfo, bucketMap
 
+    def execute_cbtransfer(self, source, destination, command_options=''):
         transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             transfer_command = '/home/%s%scbtransfer' % (self.username,
