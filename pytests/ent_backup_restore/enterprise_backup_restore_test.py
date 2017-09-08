@@ -18,7 +18,7 @@ from tasks.future import TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
-    COUCHBASE_FROM_4DOT6
+                          COUCHBASE_FROM_4DOT6, ENT_BKRS, ENT_BKRS_FTS
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID = 20485
@@ -1085,11 +1085,25 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         shell.execute_command("rm -rf %s " % self.backupset.directory)
         fts = ""
+        backup_file = ENT_BKRS
         if self.create_fts_index:
+            backup_file = ENT_BKRS_FTS
             fts = "-fts"
+        backup_dir_found = False
+        backup_dir = "entbackup" + fts
+        output, error = shell.execute_command("ls | grep entbackup")
+        self.log.info("check if %s dir exists on this server " % backup_dir)
+        if output:
+            for x in output:
+                if x == backup_dir:
+                    backup_dir_found = True
+        if not backup_dir_found:
+            self.log.info("%s dir does not exist on this server.  Downloading.. "
+                                                                   % backup_dir)
+            shell.execute_command("%s -q %s " % (self.wget, backup_file))
+            shell.execute_command("tar -zxvf %s.tgz " % backup_dir)
         if "-" in self.cluster_new_role:
             self.cluster_new_role = self.cluster_new_role.replace("-", ",")
-        """ Thing to do: Move entbackup* to S3 if tests run in server pools """
         shell.execute_command("cp -r entbackup%s %s/entbackup" % (fts, self.tmp_path))
         output, error = shell.execute_command("cd %s/backup/*/*/data; " \
                                               "unzip shar*.zip" \
@@ -1146,6 +1160,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if failed_persisted_bucket:
                 self.fail("Buckets %s did not persisted." % failed_persisted_bucket)
 
+            self.sleep(3)
             rest = RestConnection(self.master)
             actual_keys = rest.get_active_key_count("default")
             print "\nActual keys in default bucket: %s \n" % actual_keys

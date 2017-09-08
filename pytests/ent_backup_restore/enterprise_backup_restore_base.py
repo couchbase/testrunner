@@ -69,6 +69,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         self.root_path = LINUX_ROOT_PATH
+        self.wget = "wget"
         self.os_name = "linux"
         self.tmp_path = "/tmp/"
         if info == 'linux':
@@ -81,6 +82,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         elif info == 'windows':
             self.os_name = "windows"
             self.cmd_ext = ".exe"
+            self.wget = "/cygdrive/c/automation/wget.exe"
             self.database_path = WIN_COUCHBASE_DATA_PATH
             self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
             self.root_path = WIN_ROOT_PATH
