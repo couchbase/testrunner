@@ -1108,14 +1108,12 @@ class RbacN1QL(QueryTests):
         #     self.assertTrue(str(res).find("'code': 13014")!=-1)
         # else:
         #     self.assertTrue(res['metrics']['resultCount']> 0)
-        if(role != "ro_admin" and role != "replication_admin" and role != "query_insert(default)" and role != "query_delete(default)" and role != "query_update(default)" and role != "bucket_full_access(default)" and role != "query_system_catalog"):
+        if(role != "ro_admin" and role != "replication_admin" and role != "query_insert(default)" and role != "query_delete(default)" and role != "query_update(default)" and role != "bucket_full_access(default)" and role != "query_system_catalog" and role != "views_admin(default)"):
            self.query = "prepare st1 from select * from default union select * from default union select * from default"
            res = self.curl_with_roles(self.query)
            self.query = 'execute st1'
            res = self.curl_with_roles(self.query)
-           print res
-
-           if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "views_admin(default)" or role == "views_admin" or role == "replication_admin" ):
+           if(role == "bucket_admin(standard_bucket0)" or role == "views_admin(standard_bucket0)" or role == "replication_admin" ):
              self.assertTrue(str(res).find("'code': 4040")!=-1)
            elif(role == "select(default)" or role == "query_select(default)"):
              self.assertTrue(res['metrics']['resultCount']== 0)
