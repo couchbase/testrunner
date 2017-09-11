@@ -325,6 +325,7 @@ class QueryCurlTests(QueryTests):
         # Get the output from the actual curl and test it against the n1ql curl query
         curl_output = self.shell.execute_command("%s https://jsonplaceholder.typicode.com/todos"
                                                  % self.curl_path)
+        self.log.info(curl_output)
         # The above command returns a tuple, we want the first element of that tuple
         expected_curl = self.convert_list_to_json(curl_output[0])
 
@@ -338,6 +339,7 @@ class QueryCurlTests(QueryTests):
         # Test for more complex data
         curl_output = self.shell.execute_command("%s https://jsonplaceholder.typicode.com/users"
                                                  % self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jsonplaceholder.typicode.com/users'"
         query = "select curl("+ url + ")"
@@ -348,6 +350,7 @@ class QueryCurlTests(QueryTests):
         # Test for a website in production (the website above is only used to provide json endpoints with fake data)
         curl_output = self.shell.execute_command("%s http://data.colorado.gov/resource/4ykn-tg5h.json/"
                                                  %self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'http://data.colorado.gov/resource/4ykn-tg5h.json/'"
         query = "select curl("+ url + ")"
@@ -389,6 +392,7 @@ class QueryCurlTests(QueryTests):
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
                                                  % self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
@@ -401,6 +405,7 @@ class QueryCurlTests(QueryTests):
     def test_external_json_jira(self):
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  %self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
@@ -412,6 +417,7 @@ class QueryCurlTests(QueryTests):
     def test_external_json_jira_with_header(self):
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  %self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
 
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
@@ -429,6 +435,7 @@ class QueryCurlTests(QueryTests):
     def test_array_of_json(self):
         curl_output = self.shell.execute_command("%s https://api.github.com/users/ikandaswamy/repos"
                                                  %self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://api.github.com/users/ikandaswamy/repos'"
         query="select raw curl("+ url +",{'header':'User-Agent: ikandaswamy'}) list"
@@ -474,6 +481,7 @@ class QueryCurlTests(QueryTests):
     def test_curl_prepared(self):
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json -d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
                                                  % self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json_with_spacing(curl_output[0])
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
@@ -647,6 +655,7 @@ class QueryCurlTests(QueryTests):
             "{0} https://query.yahooapis.com/v1/public/yql --data 'q=select%20*%20from%20yahoo."
             "finance.quotes%20where%20symbol%20in%20(%22HDP%22)&format=json&diagnostics=true&env="
             "store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback='".format(self.curl_path))
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://query.yahooapis.com/v1/public/yql'"
         query="select temp.query.results from curl("+ url + ", "
@@ -662,6 +671,7 @@ class QueryCurlTests(QueryTests):
             "{0} https://query.yahooapis.com/v1/public/yql --data 'q=select%20*%20from%20yahoo."
             "finance.quotes%20where%20symbol%20in%20(%22HDP%22)%20AND%20YearLow=%226.42%22&format="
             "json&diagnostics=true&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback='".format(self.curl_path))
+        self.log.info(curl_output2)
         expected_curl2 = self.convert_list_to_json(curl_output2[0])
         options = "{'data-urlencode':['q=select * from yahoo.finance.quotes where symbol in " \
                   "(\\\"HDP\\\") AND YearLow=\"6.42\"','format=json','diagnostics=true'," \
@@ -713,6 +723,7 @@ class QueryCurlTests(QueryTests):
             "%s --get https://maps.googleapis.com/maps/api/geocode/json -d "
             "'address=santa+cruz&components=country:ES&key"
             "=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'" % self.curl_path)
+        self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options = "{'get':False,'request':'GET','data': " \
