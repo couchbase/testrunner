@@ -13,7 +13,6 @@ from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-from numpy import float_
 
 
 class EvictionKV(EvictionBase):
