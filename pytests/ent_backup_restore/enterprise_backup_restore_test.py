@@ -836,6 +836,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         else:
             subcommand = self.input.param("subcommand", None)
         cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
+        if display_option == "--help":
+            display_option = self.long_help_flag
+        elif display_option == "-h":
+            self.long_help_flag = self.short_help_flag
         cmd += " %s %s " % (subcommand, display_option)
 
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)

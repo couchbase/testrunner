@@ -72,6 +72,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.wget = "wget"
         self.os_name = "linux"
         self.tmp_path = "/tmp/"
+        self.long_help_flag = "--help"
+        self.short_help_flag = "-h"
         if info == 'linux':
             if self.nonroot:
                 base_path = "/home/%s" % self.master.ssh_username
@@ -87,6 +89,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
             self.root_path = WIN_ROOT_PATH
             self.tmp_path = WIN_TMP_PATH
+            self.long_help_flag = "help"
+            self.short_help_flag = "h"
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
             self.cli_command_location = MAC_COUCHBASE_BIN_PATH
