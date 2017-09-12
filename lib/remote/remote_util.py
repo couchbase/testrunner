@@ -489,6 +489,14 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
             o, r = self.execute_command("taskkill /F /T /IM erl.exe*")
             self.log_command_output(o, r)
+            o, r = self.execute_command("tasklist | grep erl.exe")
+            kill_all = False
+            while len(o) >= 1 and not kill_all:
+                self.execute_command("taskkill /F /T /IM erl.exe*")
+                o, r = self.execute_command("tasklist | grep erl.exe")
+                if len(o) == 0:
+                    kill_all = True
+                    log.info("all erlang processes were killed")
         else:
             o, r = self.execute_command("kill "
                         " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
@@ -2076,6 +2084,7 @@ class RemoteMachineShellConnection:
         end_time = time.time() + float(timeout_in_seconds)
         process_ended = False
         process_running = False
+        count_process_not_run = 0
         while time.time() < end_time and not process_ended:
             output, error = self.execute_command("tasklist | grep {0}" \
                                                  .format(process_name))
@@ -2089,8 +2098,17 @@ class RemoteMachineShellConnection:
                              .format(process_name, self.ip))
                     process_ended = True
                 else:
-                    log.error("{1}: process {0} may not run" \
+                    if count_process_not_run < 5:
+                        log.error("{1}: process {0} may not run" \
                               .format(process_name, self.ip))
+                        self.sleep(5)
+                        count_process_not_run += 1
+                    else:
+                        log.error("{1}: process {0} did not run after 25 seconds"
+                                                   .format(process_name, self.ip))
+                        mesg = "kill in/uninstall job due to process was not run" \
+                                                     .format(process_name, self.ip)
+                        self.stop_current_python_running(mesg)
         if time.time() >= end_time and not process_ended:
             log.info("Process {0} on node {1} is still running"
                      " after 10 minutes VERSION.txt file was removed"
