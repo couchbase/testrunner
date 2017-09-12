@@ -73,7 +73,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
-        self.sleep(20)
+        self.sleep(120)
         self.add_built_in_server_user()
         ops_map = self.generate_operation_map("before")
         if "create_index" in ops_map and not self.build_index_after_create:
@@ -116,6 +116,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         for th in upgrade_th:
             th.join()
         log.info("==== Upgrade Complete ====")
+        self.sleep(120)
         node_version = RestConnection(server_out[0]).get_nodes_versions()
         for service in self.services_map.keys():
             for node in self.nodes_out_list:
@@ -265,6 +266,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             for th in upgrade_th:
                 th.join()
             log.info("==== Upgrade Complete ====")
+            self.sleep(120)
             rest = RestConnection(self.master)
             nodes_all = rest.node_statuses()
             for cluster_node in nodes_all:
@@ -335,7 +337,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
-        self.sleep(20)
+        self.sleep(120)
         self.add_built_in_server_user()
         indexer_node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(indexer_node)
@@ -373,7 +375,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
-        self.sleep(20)
+        self.sleep(120)
         self.add_built_in_server_user()
         for indexer_node in self.nodes_in_list:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -412,6 +414,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             upgrade_th = self._async_update(self.upgrade_to, [node])
             for th in upgrade_th:
                 th.join()
+            self.sleep(120)
             log.info("Rebalancing kv node {0} in after upgrade...".format(node.ip))
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [node], [],
@@ -428,6 +431,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         upgrade_th = self._async_update(self.upgrade_to, query_nodes)
         for th in upgrade_th:
             th.join()
+        self.sleep(120)
         services_in = ["n1ql" for x in range(len(query_nodes))]
         log.info("Rebalancing query nodes in after upgrade...")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -443,6 +447,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                              index_nodes)
         rebalance.result()
         upgrade_th = self._async_update(self.upgrade_to, index_nodes)
+        self.sleep(120)
         rest = RestConnection(self.master)
         log.info("Setting indexer storage mode to {0}...".format(self.post_upgrade_gsi_type))
         status = rest.set_indexer_storage_mode(storageMode=self.post_upgrade_gsi_type)
@@ -514,6 +519,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 upgrade_th = self._async_update(self.upgrade_to, [node])
                 for th in upgrade_th:
                      th.join()
+                self.sleep(120)
                 log.info("==== Upgrade Complete ====")
                 log.info("Adding node back to cluster...")
                 rebalance = self.cluster.async_rebalance(active_nodes,
