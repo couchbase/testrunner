@@ -1515,22 +1515,31 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         try:
-            backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                              backup_host=self.backupset.backup_host,
-                                                              directory=self.backupset.directory,
-                                                              name=self.backupset.name,
-                                                              resume=self.backupset.resume, purge=self.backupset.purge,
-                                                              no_progress_bar=self.no_progress_bar,
-                                                              cli_command_location=self.cli_command_location,
-                                                              cb_version=self.cb_version)
-            self.sleep(10)
+            backup_result = self.cluster.async_backup_cluster(
+                                                cluster_host=self.backupset.cluster_host,
+                                                backup_host=self.backupset.backup_host,
+                                                directory=self.backupset.directory,
+                                                name=self.backupset.name,
+                                                resume=self.backupset.resume,
+                                                purge=self.backupset.purge,
+                                                no_progress_bar=self.no_progress_bar,
+                                                cli_command_location=self.cli_command_location,
+                                                cb_version=self.cb_version)
+            if self.os_name != "windows":
+                self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-            conn.kill_erlang()
+            conn.kill_erlang(self.os_name)
             output = backup_result.result(timeout=200)
-            self.assertTrue(
-                "Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
-                "Expected error message not thrown by Backup 180 seconds after erlang crash")
-            self.log.info("Expected error message thrown by Backup 180 seconds after erlang crash")
+            if self.debug_logs:
+                print "Raw output from backup run: ", output
+            error_mesgs = ["Error backing up cluster: Not all data was backed up due to",
+                "No connection could be made because the target machine actively refused it."]
+            error_found = False
+            for error in error_mesgs:
+                if error in output[0]:
+                    error_found = True
+            if not error_found:
+                raise("Expected error message not thrown by Backup 180 seconds after erlang crash")
         except Exception as ex:
             self.fail(str(ex))
         finally:
