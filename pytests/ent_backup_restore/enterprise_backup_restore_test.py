@@ -1591,27 +1591,29 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         try:
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-            conn.pause_memcached()
+            conn.pause_memcached(self.os_name)
             self.sleep(10)
-            backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                              backup_host=self.backupset.backup_host,
-                                                              directory=self.backupset.directory,
-                                                              name=self.backupset.name,
-                                                              resume=self.backupset.resume, purge=self.backupset.purge,
-                                                              no_progress_bar=self.no_progress_bar,
-                                                              cli_command_location=self.cli_command_location,
-                                                              cb_version=self.cb_version)
+            backup_result = self.cluster.async_backup_cluster(
+                                                cluster_host=self.backupset.cluster_host,
+                                                backup_host=self.backupset.backup_host,
+                                                directory=self.backupset.directory,
+                                                name=self.backupset.name,
+                                                resume=self.backupset.resume,
+                                                purge=self.backupset.purge,
+                                                no_progress_bar=self.no_progress_bar,
+                                                cli_command_location=self.cli_command_location,
+                                                cb_version=self.cb_version)
 
             self.sleep(10)
             output = backup_result.result(timeout=200)
-            self.assertTrue(
-                "Error backing up cluster: Unable to find the latest vbucket sequence numbers." in output[0],
+            mesg = "Error backing up cluster: Unable to find the latest vbucket sequence numbers."
+            self.assertTrue( mesg in output[0],
                 "Expected error message not thrown by Backup 180 seconds after memcached crash")
-            self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
+            self.log.info("Expected error thrown by Backup 180 seconds after memcached crash")
         except Exception as ex:
             self.fail(str(ex))
         finally:
-            conn.unpause_memcached()
+            conn.unpause_memcached(self.os_name)
             self.sleep(30)
             conn.disconnect()
 

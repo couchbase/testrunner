@@ -38,7 +38,7 @@ from testconstants import WIN_COUCHBASE_BIN_PATH,\
                           WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH, WIN_TMP_PATH_RAW
-from testconstants import WIN_UNZIP
+from testconstants import WIN_UNZIP, WIN_PSSUSPEND
 
 from testconstants import MAC_CB_PATH, MAC_COUCHBASE_BIN_PATH
 
@@ -3246,13 +3246,26 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
 
-    def pause_memcached(self):
-        o, r = self.execute_command("killall -SIGSTOP memcached")
-        self.log_command_output(o, r)
+    def pause_memcached(self, os="linux"):
+        log.info("*** pause memcached process ***")
+        if os == "windows":
+            self.check_cmd("pssuspend")
+            cmd = "pssuspend $(tasklist | grep  memcached | gawk '{printf $2}')"
+            o, r = self.execute_command(cmd)
+            self.log_command_output(o, [])
+        else:
+            o, r = self.execute_command("killall -SIGSTOP memcached")
+            self.log_command_output(o, r)
 
-    def unpause_memcached(self):
-        o, r = self.execute_command("killall -SIGCONT memcached")
-        self.log_command_output(o, r)
+    def unpause_memcached(self, os="linux"):
+        log.info("*** unpause memcached process ***")
+        if os == "windows":
+            cmd = "pssuspend -r $(tasklist | grep  memcached | gawk '{printf $2}')"
+            o, r = self.execute_command(cmd)
+            self.log_command_output(o, [])
+        else:
+            o, r = self.execute_command("killall -SIGCONT memcached")
+            self.log_command_output(o, r)
 
     def pause_beam(self):
         o, r = self.execute_command("killall -SIGSTOP beam")
@@ -3964,16 +3977,29 @@ class RemoteMachineShellConnection:
            Copy or install command in server if they are not available
         """
         out, err = self.execute_command(cmd)
+        found_command = False
+        download_command = ""
+        command_output = ""
         if self.info.type.lower() == 'windows':
             wget = "/cygdrive/c/automation/wget.exe"
-            if out and "UnZip 5.52 of 28 February 2005, by Info-ZIP" in out[0]:
-                log.info("unzip command is ready")
-            elif err and "command not found" in err[0]:
-                self.execute_command("cd /bin; %s --no-check-certificate -q %s "
-                                                             % (wget, WIN_UNZIP))
-                out, err = self.execute_command(cmd)
-                if out and "UnZip 5.52 of 28 February 2005, by Info-ZIP" in out[0]:
+            if cmd == "unzip":
+                download_command = WIN_UNZIP
+                command_output = "UnZip 5.52 of 28 February 2005, by Info-ZIP"
+                if out and command_output in out[0]:
                     log.info("unzip command is ready")
+                    found_command = True
+            if cmd == "pssuspend":
+                download_command = WIN_PSSUSPEND
+                command_output = "PsSuspend suspends or resumes processes"
+                if out and command_output in out[0]:
+                    log.info("PsSuspend command is ready to run")
+                    found_command = True
+            if not found_command and err and "command not found" in err[0]:
+                self.execute_command("cd /bin; %s --no-check-certificate -q %s "
+                                                        % (wget, download_command))
+                out, err = self.execute_command(cmd)
+                if out and command_output in out[0]:
+                    log.info("%s command is ready" % cmd)
                 else:
                     mesg = "Failed to download %s " % cmd
                     self.stop_current_python_running(mesg)

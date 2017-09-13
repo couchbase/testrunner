@@ -206,6 +206,7 @@ QUERY_SUBQUERY = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/qu
 ENT_BKRS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/entbackup.tgz"
 ENT_BKRS_FTS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/entbackup-fts.tgz"
 WIN_UNZIP = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/win-cmd/unzip.exe"
+WIN_PSSUSPEND = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/win-cmd/pssuspend.exe"
 # the maximum number of processes to allow under high_throughput data loading
 THROUGHPUT_CONCURRENCY = 4
 # determine wether or not to use high throughput
