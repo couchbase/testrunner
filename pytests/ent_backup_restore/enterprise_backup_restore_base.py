@@ -15,7 +15,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestHelper, Bucket as CBBucket
 from couchbase_helper.document import View
 from testconstants import LINUX_COUCHBASE_BIN_PATH,\
-                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH,\
+                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH_RAW,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT
@@ -85,7 +85,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.os_name = "windows"
             self.cmd_ext = ".exe"
             self.wget = "/cygdrive/c/automation/wget.exe"
-            self.database_path = WIN_COUCHBASE_DATA_PATH
+            self.database_path = WIN_COUCHBASE_DATA_PATH_RAW
             self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
             self.root_path = WIN_ROOT_PATH
             self.tmp_path = WIN_TMP_PATH
@@ -103,6 +103,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.non_master_host = self.input.param("non-master", False)
         self.compact_backup = self.input.param("compact-backup", False)
         self.merged = self.input.param("merged", None)
+        self.expire_time = self.input.param('expire_time', 0)
         self.after_upgrade_merged = self.input.param("after-upgrade-merged", False)
         self.create_gsi = self.input.param("create-gsi", False)
         self.do_restore = self.input.param("do-restore", False)
@@ -868,7 +869,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info("Search for '%s' in database info" % text_search)
             for x in output:
                 if text_search in x:
-                    self.log.info("Found %s in database" % text_search)
+                    self.log.info("*** Found %s in database %s" % (text_search, x))
                     found = True
                     break
         else:

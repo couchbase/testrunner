@@ -1356,16 +1356,19 @@ class RemoteMachineShellConnection:
             compact each vbucket with cbcompact tools
         """
         for node in nodes:
-            log.info("Purge delete keys in %s vbuckets.  It will take times " % vbuckets)
+            log.info("Purge 'deleted' keys in all %s vbuckets in node %s.  It will take times "
+                                                                         % (vbuckets, node.ip))
             for vbucket in range(0, vbuckets):
-                self.execute_command("%scbcompact%s %s:11210 compact %s --dropdeletes "
-                                     " --purge-only-up-to-seq=%s" % (self.bin_path,
-                                                                     self.cmd_ext,
-                                                                     node, cbadmin_user,
-                                                                     cbadmin_password,
-                                                                     vbucket,
-                                                                     upto_seq),
-                                                                     debug=False)
+                cmd = "%scbcompact%s %s:11210 compact %d -u %s -p %s "\
+                      "--dropdeletes --purge-only-upto-seq=%d" \
+                                                  % (self.bin_path,
+                                                     self.cmd_ext,
+                                                     node.ip, vbucket,
+                                                     cbadmin_user,
+                                                     cbadmin_password,
+                                                     upto_seq)
+                self.execute_command(cmd, debug=False)
+        log.info("done compact")
 
     def set_vbuckets_win(self, vbuckets):
         bin_path = WIN_COUCHBASE_BIN_PATH

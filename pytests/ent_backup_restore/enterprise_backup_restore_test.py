@@ -694,7 +694,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         rest = RestConnection(self.master)
         cluster_nodes = rest.get_nodes()
-        for bucket in self.buckets:
+        for bucket in RestConnection(self.master).get_buckets():
             found = self.get_info_in_database(self.backupset.cluster_host, bucket, "deleted")
             if found:
                 shell = RemoteMachineShellConnection(self.backupset.cluster_host)
@@ -704,15 +704,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.log.info("Load another docs to bucket %s " % bucket.name)
                 create_gen3 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
                                             end=self.num_items / 4)
-                self._load_bucket(bucket.name, self.master, create_gen3, "create")
+                self._load_bucket(bucket, self.master, create_gen3, "create",
+                                                                 self.expire_time)
                 self.backup_cluster()
                 create_gen4 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
                                             end=self.num_items / 4)
-                self._load_bucket(bucket.name, self.master, create_gen4, "create")
+                self._load_bucket(bucket, self.master, create_gen4, "create",
+                                                                 self.expire_time)
                 self.backup_cluster()
+                self.backupset.end = 3
                 status, output, message = self.backup_merge()
                 if not status:
                     self.fail(message)
+            else:
+                self.fail("cbcompact failed to purge deleted key")
 
     def test_merge_backup_with_failover_logs(self):
         """
@@ -1729,24 +1734,25 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
-            restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                                backup_host=self.backupset.backup_host,
-                                                                backups=self.backups, start=self.backupset.start,
-                                                                end=self.backupset.end,
-                                                                directory=self.backupset.directory,
-                                                                name=self.backupset.name,
-                                                                force_updates=self.backupset.force_updates,
-                                                                no_progress_bar=self.no_progress_bar,
-                                                                cli_command_location=self.cli_command_location,
-                                                                cb_version=self.cb_version)
+            restore_result = self.cluster.async_restore_cluster(
+                                            restore_host=self.backupset.restore_cluster_host,
+                                            backup_host=self.backupset.backup_host,
+                                            backups=self.backups, start=self.backupset.start,
+                                            end=self.backupset.end,
+                                            directory=self.backupset.directory,
+                                            name=self.backupset.name,
+                                            force_updates=self.backupset.force_updates,
+                                            no_progress_bar=self.no_progress_bar,
+                                            cli_command_location=self.cli_command_location,
+                                            cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
-            conn.kill_erlang()
+            conn.kill_erlang(self.os_name)
             output = restore_result.result(timeout=200)
             self.assertTrue(
-                "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
+                "Error restoring cluster: Not all data was sent to Couchbase" in output[0],
                 "Expected error message not thrown by Restore 180 seconds after erlang crash")
-            self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
+            self.log.info("Expected error thrown by Restore 180 seconds after erlang crash")
         except Exception as ex:
             self.fail(str(ex))
         finally:
@@ -1805,28 +1811,29 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
-            restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                                backup_host=self.backupset.backup_host,
-                                                                backups=self.backups, start=self.backupset.start,
-                                                                end=self.backupset.end,
-                                                                directory=self.backupset.directory,
-                                                                name=self.backupset.name,
-                                                                force_updates=self.backupset.force_updates,
-                                                                no_progress_bar=self.no_progress_bar,
-                                                                cli_command_location=self.cli_command_location,
-                                                                cb_version=self.cb_version)
+            restore_result = self.cluster.async_restore_cluster(
+                                            restore_host=self.backupset.restore_cluster_host,
+                                            backup_host=self.backupset.backup_host,
+                                            backups=self.backups, start=self.backupset.start,
+                                            end=self.backupset.end,
+                                            directory=self.backupset.directory,
+                                            name=self.backupset.name,
+                                            force_updates=self.backupset.force_updates,
+                                            no_progress_bar=self.no_progress_bar,
+                                            cli_command_location=self.cli_command_location,
+                                            cb_version=self.cb_version)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
-            conn.pause_memcached()
+            conn.pause_memcached(self.os_name)
             output = restore_result.result(timeout=200)
             self.assertTrue(
-                "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
+                "Error restoring cluster: Not all data was sent to Couchbase" in output[0],
                 "Expected error message not thrown by Restore 180 seconds after memcached crash")
-            self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
+            self.log.info("Expected error thrown by Restore 180 seconds after memcached crash")
         except Exception as ex:
             self.fail(str(ex))
         finally:
-            conn.unpause_memcached()
+            conn.unpause_memcached(self.os_name)
             self.sleep(30)
 
     def test_backup_merge(self):
@@ -2048,11 +2055,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             cb_version=self.cb_version)
         self.sleep(3)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        op, er = conn.execute_command("ps aux | grep 'beam.smp' | awk '{print $2}'")
-        print "\nErlang process IDs before killed\n", op
-        conn.kill_erlang()
-        op, er = conn.execute_command("ps aux | grep 'beam.smp' | awk '{print $2}'")
-        print "\nErlang process IDs after killed\n", op
+        conn.kill_erlang(self.os_name)
         output = backup_result.result(timeout=200)
         self.log.info(str(output))
         status, output, message = self.backup_list()
