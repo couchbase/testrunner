@@ -164,7 +164,7 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("remove [] in file")
                 self.shell.execute_command("sed%s -i '/^\[\]/d' %s"
                                                  % (self.cmd_ext,export_file))
-            output, _ = self.shell.execute_command("awk%s 'END {print NR}' %s"
+            output, _ = self.shell.execute_command("gawk%s 'END {print NR}' %s"
                                                      % (self.cmd_ext, export_file))
             self.assertTrue(int(total_items) == int(output[0]),
                                      "doc in bucket: %s != doc in export file: %s"

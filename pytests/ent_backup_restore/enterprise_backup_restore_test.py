@@ -589,8 +589,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
-        self.backupset.end = randrange(self.backupset.start,
-                                       self.backupset.number_of_backups + 1)
+        self.backupset.end = 2
+
         self.merged = True
         merge_threads = []
         merge_thread = Thread(target=self.backup_merge)
@@ -605,7 +605,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         result, output, _ = self.backup_merge()
-        self.backupset.end -= 1
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
@@ -638,15 +637,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.number_of_backups += 1
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
-        self.backupset.end = randrange(self.backupset.start,
-                                       self.backupset.number_of_backups + 1)
+        self.backupset.end = 3
         self.merged = True
         status, output, _ = self.backup_merge()
         if status:
             self.fail("This merge should fail due to last backup killed, not complete yet")
-        elif "Error merging data: Backup Meta " in output[0]:
+        elif "Error merging data: Unable to merge" in output[0]:
             self.log.info("Test failed as expected as last backup failed to complete")
-        self.backupset.end -= 1
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
@@ -657,9 +654,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         self.sleep(1, "times need for cbbackupmgr process run")
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        if self.cmd_ext == "":
-            cmd = "ps aux | grep cbbackupmgr | awk '{print $2}' | xargs kill -9"
-            output, error = shell.execute_command(cmd)
+        if self.os_name != "windows":
+            cmd = "ps aux | grep cbbackupmgr | gawk '{print $2}' | xargs kill -9"
+            output, _ = shell.execute_command(cmd)
+        else:
+            cmd = "tasklist | grep cbbackupmgr | gawk '{printf$2}'"
+            output, _ = shell.execute_command(cmd)
+            if output:
+                kill_cmd = "taskkill /F /T /pid %d " % int(output[0])
+                output, _ = shell.execute_command(kill_cmd)
+                if output and "SUCCESS" not in output[0]:
+                    self.fail("Failed to kill cbbackupmgr on windows")
 
     def test_merge_backup_with_purge_deleted_keys(self):
         """
@@ -1653,7 +1658,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.kill_erlang(self.os_name)
         conn.start_couchbase()
-        output = restore_result.result(timeout=500)
+        timeout_now = 400
+        if self.os_name == "windows":
+            timeout_now = 600
+        output = restore_result.result(timeout_now=500)
         self.assertTrue("Restore completed successfully" in output[0],
                         "Restore failed with erlang crash and restart within 180 seconds")
         self.log.info("Restore succeeded with erlang crash and restart within 180 seconds")

@@ -205,13 +205,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.input.param("skip_cleanup", False):
             remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
             info = remote_client.extract_remote_info().type.lower()
+            self.tmp_path = "/tmp/"
             if info == 'linux' or info == 'mac':
                 backup_directory = "/tmp/entbackup"
             elif info == 'windows':
+                self.tmp_path = WIN_TMP_PATH
                 backup_directory = WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
-            validation_files_location = "/tmp/backuprestore" + self.master.ip
+            validation_files_location = "%sbackuprestore" % self.tmp_path + self.master.ip
             if info == 'linux':
                 command = "rm -rf {0}".format(backup_directory)
                 output, error = remote_client.execute_command(command)
