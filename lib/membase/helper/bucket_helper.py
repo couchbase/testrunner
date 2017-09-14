@@ -165,6 +165,8 @@ class BucketOperationHelper():
                         except:
                             log.error("Unable to get timings for bucket")
                         test_case.fail(msg)
+            log.info("sleep 2 seconds to make sure all buckets were deleted completely.")
+            time.sleep(2)
 
     @staticmethod
     def delete_bucket_or_assert(serverInfo, bucket='default', test_case=None):

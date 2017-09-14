@@ -7,7 +7,7 @@ from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
-    WIN_COUCHBASE_SAMPLE_PATH, \
+    WIN_COUCHBASE_SAMPLE_PATH_C, \
     WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
     WIN_COUCHBASE_LOGS_PATH, WIN_TMP_PATH, WIN_TMP_PATH_RAW, \
     WIN_BACKUP_PATH, LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, LINUX_CB_PATH,\
@@ -90,6 +90,7 @@ class CliBaseTest(BaseTestCase):
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         self.root_path = LINUX_ROOT_PATH
         self.tmp_path = "/tmp/"
+        self.tmp_path_raw = "/tmp/"
         self.cmd_backup_path = LINUX_BACKUP_PATH
         self.backup_path = LINUX_BACKUP_PATH
         self.cmd_ext = ""
@@ -118,7 +119,7 @@ class CliBaseTest(BaseTestCase):
             self.cmd_backup_path = WIN_BACKUP_C_PATH
             self.backup_path = WIN_BACKUP_PATH
             self.cli_command_path = WIN_COUCHBASE_BIN_PATH
-            self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH
+            self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH_C
             self.log_path = WIN_COUCHBASE_LOGS_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'

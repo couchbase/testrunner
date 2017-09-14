@@ -567,14 +567,19 @@ class ImportExportTests(CliBaseTest):
                 for bucket in self.buckets:
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
                         -b default -d file:///tmp/export/default -f list -g %index%  """
+                    des_file = self.des_file
+                    if "/cygdrive/c" in des_file:
+                        des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
                                   "-d %s%s -f %s -g key::%%index%% %s %s %s %s %s %s"\
                              % (self.cli_command_path, cmd, self.cmd_ext,
-                                            self.imex_type, server.ip, bucket.name,
-                                    import_method, self.des_file, self.format_type,
-                                                   threads_flag, self.threads_flag,
-                                                          errors_flag, errors_path,
-                                                              logs_flag, logs_path)
+                                self.imex_type, server.ip, bucket.name,
+                                import_method,
+                                des_file,
+                                self.format_type, threads_flag,
+                                self.threads_flag,
+                                errors_flag, errors_path,
+                                logs_flag, logs_path)
                     self.log.info("command to run %s " % imp_cmd_str)
                     output, error = self.shell.execute_command(imp_cmd_str)
                     self.log.info("Output from execute command %s " % output)
@@ -598,14 +603,18 @@ class ImportExportTests(CliBaseTest):
                                              server.ip, self.num_items, bucket.name)
                     self.shell.execute_command(load_cmd)
                     export_file = self.ex_path + bucket.name
+                    export_file_cmd = export_file
+                    if "/cygdrive/c" in export_file_cmd:
+                        export_file_cmd = export_file_cmd.replace("/cygdrive/c", "c:")
                     cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
                                     "  -f %s %s %s %s %s %s %s %s %s"\
                                      % (self.cli_command_path, cmd, self.cmd_ext,
-                                          self.imex_type, server.ip, bucket.name,
-                                 self.format_type, self.output_flag, export_file,
-                                 threads_flag, self.threads_flag,
-                                 logs_flag, logs_path,
-                                 include_flag, self.include_key_flag)
+                                        self.imex_type, server.ip, bucket.name,
+                                        self.format_type, self.output_flag,
+                                        export_file_cmd,
+                                        threads_flag, self.threads_flag,
+                                        logs_flag, logs_path,
+                                        include_flag, self.include_key_flag)
                     output, error = self.shell.execute_command(cmd_str)
                     self.log.info("Output from execute command %s " % output)
                     error_check = self._check_output_option_flags(output,
@@ -776,7 +785,7 @@ class ImportExportTests(CliBaseTest):
         if self.secure_conn:
             # bin_path, cert_path, user, password, server_cert
             cacert = self.shell.get_cluster_certificate_info(self.cli_command_path,
-                                                             self.tmp_path,
+                                                             self.tmp_path_raw,
                                                              "Administrator",
                                                              "password",
                                                              self.master)
@@ -1106,12 +1115,13 @@ class ImportExportTests(CliBaseTest):
 
             if self.imex_type == "json":
                 export_file = self.tmp_path + "bucket_data"
+                export_file_cmd = self.tmp_path_raw + "bucket_data"
                 self.shell.execute_command("rm -rf %s " % export_file)
                 cmd = "%scbexport%s %s -c %s -u %s -p '%s' -b %s -f %s -o %s"\
                               % (self.cli_command_path, self.cmd_ext,
                                  self.imex_type,
                                  self.master.ip, "cbadminbucket", "password",
-                                 "default", self.format_type, export_file)
+                                 "default", self.format_type, export_file_cmd)
                 output, error = self.shell.execute_command(cmd)
                 self.shell.log_command_output(output, error)
             format_type = "json"
