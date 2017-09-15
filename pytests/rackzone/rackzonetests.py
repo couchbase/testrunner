@@ -164,80 +164,92 @@ class RackzoneTests(RackzoneBaseTest):
         nodes_in_zone = {}
         nodes_in_zone["Group 1"] = [serverInfo.ip]
         """ Create zone base on params zone in test"""
-        if int(self.zone) > 1:
-            for i in range(1,int(self.zone)):
-                a = "Group "
-                zones.append(a + str(i + 1))
-                rest.add_zone(a + str(i + 1))
-        servers_rebalanced = []
-        self.user = serverInfo.rest_username
-        self.password = serverInfo.rest_password
-        if len(self.servers)%int(self.zone) != 0:
-            msg = "unbalance zone.  Recaculate to make balance ratio node/zone"
-            raise Exception(msg)
-        """ Add node to each zone """
-        k = 1
-        for i in range(0, self.zone):
-            if "Group 1" in zones[i]:
-                total_node_per_zone = int(len(self.servers))/int(self.zone) - 1
-            else:
-                nodes_in_zone[zones[i]] = []
-                total_node_per_zone = int(len(self.servers))/int(self.zone)
-            for n in range(0,total_node_per_zone):
-                nodes_in_zone[zones[i]].append(self.servers[k].ip)
-                rest.add_node(user=self.user, password=self.password, \
-                    remoteIp=self.servers[k].ip, port='8091', zone_name=zones[i])
-                k += 1
-        otpNodes = [node.id for node in rest.node_statuses()]
-        """ Start rebalance and monitor it. """
-        started = rest.rebalance(otpNodes, [])
+        try:
+            if int(self.zone) > 1:
+                for i in range(1,int(self.zone)):
+                    a = "Group "
+                    zone_name = a + str(i + 1)
+                    zones.append(zone_name)
+                    rest.add_zone(zone_name)
+            servers_rebalanced = []
+            self.user = serverInfo.rest_username
+            self.password = serverInfo.rest_password
+            if len(self.servers)%int(self.zone) != 0:
+                msg = "unbalance zone.  Recaculate to make balance ratio node/zone"
+                raise Exception(msg)
+            """ Add node to each zone """
+            k = 1
+            for i in range(0, self.zone):
+                if "Group 1" in zones[i]:
+                    total_node_per_zone = int(len(self.servers))/int(self.zone) - 1
+                else:
+                    nodes_in_zone[zones[i]] = []
+                    total_node_per_zone = int(len(self.servers))/int(self.zone)
+                for n in range(0,total_node_per_zone):
+                    nodes_in_zone[zones[i]].append(self.servers[k].ip)
+                    rest.add_node(user=self.user, password=self.password, \
+                        remoteIp=self.servers[k].ip, port='8091', zone_name=zones[i])
+                    k += 1
+            otpNodes = [node.id for node in rest.node_statuses()]
+            """ Start rebalance and monitor it. """
+            started = rest.rebalance(otpNodes, [])
 
-        if started:
-            try:
-                result = rest.monitorRebalance()
-            except RebalanceFailedException as e:
-                self.log.error("rebalance failed: {0}".format(e))
-                return False, servers_rebalanced
-            msg = "successfully rebalanced cluster {0}"
-            self.log.info(msg.format(result))
-        """ Verify replica of one node should not in same zone of active. """
-        self._verify_replica_distribution_in_zones(nodes_in_zone, "tap")
+            if started:
+                try:
+                    result = rest.monitorRebalance()
+                except RebalanceFailedException as e:
+                    self.log.error("rebalance failed: {0}".format(e))
+                    return False, servers_rebalanced
+                msg = "successfully rebalanced cluster {0}"
+                self.log.info(msg.format(result))
+            """ Verify replica of one node should not in same zone of active. """
+            self._verify_replica_distribution_in_zones(nodes_in_zone, "tap")
 
-        """ Simulate entire nodes down in zone(s) by killing erlang process"""
-        if self.shutdown_zone >= 1 and self.zone >=2:
-            self.log.info("Start to shutdown nodes in zone to failover")
-            for down_zone in range(1, self.shutdown_zone + 1):
-                down_zone = "Group " + str(down_zone + 1)
-                for sv in nodes_in_zone[down_zone]:
-                    for si in self.servers:
-                        if si.ip == sv:
-                            server = si
+            """ Simulate entire nodes down in zone(s) by killing erlang process"""
+            if self.shutdown_zone >= 1 and self.zone >=2:
+                self.log.info("Start to shutdown nodes in zone to failover")
+                for down_zone in range(1, self.shutdown_zone + 1):
+                    down_zone = "Group " + str(down_zone + 1)
+                    for sv in nodes_in_zone[down_zone]:
+                        for si in self.servers:
+                            if si.ip == sv:
+                                server = si
 
-                    shell = RemoteMachineShellConnection(server)
-                    shell.kill_erlang(self.os_name)
-                    """ Failover down node(s)"""
-                    self.log.info("----> start failover node %s" % server.ip)
-                    failed_over = rest.fail_over("ns_1@" + server.ip)
-                    if not failed_over:
-                        self.log.info("unable to failover the node the first time. \
-                                       try again in 75 seconds..")
-                        time.sleep(75)
+                        shell = RemoteMachineShellConnection(server)
+                        shell.kill_erlang(self.os_name)
+                        """ Failover down node(s)"""
+                        self.log.info("----> start failover node %s" % server.ip)
                         failed_over = rest.fail_over("ns_1@" + server.ip)
-                    self.assertTrue(failed_over, "unable to failover node after erlang killed")
-        otpNodes = [node.id for node in rest.node_statuses()]
-        self.log.info("----> start rebalance after failover.")
-        """ Start rebalance and monitor it. """
-        started = rest.rebalance(otpNodes, [])
-        if started:
-            try:
-                result = rest.monitorRebalance()
-            except RebalanceFailedException as e:
-                self.log.error("rebalance failed: {0}".format(e))
-                return False, servers_rebalanced
-            msg = "successfully rebalanced in selected nodes from the cluster ? {0}"
-            self.log.info(msg.format(result))
-        """ Compare current keys in bucekt with initial loaded keys count. """
-        self._verify_total_keys(self.servers[0], self.num_items)
+                        if not failed_over:
+                            self.log.info("unable to failover the node the first time. \
+                                           try again in 75 seconds..")
+                            time.sleep(75)
+                            failed_over = rest.fail_over("ns_1@" + server.ip)
+                        self.assertTrue(failed_over,
+                                        "unable to failover node after erlang was killed")
+            otpNodes = [node.id for node in rest.node_statuses()]
+            self.log.info("----> start rebalance after failover.")
+            """ Start rebalance and monitor it. """
+            started = rest.rebalance(otpNodes, [])
+            if started:
+                try:
+                    result = rest.monitorRebalance()
+                except RebalanceFailedException as e:
+                    self.log.error("rebalance failed: {0}".format(e))
+                    return False, servers_rebalanced
+                msg = "successfully rebalanced in selected nodes from the cluster ? {0}"
+                self.log.info(msg.format(result))
+            """ Compare current keys in bucekt with initial loaded keys count. """
+            self._verify_total_keys(self.servers[0], self.num_items)
+        except Exception as e:
+            self.log.error(e)
+            raise
+        finally:
+            self.log.info("---> remove all zones in cluster")
+            rm_zones = rest.get_zone_names()
+            for zone in rm_zones:
+                if zone != "Group 1":
+                    rest.delete_zone(zone)
 
     """ to run this test, use these params:
             nodes_init=3,version=2.5.1-xx,type=community   """
