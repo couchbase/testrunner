@@ -38,8 +38,10 @@ class RackzoneBaseTest(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
+        self.os_name = "linux"
         if type.lower() == 'windows':
             self.is_linux = False
+            self.os_name = "windows"
         else:
             self.is_linux = True
 

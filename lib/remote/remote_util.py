@@ -487,12 +487,12 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("taskkill /F /T /IM epmd.exe*")
             self.log_command_output(o, r)
-            o, r = self.execute_command("taskkill /F /T /IM erl.exe*")
+            o, r = self.execute_command("taskkill /F /T /IM erl*")
             self.log_command_output(o, r)
             o, r = self.execute_command("tasklist | grep erl.exe")
             kill_all = False
             while len(o) >= 1 and not kill_all:
-                self.execute_command("taskkill /F /T /IM erl.exe*")
+                self.execute_command("taskkill /F /T /IM erl*")
                 o, r = self.execute_command("tasklist | grep erl.exe")
                 if len(o) == 0:
                     kill_all = True
