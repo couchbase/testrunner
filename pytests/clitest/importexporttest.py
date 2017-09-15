@@ -269,6 +269,8 @@ class ImportExportTests(CliBaseTest):
                                     field_separator_flag = "--field-separator %s "\
                                                               % self.field_separator
                         key_gen = "key::%index%"
+                        if self.cmd_ext:
+                            self.des_file = self.des_file.replace("/cygdrive/c", "c:")
                         imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                     " -b %s -d %s%s %s %s -g %s %s "\
                               % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -532,10 +534,13 @@ class ImportExportTests(CliBaseTest):
                     self.shell.execute_command("rm -rf %serror"
                                                    % self.cli_command_path)
             elif self.errors_flag == "relative_path":
+                if self.os == 'windows':
+                    self.log.info("skip relative path test for -e flag on windows")
+                    return
                 errors_path = "~/error"
                 self.shell.execute_command("rm -rf ~/error")
             elif self.errors_flag == "absolute_path":
-                errors_path = self.tmp_path + "errors/" + self.errors_flag
+                errors_path = self.tmp_path_raw + "errors/" + self.errors_flag
         logs_flag = ""
         logs_path = ""
         if self.logs_flag != "":
@@ -553,10 +558,13 @@ class ImportExportTests(CliBaseTest):
                     self.shell.execute_command("rm -rf %slog"
                                                     % self.cli_command_path)
             elif self.logs_flag == "relative_path":
+                if self.os == 'windows':
+                    self.log.info("skip relative path test for -l flag on windows")
+                    return
                 logs_path = "~/log"
                 self.shell.execute_command("rm -rf ~/log")
             elif self.logs_flag == "absolute_path":
-                logs_path = self.tmp_path + "logs/" + self.logs_flag
+                logs_path = self.tmp_path_raw + "logs/" + self.logs_flag
         if self.cmd_ext:
             if logs_path and logs_path.startswith("/cygdrive/"):
                 logs_path = logs_path.replace("/cygdrive/c", "c:")
@@ -585,6 +593,10 @@ class ImportExportTests(CliBaseTest):
                     self.log.info("Output from execute command %s " % output)
                     error_check = self._check_output_option_flags(output,
                                                   errors_path, logs_path)
+                    if logs_path:
+                        self.shell.execute_command("rm -rf %s" % logs_path)
+                    if errors_path:
+                        self.shell.execute_command("rm -rf %s" % errors_path)
                     if error_check and not self._check_output("successfully", output):
                         self.fail("failed to run optional flags")
         elif self.test_type == "export":
@@ -619,6 +631,8 @@ class ImportExportTests(CliBaseTest):
                     self.log.info("Output from execute command %s " % output)
                     error_check = self._check_output_option_flags(output,
                                                               errors_path, logs_path)
+                    if logs_path:
+                        self.shell.execute_command("rm -rf %s" % logs_path)
                     if error_check and not self._check_output("successfully", output):
                         self.fail("failed to run optional flags")
                     if self.include_key_flag:

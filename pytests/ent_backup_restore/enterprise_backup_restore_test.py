@@ -1661,7 +1661,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         timeout_now = 400
         if self.os_name == "windows":
             timeout_now = 600
-        output = restore_result.result(timeout_now=500)
+        output = restore_result.result(timeout=timeout_now)
         self.assertTrue("Restore completed successfully" in output[0],
                         "Restore failed with erlang crash and restart within 180 seconds")
         self.log.info("Restore succeeded with erlang crash and restart within 180 seconds")
@@ -3223,12 +3223,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                             cli_command_location=self.cli_command_location)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.backup_host)
-            conn.terminate_process(process_name="cbbackupmgr")
-            #o, e = conn.execute_command("ps aux | grep '/opt/couchbase/bin//cbbackupmgr merge'")
-            #split = o[0].split(" ")
-            #split = [s for s in split if s]
-            #merge_pid = split[1]
-            #conn.execute_command("kill -9 " + str(merge_pid))
+            self._kill_cbbackupmgr()
             merge_result.result(timeout=400)
         except TimeoutError:
             status, output, message = self.backup_list()
@@ -3261,12 +3256,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                                 cli_command_location=self.cli_command_location)
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.backup_host)
-            conn.terminate_process(process_name="cbbackupmgr")
-            #o, e = conn.execute_command("ps aux | grep '/opt/couchbase/bin//cbbackupmgr compact'")
-            #split = o[0].split(" ")
-            #split = [s for s in split if s]
-            #compact_pid = split[1]
-            #conn.execute_command("kill -9 " + str(compact_pid))
+            self._kill_cbbackupmgr()
             compact_result.result(timeout=400)
         except TimeoutError:
             status, output_after_compact, message = self.backup_list()
