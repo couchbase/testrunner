@@ -12,5 +12,6 @@
   "disable_views": false,
   "disable_gsi_indexes": false,
   "disable_ft_indexes": false,
-  "disable_data": false
+  "disable_data": false,
+  "filter_vbuckets": []
 }
