@@ -1118,6 +1118,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             shell.execute_command("tar -zxvf %s.tgz " % backup_dir)
         if "-" in self.cluster_new_role:
             self.cluster_new_role = self.cluster_new_role.replace("-", ",")
+        shell.check_cmd("unzip")
         shell.execute_command("cp -r entbackup%s %s/entbackup" % (fts, self.tmp_path))
         output, error = shell.execute_command("cd %s/backup/*/*/data; " \
                                               "unzip shar*.zip" \
