@@ -3979,6 +3979,8 @@ class RemoteMachineShellConnection:
            Some tests need some commands to run.
            Copy or install command in server if they are not available
         """
+        log.info("\n---> Run command %s to check if it is ready on server %s"
+                                                            % (cmd, self.ip))
         out, err = self.execute_command(cmd)
         found_command = False
         download_command = ""
@@ -4005,6 +4007,20 @@ class RemoteMachineShellConnection:
                     log.info("%s command is ready" % cmd)
                 else:
                     mesg = "Failed to download %s " % cmd
+                    self.stop_current_python_running(mesg)
+        elif self.info.distribution_type.lower() == 'centos':
+            if cmd == "unzip":
+                command_output = "UnZip 6.00 of 20 April 2009"
+                if out and command_output in out[0]:
+                    log.info("unzip command is ready")
+                    found_command = True
+            if not found_command and err and "command not found" in err[0]:
+                self.execute_command("yum install -y unzip")
+                out, err = self.execute_command(cmd)
+                if out and command_output in out[0]:
+                    log.info("%s command is ready" % cmd)
+                else:
+                    mesg = "Failed to install %s " % cmd
                     self.stop_current_python_running(mesg)
 
     def check_openssl_version(self, deliverable_type, openssl, version):
