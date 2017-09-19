@@ -60,6 +60,7 @@ class QueryTests(BaseTestCase):
         if self.input.param("start_cmd", True) and self.input.param("cbq_version", "sherlock") != 'sherlock':
             self._start_command_line_query(self.master, user=self.master.rest_username, password=self.master.rest_password)
         self.use_rest = self.input.param("use_rest", True)
+        self._sdk = self.input.param("_sdk",False)
         self.hint_index = self.input.param("hint", None)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
@@ -4414,7 +4415,14 @@ class QueryTests(BaseTestCase):
                 hint = ' USE INDEX (%s using %s) ' % (self.hint_index, self.index_type)
                 query = query.replace(from_clause, from_clause + hint)
 
-            if self.analytics:
+            if self._sdk:
+                result = rest.query_tool_sdk(query, buckets1 = self.buckets,query_params=query_params,
+                                                            is_prepared=is_prepared,
+                                                            named_prepare=self.named_prepare,
+                                                            encoded_plan=encoded_plan,
+                                                            servers=self.servers)
+                return result
+            elif self.analytics:
                 query = query + ";"
                 for bucket in self.buckets:
                     query = query.replace(bucket.name,bucket.name+"_shadow")

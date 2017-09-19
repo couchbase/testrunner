@@ -28,6 +28,11 @@ from membase.api.exception import BucketCreationException, ServerSelfJoinExcepti
     BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed, BucketCompactionException
 log = logger.Logger.get_logger()
 
+from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
+from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, UNBOUNDED, CONSISTENCY_REQUEST, MutationState
+
+
 # helper library methods built on top of RestConnection interface
 
 class RestHelper(object):
@@ -3093,6 +3098,49 @@ class RestConnection(object):
             return json.loads(content)
         except ValueError:
             return content
+
+    def query_tool_sdk(self, query, buckets1,timeout=650, query_params={}, rv=None, is_prepared=False, named_prepare=None,verbose = True, encoded_plan=None,servers=None):
+        if len(servers)>1:
+            ip = servers[1].ip
+        else:
+            ip = self.ip
+        connectStr = "couchbase://%s" % ip
+        cluster = Cluster(connectStr)
+        user = query_params['creds'][0]['user'].encode('utf-8')
+        passwd = query_params['creds'][0]['pass'].encode('utf-8')
+        authenticator = PasswordAuthenticator(user, passwd)
+        cluster.authenticate(authenticator)
+        for bucket in buckets1:
+         cb = cluster.open_bucket(bucket.name)
+        query = N1QLQuery(query)
+
+        if is_prepared:
+           query.adhoc = False
+        if 'scan_consistency' in query_params:
+          if query_params['scan_consistency'] == 'REQUEST_PLUS':
+             query.consistency = CONSISTENCY_REQUEST # request_plus is currently mapped to the CONSISTENT_REQUEST constant in the Python SDK
+          elif query_params['scan_consistency'] == 'STATEMENT_PLUS':
+            query.consistency = STATEMENT_PLUS
+          elif query_params['scan_consistency'] == 'NOT_BOUNDED':
+            query.consistency = UNBOUNDED
+          else:
+            raise ValueError('Unknown consistency')
+        if 'scan_vector' in query_params and query_params['scan_vector'] and 'rv' in query_params and query_params['rv']:
+           ms = MutationState()
+           ms.add_results(rv)
+           query.consistent_with(ms)
+
+        query.timeout = timeout
+
+        if verbose:
+           log.info('query params : {0}'.format(query_params))
+
+        row_iter = cb.n1ql_query(query)
+
+        content = []
+        for row in row_iter:
+           content.append(row)
+        return json.dumps(content)
 
     def analytics_tool(self, query, port=8095, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
