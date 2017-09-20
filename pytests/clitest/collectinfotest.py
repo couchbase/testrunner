@@ -183,8 +183,11 @@ class CollectinfoTests(CliBaseTest):
                     if self.debug_logs:
                         print "File size: ", file_size
                     if file_size == 0:
-                        empty_logs = True
-                        self.log.error("%s is empty" % (output_line[1]))
+                        if "kv_trace" in output_line[1] and self.node_down:
+                            continue
+                        else:
+                            empty_logs = True
+                            self.log.error("%s is empty" % (output_line[1]))
 
                 if missing_logs:
                     raise Exception("Bad log file package generated. Missing logs")
