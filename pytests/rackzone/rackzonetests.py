@@ -15,8 +15,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_FROM_VERSION_3
-from testconstants import LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH,\
-                          MAC_COUCHBASE_BIN_PATH
 
 
 
@@ -371,15 +369,6 @@ class RackzoneTests(RackzoneBaseTest):
 
     def _verify_replica_distribution_in_zones(self, nodes, command, saslPassword = ""):
         shell = RemoteMachineShellConnection(self.servers[0])
-        info = shell.extract_remote_info()
-        if info.type.lower() == 'linux':
-            cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
-        elif info.type.lower() == 'windows':
-            cbstat_command = "%scbstats.exe" % (WIN_COUCHBASE_BIN_PATH)
-        elif info.type.lower() == 'mac':
-            cbstat_command = "%scbstats" % (MAC_COUCHBASE_BIN_PATH)
-        else:
-            raise Exception("Not support OS")
         saslPassword = ''
         versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
@@ -387,9 +376,9 @@ class RackzoneTests(RackzoneBaseTest):
                 if versions[0][:5] in COUCHBASE_VERSION_2:
                     command = "tap"
                     cmd  = "%s %s:11210 %s -b %s -p '%s' "\
-                            % (cbstat_command, node, command,"default", saslPassword)
+                            % (self.cbstat_command, node, command,"default", saslPassword)
                     cmd += "| grep :vb_filter: "\
-                           "| awk '{print $1}' "\
+                           "| gawk '{print $1}' "\
                            "| sed 's/eq_tapq:replication_ns_1@//g' "\
                            "| sed 's/:vb_filter://g' "
                     output, error = shell.execute_command(cmd)
@@ -398,7 +387,7 @@ class RackzoneTests(RackzoneBaseTest):
                     if 5 <= versions[0]:
                         saslPassword = self.master.rest_password
                     cmd  = "%s %s:11210 %s -b %s -u Administrator -p '%s' "\
-                            % (cbstat_command, node, command,"default", saslPassword)
+                            % (self.cbstat_command, node, command,"default", saslPassword)
                     cmd += "| grep :replication:ns_1@%s |  grep vb_uuid "\
                            "| gawk '{print $1}' "\
                            "| sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' "\
