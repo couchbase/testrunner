@@ -355,57 +355,45 @@ class RackzoneTests(RackzoneBaseTest):
         else:
             raise Exception("There is not zone with name: %s in cluster" % name)
 
-    def _verify_replica_distribution_in_zones(self, nodes, commmand, saslPassword = ""):
+    def _verify_replica_distribution_in_zones(self, nodes, command, saslPassword = ""):
         shell = RemoteMachineShellConnection(self.servers[0])
-        info = shell.extract_remote_info()
-        if info.type.lower() == 'linux':
-            cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        elif info.type.lower() == 'windows':
-            cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
-        elif info.type.lower() == 'mac':
-            cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
-        else:
-            raise Exception("Not support OS")
         saslPassword = ''
         versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
             for node in nodes[group]:
                 if versions[0][:5] in COUCHBASE_VERSION_2:
                     command = "tap"
-                    if not info.type.lower() == 'windows':
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' \
-                            | xargs | sed 's/eq_tapq:replication_ns_1@//g'  | sed 's/:vb_filter://g' \
-                            " % (cbstat_command, node, command,"default", saslPassword)
-                    elif info.type.lower() == 'windows':
-                        """ standalone gawk.exe should be copy to ../ICW/bin for command below to work.
-                            Ask IT to do this if you don't know how """
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
-                               | sed.exe 's/eq_tapq:replication_ns_1@//g'  | sed.exe 's/:vb_filter://g' \
-                               " % (cbstat_command, node, command,"default", saslPassword)
-                    output, error = shell.execute_command(commands)
+                    cmd  = "%s %s:11210 %s -b %s -p '%s' "\
+                            % (self.cbstat_command, node, command,"default", saslPassword)
+                    cmd += "| grep :vb_filter: "\
+                           "| gawk '{print $1}' "\
+                           "| sed 's/eq_tapq:replication_ns_1@//g' "\
+                           "| sed 's/:vb_filter://g' "
+                    output, error = shell.execute_command(cmd)
                 elif versions[0][:5] in COUCHBASE_FROM_VERSION_3:
                     command = "dcp"
-                    if not info.type.lower() == 'windows':
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \
-                                    awk '{print $1}' | sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
-                                    sed 's/:.*//g' | sort -u | xargs \
-                                   " % (cbstat_command, node, command,"default", saslPassword, node, node)
-                        output, error = shell.execute_command(commands)
-                    elif info.type.lower() == 'windows':
-                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :replication:ns_1@%s |  grep vb_uuid | \
-                                    gawk.exe '{print $1}' | sed.exe 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
-                                    sed.exe 's/:.*//g' \
-                                   " % (cbstat_command, node, command,"default", saslPassword, node, node)
-                        output, error = shell.execute_command(commands)
-                        output = sorted(set(output))
+                    if 5 <= versions[0]:
+                        saslPassword = self.master.rest_password
+                    cmd  = "%s %s:11210 %s -b %s -u Administrator -p '%s' "\
+                            % (self.cbstat_command, node, command,"default", saslPassword)
+                    cmd += "| grep :replication:ns_1@%s |  grep vb_uuid "\
+                           "| gawk '{print $1}' "\
+                           "| sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' "\
+                           "| sed 's/:.*//g' "\
+                            % (node, node)
+                    output, error = shell.execute_command(cmd)
+                    output = sorted(set(output))
                 shell.log_command_output(output, error)
                 output = output[0].split(" ")
                 if node not in output:
                     self.log.info("{0}".format(nodes))
-                    self.log.info("replicas of node {0} are in nodes {1}".format(node, output))
-                    self.log.info("replicas of node {0} are not in its zone {1}".format(node, group))
+                    self.log.info("replicas of node {0} are in nodes {1}"
+                                                   .format(node, output))
+                    self.log.info("replicas of node {0} are not in its zone {1}"
+                                                   .format(node, group))
                 else:
-                    raise Exception("replica of node {0} are on its own zone {1}".format(node, group))
+                    raise Exception("replica of node {0} are on its own zone {1}"
+                                                   .format(node, group))
         shell.disconnect()
 
     def _verify_total_keys(self, server, loaded_keys):

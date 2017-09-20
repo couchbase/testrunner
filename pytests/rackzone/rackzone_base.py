@@ -4,6 +4,8 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH,\
+                          MAC_COUCHBASE_BIN_PATH
 
 
 class RackzoneBaseTest(BaseTestCase):
@@ -38,15 +40,24 @@ class RackzoneBaseTest(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
+        self.os_name = "linux"
+        self.is_linux = True
+        self.cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         if type.lower() == 'windows':
             self.is_linux = False
-        else:
-            self.is_linux = True
+            self.os_name = "windows"
+            self.cbstat_command = "%scbstats.exe" % (WIN_COUCHBASE_BIN_PATH)
+        if type.lower() == 'mac':
+            self.cbstat_command = "%scbstats" % (MAC_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            self.cbstat_command = "/home/%s%scbstats" % (self.master.ssh_username,
+                                                         LINUX_COUCHBASE_BIN_PATH)
 
     def tearDown(self):
         """ Some test involve kill couchbase server.  If the test steps failed
             right after kill erlang process, we need to start couchbase server
             in teardown so that the next test will not be false failed """
+        super(RackzoneBaseTest, self).tearDown()
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             shell.start_couchbase()
