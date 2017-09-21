@@ -1264,8 +1264,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Enables firewall on restore host and validates if backup restore command throws expected error
         6. Disables firewall on restore host, restores and validates
         """
-        if self.os_name == "windows":
-            self.log.info("This firewall test does not run on windows")
+        if self.os_name == "windows" or self.nonroot:
+            self.log.info("This firewall test does not run on windows or nonroot user")
             return
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
