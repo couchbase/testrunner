@@ -1114,7 +1114,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not backup_dir_found:
             self.log.info("%s dir does not exist on this server.  Downloading.. "
                                                                    % backup_dir)
-            shell.execute_command("%s -q %s " % (self.wget, backup_file))
+            shell.execute_command("%s -q %s --no-check-certificate " % (self.wget, backup_file))
             shell.execute_command("tar -zxvf %s.tgz " % backup_dir)
         if "-" in self.cluster_new_role:
             self.cluster_new_role = self.cluster_new_role.replace("-", ",")
