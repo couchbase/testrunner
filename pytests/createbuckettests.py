@@ -6,6 +6,7 @@ import datetime
 import time
 from membase.api.exception import BucketCreationException
 from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
 from membase.helper.bucket_helper import BucketOperationHelper
 
@@ -158,25 +159,29 @@ class CreateMembaseBucketsTests(unittest.TestCase):
     def test_non_default_case_sensitive_same_port(self):
         postfix = uuid.uuid4()
         name = 'uppercase_{0}'.format(postfix)
-        for serverInfo in self.servers:
-            rest = RestConnection(serverInfo)
-            proxyPort = rest.get_nodes_self().moxi + 100
-            rest.create_bucket(bucket=name,
-                               ramQuotaMB=200,
-                               proxyPort=proxyPort)
-            msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
-            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+        master = self.servers[0]
+        rest = RestConnection(master)
+        proxyPort = rest.get_nodes_self().moxi + 100
+        shell = RemoteMachineShellConnection(master)
+        url = "http://%s:8091/pools/default/buckets" % master.ip
+        params = "name=%s&ramQuotaMB=200&authType=none&replicaNumber=1&proxyPort=%s" \
+                                                                   % (name, proxyPort)
+        cmd = "curl -X POST -u Administrator:password  -d '%s' %s" % (params, url)
+        output, error = shell.execute_command(cmd)
+        if output and "error" in output[0]:
+            self.fail("Fail to create bucket %s" % name)
 
-            self.log.info("user should not be able to create a new bucket on a an already used port")
-            name = 'UPPERCASE{0}'.format(postfix)
-            try:
-                rest.create_bucket(bucket=name,
-                                   ramQuotaMB=200,
-                                   proxyPort=proxyPort)
-                self.fail('create-bucket did not throw exception while creating a new bucket on an already used port')
-            #make sure it raises bucketcreateexception
-            except BucketCreationException as ex:
-                self.log.error(ex)
+        msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
+        self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+
+        name = 'UPPERCASE{0}'.format(postfix)
+        params = "name=%s&ramQuotaMB=200&authType=none&replicaNumber=1&proxyPort=%s" \
+                                                                   % (name, proxyPort)
+        cmd = "curl -X POST -u Administrator:password  -d '%s' %s" % (params, url)
+        output, error = shell.execute_command(cmd)
+        if output and 'port is already in use' not in output[0]:
+            self.log.error(output)
+            self.fail('create-bucket on same port failed as expected.')
 
     def test_less_than_minimum_memory_quota(self):
         postfix = uuid.uuid4()
