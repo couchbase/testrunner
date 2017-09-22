@@ -4,6 +4,7 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH,\
                           MAC_COUCHBASE_BIN_PATH
 
@@ -58,6 +59,7 @@ class RackzoneBaseTest(BaseTestCase):
             right after kill erlang process, we need to start couchbase server
             in teardown so that the next test will not be false failed """
         super(RackzoneBaseTest, self).tearDown()
+        ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             shell.start_couchbase()

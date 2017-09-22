@@ -361,10 +361,11 @@ class RackzoneTests(RackzoneBaseTest):
         versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
             for node in nodes[group]:
+                buckets = RestConnection(self.servers[0]).get_buckets()
                 if versions[0][:5] in COUCHBASE_VERSION_2:
                     command = "tap"
                     cmd  = "%s %s:11210 %s -b %s -p '%s' "\
-                            % (self.cbstat_command, node, command,"default", saslPassword)
+                            % (self.cbstat_command, node, command, buckets[0].name, saslPassword)
                     cmd += "| grep :vb_filter: "\
                            "| gawk '{print $1}' "\
                            "| sed 's/eq_tapq:replication_ns_1@//g' "\
@@ -375,7 +376,7 @@ class RackzoneTests(RackzoneBaseTest):
                     if 5 <= versions[0]:
                         saslPassword = self.master.rest_password
                     cmd  = "%s %s:11210 %s -b %s -u Administrator -p '%s' "\
-                            % (self.cbstat_command, node, command,"default", saslPassword)
+                            % (self.cbstat_command, node, command, buckets[0].name, saslPassword)
                     cmd += "| grep :replication:ns_1@%s |  grep vb_uuid "\
                            "| gawk '{print $1}' "\
                            "| sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' "\
