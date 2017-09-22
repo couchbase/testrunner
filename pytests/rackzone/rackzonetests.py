@@ -243,6 +243,8 @@ class RackzoneTests(RackzoneBaseTest):
             self.log.error(e)
             raise
         finally:
+            self.log.info("---> remove all nodes in all zones")
+            ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
             self.log.info("---> remove all zones in cluster")
             rm_zones = rest.get_zone_names()
             for zone in rm_zones:
