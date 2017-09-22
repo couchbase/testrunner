@@ -71,4 +71,3 @@ class RackzoneBaseTest(BaseTestCase):
         for zone in zones:
             if zone != "Group 1":
                 rest.delete_zone(zone)
-        super(RackzoneBaseTest, self).tearDown()
