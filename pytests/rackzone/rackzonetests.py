@@ -12,6 +12,7 @@ from membase.api.exception import RebalanceFailedException
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.bucket_helper import BucketOperationHelper
 from scripts.install import InstallerJob
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_FROM_VERSION_3
@@ -204,6 +205,7 @@ class RackzoneTests(RackzoneBaseTest):
             self._verify_replica_distribution_in_zones(nodes_in_zone, "tap")
 
             """ Simulate entire nodes down in zone(s) by killing erlang process"""
+            shutdown_nodes = []
             if self.shutdown_zone >= 1 and self.zone >=2:
                 self.log.info("Start to shutdown nodes in zone to failover")
                 for down_zone in range(1, self.shutdown_zone + 1):
@@ -212,6 +214,7 @@ class RackzoneTests(RackzoneBaseTest):
                         for si in self.servers:
                             if si.ip == sv:
                                 server = si
+                                shutdown_nodes.append(si)
 
                         shell = RemoteMachineShellConnection(server)
                         shell.kill_erlang(self.os_name)
@@ -244,6 +247,13 @@ class RackzoneTests(RackzoneBaseTest):
             raise
         finally:
             self.log.info("---> remove all nodes in all zones")
+            if shutdown_nodes:
+                for node in shutdown_nodes:
+                    conn = RemoteMachineShellConnection(node)
+                    self.log.info("---> re-start nodes %s after erlang killed " % node.ip)
+                    conn.start_couchbase()
+                    time.sleep(5)
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
             ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
             self.log.info("---> remove all zones in cluster")
             rm_zones = rest.get_zone_names()

@@ -3421,7 +3421,7 @@ class RemoteMachineShellConnection:
         file_path = "/opt/couchbase/etc/"
         if self.info.type.lower() == "windows":
             init_file = "service_start.bat"
-            file_path = "/cygdrive/c/Program Files/Couchbase/Server/bin"
+            file_path = "/cygdrive/c/Program\ Files/Couchbase/Server/bin/"
         backupfile = file_path + init_file + ".bak"
         sourceFile = file_path + init_file
         o, r = self.execute_command("mv " + backupfile + " " + sourceFile)
