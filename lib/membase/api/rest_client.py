@@ -317,7 +317,7 @@ class RestConnection(object):
                     self.cbas_port)
             elif "cbas" in self.services:
                 self.cbas_base_url = "http://{0}:{1}".format(self.ip, 8095)
-            
+
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
@@ -973,7 +973,7 @@ class RestConnection(object):
         headers = {'Content-Type': 'application/json',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
-        
+
         params = {'statement': statement, 'mode': mode, 'pretty': pretty,
                   'client_context_id': client_context_id}
         params = json.dumps(params)
@@ -2917,7 +2917,7 @@ class RestConnection(object):
                 return json_parsed[param]
         else:
             return None
-        
+
     def flush_bucket(self, bucket="default"):
         if isinstance(bucket, Bucket):
             bucket_name = bucket.name
@@ -3888,6 +3888,34 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
+    # Applicable to eventing service
+    '''
+        Save the Function so that it is visible in UI
+    '''
+    def save_function(self, name, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
+        url = "_p/event/saveAppTempStore/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            Deploy the Function
+    '''
+    def deploy_function(self, name, body, username="Administrator", password="password"):
+        authorization = base64.encodestring('%s:%s' % (username, password))
+        url = "_p/event/setApplication/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
 
 
 class MembaseServerVersion:
