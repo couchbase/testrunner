@@ -113,7 +113,6 @@ string_condition:
 	string_is_null |
 	string_not_equals_condition |
 	string_in_conidtion |
-	string_like_condition |
 	string_equals_condition ;
 
 string_equals_condition:
@@ -136,9 +135,6 @@ string_in_conidtion:
 
 string_is_null:
 	string_field IS NULL;
-
-string_like_condition:
-	string_field LIKE 'STRING_VALUES%' | string_field LIKE '%STRING_VALUES' | string_field LIKE STRING_VALUES | string_field LIKE '%STRING_VALUES%';
 
 string_field_list:
 	LIST;
