@@ -1,4 +1,5 @@
 from remote.remote_util import RemoteMachineShellConnection
+import time
 
 class CouchbaseCLI:
     def __init__(self, server, username, password, cb_version=None):
@@ -176,8 +177,10 @@ class CouchbaseCLI:
 
     def failover(self, failover_servers, force):
         options = self._get_default_options()
+        mesg = ""
         if failover_servers:
             options += " --server-failover " + str(failover_servers)
+            mesg = "failover ns_1@" + failover_servers.replace(":8091", "")
         if force:
             options += " --force"
 
@@ -185,7 +188,7 @@ class CouchbaseCLI:
         stdout, stderr = remote_client.couchbase_cli("failover", self.hostname,
                                                      options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Server failed over")
+        return stdout, stderr, self._was_success(stdout, mesg)
 
     def group_manage(self, create, delete, list, move_servers, rename, name,
                      to_group, from_group):
@@ -250,7 +253,7 @@ class CouchbaseCLI:
         stdout, stderr = remote_client.couchbase_cli("rebalance",
                                                      self.hostname, options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Rebalance complete")
+        return stdout, stderr, self._was_success(stdout, "rebalanced cluster")
 
     def rebalance_stop(self):
         options = self._get_default_options()
@@ -262,8 +265,18 @@ class CouchbaseCLI:
 
     def recovery(self, servers, recovery_type):
         options = self._get_default_options()
+        mesg = ""
+        server_recovery = ""
         if servers:
-            options += " --server-recovery " + str(servers)
+            if "," in servers:
+                servers = servers.split(",")
+                for server in servers:
+                    options += " --server-recovery " + str(server)
+                    server_recovery = server
+            else:
+                options += " --server-recovery " + str(servers)
+                server_recovery = servers
+            mesg = "setRecoveryType for node ns_1@" + server_recovery.replace(":8091", "")
         if recovery_type:
             options += " --recovery-type " + str(recovery_type)
 
@@ -271,13 +284,23 @@ class CouchbaseCLI:
         stdout, stderr = remote_client.couchbase_cli("recovery", self.hostname,
                                                      options)
         remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Servers recovered")
+        return stdout, stderr, self._was_success(stdout, mesg, server_info=server_recovery)
 
     def server_add(self, server, server_username, server_password, group_name,
                    services, index_storage_mode):
         options = self._get_default_options()
+        server_add = ""
         if server:
-            options += " --server-add " + str(server)
+            if "," in server:
+                servers = server.split(",")
+                for server in servers:
+                    options += " --server-add " + str(server)
+                    server_add = server
+            else:
+                options += " --server-add " + str(server)
+                server_add = server
+        else:
+            server = None
         if server_username:
             options += " --server-add-username " + str(server_username)
         if server_password:
@@ -292,8 +315,8 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("server-add",
                                                      self.hostname, options)
-        remote_client.disconnect()
-        return stdout, stderr, self._was_success(stdout, "Server added")
+        return stdout, stderr, self._was_success(stdout, "Server added",
+                                                 server_info=server_add)
 
     def server_readd(self, servers):
         options = self._get_default_options()
@@ -587,7 +610,7 @@ class CouchbaseCLI:
                 return False
         return True
 
-    def _was_success(self, stdout, message):
+    def _was_success(self, stdout, message, server_info=None):
         """Inspects each line of the command output and checks to see if
         the command succeeded
 
@@ -600,6 +623,9 @@ class CouchbaseCLI:
         """
 
         for line in stdout:
-            if line == "SUCCESS: " + message:
+            if "Server added" in message and server_info:
+                if "Server %s added" % server_info in line:
+                    return True
+            elif line == "SUCCESS: " + message:
                 return True
         return False
