@@ -37,7 +37,7 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=10000, cleanup_timers=False,
                                   dcp_stream_boundary="everything", deployment_status=True, log_level="TRACE",
-                                  rbacpass="asdasd", rbacrole="admin", rbacuser="eventing", skip_timer_threshold=86400,
+                                  rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket", skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=1, processing_status=True,
                                   cpp_worker_thread_count=1):
