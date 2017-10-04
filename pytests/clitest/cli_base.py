@@ -258,10 +258,10 @@ class CliBaseTest(BaseTestCase):
         if enable_index_replica is not None and enable_index_replica != result["replicaIndex"]:
             log.info("Replica index enabled does not match (%s vs %s)", enable_index_replica, result["replicaIndex"])
             return False
-
-        if priority == "high":
-            priority = 8
-        elif priority == "low":
+        if bucket_type != "memcached":
+            if priority == "high":
+                priority = 8
+        elif priority == "low" or bucket_type == "memcached":
             priority = 3
 
         if priority is not None and priority != result["threadsNumber"]:

@@ -27,7 +27,7 @@ class CouchbaseCLI:
             options += " --bucket-replica " + str(replica_count)
         if enable_replica_indexes is not None:
             options += " --enable-index-replica " + str(enable_replica_indexes)
-        if priority is not None:
+        if priority is not None  and bucket_type != "memcached":
             options += " --bucket-priority " + priority
         if enable_flush is not None:
             options += " --enable-flush " + str(enable_flush)
