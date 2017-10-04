@@ -1034,18 +1034,23 @@ class QueriesIndexTests(QueryTests):
         idx = "idx_country"
         idx2 = "gix_USMales"
         try:
-            self.query = "CREATE INDEX {0} ON `default`(`address[1][0]`.`country`) WHERE (`_id` = 'query-testemployee10194.855617-0')".format(idx)
+            self.query = "CREATE INDEX {0} ON `default`(`address`[1][0].`country`) WHERE (`_id` = 'query-testemployee10194.855617-0')".format(idx)
             self.run_cbq_query()
             created_indexes.append(idx)
-            self.query = "CREATE INDEX gix_USMales ON `default`(distinct (pairs(self))) WHERE (`_id` = 'query-testemployee10194.855617-0') and (`gender` = 'M') and (`address[1][0]`.`country` = 'United States of America')"
+            self.query = "CREATE INDEX gix_USMales ON `default`(distinct (pairs(self))) WHERE (`_id` = 'query-testemployee10194.855617-0') and (`gender` = 'M') and (`address`[1][0].`country` = 'United States of America')"
             self.run_cbq_query()
             created_indexes.append(idx2)
             self.query = "explain select count(*) from default where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("cover" not in str(plan))
-            self.assertTrue("IntersectScan" not in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='idx_country')
+            self.assertTrue("cover" in str(plan))
+            self.assertTrue("IntersectScan" in str(plan))
+            self.assertTrue(idx2 in str(plan['~children'][0]['scans'][0]) )
+            self.query = "select count(*) from default where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
+            actual_result = self.run_cbq_query()
+            self.query = "select count(*) from default use index(`#primary`) where _id = 'query-testemployee10194.855617-0' and address[1][0].country = 'United States of America' and gender = 'M'"
+            expected_result = self.run_cbq_query()
+            self.assertEqual(actual_result['results'],expected_result['results'])
         finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
@@ -3010,44 +3015,45 @@ class QueriesIndexTests(QueryTests):
             self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "value":"val1"} end AND any i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='rec1-1_record_by_index_map')
+            self.assertEqual(plan['~children'][0]['~children'][0]['#operator'] , 'IntersectScan')
+            self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['index'] == 'rec1-1_record_by_index_map' or plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']=='rec1-1_record_by_index_map')
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND any i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(sorted(actual_result['results'][0]['doc']) == ([u'data', u'indexMap', u'type']))
+            self.assertEqual(sorted(actual_result['results'][0]['doc']), ([u'data', u'indexMap', u'type']))
             self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE every i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND any i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='rec1-1_record_by_index_map')
+            self.assertTrue('rec1-1_record_by_index_map' in str(plan['~children'][0]['~children']))
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE every i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end or any i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result=self.run_cbq_query()
-            self.assertTrue(sorted(actual_result['results'][0]['doc']) == ([u'data', u'indexMap', u'type']))
+            self.assertEqual(sorted(actual_result['results'][0]['doc']) , ([u'data', u'indexMap', u'type']))
             self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND every i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='rec1-1_record_by_index_map')
+            self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'] , 'rec1-1_record_by_index_map')
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end or every i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(sorted(actual_result['results'][0]['doc']) == ([u'data', u'indexMap', u'type']))
+            self.assertEqual(sorted(actual_result['results'][0]['doc']) , ([u'data', u'indexMap', u'type']))
             self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE some and every i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND some and every i in object_pairs(indexMap) satisfies i = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='rec1-1_record_by_index_map')
+            self.assertTrue('rec1-1_record_by_index_map' in str(plan['~children'][0]['~children']))
             self.query = 'insert into %s (KEY, VALUE) VALUES ("test1",{"type":"testType","indexMap":{"key1":"val1"},"data":{"foo":"bar"}})'%(bucket.name)
             self.run_cbq_query()
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE SOME AND EVERY i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND SOME AND EVERY i in object_pairs(data) satisfies i = { "name":"foo", "val":"bar"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(sorted(actual_result['results'][0]['doc']) == ([u'data', u'indexMap', u'type']))
+            self.assertEqual(sorted(actual_result['results'][0]['doc']), ([u'data', u'indexMap', u'type']))
             self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND any j in object_pairs(indexMap) satisfies j = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='rec1-1_record_by_index_map')
+            self.assertTrue('rec1-1_record_by_index_map' in str(plan['~children'][0]['~children']))
             self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE any i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND any j in object_pairs(indexMap) satisfies j = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(sorted(actual_result['results'][0]['doc']) == ([u'data', u'indexMap', u'type']))
+            self.assertEqual(sorted(actual_result['results'][0]['doc']) , ([u'data', u'indexMap', u'type']))
             self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM %s AS r WHERE some and every i in object_pairs(indexMap) satisfies i = { "name":"key1", "val":"val1"} end AND some and every j in object_pairs(indexMap) satisfies j = { "name":"key2", "val":"val2"} end LIMIT 100'%(bucket.name)
             actual_result = self.run_cbq_query()
             plan = ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='rec1-1_record_by_index_map')
+            self.assertTrue('rec1-1_record_by_index_map' in str(plan['~children'][0]['~children']))
             self.query = 'delete from %s use keys["test","test1"]'%bucket.name
             self.run_cbq_query()
 
@@ -3760,7 +3766,7 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             for ind in xrange(self.num_indexes):
                     index_name = "indexwitharraysum%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(department,join_yr, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in VMs END ) where join_yr=2012 USING %s" % (index_name, bucket.name,self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(department,join_yr[0], DISTINCT ARRAY round(v.memory + v.RAM) FOR v in VMs END ) where join_yr[0]=2012 USING %s" % (index_name, bucket.name,self.index_type)
                     # if self.gsi_type:
                     #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
@@ -3770,7 +3776,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 for index_name in created_indexes:
                     self.query = "EXPLAIN SELECT count(department)" + \
-                                 " FROM %s where join_yr=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                                 " FROM %s where join_yr[0]=2012 AND department = 'Support'  GROUP BY department" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     plan = ExplainPlanHelper(actual_result)
                     self.assertTrue(
@@ -3779,10 +3785,10 @@ class QueriesIndexTests(QueryTests):
                     result1 = plan['~children'][0]['scan']['index']
                     self.assertTrue(result1 == index_name)
                     self.query = "SELECT count(department)" + \
-                                 " FROM %s where join_yr=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                                 " FROM %s where join_yr[0]=2012 AND department = 'Support'  GROUP BY department" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     self.query = "SELECT count(department)" + \
-                                 " FROM %s use index(`#primary`) where join_yr=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                                 " FROM %s use index(`#primary`) where join_yr[0]=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
                     expected_result = self.run_cbq_query()
                     self.assertTrue(sorted(actual_result['results']),sorted(expected_result['results']))
             finally:
