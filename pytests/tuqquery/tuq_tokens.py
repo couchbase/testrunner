@@ -3,9 +3,7 @@ from lib.membase.api.exception import CBQError
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
-from tuqquery.tuq import ExplainPlanHelper
 from pytests.tuqquery.tuq import QueryTests
-
 
 class TokenTests(QueryTests):
     def setUp(self):
@@ -15,16 +13,12 @@ class TokenTests(QueryTests):
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
 
-    # def suite_setUp(self):
-    #     super(TokenTests, self).suite_setUp()
-
     def tearDown(self):
         server = self.master
         shell = RemoteMachineShellConnection(server)
         #  shell.execute_command("""curl -X DELETE -u Administrator:password http://{0}:8091/pools/default/buckets/beer-sample""".format(server.ip))
         self.sleep(20)
         super(TokenTests, self).tearDown()
-
 
     def test_tokens_secondary_indexes(self):
         self.rest.load_sample("beer-sample")
@@ -83,7 +77,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description) satisfies v = "golden" END limit 10'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
 
         self.assertTrue(actual_result['results'])
         self.assertTrue("covers" in str(plan))
@@ -103,7 +97,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description,{"case":"lower","names":true,"specials":false}) satisfies v = "brewery" END limit 10'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ('cover ((distinct (array `v` for `v` in tokens((`beer-sample`.`description`), {"case": "lower", "names": true, "specials": false}) end)))'))
         self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == "idx3")
@@ -119,7 +113,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` use index(`idx14`) where any v in tokens(description,{"case":"upper","names":false,"specials":true}) satisfies v = "BREWERY" END order by meta().id limit 10'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['covers'][0]) == ('cover ((distinct (array `v` for `v` in tokens((`beer-sample`.`description`), {"case": "upper", "names": false, "specials": true}) end)))'))
         self.assertTrue(str(plan['~children'][0]['~children'][0]['scan']['index']) == "idx4")
@@ -130,7 +124,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description,{"case":"upper","names":false}) satisfies v = "GOLDEN" END limit 10'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == "idx5")
 
@@ -145,7 +139,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description,{}) satisfies  v = "golden" END limit 10'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == "idx7")
         self.query = 'select name from `beer-sample` use index(`idx18`) where any v in tokens(description,{}) satisfies  v = "golden" END limit 10'
@@ -157,7 +151,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description,{"":""}) satisfies v = "golden" END limit 10'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == "idx8")
 
@@ -170,7 +164,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description,{"case":"random"}) satisfies  v = "golden"  END '
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(plan['~children'][0]['scan']['index'] == "idx9")
 
@@ -182,7 +176,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description,{"specials":"random"}) satisfies v = "brewery" END order by name'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == "idx11")
 
@@ -195,7 +189,7 @@ class TokenTests(QueryTests):
 
         self.query = 'explain select name from `beer-sample` where any v in tokens(description,{"names":"random"}) satisfies v = "brewery" END limit 10'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("covers" in str(plan))
         self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index'] == "idx10")
 
@@ -223,37 +217,37 @@ class TokenTests(QueryTests):
             created_indexes.append(idx1)
             self.query = "explain select * from `beer-sample` where name like '%Cafe%'"
             actual_result = self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
+            plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['scan']['index']==idx1)
             self.query = 'CREATE INDEX {0} ON `beer-sample`( DISTINCT TOKENS( description ) )'.format(idx2)
             self.run_cbq_query()
             created_indexes.append(idx2)
             self.query = "explain select * from `beer-sample` where contains_token(description,'Great')"
             actual_result = self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
+            plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['scan']['index']==idx2)
             self.query = "CREATE INDEX {0} ON `beer-sample`( DISTINCT PAIRS( SELF ) )".format(idx3)
             self.run_cbq_query()
             created_indexes.append(idx3)
             self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 6"
             actual_result = self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
+            plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']== idx1)
             self.assertTrue(plan['~children'][0]['scans'][1]['scan']['index']==idx3)
             self.query = "CREATE INDEX {0} ON `beer-sample`( ALL address )".format(idx4)
             self.run_cbq_query()
             self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
             actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
+            plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['index']==idx4)
             self.query = "explain select count(a) from `beer-sample` unnest address as a"
             actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
+            plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['index']==idx4)
             self.query = "explain select * from `beer-sample` where any place in address satisfies " \
                          "place LIKE '100 %' end"
             actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
+            plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']== idx4)
             self.assertTrue(plan['~children'][0]['scans'][1]['scan']['index']==idx3)
         finally:
@@ -276,7 +270,7 @@ class TokenTests(QueryTests):
             created_indexes.append(idx2)
             self.query = "Explain select * from `beer-sample` where abv > 5 LIMIT 10"
             res = self.run_cbq_query()
-            plan = ExplainPlanHelper(res)
+            plan = self.ExplainPlanHelper(res)
             self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='10')
         finally:
                 for idx in created_indexes:

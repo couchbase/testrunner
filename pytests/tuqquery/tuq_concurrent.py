@@ -138,16 +138,3 @@ class ConcurrentTests(QueryTests):
                         self.run_cbq_query()
                     except:
                         pass
-
-    def query_thread(self, method_name):
-        try:
-            fn = getattr(self, method_name)
-            fn()
-        except Exception as ex:
-            self.log.error("***************ERROR*************\n" +\
-                           "At least one of query threads is crashed: {0}".format(ex))
-            self.thread_crashed.set()
-            raise ex
-        finally:
-            if not self.thread_stopped.is_set():
-                self.thread_stopped.set()

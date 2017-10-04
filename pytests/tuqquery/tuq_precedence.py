@@ -1,7 +1,5 @@
 import math
-
 from tuqquery.tuq import QueryTests
-
 
 class PrecedenceTests(QueryTests):
     def setUp(self):

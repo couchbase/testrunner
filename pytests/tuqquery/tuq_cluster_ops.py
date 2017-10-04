@@ -43,7 +43,6 @@ class QueriesOpsTests(QueryTests):
                 except BaseException, e:
                     self.fail(e)
 
-
     def suite_tearDown(self):
         super(QueriesOpsTests, self).suite_tearDown()
 
@@ -325,7 +324,6 @@ class QueriesOpsTests(QueryTests):
             for bucket in self.buckets:
                 self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
 
-    
     def test_audit_add_node(self):
         eventID = 8196 #add node
         server = self.master
@@ -526,32 +524,6 @@ class QueriesOpsTests(QueryTests):
             self.log.info("-"*100)
         finally:
             self.log.info("Done with encoded_prepare ....")
-
-
-###########################################################################################################
-    def _create_multiple_indexes(self, index_field):
-        indexes = []
-        self.assertTrue(self.buckets, 'There are no buckets! check your parameters for run')
-        for bucket in self.buckets:
-            index_name = 'idx_%s_%s_%s' % (bucket.name, index_field, str(uuid.uuid4())[:4])
-            query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name,
-                                                                      ','.join(index_field.split(';')), self.indx_type)
-            # if self.gsi_type:
-            #     query += " WITH {'index_type': 'memdb'}"
-            self.run_cbq_query(query=query)
-            if self.indx_type.lower() == 'gsi':
-                self._wait_for_index_online(bucket, index_name)
-        indexes.append(index_name)
-        return indexes
-
-    def _delete_multiple_indexes(self, indexes):
-        for bucket in self.buckets:
-            for index_name in set(indexes):
-                try:
-                    self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
-                except:
-                    pass
-
 
 class QueriesOpsJoinsTests(JoinTests):
     def setUp(self):

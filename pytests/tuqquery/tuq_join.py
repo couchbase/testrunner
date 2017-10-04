@@ -13,7 +13,7 @@ class JoinTests(QueryTests):
     def setUp(self):
         try:
             super(JoinTests, self).setUp()
-            self.gens_tasks = self.generate_docs_tasks()
+            self.gens_tasks = self.gen_docs(self, type='tasks')
             self.type_join = self.input.param("type_join", JOIN_INNER)
         except Exception, ex:
             self.log.error("ERROR SETUP FAILED: %s" % str(ex))
@@ -868,7 +868,7 @@ class JoinTests(QueryTests):
             expected_result = [{"name" : doc['item']['name'], "join_day" : doc['item']['join_day'],
                                 "projects" : [nested_doc['project'] for nested_doc in doc['items_nested']]}
                                for doc in full_list
-                               if doc and 'join_day' in doc['item'] and\
+                               if doc and 'join_day' in doc['item'] and \
                                doc['item']['join_day'] >= 2 and doc['item']['join_day'] <=4]
             expected_result = self.sort_nested_list(expected_result, key='projects')
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['projects']))
@@ -893,127 +893,6 @@ class JoinTests(QueryTests):
             expected_result = self.sort_nested_list(expected_result, key='projects')
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
-
-    def _get_for_sort(self, doc):
-        if not 'emp' in doc:
-            return ''
-        if 'name' in doc['emp']:
-            return doc['emp']['name'], doc['emp']['join_yr'],\
-                   doc['emp']['join_mo'], doc['emp']['job_title']
-        else:
-            return doc['emp']['task_name']
-
-    def _delete_ids(self, result):
-        for item in result:
-            if 'emp' in item:
-                del item['emp']['_id']
-            if 'tasks' in item:
-                for task in item['tasks']:
-                    if task and '_id' in task:
-                        del task['_id']
-
-    def generate_docs(self, docs_per_day, start=0):
-        generators = []
-        types = ['Engineer', 'Sales', 'Support']
-        join_yr = [2010, 2011]
-        join_mo = xrange(1, 12 + 1)
-        join_day = xrange(1, 28 + 1)
-        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
-        template += ' "job_title":"{4}", "tasks_ids":{5}}}'
-        for info in types:
-            for year in join_yr:
-                for month in join_mo:
-                    for day in join_day:
-                        name = ["employee-%s" % (str(day))]
-                        tasks_ids = ["test_task-%s" % day, "test_task-%s" % (day + 1)]
-                        generators.append(DocumentGenerator("query-test-%s-%s-%s-%s" % (info, year, month, day),
-                                               template,
-                                               name, [year], [month], [day],
-                                               [info], [tasks_ids],
-                                               start=start, end=docs_per_day))
-        return generators
-
-    def generate_docs_tasks(self):
-        generators = []
-        start, end = 0, (28 + 1)
-        template = '{{ "task_name":"{0}", "project": "{1}"}}'
-        generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task-%s" % i for i in xrange(0,10)],
-                                            ["CB"],
-                                            start=start, end=10))
-        generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task-%s" % i for i in xrange(10,20)],
-                                            ["MB"],
-                                            start=10, end=20))
-        generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task-%s" % i for i in xrange(20,end)],
-                                            ["IT"],
-                                            start=20, end=end))
-        return generators
-
-    def _generate_full_joined_docs_list(self, join_type=JOIN_INNER,
-                                        particular_key=None):
-        joined_list = []
-        all_docs_list = self.generate_full_docs_list(self.gens_load)
-        if join_type.upper() == JOIN_INNER:
-            for item in all_docs_list:
-                keys = item["tasks_ids"]
-                if particular_key is not None:
-                    keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
-                for tasks_item in tasks_items:
-                    item_to_add = copy.deepcopy(item)
-                    item_to_add.update(tasks_item)
-                    joined_list.append(item_to_add)
-        elif join_type.upper() == JOIN_LEFT:
-            for item in all_docs_list:
-                keys = item["tasks_ids"]
-                if particular_key is not None:
-                    keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
-                for key in keys:
-                    item_to_add = copy.deepcopy(item)
-                    if key in [doc["_id"] for doc in tasks_items]:
-                        item_to_add.update([doc for doc in tasks_items if key == doc['_id']][0])
-                        joined_list.append(item_to_add)
-            joined_list.extend([{}] * self.gens_tasks[-1].end)
-        elif join_type.upper() == JOIN_RIGHT:
-            raise Exception("RIGHT JOIN doen't exists in corrunt implementation")
-        else:
-            raise Exception("Unknown type of join")
-        return joined_list
-
-    def _generate_full_nested_docs_list(self, join_type=JOIN_INNER,
-                                        particular_key=None):
-        nested_list = []
-        all_docs_list = self.generate_full_docs_list(self.gens_load)
-        if join_type.upper() == JOIN_INNER:
-            for item in all_docs_list:
-                keys = item["tasks_ids"]
-                if particular_key is not None:
-                    keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
-                if tasks_items:
-                    nested_list.append({"items_nested" : tasks_items,
-                                        "item" : item})
-        elif join_type.upper() == JOIN_LEFT:
-            for item in all_docs_list:
-                keys = item["tasks_ids"]
-                if particular_key is not None:
-                    keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
-                if tasks_items:
-                    nested_list.append({"items_nested" : tasks_items,
-                                        "item" : item})
-            tasks_doc_list = self.generate_full_docs_list(self.gens_tasks)
-            for item in tasks_doc_list:
-                nested_list.append({"item" : item})
-        elif join_type.upper() == JOIN_RIGHT:
-            raise Exception("RIGHT JOIN doen't exists in corrunt implementation")
-        else:
-            raise Exception("Unknown type of join")
-        return nested_list
-
 
     def test_dual(self):
         self.query = "select 1"

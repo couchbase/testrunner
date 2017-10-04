@@ -3,101 +3,112 @@ from lib.membase.api.exception import CBQError
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
-from tuqquery.tuq import ExplainPlanHelper
-from pytests.tuqquery.tuq import QueryTests
+from tuq import QueryTests
+import time
+import sys
+import traceback
 
 
 class AscDescTests(QueryTests):
     def setUp(self):
-        if not self._testMethodName == 'suite_setUp':
-            self.skip_buckets_handle = True
+        self.skip_buckets_handle = True if not self._testMethodName == 'suite_setUp' else None
         super(AscDescTests, self).setUp()
 
     def tearDown(self):
         super(AscDescTests, self).tearDown()
 
-    # Helper function to run queries and compare results statically and with primary index
-    def compare(self, test, query, expected_result_list):
-            actual_result_list = []
-            actual_result = self.run_cbq_query()
-            for i in xrange(0,5):
-               if(test == "test_asc_desc_composite_index" or test == "test_meta" or test=="test_asc_desc_array_index") :
-                 actual_result_list.append(actual_result['results'][i]['default']['_id'])
-               elif(test == "test_desc_isReverse_ascOrder"):
-                 actual_result_list.append(actual_result['results'][i]['id'])
-            self.assertEqual(actual_result_list, expected_result_list)
-            self.query = query.replace("from default","from default use index(`#primary`)")
-            expected_result = self.run_cbq_query()
-            self.assertEqual(actual_result['results'], expected_result['results'])
-
     # This test is for composite index on different fields where it makes sure the query uses the particular asc/desc index
     # and results are compared against query run against primary index and static results generated and sorted manually.
     def test_asc_desc_composite_index(self):
+
+        test_dict = dict()
+        index_type = self.index_type.lower()
+
+        # extra defs
+        static_res_2 = ['query-testemployee96373.2660745-3', 'query-testemployee96373.2660745-2', 'query-testemployee96373.2660745-1',
+                        'query-testemployee96373.2660745-0','query-testemployee92486.5251626-5']
+        static_res_4 = ['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1', 'query-testemployee10153.1877827-2',
+                        'query-testemployee10153.1877827-3', 'query-testemployee10153.1877827-4']
+        static_res_6 = ['query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3', 'query-testemployee10153.1877827-4',
+                        'query-testemployee10153.1877827-5', 'query-testemployee10194.855617-0']
+
+        # index defs
+        #primary_index = ("#primary", "default", [], "online", index_type)
+        primary_index = {'name': '#primary',
+                         'bucket': 'default',
+                         'fields': [],
+                         'state': 'online',
+                         'using': index_type,
+                         'is_primary': True}
+        #index_1 = ("idx", "default", ["join_yr ASC", " _id DESC"], "online", index_type)
+        index_1 = {'name': 'idx',
+                   'bucket': 'default',
+                   'fields': ["join_yr ASC", " _id DESC"],
+                   'state': 'online',
+                   'using': index_type,
+                   'is_primary': False}
+
+        # pre query defs
+
+        # query defs
+        query_1 = 'explain SELECT * FROM default WHERE join_yr > 10 ORDER BY join_yr, _id DESC LIMIT 100 OFFSET 200'
+        query_2 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY join_yr, _id DESC,_id LIMIT 10 OFFSET 2'
+        query_3 = 'explain SELECT * FROM default WHERE join_yr > 10 ORDER BY join_yr,meta().id ASC LIMIT 10 OFFSET 2'
+        query_4 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY meta().id,join_yr ASC LIMIT 10'
+        query_5 = 'explain SELECT * FROM default WHERE join_yr > 10 and _id like "query-test%" ORDER BY join_yr desc,_id asc LIMIT 10 OFFSET 2'
+        query_6 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY _id,join_yr asc LIMIT 10 OFFSET 2'
+        query_7 = 'explain SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ORDER BY join_yr asc,meta().id ASC LIMIT 10 OFFSET 2'
+        query_8 = 'SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ORDER BY meta().id,join_yr asc LIMIT 10 OFFSET 2'
+        query_9 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY meta().id,join_yr DESC LIMIT 10'
+
+        # post query defs
+        explain_1 = lambda x: self.ExplainPlanHelper(x['q_res'][0])
+
+        # assert defs
+        assert_1 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['index'], 'idx')
+        assert_2 = lambda x: self.compare("test_asc_desc_composite_index", query_2, static_res_2)
+        assert_4 = lambda x: self.compare("test_asc_desc_composite_index", query_4, static_res_4)
+        assert_6 = lambda x: self.compare("test_asc_desc_composite_index", query_6, static_res_6)
+        assert_7 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['scans'][0]['index'], 'idx')
+        assert_8 = lambda x: self.compare("test_asc_desc_composite_index", query_8, static_res_6)
+        assert_9 = lambda x: self.compare("test_asc_desc_composite_index", query_9, static_res_4)
+
+        # cleanup defs
+
         for bucket in self.buckets:
-            created_indexes = []
-            try:
-                idx = "idx"
-                self.query = "CREATE INDEX %s ON default(join_yr ASC, _id DESC)"%(idx)
-                actual_result = self.run_cbq_query()
-                self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
-                created_indexes.append(idx)
+            bname = bucket.name
+            test_dict["1-%s" % (bname)] = {"indexes": [primary_index, index_1],
+                                           "pre_queries": [],
+                                           "queries": [query_1],
+                                           "post_queries": [explain_1],
+                                           "asserts": [assert_1],
+                                           "cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr, _id DESC LIMIT 100 OFFSET 200'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr, _id DESC,_id LIMIT 10 OFFSET 2'
-                static_expected_results_list = ['query-testemployee96373.2660745-3', 'query-testemployee96373.2660745-2',
-                                                'query-testemployee96373.2660745-1', 'query-testemployee96373.2660745-0',
-                                                'query-testemployee92486.5251626-5']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
+            test_dict["2-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_2],
+                                           "post_queries": [], "asserts": [assert_2], "cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr,meta().id ASC LIMIT 10 OFFSET 2'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY meta().id,join_yr ASC LIMIT 10'
-                static_expected_results_list = ['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
-                                                'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                 'query-testemployee10153.1877827-4']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
+            test_dict["3-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_3],
+                                           "post_queries": [explain_1], "asserts": [assert_1],"cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and _id like "query-test%" ' \
-                             'ORDER BY join_yr desc,_id asc LIMIT 10 OFFSET 2'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY _id,join_yr asc LIMIT 10 OFFSET 2'
-                static_expected_results_list = ['query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                'query-testemployee10153.1877827-4', 'query-testemployee10153.1877827-5',
-                                                'query-testemployee10194.855617-0']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
+            test_dict["4-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_4],
+                                           "post_queries": [], "asserts": [assert_4], "cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ' \
-                             'ORDER BY join_yr asc,meta().id ASC LIMIT 10 OFFSET 2'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['index']==idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ' \
-                             'ORDER BY meta().id,join_yr asc LIMIT 10 OFFSET 2'
-                #static_expected_results_list is same as previous assert
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY meta().id,join_yr DESC LIMIT 10'
-                static_expected_results_list = ['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
-                                                'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                'query-testemployee10153.1877827-4']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
-            finally:
-                for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
-                    self.run_cbq_query()
+            test_dict["5-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_5],
+                                           "post_queries": [explain_1], "asserts": [assert_1], "cleanups": []}
+
+            test_dict["6-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_6],
+                                           "post_queries": [], "asserts": [assert_6], "cleanups": []}
+
+            test_dict["7-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_7],
+                                           "post_queries": [explain_1], "asserts": [assert_7], "cleanups": []}
+
+            test_dict["8-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_8],
+                                            "post_queries": [], "asserts": [assert_8], "cleanups": []}
+
+            test_dict["9-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_9],
+                                            "post_queries": [], "asserts": [assert_9], "cleanups": []}
+
+        self.query_runner(test_dict)
 
     # This test test various combination of fields in an array index.
     def test_asc_desc_array_index(self):
@@ -111,26 +122,31 @@ class AscDescTests(QueryTests):
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
+
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby asc" % (
                 bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
-                plan = ExplainPlanHelper(actual_result)
+                plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
+
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby desc" % (
                 bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
-                plan = ExplainPlanHelper(actual_result)
+                plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
+
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby desc,_id asc" % (
                 bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
-                plan = ExplainPlanHelper(actual_result)
+                plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
+
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby asc,_id desc" % (
                 bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
-                plan = ExplainPlanHelper(actual_result)
+                plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
+
                 self.query = "select * from %s WHERE department = 'Support' and (ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby asc,_id desc limit 10" % (
                 bucket.name,bucket.name)
                 static_expected_results_list = ['query-testemployee28748.5695367-5', 'query-testemployee28748.5695367-4',
@@ -164,13 +180,13 @@ class AscDescTests(QueryTests):
                     created_indexes.append(idx)
                     self.query = "Explain select meta().id from %s where VMs[0].memory > 0 order by VMs[0].memory" %(bucket.name)
                     actual_result = self.run_cbq_query()
-                    plan = ExplainPlanHelper(actual_result)
+                    plan = self.ExplainPlanHelper(actual_result)
                     self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
                     self.assertTrue("sort_terms" in str(actual_result['results']))
                     self.assertTrue("covers" in str(plan))
                     self.query = "Explain select meta().id from %s where VMs[0].memory > 0 order by  VMs[0].memory desc" %(bucket.name)
                     actual_result = self.run_cbq_query()
-                    plan = ExplainPlanHelper(actual_result)
+                    plan = self.ExplainPlanHelper(actual_result)
                     self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
                     self.assertTrue("sort_terms" not in actual_result)
                     self.assertTrue("covers" in str(plan))
@@ -279,12 +295,12 @@ class AscDescTests(QueryTests):
                 self.query = 'explain select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id is not null and hobbies.hobby is not missing' \
                              ' order by meta().id asc' %(bucket.name)
                 res =self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx2 or plan['~children'][0]['~children'][0]['index']==idx)
                 self.query = 'explain select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id is not missing and tasks is not null and hobbies.hobby is not missing' \
                              ' order by meta().id desc' %(bucket.name)
                 res =self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx2 or plan['~children'][0]['~children'][0]['index']==idx)
                 self.query = 'select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id is not null and hobbies.hobby is not missing' \
                              ' order by meta().id asc'%(bucket.name)
@@ -301,7 +317,7 @@ class AscDescTests(QueryTests):
                 self.query = 'explain select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id is not null and hobbies.hobby is not missing' \
                              ' order by meta().id'%(bucket.name)
                 res =self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx2)
                 self.query = "CREATE INDEX %s ON %s(meta().id asc,_id,tasks,age,hobbies.hobby)" % (
                   idx, bucket.name)
@@ -314,7 +330,7 @@ class AscDescTests(QueryTests):
                 self.query = 'explain select * from default where meta().id ="query-testemployee10317.9004497-0" and _id is not missing and tasks is not null and age is not missing' \
                              ' order by meta().id desc'
                 res =self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
             finally:
                   for idx in created_indexes:
@@ -336,7 +352,7 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx2)
                 self.query = 'explain select max(_id) from default where _id is not missing'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['limit'], '1')
                 self.query ='select max(join_yr[0]) from default where _id is not missing and join_yr[0] is not null'
                 res = self.run_cbq_query()
@@ -353,7 +369,7 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx)
                 self.query = 'explain select min(_id) from default where _id is not missing'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 if 'limit' in plan['~children'][0] and 'limit' not in plan['~children'][1]:
                     self.assertEqual(plan['~children'][0]['limit'], '1')
                 elif 'limit' not in plan['~children'][0] and 'limit' in plan['~children'][1]:
@@ -395,7 +411,7 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx)
                 self.query = "explain select meta().id from %s where datetime is not missing order by datetime"%(bucket.name)
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
                 self.query = "select meta().id from %s where datetime is not null order by datetime asc"%(bucket.name)
                 res = self.run_cbq_query()
@@ -410,7 +426,7 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx2)
                 self.query = 'explain select meta().id from %s where isPresent is not missing order by isPresent'%(bucket.name)
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx2)
                 self.query = 'select meta().id from %s where isPresent=true or isPresent=false order by isPresent'%(bucket.name)
                 res = self.run_cbq_query()
@@ -429,7 +445,7 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx3)
                 self.query = 'explain select meta().id from %s where id > 1 order by id'%(bucket.name)
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx3)
                 self.query = 'select meta().id from %s where id > 1 order by id'%(bucket.name)
                 res = self.run_cbq_query()
@@ -468,7 +484,7 @@ class AscDescTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'explain select meta().id from %s where isPresent = true order by isPresent'%(bucket.name)
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx7)
                 self.query = 'select meta().id from %s where isPresent=true or isPresent=false order by isPresent asc'%(bucket.name)
                 res = self.run_cbq_query()
@@ -486,7 +502,7 @@ class AscDescTests(QueryTests):
                 self.run_cbq_query()
                 self.query = "explain select meta().id from %s where datetime > '2006-01-02T15:04:05' order by datetime"%(bucket.name)
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx8)
                 self.query = "select meta().id from %s where datetime > '2006-01-02T15:04:05' order by datetime"%(bucket.name)
                 res = self.run_cbq_query()
@@ -506,42 +522,43 @@ class AscDescTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'INSERT INTO %s VALUES ("k002", {"arr":[{"y":11},{"y1":-1}, {"z":42},{"p":42}, {"q":-2}, {"y":102},{"y":201}]})'%(bucket.name)
                 self.run_cbq_query()
+
                 self.query = 'CREATE INDEX ix1 ON %s(ALL ARRAY a.y FOR a IN arr END)'%(bucket.name)
                 created_indexes.append("ix1")
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], 'ix1')
                 self.query = 'EXPLAIN SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 ORDER BY a.y limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], 'ix1')
                 self.query = 'EXPLAIN SELECT MIN(a.y) FROM default d UNNEST d.arr As a WHERE a.y > 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['index'], 'ix1')
                 self.assertTrue("covers" in str(plan))
                 self.query = 'EXPLAIN SELECT COUNT(1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix1')
                 self.query = 'EXPLAIN SELECT COUNT(a.y) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix1')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT a.y) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix1')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT 1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix1')
                 self.query = 'SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 order by meta(d).id,a.y'
@@ -587,37 +604,37 @@ class AscDescTests(QueryTests):
                 created_indexes.append("ix2")
                 self.query = 'EXPLAIN SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], 'ix2')
                 self.query = 'EXPLAIN SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 ORDER BY a.y DESC limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['~children'][0]['index'], 'ix2')
                 self.query = 'EXPLAIN SELECT MAX(a.y) FROM default d UNNEST d.arr As a WHERE a.y > 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix2')
                 self.query = 'EXPLAIN SELECT COUNT(1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix2')
                 self.query = 'EXPLAIN SELECT COUNT(a.y) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertTrue(plan['~children'][0]['index']=='ix2')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT a.y) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix2')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT 1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix2')
                 self.query = 'SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 order by meta(d).id,a.y'
@@ -663,22 +680,22 @@ class AscDescTests(QueryTests):
                 created_indexes.append("ix3")
                 self.query = 'EXPLAIN SELECT MIN(a.y) FROM default d UNNEST d.arr As a WHERE a.y > 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['scan']['index'], 'ix3')
                 self.query = 'EXPLAIN SELECT MAX(a.y) FROM default d UNNEST d.arr As a WHERE a.y > 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix3')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT a.y) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("IndexCountDistinctScan2" in str(plan))
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix3')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT 1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix3')
                 self.query = 'SELECT MIN(a.y) FROM default d UNNEST d.arr As a WHERE a.y > 10'
@@ -727,23 +744,23 @@ class AscDescTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'explain select a.y from default d UNNEST d.arr As a where a.y > 10 limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['limit'], '10')
                 self.query = 'explain select a.y from default d UNNEST d.arr As a where a.y > 10 ORDER BY a.y limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['limit'], '10')
                 self.query = 'explain select min(a.y) from default d UNNEST d.arr As a where a.y > 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['limit'], '1')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT 1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['limit'], '1')
                 self.query = 'explain select count(a.y) from default d UNNEST d.arr As a where a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue('IndexCountScan2' in str(plan))
                 self.query ='select min(a.y) from default d UNNEST d.arr As a where a.y > 10'
                 actual_result = self.run_cbq_query()
@@ -758,26 +775,26 @@ class AscDescTests(QueryTests):
                 created_indexes.append("ix2")
                 self.query = 'explain select max(a.y) from default d UNNEST d.arr As a where a.y > 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['limit'], '1')
                 self.query = 'create index ix3 on default(ALL DISTINCT ARRAY a.y FOR a IN arr END DESC )'
                 self.run_cbq_query()
                 created_indexes.append("ix3")
                 self.query = 'EXPLAIN SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['limit'], '10')
                 self.query = 'EXPLAIN SELECT a.y FROM default d  UNNEST d.arr As a WHERE a.y > 10 ORDER BY a.y DESC limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertEqual(plan['~children'][0]['~children'][0]['limit'], '10')
                 self.query = 'EXPLAIN SELECT COUNT(1) FROM default d  UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("limit" not in str(plan['~children'][0]))
                 self.query = 'EXPLAIN SELECT COUNT(a.y) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("limit" not in str(plan['~children'][0]))
                 self.query = 'drop index default.ix2'
                 self.run_cbq_query()
@@ -787,11 +804,11 @@ class AscDescTests(QueryTests):
                 created_indexes.append("ix4")
                 self.query = 'EXPLAIN SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("limit" not in str(plan['~children'][0]))
                 self.query = 'EXPLAIN SELECT a.y FROM default d UNNEST d.arr As a WHERE a.y > 10 ORDER BY a.y limit 10'
                 res = self.run_cbq_query()
-                plan = ExplainPlanHelper(res)
+                plan = self.ExplainPlanHelper(res)
                 self.assertTrue("limit" not in str(plan['~children'][0]))
             finally:
                   for idx in created_indexes:

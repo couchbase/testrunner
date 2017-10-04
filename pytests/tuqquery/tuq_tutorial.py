@@ -11,40 +11,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection
 
-
 class TuqTutorialTests(BaseTestCase):
-
-    def _create_headers(self):
-        authorization = ""
-        return {'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': 'Basic %s' % authorization,
-                'Accept': '*/*'}
-
-    def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
-        if not headers:
-            headers = self._create_headers()
-        end_time = time.time() + timeout
-        while True:
-            try:
-                response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers)
-                if response['status'] in ['200', '201', '202']:
-                    return True, content, response
-                else:
-                    try:
-                        json_parsed = json.loads(content)
-                    except ValueError as e:
-                        json_parsed = {}
-                        json_parsed["error"] = "status: {0}, content: {1}".format(response['status'], content)
-                    reason = "unknown"
-                    if "error" in json_parsed:
-                        reason = json_parsed["error"]
-                    self.log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content.rstrip('\n')))
-                    return False, content, response
-            except socket.error as e:
-                self.log.error("socket error while connecting to {0} error {1} ".format(api, e))
-                if time.time() > end_time:
-                    raise Exception("nothing")
-            time.sleep(3)
 
     def test_queries_tutorial(self):
         """

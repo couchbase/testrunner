@@ -4,7 +4,6 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from tuqquery.tuq import QueryTests
 
-
 class OptionsTests(QueryTests):
     def setUp(self):
         super(OptionsTests, self).setUp()
@@ -335,39 +334,6 @@ class OptionsRestTests(QueryTests):
             statement = 'SELECT * FROM  (SELECT name FROM %s where job_title=$1 and name=$2) as name&args=["Support","employee-4"]'% (bucket.name)
             actual_result = self.curl_helper(statement)
             self.assertTrue(actual_result['metrics']['resultCount'] == 144)
-
-
-
-
-    def curl_helper(self,statement):
-         shell = RemoteMachineShellConnection(self.master)
-         cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement={3}'".\
-                format('Administrator', 'password', self.master.ip,statement ,self.curl_path)
-         output, error = shell.execute_command(cmd)
-         new_list = [string.strip() for string in output]
-         concat_string = ''.join(new_list)
-         json_output=json.loads(concat_string)
-         return json_output
-
-    def prepare_helper(self,statement):
-         shell = RemoteMachineShellConnection(self.master)
-         cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&$type="Engineer"&$name="employee-4"\''.\
-                format('Administrator', 'password', self.master.ip,statement ,self.curl_path)
-         output, error = shell.execute_command(cmd)
-         new_list = [string.strip() for string in output]
-         concat_string = ''.join(new_list)
-         json_output=json.loads(concat_string)
-         return json_output
-
-    def prepare_helper2(self,statement):
-         shell = RemoteMachineShellConnection(self.master)
-         cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&args=["Engineer","employee-4"]\''.\
-                format('Administrator', 'password', self.master.ip,statement ,self.curl_path)
-         output, error = shell.execute_command(cmd)
-         new_list = [string.strip() for string in output]
-         concat_string = ''.join(new_list)
-         json_output=json.loads(concat_string)
-         return json_output
 
 
 

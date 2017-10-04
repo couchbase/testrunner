@@ -1,5 +1,4 @@
 import math
-
 from tuqquery.tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -94,29 +93,3 @@ class QueriesViewsTests(QueryTests):
                                          "endkey" : "[2011,1]",
                                          "descending" : "true"})
         self._compare_view_and_tool_result(view_res['rows'], tool_res["results"])
-
-    def _compare_view_and_tool_result(self, view_result, tool_result, check_values=True):
-        self.log.info("Comparing result ...")
-        formated_tool_res = [{"key" : [doc["join_yr"], doc["join_mo"]],
-                              "value" : doc["name"]} for doc in tool_result]
-        formated_view_res = [{"key" : row["key"],
-                              "value": row["value"]} for row in view_result]
-
-        self.assertEqual(len(formated_tool_res), len(formated_view_res),
-                         "Query results are not equal. Tool %s, view %s" %(
-                                        len(formated_tool_res), len(formated_view_res)))
-        self.log.info("Length is equal")
-        self.assertEqual([row["key"] for row in formated_tool_res],
-                         [row["key"] for row in formated_view_res],
-                         "Query results sorting are not equal./n Actual %s, Expected %s" %(
-                                                formated_tool_res[:100],formated_view_res[:100]))
-        self.log.info("Sorting is equal")
-        if check_values:
-            formated_tool_res = sorted(formated_tool_res, key=lambda doc: (doc['key'],
-                                                            doc['value']))
-            formated_view_res = sorted(formated_view_res, key=lambda doc: (doc['key'],
-                                                            doc['value']))
-            self.assertTrue(formated_tool_res == formated_view_res,
-                             "Query results sorting are not equal. View but not tool has [%s]" %(
-                                [r for r in view_result if r in formated_tool_res]))
-            self.log.info("Items are equal")

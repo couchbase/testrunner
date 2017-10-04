@@ -1,48 +1,35 @@
 import os
-import pprint
-import logging
-import threading
 import json
 import uuid
 import copy
-import math
+import pprint
 import re
+import logging
 import testconstants
-from datetime import date, timedelta
-import datetime
 import time
-import random
+import traceback
+import collections
+from subprocess import Popen, PIPE
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_generators import JsonGenerator
 from basetestcase import BaseTestCase
-from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
+from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import MemcachedClientHelper
+from security.rbac_base import RbacBase
 # from sdk_client import SDKClient
 from couchbase_helper.tuq_generators import TuqGenerators
+#from xdcr.upgradeXDCR import UpgradeTests
+from couchbase_helper.documentgenerator import JSONNonDocGenerator
 
-
-def ExplainPlanHelper(res):
-    try:
-        rv = res["results"][0]["plan"]
-    except:
-        rv = res["results"][0]
-    return rv
-
-
-def PreparePlanHelper(res):
-    try:
-        rv = res["results"][0]["plan"]
-    except:
-        rv = res["results"][0]["operator"]
-    return rv
+JOIN_INNER = "INNER"
+JOIN_LEFT = "LEFT"
+JOIN_RIGHT = "RIGHT"
 
 
 class QueryTests(BaseTestCase):
     def setUp(self):
-        if not self._testMethodName == 'suite_setUp' and \
-                        str(self.__class__).find('upgrade_n1qlrbac') == -1:
+        if not self._testMethodName == 'suite_setUp' and str(self.__class__).find('upgrade_n1qlrbac') == -1:
             self.skip_buckets_handle = True
         else:
             self.skip_buckets_handle = False
@@ -65,35 +52,36 @@ class QueryTests(BaseTestCase):
         self.buckets = RestConnection(self.master).get_buckets()
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
-        self.array_indexing = self.input.param("array_indexing", False)
-        self.dataset = self.input.param("dataset", "default")
-        self.gens_load = self.generate_docs(self.docs_per_day)
-        self.skip_load = self.input.param("skip_load", False)
-        self.skip_index = self.input.param("skip_index", False)
-        self.plasma_dgm = self.input.param("plasma_dgm", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
-        #self.analytics = self.input.param("analytics",False)
+        self.analytics = self.input.param("analytics", False)
+        self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
-        self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.index_type = self.input.param("index_type", 'GSI')
-        self.DGM = self.input.param("DGM",False)
-        self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
-        self.covering_index = self.input.param("covering_index", False)
-        self.named_prepare = self.input.param("named_prepare", None)
+        self.skip_primary_index = self.input.param("skip_primary_index", False)
+        self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.monitoring = self.input.param("monitoring", False)
-        self.encoded_prepare = self.input.param("encoded_prepare", False)
-        self.cluster_ops = self.input.param("cluster_ops",False)
+        self.value_size = self.input.param("value_size", 0)
         self.isprepared = False
-        self.server = self.master
-        self.rest = RestConnection(self.server)
-        self.username=self.rest.username
-        self.password=self.rest.password
-        #self.coverage = self.input.param("coverage",False)
-        self.cover = self.input.param("cover", False)
+        self.named_prepare = self.input.param("named_prepare", None)
+        self.encoded_prepare = self.input.param("encoded_prepare", False)
+        self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
+        self.array_indexing = self.input.param("array_indexing", False)
+        self.gens_load = self.gen_docs(self.docs_per_day)
+        self.skip_load = self.input.param("skip_load", False)
+        self.skip_index = self.input.param("skip_index", False)
+        self.plasma_dgm = self.input.param("plasma_dgm", False)
+        self.DGM = self.input.param("DGM",False)
+        self.covering_index = self.input.param("covering_index", False)
+        self.cluster_ops = self.input.param("cluster_ops",False)
+        self.server = self.master
+        self.rest = RestConnection(self.server)
+        self.username= self.rest.username
+        self.password= self.rest.password
+        self.cover = self.input.param("cover", False)
         self.curl_path = "curl"
         self.n1ql_certs_path = "/opt/couchbase/var/lib/couchbase/n1qlcerts"
         if type.lower() == 'windows':
@@ -102,42 +90,37 @@ class QueryTests(BaseTestCase):
             self.n1ql_certs_path = "/cygdrive/c/Program\ Files/Couchbase/server/var/lib/couchbase/n1qlcerts"
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
-        if self.primary_indx_type.lower() == "gsi":
-            self.gsi_type = self.input.param("gsi_type", 'plasma')
-        else:
-            self.gsi_type = None
+        self.gsi_type = self.input.param("gsi_type", 'plasma') if self.primary_indx_type.lower() == "gsi" else None
         if self.input.param("reload_data", False):
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [], [self.cbas_node], services=['cbas'])
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
-            self.gens_load = self.generate_docs(self.docs_per_day)
-            self.load(self.gens_load, flag=self.item_flag)
+            self.gens_load = self.gen_docs(self.docs_per_day)
+            self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
         if not (hasattr(self, 'skip_generation') and self.skip_generation):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
+        self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
-            if (self.analytics == False):
+            if self.analytics == False:
                 self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
-        #if (self.coverage == False):
-        if (self.cluster_ops == False):
+        if self.cluster_ops == False:
             self.shell.execute_command("killall -9 cbq-engine")
             self.shell.execute_command("killall -9 indexer")
             self.sleep(20, 'wait for indexer')
         self.log.info('-'*100)
-        if (self.analytics):
+        if self.analytics:
             self.setup_analytics()
             self.sleep(30,'wait for analytics setup')
         if self.monitoring:
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
-        #if self.ispokemon:
-            #self.set_indexer_pokemon_settings()
 
     def suite_setUp(self):
         try:
@@ -145,14 +128,11 @@ class QueryTests(BaseTestCase):
             if os != 'windows':
                 self.sleep(10, 'sleep before load')
             if not self.skip_load:
-                if self.flat_json:
-                    self.load_directory(self.gens_load)
-                else:
-                    self.load(self.gens_load, flag=self.item_flag)
+                self.load_directory(self.gens_load) if self.flat_json else self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
-            if (self.analytics):
+            if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
                 self.sleep(30,'wait for analytics setup')
@@ -171,10 +151,7 @@ class QueryTests(BaseTestCase):
                 data += 'disconnect bucket {0} if connected;'.format(bucket.name)
                 data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow")
                 data += 'drop bucket {0} if exists;'.format(bucket.name)
-            filename = "file.txt"
-            f = open(filename,'w')
-            f.write(data)
-            f.close()
+            self.write_file("file.txt", data)
             url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
             os.system(cmd)
@@ -184,15 +161,17 @@ class QueryTests(BaseTestCase):
     def suite_tearDown(self):
         if not self.input.param("skip_build_tuq", True):
             if hasattr(self, 'shell'):
-               o = self.shell.execute_command("ps -aef| grep cbq-engine")
-               self.log.info(o)
-               if len(o):
-                   for cbq_engine in o[0]:
-                       if cbq_engine.find('grep') == -1:
-                           output = cbq_engine.split(' ')
-                           if len(output) > 1:
-                                pid = [item for item in output if item][1]
-                                self.shell.execute_command("kill -9 %s" % pid)
+                self._kill_all_processes_cbq()
+
+##############################################################################################
+#
+#  Setup Helpers
+##############################################################################################
+
+    def write_file(self, filename, data):
+        f = open(filename,'w')
+        f.write(data)
+        f.close()
 
     def setup_analytics(self):
         data = 'use Default;'
@@ -203,10 +182,7 @@ class QueryTests(BaseTestCase):
             data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.cbas_node.ip)
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow")
             data += 'connect bucket {0} with {{"username":"{1}","password":"{2}"}};'.format(bucket.name, bucket_username, bucket_password)
-        filename = "file.txt"
-        f = open(filename,'w')
-        f.write(data)
-        f.close()
+        self.write_file("file.txt", data)
         url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
@@ -222,8 +198,7 @@ class QueryTests(BaseTestCase):
         for index_stats in json_parsed:
             bucket = index_stats["Index"].split(":")[0]
             index_name = index_stats["Index"].split(":")[1]
-            if not bucket in index_storage_stats.keys():
-                index_storage_stats[bucket] = {}
+            index_storage_stats[bucket] = {} if not bucket in index_storage_stats.keys() else None
             index_storage_stats[bucket][index_name] = index_stats["Stats"]
         return index_storage_stats
 
@@ -233,9 +208,7 @@ class QueryTests(BaseTestCase):
         :return:
         """
         def validate_disk_writes(indexer_nodes=None):
-            if not indexer_nodes:
-                indexer_nodes = self.get_nodes_from_services_map(
-                    service_type="index", get_all_nodes=True)
+            indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True) if not indexer_nodes else None
             for node in indexer_nodes:
                 indexer_rest = RestConnection(node)
                 content = self.get_index_storage_stats()
@@ -246,13 +219,12 @@ class QueryTests(BaseTestCase):
             return True
 
         def kv_mutations(self, docs=1):
-            if not docs:
-                docs = self.docs_per_day
-            gens_load = self.generate_docs(docs)
+            docs = self.docs_per_day if not docs else None
+            gens_load = self.gen_docs(docs)
             self.full_docs_list = self.generate_full_docs_list(gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
             self.load(gens_load, buckets=self.buckets, flag=self.item_flag,
-                  verify_data=False, batch_size=self.batch_size)
+                  verify_data=False, batch_size=1000)
         if self.gsi_type != "plasma":
             return
         if not self.plasma_dgm:
@@ -274,6 +246,7 @@ class QueryTests(BaseTestCase):
             docs += 20
         return False
 
+    #This method is not being used
     def print_list_of_dicts(self, list_to_print, num_elements=10):
         print('\n\n')
         print('Printing a list...')
@@ -283,4075 +256,356 @@ class QueryTests(BaseTestCase):
             if num_elements == 0:
                 break
 
+    #This method is only used by the function right above it, which is not being used
     def print_dict(self, dict_to_print):
         for k, v in dict_to_print.iteritems():
             print(k, v)
         print('\n')
 
-    def expected_substr(self, a_string, start, index):
-        if start is 0:
-            substring = a_string[index:]
-            if index >= len(a_string):
-                return None
-            elif index < -len(a_string):
-                return None
-            else:
-                return substring
-        if start is 1:
-            substring = a_string[index-start:] if index > 0 else a_string[index:]
-            if index >= len(a_string):
-                return None
-            elif index < -len(a_string):
-                return None
-            else:
-                return substring
-
-    def run_regex_query(self, word, substring, regex_type = ''):
-        self.query = "select REGEXP_POSITION%s('%s', '%s')" % (regex_type, word, substring)
-        results = self.run_cbq_query()
-        return results['results'][0]['$1']
-
-    def run_position_query(self, word, substring, position_type = ''):
-        self.query = "select POSITION%s('%s', '%s')" % (position_type, word, substring)
-        results = self.run_cbq_query()
-        return results['results'][0]['$1']
-
-
-##############################################################################################
-#
-#   SIMPLE CHECKS
-##############################################################################################
-    def test_escaped_identifiers(self):
-        queries_errors = {'SELECT name FROM {0} as bucket' :
-                          ('syntax error', 3000)} #execution phase
-        self.negative_common_body(queries_errors)
-        for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s as `bucket` ORDER BY name' % (bucket.name)
-            actual_result = self.run_cbq_query()
-
-            expected_list = [{"name" : doc["name"]} for doc in self.full_list]
-            expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_list_sorted)
-
-    '''MB-22273'''
-    def test_prepared_encoded_rest(self):
-        result_count = 1412
-        self.rest.load_sample("beer-sample")
-        try:
-            query = 'create index myidx on `beer-sample`(name,country,code) where (type="brewery")'
-            self.run_cbq_query(query)
-            time.sleep(10)
-            result = self.run_cbq_query('prepare s1 from SELECT name, IFMISSINGORNULL(country,999), '
-                                        'IFMISSINGORNULL(code,999) FROM `beer-sample` WHERE type = "brewery" AND name IS NOT MISSING')
-            encoded_plan = '"' + result['results'][0]['encoded_plan'] + '"'
-            for server in self.servers:
-                remote = RemoteMachineShellConnection(server)
-                remote.stop_server()
-            time.sleep(20)
-            for server in self.servers:
-                remote = RemoteMachineShellConnection(server)
-                remote.start_server()
-            time.sleep(30)
-            for server in self.servers:
-                remote = RemoteMachineShellConnection(server)
-                result = remote.execute_command(
-                    "%s http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
-                    "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'"
-                    % (self.curl_path,server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
-                new_list = [string.strip() for string in result[0]]
-                concat_string = ''.join(new_list)
-                json_output = json.loads(concat_string)
-                self.log.info(json_output['metrics']['resultCount'])
-                self.assertTrue(json_output['metrics']['resultCount'] == result_count)
-        finally:
-            self.rest.delete_bucket("beer-sample")
-
-    '''MB-19887 and MB-24303: These queries were returning incorrect results with views.'''
-    def test_views(self):
-        created_indexes = []
-        try:
-            idx = "ix1"
-            self.query = "CREATE INDEX %s ON default(x,y) USING VIEW" % idx
-            self.run_cbq_query()
-            created_indexes.append(idx)
-            time.sleep(15)
-            self.run_cbq_query("insert into default values ('k01',{'x':10})")
-            result = self.run_cbq_query("select x,y from default where x > 3")
-            self.assertTrue(result['results'][0] == {"x":10})
-
-            self.run_cbq_query('insert into default values("k02", {"x": 20, "y": 20})')
-            self.run_cbq_query('insert into default values("k03", {"x": 30, "z": 30})')
-            self.run_cbq_query('insert into default values("k04", {"x": 40, "y": 40, "z": 40})')
-            idx2 = "iv1"
-            self.query = "CREATE INDEX %s ON default(x,y,z) USING VIEW" % idx2
-            self.run_cbq_query()
-            created_indexes.append(idx2)
-            expected_result = [{'x':10},{'x':20,'y':20},{'x':30,'z':30},{'x':40,'y':40,'z':40}]
-            result = self.run_cbq_query('select x,y,z from default use index (iv1 using view) '
-                                        'where x is not missing')
-            self.assertTrue(result['results'] == expected_result)
-
-        finally:
-            for idx in created_indexes:
-                self.query = "DROP INDEX %s.%s USING VIEW" % ("default", idx)
-                self.run_cbq_query()
-
-##############################################################################################
-#
-#   ALL
-##############################################################################################
-
-    def test_all(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT ALL job_title FROM %s ORDER BY job_title'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [{"job_title" : doc['job_title']}
-                             for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_all_nested(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT ALL tasks_points.task1 FROM %s '  % (bucket.name) +\
-                         'ORDER BY tasks_points.task1'
-            actual_result = self.run_cbq_query()
-            expected_result = [{"task1" : doc['tasks_points']['task1']}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task1']))
-            self._verify_results(actual_result['results'], expected_result)
-            self.query = 'SELECT ALL skills[0] as skill' +\
-                         ' FROM %s ORDER BY skills[0]'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [{"skill" : doc['skills'][0]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['skill']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            if (self.analytics == False):
-                self.query = 'SELECT ALL tasks_points.* ' +\
-                         'FROM %s'  % (bucket.name)
-                actual_result = self.run_cbq_query()
-                expected_result = [doc['tasks_points'] for doc in self.full_list]
-                expected_result = sorted(expected_result, key=lambda doc:
-                                     (doc['task1'], doc['task2']))
-                actual_result = sorted(actual_result['results'], key=lambda doc:
-                                     (doc['task1'], doc['task2']))
-                self._verify_results(actual_result, expected_result)
-
-    def set_indexer_pokemon_settings(self):
-        projector_json = { "projector.dcp.numConnections": 1 }
-        moi_json = {"indexer.moi.useMemMgmt": True }
-        server = self.get_nodes_from_services_map(service_type="index")
-        rest = RestConnection(server)
-        status = rest.set_index_settings(projector_json)
-        self.log.info("{0} set".format(projector_json))
-        self.sleep(60)
-        servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
-        for server in servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.terminate_process(process_name="projector")
-            self.sleep(60)
-        self.sleep(60)
-        #self.set_indexer_logLevel()
-        self.loglevel="info"
-        self.log.info("Setting indexer log level to {0}".format(self.loglevel))
-        server = self.get_nodes_from_services_map(service_type="index")
-        rest = RestConnection(server)
-
-        status = rest.set_indexer_params("logLevel", self.loglevel)
-        self.sleep(30)
-        status = rest.set_index_settings(moi_json)
-        self.log.info("{0} set".format(moi_json))
-        self.sleep(30)
-
-    def test_all_negative(self):
-        queries_errors = {'SELECT ALL * FROM %s' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_keywords(self):
-        queries_errors = {'SELECT description as DESC FROM %s order by DESC' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_distinct_negative(self):
-        queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : ('syntax error', 3000),
-                          'SELECT name FROM {0} GROUP BY DISTINCT name' : ('syntax error', 3000),
-                          'SELECT ANY tasks_points FROM {0}' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_any(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 END)"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([skill for skill in doc["skills"]
-                                       if skill == 'skill2010']) > 0 and\
-                                  len([vm for vm in doc["VMs"]
-                                       if vm["RAM"] == 5]) > 0 and\
-                                  doc["job_title"] != 'Sales']
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_any_within(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s "  % (bucket.name) +\
-                         "WHERE ANY vm within %s.VMs SATISFIES vm.RAM = 5 END" % (
-                                                                      bucket.name)
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([vm for vm in doc["VMs"]
-                                       if vm["RAM"] == 5]) > 0]
-            expected_result = sorted(expected_result)
-            self._verify_results(sorted(actual_result['results']), expected_result)
-
-    def test_any_no_in_clause(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' end)" % (
-                                                                bucket.name) +\
-                         "AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 end) " % (
-                                                            bucket.name) +\
-                         "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([skill for skill in doc["skills"]
-                                       if skill == 'skill2010']) > 0 and\
-                                  len([vm for vm in doc["VMs"]
-                                       if vm["RAM"] == 5]) > 0 and\
-                                  doc["job_title"] != 'Sales']
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_prepared_any_no_in_clause(self):
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==0)
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' end)" % (
-                                                                bucket.name) +\
-                         "AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 end) " % (
-                                                            bucket.name) +\
-                         "AND  NOT (job_title = 'Sales') ORDER BY name"
-            self.prepared_common_body()
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==1)
-
-    def test_any_external(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s WHERE '  % (bucket.name) +\
-                         'ANY x IN ["Support", "Management"] SATISFIES job_title = x END ' +\
-                         'ORDER BY name'
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if doc["job_title"] in ["Support", "Management"]]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_every(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES CEIL(vm.memory) > 5 END)" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if len([vm for vm in doc["VMs"]
-                                       if math.ceil(vm['memory']) > 5]) ==\
-                                  len(doc["VMs"])]
-
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_satisfy_negative(self):
-        queries_errors = {'SELECT name FROM %s WHERE ANY x IN 123 SATISFIES job_title = x END' : ('syntax error', 3000),
-                          'SELECT name FROM %s WHERE ANY x IN ["Sales"] SATISFIES job_title = x' : ('syntax error', 3000),
-                          'SELECT job_title FROM %s WHERE ANY job_title IN ["Sales"] SATISFIES job_title = job_title END' : ('syntax error', 3000),
-                          'SELECT job_title FROM %s WHERE EVERY ANY x IN ["Sales"] SATISFIES x = job_title END' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_check_is_isnot_negative(self):
-         queries_errors = {'SELECT * FROM %s WHERE name is foo' : ('syntax error', 3000),
-                          'SELECT * FROM %s WHERE name is not foo' : ('syntax error', 3000)}
-         self.negative_common_body(queries_errors)
-
-    def test_array(self):
-        for bucket in self.buckets:
-            self.query = "SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories" +\
-            " FROM %s WHERE VMs IS NOT NULL "  % (bucket.name)
-            if self.analytics:
-                self.query = 'SELECT (SELECT VALUE vm.memory FROM VMs AS vm) AS vm_memories FROM %s WHERE VMs IS NOT NULL '% bucket.name
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['vm_memories']))
-            expected_result = [{"vm_memories" : [vm["memory"] for vm in doc['VMs']]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['vm_memories']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_objects(self):
-        for bucket in self.buckets:
-            self.query = "SELECT VMs[*].os from %s" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-            expected_result = [{"os" : [vm["os"] for vm in doc['VMs']]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-
-    def test_arrays_negative(self):
-        queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : ('syntax error', 3000),
-                          'SELECT job_title, array_agg(name)[:5] as names FROM %s' : ('syntax error', 3000),
-                          'SELECT job_title, array_agg(name)[-20:-5] as names FROM %s' : ('syntax error', 3000),
-                          'SELECT job_title, array_agg(name)[a:-b] as names FROM %s' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_slicing(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_agg(name)[0:5] as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            for item in actual_result['results']:
-                self.log.info("Result: %s" % actual_result['results'])
-                self.assertTrue(len(item['names']) <= 5, "Slicing doesn't work")
-
-            self.query = "SELECT job_title, array_agg(name)[5:] as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-            actual_result = self.run_cbq_query()
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_list = [{"job_title" : group,
-                                "names" : [x["name"] for x in self.full_list
-                                               if x["job_title"] == group]}
-                               for group in tmp_groups]
-            for item in actual_result['results']:
-                for tmp_item in expected_list:
-                    if item['job_title'] == tmp_item['job_title']:
-                        expected_item = tmp_item
-                self.log.info("Result: %s" % actual_result['results'])
-                self.assertTrue(len(item['names']) == len(expected_item['names']),
-                                "Slicing doesn't work")
-
-            self.query = "SELECT job_title, array_agg(name)[5:10] as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            for item in actual_result['results']:
-                self.log.info("Result: %s" % actual_result['results'])
-                self.assertTrue(len(item['names']) <= 5, "Slicing doesn't work")
-
-    def test_count_prepare(self):
-        for bucket in self.buckets:
-            self.query = "create index idx_cover on %s(join_mo,join_day) where join_mo > 7" % (bucket.name)
-            self.run_cbq_query()
-            self.query = "SELECT count(*) AS cnt from %s " % (bucket.name) +\
-                         "WHERE join_mo > 7 and join_day > 1"
-            self.prepared_common_body()
-
-    def test_leak_goroutine(self):
-     shell = RemoteMachineShellConnection(self.master)
-     for i in xrange(20):
-         cmd = 'curl http://%s:6060/debug/pprof/goroutine?debug=2 | grep NewLexer' %(self.master.ip)
-         o =shell.execute_command(cmd)
-         new_curl = json.dumps(o)
-         string_curl = json.loads(new_curl)
-         self.assertTrue("curl: (7) couldn't connect to host"== str(string_curl[1][1]))
-         cmd = "curl http://%s:8093/query/service -d 'statement=select * from 1+2+3'"%(self.master.ip)
-         o =shell.execute_command(cmd)
-         new_curl = json.dumps(o)
-         string_curl = json.loads(new_curl)
-         self.assertTrue(len(string_curl)==2)
-         cmd = 'curl http://%s:6060/debug/pprof/goroutine?debug=2 | grep NewLexer'%(self.master.ip)
-         o =shell.execute_command(cmd)
-         new_curl = json.dumps(o)
-         string_curl = json.loads(new_curl)
-         self.assertTrue(len(string_curl)==2)
-
-
-
-
-##############################################################################################
-#
-#   LIKE
-##############################################################################################
-
-    def test_like(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM {0} WHERE job_title LIKE 'S%' ORDER BY name".format(bucket.name)
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if doc["job_title"].startswith('S')]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            self.query = "SELECT name FROM {0} WHERE job_title LIKE '%u%' ORDER BY name".format(
-                                                                            bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if doc["job_title"].find('u') != -1]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            self.query = "SELECT name FROM {0} WHERE job_title NOT LIKE 'S%' ORDER BY name".format(
-                                                                            bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if not doc["job_title"].startswith('S')]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            self.query = "SELECT name FROM {0} WHERE job_title NOT LIKE '_ales' ORDER BY name".format(
-                                                                            bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if not (doc["job_title"].endswith('ales') and\
-                               len(doc["job_title"]) == 5)]
-            self.query = "SELECT name FROM {0} WHERE reverse(job_title) NOT LIKE 'sela_' ORDER BY name".format(
-                                                                            bucket.name)
-            actual_result1 = self.run_cbq_query()
-
-            self.assertEqual(actual_result1['results'],actual_result['results'] )
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_like_negative(self):
-        queries_errors = {"SELECT tasks_points FROM {0} WHERE tasks_points.* LIKE '_1%'" :
-                           ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-        queries_errors = {"SELECT tasks_points FROM {0} WHERE REVERSE(tasks_points.*) LIKE '%1_'" :
-                           ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-
-    def test_like_any(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE (ANY vm IN %s.VMs" % (
-                                                        bucket.name, bucket.name) +\
-            " SATISFIES vm.os LIKE '%bun%'" +\
-            "END) AND (ANY skill IN %s.skills " % (bucket.name) +\
-            "SATISFIES skill = 'skill2010' END) ORDER BY name"
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([vm for vm in doc["VMs"]
-                                       if vm["os"].find('bun') != -1]) > 0 and\
-                                  len([skill for skill in doc["skills"]
-                                       if skill == 'skill2010']) > 0]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_like_every(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE (EVERY vm IN %s.VMs " % (
-                                                        bucket.name, bucket.name) +\
-                         "SATISFIES vm.os NOT LIKE '%cent%' END)" +\
-                         " AND (ANY skill IN %s.skills SATISFIES skill =" % (bucket.name) +\
-                         " 'skill2010' END) ORDER BY name"
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([vm for vm in doc["VMs"]
-                                     if vm["os"].find('cent') == -1]) == len(doc["VMs"]) and\
-                                  len([skill for skill in doc["skills"]
-                                       if skill == 'skill2010']) > 0]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_like_aliases(self):
-        for bucket in self.buckets:
-            self.query = "select name AS NAME from %s " % (bucket.name) +\
-            "AS EMPLOYEE where EMPLOYEE.name LIKE '_mpl%' ORDER BY name"
-            actual_result = self.run_cbq_query()
-            self.query = "select name AS NAME from %s " % (bucket.name) +\
-            "AS EMPLOYEE where reverse(EMPLOYEE.name) LIKE '%lpm_' ORDER BY name"
-            actual_result1 = self.run_cbq_query()
-            self.assertEqual(actual_result['results'],actual_result1['results'])
-            expected_result = [{"NAME" : doc['name']} for doc in self.full_list
-                               if doc["name"].find('mpl') == 1]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['NAME']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_like_wildcards(self):
-        for bucket in self.buckets:
-            self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
-                         "LIKE '%@%.%' ORDER BY email"
-            actual_result = self.run_cbq_query()
-            self.query = "SELECT email FROM %s WHERE reverse(email) " % (bucket.name) +\
-                         "LIKE '%.%@%' ORDER BY email"
-            actual_result1 = self.run_cbq_query()
-            self.assertEqual(actual_result['results'],actual_result1['results'])
-
-            expected_result = [{"email" : doc['email']} for doc in self.full_list
-                               if re.match(r'.*@.*\..*', doc['email'])]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['email']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            self.query = "SELECT email FROM %s WHERE email" % (bucket.name) +\
-                         " LIKE '%@%.h' ORDER BY email"
-            actual_result = self.run_cbq_query()
-            expected_result = []
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_prepared_like_wildcards(self):
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==0)
-        for bucket in self.buckets:
-            self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
-                         "LIKE '%@%.%' ORDER BY email"
-            self.prepared_common_body()
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==1)
-
-
-    def test_between(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM {0} WHERE join_mo BETWEEN 1 AND 6 ORDER BY name".format(bucket.name)
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if doc["join_mo"] >= 1 and doc["join_mo"] <= 6]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            self.query = "SELECT name FROM {0} WHERE join_mo NOT BETWEEN 1 AND 6 ORDER BY name".format(bucket.name)
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if not(doc["join_mo"] >= 1 and doc["join_mo"] <= 6)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_between_negative(self):
-        queries_errors = {'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND -10 ORDER BY name' : ('syntax error', 3000),
-                          'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-
-##############################################################################################
-#
-#   GROUP BY
-##############################################################################################
-
-    def test_group_by(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
-                         "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
-                         "ORDER BY tasks_points.task1"
-            if (self.analytics):
-                 self.query = "SELECT d.tasks_points.task1 AS task from %s d " % (bucket.name) +\
-                         "WHERE d.join_mo>7 GROUP BY d.tasks_points.task1 " +\
-                         "ORDER BY d.tasks_points.task1"
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"task" : doc['tasks_points']["task1"]}
-                               for doc in self.full_list
-                               if doc["join_mo"] > 7]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_group_by_having(self):
-        for bucket in self.buckets:
-            self.query = "from %s WHERE join_mo>7 GROUP BY tasks_points.task1 " % (bucket.name) +\
-                         "HAVING COUNT(tasks_points.task1) > 0 SELECT tasks_points.task1 " +\
-                         "AS task ORDER BY tasks_points.task1"
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"task" : doc['tasks_points']["task1"]}
-                               for doc in self.full_list
-                               if doc["join_mo"] > 7]
-            expected_result = [doc for doc in expected_result
-                               if expected_result.count(doc) > 0]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_group_by_aggr_fn(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
-                         "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
-                         "HAVING COUNT(tasks_points.task1) > 0 AND "  +\
-                         "(MIN(join_day)=1 OR MAX(join_yr=2011)) " +\
-                         "ORDER BY tasks_points.task1"
-            actual_result = self.run_cbq_query()
-
-            if self.analytics:
-                self.query = "SELECT d.tasks_points.task1 AS task from %s d " % (bucket.name) +\
-                         "WHERE d.join_mo>7 GROUP BY d.tasks_points.task1 " +\
-                         "HAVING COUNT(d.tasks_points.task1) > 0 AND "  +\
-                         "(MIN(d.join_day)=1 OR MAX(d.join_yr=2011)) " +\
-                         "ORDER BY d.tasks_points.task1"
-
-            tmp_groups = set([doc['tasks_points']["task1"] for doc in self.full_list])
-            expected_result = [{"task" : group} for group in tmp_groups
-                               if [doc['tasks_points']["task1"]
-                                   for doc in self.full_list].count(group) >0 and\
-                               (min([doc["join_day"] for doc in self.full_list
-                                     if doc['tasks_points']["task1"] == group]) == 1 or\
-                                max([doc["join_yr"] for doc in self.full_list
-                                     if doc['tasks_points']["task1"] == group]) == 2011)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_prepared_group_by_aggr_fn(self):
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==0)
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
-                         "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
-                         "HAVING COUNT(tasks_points.task1) > 0 AND "  +\
-                         "(MIN(join_day)=1 OR MAX(join_yr=2011)) " +\
-                         "ORDER BY tasks_points.task1"
-            self.prepared_common_body()
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==1)
-            self.query = "delete from system:prepareds"
-            self.run_cbq_query()
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==0)
-
-    def test_group_by_satisfy(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, AVG(test_rate) as avg_rate FROM %s " % (bucket.name) +\
-                         "WHERE (ANY skill IN %s.skills SATISFIES skill = 'skill2010' end) " % (
-                                                                      bucket.name) +\
-                         "AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 end) "  % (
-                                                                      bucket.name) +\
-                         "GROUP BY job_title ORDER BY job_title"
-
-            if self.analytics:
-                self.query = "SELECT d.job_title, AVG(d.test_rate) as avg_rate FROM %s d " % (bucket.name) +\
-                         "WHERE (ANY skill IN d.skills SATISFIES skill = 'skill2010' end) " +\
-                         "AND (ANY vm IN d.VMs SATISFIES vm.RAM = 5 end) "  +\
-                         "GROUP BY d.job_title ORDER BY d.job_title"
-
-            actual_result = self.run_cbq_query()
-
-            tmp_groups = set([doc["job_title"] for doc in self.full_list])
-            expected_result = [{"job_title" : doc['job_title'],
-                                "test_rate" : doc["test_rate"]}
-                               for doc in self.full_list
-                               if 'skill2010' in doc["skills"] and\
-                                  len([vm for vm in doc["VMs"] if vm["RAM"] == 5]) >0]
-            expected_result = [{"job_title" : group,
-                                "avg_rate" : math.fsum([doc["test_rate"]
-                                                         for doc in expected_result
-                                             if doc["job_title"] == group]) /
-                                             len([doc["test_rate"] for doc in expected_result
-                                             if doc["job_title"] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_group_by_negative(self):
-        queries_errors = {"SELECT tasks_points from {0} WHERE tasks_points.task2>3" +\
-                          " GROUP BY tasks_points.*" :
-                           ('syntax error', 3000),
-                           "from {0} WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
-                           "SELECT tasks_points.task1 AS task HAVING COUNT(tasks_points.task1) > 0" :
-                           ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_groupby_first(self):
-        for bucket in self.buckets:
-            self.query = "select job_title, (FIRST p FOR p IN ARRAY_AGG(name) END) as names from {0} group by job_title order by job_title ".format(bucket.name)
-            actual_result = self.run_cbq_query()
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_list = [{"job_title" : group,
-                                "names" : ([x["name"] for x in self.full_list
-                                               if x["job_title"] == group][0])}
-                               for group in tmp_groups]
-            expected_result = self.sort_nested_list(expected_list)
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self.assertTrue(actual_result['results'] == expected_result)
-
-
-
-##############################################################################################
-#
-#   SCALAR FN
-##############################################################################################
-
-    def test_ceil(self):
-        for bucket in self.buckets:
-            self.query = "select name, ceil(test_rate) as rate from %s"  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['rate']))
-
-            expected_result = [{"name" : doc['name'], "rate" : math.ceil(doc['test_rate'])}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['rate']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "select name from %s where ceil(test_rate) > 5"  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['name']))
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if math.ceil(doc['test_rate']) > 5]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_floor(self):
-        for bucket in self.buckets:
-            self.query = "select name, floor(test_rate) as rate from %s"  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['rate']))
-
-            expected_result = [{"name" : doc['name'], "rate" : math.floor(doc['test_rate'])}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['rate']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "select name from %s where floor(test_rate) > 5"  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['name']))
-            expected_result = [{"name" : doc['name']} for doc in self.full_list
-                               if math.floor(doc['test_rate']) > 5]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "select name from %s where floor(job_title) > 5"  %(bucket.name)
-            actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['results'], [])
-
-    def test_greatest(self):
-        for bucket in self.buckets:
-            self.query = "select name, GREATEST(skills[0], skills[1]) as SKILL from %s"  % (
-                                                                                bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['SKILL']))
-
-            expected_result = [{"name" : doc['name'], "SKILL" :
-                                (doc['skills'][0], doc['skills'][1])[doc['skills'][0]<doc['skills'][1]]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['SKILL']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_least(self):
-        for bucket in self.buckets:
-            self.query = "select name, LEAST(skills[0], skills[1]) as SKILL from %s"  % (
-                                                                            bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['SKILL']))
-
-            expected_result = [{"name" : doc['name'], "SKILL" :
-                                (doc['skills'][0], doc['skills'][1])[doc['skills'][0]>doc['skills'][1]]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['SKILL']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_meta(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT distinct name FROM %s WHERE META(%s).`type` = "json"'  % (
-                                                                            bucket.name, bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name']))
-
-            expected_result = [{"name" : doc['name']} for doc in self.full_list]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT distinct name FROM %s WHERE META(%s).id IS NOT NULL"  % (
-                                                                                   bucket.name, bucket.name)
-            actual_result = self.run_cbq_query()
-
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_meta_like(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "%s"'  % (
-                                                                            bucket.name, bucket.name,"query%")
-            actual_result = self.run_cbq_query()
-
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name']))
-
-            expected_result = [{"name" : doc['name']} for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_meta_like(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s WHERE META(%s).id '  % (bucket.name, bucket.name) +\
-                         'LIKE "employee%"'
-            self.prepared_common_body()
-            if self.monitoring:
-                self.query = 'select * from system:completed_requests'
-                result = self.run_cbq_query()
-                requestID = result['requestID']
-                self.query = 'delete from system:completed_requests where requestID  =  "%s"' % requestID
-                self.run_cbq_query()
-                result = self.run_cbq_query('select * from system:completed_requests where requestID  =  "%s"' % requestID)
-                self.assertTrue(result['metrics']['resultCount'] == 0)
-
-    def test_meta_flags(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT META(%s).flags as flags FROM %s'  % (
-                                                                bucket.name, bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [{"flags" : self.item_flag}]
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_long_values(self):
-            self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%("default")
-            self.run_cbq_query()
-            self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%("default")
-            self.run_cbq_query()
-            self.query = 'insert into %s values("k021", { "id":1470691191458562048 } )'%("default")
-            self.run_cbq_query()
-            self.query = 'insert into %s values("k011", { "id":9223372036854775807 } )'%("default")
-            self.run_cbq_query()
-            self.query = 'insert into %s values("k041", { "id":9223372036854775808 } )'%("default")
-            self.run_cbq_query()
-            scheme = "couchbase"
-            host=self.master.ip
-            if self.master.ip == "127.0.0.1":
-                scheme = "http"
-                host="{0}:{1}".format(self.master.ip,self.master.port)
-            self.query = 'select * from default where meta().id = "{0}"'.format("k051")
-            actual_result = self.run_cbq_query()
-            print "k051 results is {0}".format(actual_result['results'][0]["default"])
-            #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775808})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k031")
-            actual_result = self.run_cbq_query()
-            print "k031 results is {0}".format(actual_result['results'][0]["default"])
-            #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775807})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k021")
-            actual_result = self.run_cbq_query()
-            print "k021 results is {0}".format(actual_result['results'][0]["default"])
-            #self.assertEquals(actual_result['results'][0]["default"],{'id': 1470691191458562048})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k011")
-            actual_result = self.run_cbq_query()
-            print "k011 results is {0}".format(actual_result['results'][0]["default"])
-            #self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854775807})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k041")
-            actual_result = self.run_cbq_query()
-            print "k041 results is {0}".format(actual_result['results'][0]["default"])
-            #self.assertEquals(actual_result['results'][0]["default"],{'id':  9223372036854776000L})
-            self.query = 'delete from default where meta().id in ["k051","k021","k011","k041","k031"]'
-            self.run_cbq_query()
-
-            # client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
-            # expected_result = []
-            # keys = ["k01","k02","k03","k04","k05"]
-            # for key in keys:
-            #     a, cas, b = client.get(key)
-            #     expected_result.append({"cas" : int(cas)})
-            # expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))[0:10]
-            # print "expected result is {0}".format(expected_result)
-
-            #self._verify_results(actual_result, expected_result)
-
-    def test_meta_cas(self):
-        for bucket in self.buckets:
-            self.query = 'select meta().cas from {0} order by meta().id limit 10'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            print actual_result
-
-
-    def test_meta_negative(self):
-        queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_length(self):
-        for bucket in self.buckets:
-            self.query = 'Select name, email from %s where LENGTH(job_title) = 5'  % (
-                                                                            bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name']))
-
-            expected_result = [{"name" : doc['name'], "email" : doc['email']}
-                               for doc in self.full_list
-                               if len(doc['job_title']) == 5]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_upper(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT UPPER(job_title) as JOB from %s'  % (
-                                                                        bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['JOB']))
-
-            expected_result = [{"JOB" : doc['job_title'].upper()}
-                               for doc in self.full_list]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['JOB']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_lower(self):
-        for bucket in self.buckets:
-            self.query = "SELECT distinct email from %s" % (bucket.name) +\
-                         " WHERE LOWER(job_title) < 't'"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['email']))
-
-            expected_result = [{"email" : doc['email'].lower()}
-                               for doc in self.full_list
-                               if doc['job_title'].lower() < 't']
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['email']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_round(self):
-        for bucket in self.buckets:
-            self.query = "select name, round(test_rate) as rate from %s" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['rate']))
-
-            expected_result = [{"name": doc["name"], "rate" : round(doc['test_rate'])}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['rate']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_substr(self):
-        indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
-        for index in indices_to_test:
-            for bucket in self.buckets:
-                self.query = "select name, SUBSTR(email, %s) as DOMAIN from %s" % (str(index), bucket.name)
-                query_result = self.run_cbq_query()
-                query_docs = query_result['results']
-                sorted_query_docs = sorted(query_docs, key=lambda doc: (doc['name'], doc['DOMAIN']))
-
-                expected_result = [{"name": doc["name"], "DOMAIN": self.expected_substr(doc['email'], 0, index)}
-                                   for doc in self.full_list]
-                sorted_expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['DOMAIN']))
-
-                self._verify_results(sorted_query_docs, sorted_expected_result)
-
-    def test_substr0(self):
-        indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
-        for index in indices_to_test:
-            for bucket in self.buckets:
-                self.query = "select name, SUBSTR0(email, %s) as DOMAIN from %s" % (str(index), bucket.name)
-                query_result = self.run_cbq_query()
-                query_docs = query_result['results']
-                sorted_query_docs = sorted(query_docs, key=lambda doc: (doc['name'], doc['DOMAIN']))
-
-                expected_result = [{"name": doc["name"], "DOMAIN": self.expected_substr(doc['email'], 0, index)}
-                                   for doc in self.full_list]
-                sorted_expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['DOMAIN']))
-
-                self._verify_results(sorted_query_docs, sorted_expected_result)
-
-    def test_substr1(self):
-        indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
-        for index in indices_to_test:
-            for bucket in self.buckets:
-                self.query = "select name, SUBSTR1(email, %s) as DOMAIN from %s" % (str(index), bucket.name)
-                query_result = self.run_cbq_query()
-                query_docs = query_result['results']
-                sorted_query_docs = sorted(query_docs, key=lambda doc: (doc['name'], doc['DOMAIN']))
-
-                expected_result = [{"name": doc["name"], "DOMAIN": self.expected_substr(doc['email'], 1, index)}
-                                   for doc in self.full_list]
-                sorted_expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['DOMAIN']))
-
-                self._verify_results(sorted_query_docs, sorted_expected_result)
-
-    def test_trunc(self):
-        for bucket in self.buckets:
-            self.query = "select name, TRUNC(test_rate, 0) as rate from %s" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['rate']))
-
-            expected_result = [{"name": doc["name"], "rate" : math.trunc(doc['test_rate'])}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['rate']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_first(self):
-        for bucket in self.buckets:
-            self.query = "select name, FIRST vm.os for vm in VMs end as OS from %s" % (
-                                                                           bucket.name)
-            if self.analytics:
-              self.query =  "select name, VMs[0].os as OS from %s" %(bucket.name);
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['name'], doc['OS']))
-
-            expected_result = [{"name": doc["name"], "OS" : doc['VMs'][0]["os"]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['OS']))
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   AGGR FN
-##############################################################################################
-
-    def test_agg_counters(self):
-        vals = []
-        keys = []
-        for i in range(10):
-            new_val = random.randint(0, 99)
-            new_counter = "counter_US"+str(i)
-            vals.append(new_val)
-            keys.append(new_counter)
-            self.query = 'INSERT INTO default VALUES ("%s",%s)' % (new_counter, new_val)
-            self.run_cbq_query()
-
-        self.query = 'SELECT sum(default) FROM default USE KEYS %s;' % (str(keys))
-        actual_results = self.run_cbq_query()
-        self.assertEqual(actual_results['results'][0]['$1'], sum(vals))
-
-        self.query = 'SELECT avg(default) FROM default USE KEYS %s;' % (str(keys))
-        actual_results = self.run_cbq_query()
-        self.assertEqual(actual_results['results'][0]['$1'], float(sum(vals)) / max(len(vals), 1))
-
-        self.query = 'DELETE FROM default USE KEYS %s;' % (str(keys))
-        actual_results = self.run_cbq_query()
-        self.assertEqual(actual_results['results'], [])
-
-
-    def test_sum(self):
-        for bucket in self.buckets:
-            self.query = "SELECT join_mo, SUM(tasks_points.task1) as points_sum" +\
-                        " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
-                        "ORDER BY join_mo"
-            if self.analytics:
-                self.query = "SELECT d.join_mo, SUM(d.tasks_points.task1) as points_sum" +\
-                        " FROM %s d WHERE d.join_mo < 5 GROUP BY d.join_mo " % (bucket.name) +\
-                        "ORDER BY d.join_mo"
-            actual_result = self.run_cbq_query()
-
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list
-                              if doc['join_mo'] < 5])
-            expected_result = [{"join_mo" : group,
-                                "points_sum" : math.fsum([doc['tasks_points']['task1']
-                                                          for doc in self.full_list
-                                                          if doc['join_mo'] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            self.query = "SELECT join_mo, SUM(test_rate) as rate FROM %s " % (bucket.name) +\
-                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
-                         "HAVING SUM(employees.test_rate) > 0 and " +\
-                         "SUM(test_rate) < 100000"
-            if self.analytics:
-                self.query = "SELECT d.join_mo, SUM(d.test_rate) as rate FROM %s d " % (bucket.name) +\
-                         " WHERE d.job_title='Sales' GROUP BY d.join_mo " +\
-                         "HAVING SUM(d.test_rate) > 0 and " +\
-                         "SUM(d.test_rate) < 100000"
-            actual_result = self.run_cbq_query()
-            actual_result = [{"join_mo" : doc["join_mo"], "rate" : round(doc["rate"])} for doc in actual_result['results']]
-            actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
-            expected_result = [{"join_mo" : group,
-                                "rate" : round(math.fsum([doc['test_rate']
-                                                          for doc in self.full_list
-                                                          if doc['join_mo'] == group and\
-                                                             doc['job_title'] == 'Sales']))}
-                               for group in tmp_groups
-                               if math.fsum([doc['test_rate']
-                                            for doc in self.full_list
-                                            if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] ) > 0 and\
-                                  math.fsum([doc['test_rate']
-                                            for doc in self.full_list
-                                            if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] ) < 100000]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_sum(self):
-        for bucket in self.buckets:
-            self.query = "SELECT join_mo, SUM(tasks_points.task1) as points_sum" +\
-                        " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
-                        "ORDER BY join_mo"
-            self.prepared_common_body()
-
-    def test_sum_negative(self):
-        queries_errors = {'SELECT join_mo, SUM(job_title) as rate FROM %s as employees' +\
-                          ' WHERE job_title="Sales" GROUP BY join_mo' : ('syntax error', 3000),
-                          'SELECT join_mo, SUM(VMs) as rate FROM %s as employees' +\
-                          ' WHERE job_title="Sales" GROUP BY join_mo' : ('syntax error', 3000)}
-        self.negative_common_body(queries_errors)
-
-    def test_avg(self):
-        for bucket in self.buckets:
-            self.query = "SELECT join_mo, AVG(tasks_points.task1) as points_avg" +\
-                        " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
-                        "ORDER BY join_mo"
-
-            if self.analytics:
-                self.query = "SELECT d.join_mo, AVG(d.tasks_points.task1) as points_avg" +\
-                        " FROM %s d WHERE d.join_mo < 5 GROUP BY d.join_mo " % (bucket.name) +\
-                        "ORDER BY d.join_mo"
-            actual_result = self.run_cbq_query()
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list
-                              if doc['join_mo'] < 5])
-            expected_result = [{"join_mo" : group,
-                                "points_avg" : math.fsum([doc['tasks_points']['task1']
-                                                          for doc in self.full_list
-                                                          if doc['join_mo'] == group]) /
-                                                len([doc['tasks_points']['task1']
-                                                          for doc in self.full_list
-                                                          if doc['join_mo'] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            self._verify_results(actual_result['results'], expected_result)
-
-            self.query = "SELECT join_mo, AVG(test_rate) as rate FROM %s " % (bucket.name) +\
-                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
-                         "HAVING AVG(employees.test_rate) > 0 and " +\
-                         "SUM(test_rate) < 100000"
-
-            if self.analytics:
-                self.query = "SELECT d.join_mo, AVG(d.test_rate) as rate FROM %s d" % (bucket.name) +\
-                         " WHERE d.job_title='Sales' GROUP BY d.join_mo " +\
-                         "HAVING AVG(d.test_rate) > 0 and " +\
-                         "SUM(d.test_rate) < 100000"
-
-            actual_result = self.run_cbq_query()
-
-            actual_result = [{'join_mo' : doc['join_mo'],
-                              'rate' : round(doc['rate'], 2)}
-                             for doc in actual_result['results']]
-            actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
-            expected_result = [{"join_mo" : group,
-                                "rate" : math.fsum([doc['test_rate']
-                                                          for doc in self.full_list
-                                                          if doc['join_mo'] == group and\
-                                                             doc['job_title'] == 'Sales'])/
-                                               len([doc['test_rate']
-                                                          for doc in self.full_list
-                                                          if doc['join_mo'] == group and\
-                                                             doc['job_title'] == 'Sales'])}
-                               for group in tmp_groups
-                               if (math.fsum([doc['test_rate']
-                                            for doc in self.full_list
-                                            if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'])/
-                                    len([doc['test_rate']
-                                         for doc in self.full_list
-                                         if doc['join_mo'] == group and\
-                                         doc['job_title'] == 'Sales'])> 0)  and\
-                                  math.fsum([doc['test_rate']
-                                            for doc in self.full_list
-                                            if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'])  < 100000]
-            expected_result = [{'join_mo' : doc['join_mo'],
-                              'rate' : round(doc['rate'], 2)}
-                             for doc in expected_result]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_min(self):
-        for bucket in self.buckets:
-            self.query = "SELECT join_mo, MIN(test_rate) as rate FROM %s " % (bucket.name) +\
-                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
-                         "HAVING MIN(employees.test_rate) > 0 and " +\
-                         "SUM(test_rate) < 100000"
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
-            expected_result = [{"join_mo" : group,
-                                "rate" : min([doc['test_rate']
-                                              for doc in self.full_list
-                                              if doc['join_mo'] == group and\
-                                              doc['job_title'] == 'Sales'])}
-                               for group in tmp_groups
-                               if min([doc['test_rate']
-                                       for doc in self.full_list
-                                       if doc['join_mo'] == group and\
-                                       doc['job_title'] == 'Sales']) > 0 and\
-                                  math.fsum([doc['test_rate']
-                                            for doc in self.full_list
-                                            if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales']) < 100000]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_max(self):
-        for bucket in self.buckets:
-            self.query = "SELECT join_mo, MAX(test_rate) as rate FROM %s " % (bucket.name) +\
-                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
-                         "HAVING MAX(employees.test_rate) > 0 and " +\
-                         "SUM(test_rate) < 100000"
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
-            expected_result = [{"join_mo" : group,
-                                "rate" : max([doc['test_rate']
-                                              for doc in self.full_list
-                                              if doc['join_mo'] == group and\
-                                              doc['job_title'] == 'Sales'])}
-                               for group in tmp_groups
-                               if max([doc['test_rate']
-                                       for doc in self.full_list
-                                       if doc['join_mo'] == group and\
-                                       doc['job_title'] == 'Sales'] ) > 0 and\
-                                  math.fsum([doc['test_rate']
-                                            for doc in self.full_list
-                                            if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] ) < 100000]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_agg_distinct(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_agg(DISTINCT name) as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_list = [{"job_title" : group,
-                                "names" : set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group])}
-                               for group in tmp_groups]
-            expected_result = self.sort_nested_list(expected_list)
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_length(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_length(array_agg(DISTINCT name)) as num_names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "num_names" : len(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group]))}
-                               for group in tmp_groups]
-
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-            self.query = "SELECT job_title, array_length(array_agg(DISTINCT test_rate)) as rates" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['job_title']))
-            expected_result = [{"job_title" : group,
-                                "rates" : len(set([x["test_rate"] for x in self.full_list
-                                               if x["job_title"] == group]))}
-                               for group in tmp_groups]
-
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_append(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title," +\
-                         " array_append(array_agg(DISTINCT name), 'new_name') as names" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group] + ['new_name']))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT job_title," +\
-                         " array_append(array_agg(DISTINCT name), 'new_name','123') as names" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group] + ['new_name'] + ['123']))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-
-
-    def test_prepared_array_append(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title," +\
-                         " array_append(array_agg(DISTINCT name), 'new_name') as names" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            self.prepared_common_body()
-
-    def test_array_union_symdiff(self):
-        for bucket in self.buckets:
-            self.query = 'select ARRAY_SORT(ARRAY_UNION(["skill1","skill2","skill2010","skill2011"],skills)) as skills_union from {0} order by meta().id limit 5'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results']==([{u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']},
-                            {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']},
-                            {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}]))
-
-            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF(["skill1","skill2","skill2010","skill2011"],skills)) as skills_diff1 from {0} order by meta().id limit 5'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results']==[{u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}])
-
-            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF1(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff2 from {0} order by meta().id limit 5'.format(bucket.name)
-            actual_result1 = self.run_cbq_query()
-            self.assertTrue(actual_result1['results'] == [{u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}])
-
-            self.query = 'select ARRAY_SORT(ARRAY_SYMDIFFN(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff3 from {0} order by meta().id limit 5'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'] == [{u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}])
-
-    def test_let(self):
-        for bucket in self.buckets:
-            self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertTrue("query-testemployee10153.1877827-0" in str(actual_result['results']))
-            self.assertTrue( "u'x1': {u'name': 1}" in str(actual_result['results']))
-
-    def test_let_missing(self):
-      created_indexes = []
-      try:
-            self.query = 'CREATE INDEX ix1 on default(x1)'
-            self.run_cbq_query()
-            created_indexes.append("ix1")
-            self.query = 'INSERT INTO default VALUES ("k01",{"x1":5, "type":"doc", "x2": "abc"}), ' \
-                         '("k02",{"x1":5, "type":"d", "x2": "def"})'
-            self.run_cbq_query()
-            self.query = 'EXPLAIN SELECT x1, x2 FROM default o LET o = CASE WHEN o.type = "doc" THEN o ELSE MISSING END WHERE x1 = 5'
-            try:
-                    self.run_cbq_query(self.query)
-            except CBQError as ex:
-                    self.assertTrue(str(ex).find("Duplicate variable o already in scope") != -1,
-                                    "Error is incorrect.")
-            else:
-                    self.fail("There was no errors.")
-            self.query = 'delete from default use keys["k01","k02"]'
-            self.run_cbq_query()
-      finally:
-            for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
-                    actual_result = self.run_cbq_query()
-
-
-    def test_optimized_let(self):
-        self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
-        res =self.run_cbq_query()
-        plan = ExplainPlanHelper(res)
-        self.assertTrue(plan['~children'][2]['~child']['~children']==[{u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr':
-            u'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]}, {u'#operator': u'Filter', u'condition': u'(`name1` = "employeefi")'},
-            {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}])
-
-        self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi" limit 2'
-        res =self.run_cbq_query()
-        self.assertTrue(res['results'] == [{u'name1': u'employeefi'}, {u'name1': u'employeefi'}])
-        self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4"'
-        res =self.run_cbq_query()
-        plan = ExplainPlanHelper(res)
-        self.assertTrue(plan['~children'][2]['~child']['~children']==
-                    [{u'#operator': u'Filter', u'condition': u'((((`default`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
-                     {u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr': u'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
-                     {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}])
-        self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4" limit 10'
-        res =self.run_cbq_query()
-        self.assertTrue(res['results']==[])
-
-    def test_correlated_queries(self):
-        for bucket in self.buckets:
-          if(bucket.name == "default"):
-            self.query = 'create index ix1 on %s(x,id)'%bucket.name
-            self.run_cbq_query()
-            self.query = 'insert into %s (KEY, VALUE) VALUES ("kk02",{"x":100,"y":101,"z":102,"id":"kk02"})'%(bucket.name)
-            self.run_cbq_query()
-
-            self.query = 'explain select d.x from {0} d where x in (select raw d.x from {0} b use keys ["kk02"])'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-            self.query = 'select d.x from {0} d where x in (select raw d.x from {0} b use keys ["kk02"])'.format(bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
-            self.query = 'explain select d.x from {0} d where x IN (select raw d.x from {0} b use keys[d.id])'.format(bucket.name)
-            actual_result =self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-            self.query = 'select d.x from {0} d where x IN (select raw d.x from {0} b use keys[d.id])'.format(bucket.name)
-            actual_result =self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
-            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
-            actual_result =self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
-            actual_result =self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
-            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
-            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-
-            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
-
-            self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b use keys["kk02"] where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-
-            self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b use keys["kk02"] where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
-
-            self.query = 'explain select d.x,d.id from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-
-            self.query = 'select d.x,d.y from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            self.assertTrue( sorted(actual_result['results']) ==sorted([{u'y': 101, u'x': 100}]))
-            self.query = 'explain select d.x from {0} d where x IN (select raw (select raw d.x from {0} c  use keys[d.id] where d.x = b.x)[0] from {0} b  where b.x is not null)'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-
-            self.query = 'select d.x from {0} d where x IN (select raw (select raw d.x from {0} c  use keys[d.id] where d.x = b.x)[0] from {0} b  where b.x is not null)'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
-
-            self.query = 'explain select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            plan = ExplainPlanHelper(actual_result)
-            #print plan
-            self.assertTrue("covers" in str(plan))
-            self.assertTrue(plan['~children'][0]['index']=='ix1')
-            self.query = 'select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
-            actual_result=self.run_cbq_query()
-            self.assertTrue( sorted(actual_result['results']) ==sorted([{u'x': 100, u's': [100]}]))
-            self.query = 'delete from %s use keys["kk02"]'%(bucket.name)
-            self.run_cbq_query()
-            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, "ix1", self.index_type)
-            self.run_cbq_query()
-
-    def test_object_concat_remove(self):
-        for bucket in self.buckets:
-            self.query = 'select object_concat({"name":"test"},{"test":123},tasks_points) as obj from %s order by meta().id limit 10;' % bucket.name
-            actual_result=self.run_cbq_query()
-            self.assertTrue(actual_result['results']==([{u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}]))
-            self.query = 'select OBJECT_REMOVE({"abc":1,"def":2,"fgh":3},"def")'
-            actual_result=self.run_cbq_query()
-            self.assertTrue(actual_result['results'],([{u'$1': {u'abc': 1, u'fgh': 3}}]))
-
-
-
-    def test_array_concat(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title," +\
-                         " array_concat(array_agg(name), array_agg(email)) as names" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result1 = sorted(actual_result, key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "names" : sorted([x["name"] for x in self.full_list
-                                                  if x["job_title"] == group] + \
-                                                 [x["email"] for x in self.full_list
-                                                  if x["job_title"] == group])}
-                               for group in tmp_groups]
-            expected_result1 = sorted(expected_result, key=lambda doc: (doc['job_title']))
-
-            self._verify_results(actual_result1, expected_result1)
-
-            self.query = "SELECT job_title," +\
-                         " array_concat(array_agg(name), array_agg(email),array_agg(join_day)) as names" +\
-                         " FROM %s GROUP BY job_title  limit 10" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result2 = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-
-            expected_result = [{"job_title" : group,
-                                "names" : sorted([x["name"] for x in self.full_list
-                                                  if x["job_title"] == group] + \
-                                                 [x["email"] for x in self.full_list
-                                                  if x["job_title"] == group] + \
-                                                 [x["join_day"] for x in self.full_list
-                                                  if x["job_title"] == group])}
-                               for group in tmp_groups][0:10]
-            expected_result2 = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self.assertTrue(actual_result2==expected_result2)
-
-    def test_array_prepend(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title," +\
-                         " array_prepend(1.2, array_agg(test_rate)) as rates" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "rates" : sorted([x["test_rate"] for x in self.full_list
-                                                  if x["job_title"] == group] + [1.2])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-            self.query = "SELECT job_title," +\
-                         " array_prepend(1.2,2.4, array_agg(test_rate)) as rates" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "rates" : sorted([x["test_rate"] for x in self.full_list
-                                                  if x["job_title"] == group] + [1.2]+[2.4])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT job_title," +\
-                         " array_prepend(['skill5', 'skill8'], array_agg(skills)) as skills_new" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "skills_new" : sorted([x["skills"] for x in self.full_list
-                                                  if x["job_title"] == group] + \
-                                                  [['skill5', 'skill8']])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT job_title," +\
-                         " array_prepend(['skill5', 'skill8'],['skill9','skill10'], array_agg(skills)) as skills_new" +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "skills_new" : sorted([x["skills"] for x in self.full_list
-                                                  if x["job_title"] == group] + \
-                                                  [['skill5', 'skill8']]+ [['skill9','skill10']])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-
-            self._verify_results(actual_result, expected_result)
-
-
-    def test_array_remove(self):
-        value = 'employee-1'
-        for bucket in self.buckets:
-            self.query = "SELECT job_title," +\
-                         " array_remove(array_agg(DISTINCT name), '%s') as names" % (value) +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group and x["name"]!= value]))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-            value1 = 'employee-2'
-            value2 = 'emp-2'
-            value3 = 'employee-1'
-            self.query = "SELECT job_title," +\
-                         " array_remove(array_agg(DISTINCT name), '%s','%s','%s') as names" % (value1,value2,value3) +\
-                         " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group and x["name"]!= value1 and x["name"]!=value3]))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_insert(self):
-        value1 = 'skill-20'
-        value2 = 'skill-21'
-        for bucket in self.buckets:
-            self.query = "SELECT array_insert(skills, 1, '%s','%s') " % (value1,value2) +\
-                         " FROM %s limit 1" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            expected_result = [{u'$1': [u'skill2010', u'skill-20', u'skill-21', u'skill2011']}]
-            self.assertTrue( actual_list['results'] == expected_result )
-
-    def test_array_avg(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_avg(array_agg(test_rate))" +\
-            " as rates FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['job_title']))
-            for doc in actual_result:
-                doc['rates'] = round(doc['rates'])
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "rates" : round(sum([x["test_rate"] for x in self.full_list
-                                           if x["job_title"] == group]) / float(len([x["test_rate"]
-                                                                                     for x in self.full_list
-                                           if x["job_title"] == group])))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_contains(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_contains(array_agg(name), 'employee-1')" +\
-            " as emp_job FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "emp_job" : 'employee-1' in [x["name"] for x in self.full_list
-                                                           if x["job_title"] == group] }
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_count(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_count(array_agg(name)) as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "names" : len([x["name"] for x in self.full_list
-                                           if x["job_title"] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_distinct(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_distinct(array_agg(name)) as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group]))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_max(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_max(array_agg(test_rate)) as rates" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "rates" : max([x["test_rate"] for x in self.full_list
-                                           if x["job_title"] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_sum(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, round(array_sum(array_agg(test_rate))) as rates" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "rates" : round(sum([x["test_rate"] for x in self.full_list
-                                           if x["job_title"] == group]))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_min(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_min(array_agg(test_rate)) as rates" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "rates" : min([x["test_rate"] for x in self.full_list
-                                           if x["job_title"] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_position(self):
-        self.query = "select array_position(['support', 'qa'], 'dev') as index_num"
-        actual_result = self.run_cbq_query()
-        expected_result = [{"index_num" : -1}]
-        self._verify_results(actual_result['results'], expected_result)
-
-        self.query = "select array_position(['support', 'qa'], 'qa') as index_num"
-        actual_result = self.run_cbq_query()
-        expected_result = [{"index_num" : 1}]
-        self._verify_results(actual_result['results'], expected_result)
-
-    def test_array_put(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-1') as emp_job" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group]))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-50','employee-51') as emp_job" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group]  + ['employee-50'] + ['employee-51']))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-47') as emp_job" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['job_title']))
-
-            expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group] + ['employee-47']))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_range(self):
-        self.query = "select array_range(0,10) as num"
-        actual_result = self.run_cbq_query()
-        expected_result = [{"num" : list(xrange(10))}]
-        self._verify_results(actual_result['results'], expected_result)
-
-    def test_array_replace(self):
-        for bucket in self.buckets:
-
-            self.query = "SELECT job_title, array_replace(array_agg(name), 'employee-1', 'employee-47') as emp_job" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(["employee-47" if x["name"] == 'employee-1' else x["name"]
-                                             for x in self.full_list
-                                             if x["job_title"] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_array_repeat(self):
-        self.query = "select ARRAY_REPEAT(2, 2) as num"
-        actual_result = self.run_cbq_query()
-        expected_result = [{"num" : [2] * 2}]
-        self._verify_results(actual_result['results'], expected_result)
-
-    def test_array_reverse(self):
-        self.query = "select array_reverse([1,2,3]) as num"
-        actual_result = self.run_cbq_query()
-        expected_result = [{"num" : [3,2,1]}]
-        self._verify_results(actual_result['results'], expected_result)
-
-    def test_array_sort(self):
-        for bucket in self.buckets:
-
-            self.query = "SELECT job_title, array_sort(array_agg(distinct test_rate)) as emp_job" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'],
-                                   key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["test_rate"] for x in self.full_list
-                                             if x["job_title"] == group]))}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_poly_length(self):
-        for bucket in self.buckets:
-
-            query_fields = ['tasks_points', 'VMs', 'skills']
-            for query_field in query_fields:
-                self.query = "Select length(%s) as custom_num from %s order by custom_num" % (query_field, bucket.name)
-                actual_result = self.run_cbq_query()
-                expected_result = [{"custom_num" : None} for doc in self.full_list]
-                self._verify_results(actual_result['results'], expected_result)
-
-                self.query = "Select poly_length(%s) as custom_num from %s order by custom_num" % (query_field, bucket.name)
-                actual_result = self.run_cbq_query()
-                expected_result = [{"custom_num" : len(doc[query_field])}
-                                   for doc in self.full_list]
-                expected_result = sorted(expected_result, key=lambda doc: (doc['custom_num']))
-                self._verify_results(actual_result['results'], expected_result)
-
-    def test_array_agg(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, array_agg(name) as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_list = [{"job_title" : group,
-                                "names" : [x["name"] for x in self.full_list
-                                               if x["job_title"] == group]}
-                               for group in tmp_groups]
-            expected_result = self.sort_nested_list(expected_list)
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   EXPRESSIONS
-##############################################################################################
-
-    def test_case(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN 'winter'" +\
-                         " WHEN join_mo < 6 AND join_mo > 2 THEN 'spring' " +\
-                         "WHEN join_mo < 9 AND join_mo > 5 THEN 'summer' " +\
-                         "ELSE 'autumn' END AS period FROM %s" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name'],
-                                                                       doc['period']))
-
-            expected_result = [{"name" : doc['name'],
-                                "period" : ((('autumn','summer')[doc['join_mo'] in [6,7,8]],
-                                             'spring')[doc['join_mo'] in [3,4,5]],'winter')
-                                             [doc['join_mo'] in [12,1,2]]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['period']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_case_expr(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, CASE job_title WHEN 'Sales' THEN 'Marketing'" +\
-                         "ELSE job_title END AS dept FROM %s" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name'],
-                                                                       doc['dept']))
-
-            expected_result = [{"name" : doc['name'],
-                                "dept" : (doc['job_title'], 'Marketing')[doc['job_title'] == 'Sales']}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                       doc['dept']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_case_arithm(self):
-        self.query = "SELECT CASE WHEN 1+1=3 THEN 7+7 WHEN 2+2=5 THEN 8+8 ELSE 2 END"
-        actual_result = self.run_cbq_query()
-        expected_result = [{"$1" : 2}]
-        self._verify_results(actual_result['results'], expected_result)
-
-    def test_in_int(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s where join_mo in [1,6]" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name']))
-
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if doc['join_mo'] in [1,6]]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "select name from %s where join_mo not in [1,6]" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name']))
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if not(doc['join_mo'] in [1,6])]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_in_str(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.query = "select name from %s where REVERSE(job_title) in ['selaS', 'troppuS']" % (bucket.name)
-            actual_result1 = self.run_cbq_query()
-            self.assertEqual(actual_result['results'],actual_result1['results'])
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name']))
-
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if doc['job_title'] in ['Sales', 'Support']]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "select name from %s where job_title not in ['Sales', 'Support']" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name']))
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if not(doc['job_title'] in ['Sales', 'Support'])]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_in_str(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
-            self.prepared_common_body()
-
-    def test_logic_expr(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 > 1 AND tasks_points.task1 < 4"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['task']))
-
-            expected_result = [{"task" : doc['tasks_points']['task1']}
-                               for doc in self.full_list
-                               if doc['tasks_points']['task1'] > 1 and\
-                                  doc['tasks_points']['task1'] < 4]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_comparition_equal_int(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 = 4"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['task']))
-
-            expected_result = [{"task" : doc['tasks_points']['task1']}
-                               for doc in self.full_list
-                               if doc['tasks_points']['task1'] == 4]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 == 4"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['task']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_comparition_equal_str(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name)+\
-            "name = 'employee-4'"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name']))
-
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if doc['name'] == 'employee-4']
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name)+\
-            "name == 'employee-4'"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_comparition_not_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 != 1 ORDER BY task"
-            actual_result = self.run_cbq_query()
-            actual_result = actual_result['results']
-
-            expected_result = [{"task" : doc['tasks_points']['task1']}
-                               for doc in self.full_list
-                               if doc['tasks_points']['task1'] != 1]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_comparition_not_equal_more_less(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 <> 1 ORDER BY task"
-            actual_result = self.run_cbq_query()
-            actual_result = actual_result['results']
-
-            expected_result = [{"task" : doc['tasks_points']['task1']}
-                               for doc in self.full_list
-                               if doc['tasks_points']['task1'] != 1]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_every_comparision_not_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 END)" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-
-            if self.analytics:
-                self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 )" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if len([vm for vm in doc["VMs"]
-                                       if vm['memory'] != 5]) == len(doc["VMs"])]
-
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_every_comparision_not_equal_less_more(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 END)" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-
-            if self.analytics:
-                self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 )" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list
-                               if len([vm for vm in doc["VMs"]
-                                       if vm['memory'] != 5]) == len(doc["VMs"])]
-
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_any_between(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            if self.analytics:
-                 self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' )" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 )"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([skill for skill in doc["skills"]
-                                       if skill == 'skill2010']) > 0 and\
-                                  len([vm for vm in doc["VMs"]
-                                       if vm["RAM"] in [1,2,3,4,5]]) > 0 and\
-                                  doc["job_title"] != 'Sales']
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_any_less_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM <= 5 END)"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            if self.analytics:
-                self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' )" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM <= 5 )"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([skill for skill in doc["skills"]
-                                       if skill == 'skill2010']) > 0 and\
-                                  len([vm for vm in doc["VMs"]
-                                       if vm["RAM"] <=5]) > 0 and\
-                                  doc["job_title"] != 'Sales']
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_any_more_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM >= 5 END)"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            if self.analytics:
-                self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' )" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM >= 5 )"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
-                               for doc in self.full_list
-                               if len([skill for skill in doc["skills"]
-                                       if skill == 'skill2010']) > 0 and\
-                                  len([vm for vm in doc["VMs"]
-                                       if vm["RAM"] >= 5]) > 0 and\
-                                  doc["job_title"] != 'Sales']
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_prepared_between(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
-            self.prepared_common_body()
-
-    def test_named_prepared_between(self):
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==0)
-        for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                        bucket.name) +\
-                          " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
-                                                                    bucket.name) +\
-                          "AND  NOT (job_title = 'Sales') ORDER BY name"
-            self.prepared_common_body()
-        if self.monitoring:
-            self.query = "select * from system:prepareds"
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==1)
-            name = result['results'][0]['prepareds']['name']
-            self.query = 'delete from system:prepareds where name = "%s" '  % name
-            result = self.run_cbq_query()
-            self.query = 'select * from system:prepareds where name = "%s" '  % name
-            result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==0)
-
-
-    def test_prepared_comparision_not_equal_less_more(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 END)" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-            self.prepared_common_body()
-
-    def test_prepared_comparision_not_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 END)" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-            self.prepared_common_body()
-
-    def test_prepared_more_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory >= 5 END)" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-            self.prepared_common_body()
-
-    def test_prepared_less_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <= 5 END)" % (
-                                                            bucket.name) +\
-                         " ORDER BY name"
-            self.prepared_common_body()
-
-    def test_let_not_equal(self):
-        for bucket in self.buckets:
-            self.query = "select compare from %s let compare = (test_rate != 2)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : doc["test_rate"] != 2}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_let_between(self):
-        for bucket in self.buckets:
-            self.query = "select compare from %s let compare = (test_rate between 1 and 3)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare": doc["test_rate"] >= 1 and doc["test_rate"] <= 3}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_let_not_equal_less_more(self):
-        for bucket in self.buckets:
-            self.query = "select compare from %s let compare = (test_rate <> 2)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : doc["test_rate"] != 2}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_let_more_equal(self):
-        for bucket in self.buckets:
-            self.query = "select compare from %s let compare = (test_rate >= 2)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : doc["test_rate"] >= 2}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_let_less_equal(self):
-        for bucket in self.buckets:
-            self.query = "select compare from %s let compare = (test_rate <= 2)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : doc["test_rate"] <= 2}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_comparition_equal_not_equal(self):
-        template= "SELECT join_day, join_mo FROM %s WHERE " +\
-            "join_day == 1 and join_mo != 2 ORDER BY join_day, join_mo"
-        for bucket in self.buckets:
-            self.query = template % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['join_day'], doc['join_mo']))
-
-            expected_result = [{"join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
-                               for doc in self.full_list
-                               if doc['join_day'] == 1 and doc["join_mo"] != 2]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_day'], doc['join_mo']))
-            self._verify_results(actual_result, expected_result)
-        return template
-
-    def test_comparition_more_and_less_equal(self):
-        template= "SELECT join_yr, test_rate FROM %s WHERE join_yr >= 2010 AND test_rate <= 4"
-        for bucket in self.buckets:
-            self.query = template % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['test_rate'], doc['join_yr']))
-
-            expected_result = [{"test_rate" : doc['test_rate'], "join_yr" : doc['join_yr']}
-                               for doc in self.full_list
-                               if doc['test_rate'] <= 4 and
-                               doc['join_yr'] >= 2010]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['test_rate'], doc['join_yr']))
-            self._verify_results(actual_result, expected_result)
-        return template
-
-    def test_comparition_null_missing(self):
-        template= "SELECT skills, VMs FROM %s WHERE " +\
-            "skills is not null AND VMs is not missing"
-        for bucket in self.buckets:
-            self.query = template % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['VMs'], doc['skills']))
-
-            expected_result = [{"VMs" : doc['VMs'], "skills" : doc['skills']}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['VMs'], doc['skills']))
-            self._verify_results(actual_result, expected_result)
-        return template
-
-    def test_comparition_aggr_fns(self):
-        template= "SELECT count(join_yr) years, sum(test_rate) rate FROM %s"
-        for bucket in self.buckets:
-            self.query = template % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-
-            expected_result = [{"years": len([doc['join_yr'] for doc in self.full_list]),
-                                "rate": sum([doc['test_rate'] for doc in self.full_list])}]
-            expected_result = sorted(expected_result)
-            self.assertTrue(round(actual_result[0]['rate']) == round(expected_result[0]['rate']))
-            self.assertTrue((actual_result[0]['years']) == (expected_result[0]['years']))
-        return template
-
-    def test_comparition_meta(self):
-        for bucket in self.buckets:
-            self.query = "SELECT meta(default).id, meta(default).type FROM %s" % (bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-
-    def test_comparition_more_less_equal(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 >= 1 AND tasks_points.task1 <= 4"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['task']))
-
-            expected_result = [{"task" : doc['tasks_points']['task1']}
-                               for doc in self.full_list
-                               if doc['tasks_points']['task1'] >= 1 and
-                               doc['tasks_points']['task1'] <= 4]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_comparition_expr(self):
-        for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 > tasks_points.task1"
-            actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['results'], [])
-
-    def test_arithm(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, SUM(test_rate) % COUNT(distinct join_yr)" +\
-            " as avg_per_year from {0} group by job_title".format(bucket.name)
-
-            if self.analytics:
-                  self.query = "SELECT d.job_title, SUM(d.test_rate) % COUNT(d.join_yr)" +\
-            " as avg_per_year from {0} d group by d.job_title".format(bucket.name)
-
-            actual_result = self.run_cbq_query()
-            actual_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
-                              for doc in actual_result['results']]
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "avg_per_year" : math.fsum([doc['test_rate']
-                                                             for doc in self.full_list
-                                                             if doc['job_title'] == group]) %\
-                                                  len(set([doc['join_yr'] for doc in self.full_list
-                                                           if doc['job_title'] == group]))}
-                               for group in tmp_groups]
-            expected_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
-                              for doc in expected_result]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = "SELECT job_title, (SUM(tasks_points.task1) +" +\
-            " SUM(tasks_points.task2)) % COUNT(distinct join_yr) as avg_per_year" +\
-            " from {0} group by job_title".format(bucket.name)
-
-            if self.analytics:
-                 self.query = "SELECT d.job_title, (SUM(d.tasks_points.task1) +" +\
-            " SUM(d.tasks_points.task2)) % COUNT(d.join_yr) as avg_per_year" +\
-            " from {0} d group by d.job_title".format(bucket.name)
-            actual_result = self.run_cbq_query()
-            actual_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
-                              for doc in actual_result['results']]
-            actual_result = sorted(actual_result, key=lambda doc: (
-                                                                       doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_result = [{"job_title" : group,
-                                "avg_per_year" : (math.fsum([doc['tasks_points']['task1']
-                                                             for doc in self.full_list
-                                                             if doc['job_title'] == group])+\
-                                                  math.fsum([doc['tasks_points']['task2']
-                                                             for doc in self.full_list
-                                                             if doc['job_title'] == group]))%\
-                                                  len(set([doc['join_yr'] for doc in self.full_list
-                                                           if doc['job_title'] == group]))}
-                               for group in tmp_groups]
-            expected_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
-                              for doc in expected_result]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   EXPLAIN
-##############################################################################################
-
-    def test_explain(self):
-        for bucket in self.buckets:
-            res = self.run_cbq_query()
-            self.log.info(res)
-	    plan = ExplainPlanHelper(res)
-            self.assertTrue(plan["~children"][0]["index"] == "#primary",
-                            "Type should be #primary, but is: %s" % plan["~children"][0]["index"])
-
-##############################################################################################
-#
-#   EXPLAIN WITH A PARTICULAR INDEX
-##############################################################################################
-
-    def test_explain_particular_index(self,index):
-        for bucket in self.buckets:
-            res = self.run_cbq_query()
-            self.log.info(res)
-            plan = ExplainPlanHelper(res)
-            self.assertTrue(plan['~children'][2]['~child']['~children'][0]['scan']['index'] == index,
-                            "wrong index used")
-
-
-###############################################################################################
-#
-#   EXPLAIN WITH UNION SCAN: Covering Indexes
-##############################################################################################
-
-    def test_explain_union(self,index):
-        for bucket in self.buckets:
-            res = self.run_cbq_query()
-	    plan = ExplainPlanHelper(res)
-            if("IN" in self.query):
-                self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "DistinctScan",
-                        "DistinctScan Operator is not used by this query")
-            else:
-                self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
-                        "UnionScan Operator is not used by this query")
-            if plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan":
-                self.log.info("IndexScan Operator is also used by this query in scans")
-            else:
-                self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-                self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-            if plan["~children"][0]["~children"][0]["scan"]["index"] == index:
-                self.log.info("Query is using specified index")
-            else:
-                self.log.info("Query is not using specified index")
-
-##############################################################################################
-#
-#   EXPLAIN WITH INDEX SCAN: COVERING INDEXES
-##############################################################################################
-
-    def test_explain_covering_index(self,index):
-        for bucket in self.buckets:
-            res = self.run_cbq_query()
-            s = pprint.pformat( res, indent=4 )
-            if index in s:
-                self.log.info("correct index used in json result ")
-            else:
-                self.log.error("correct index not used in json result ")
-                self.fail("correct index not used in json result ")
-            if 'covers' in s:
-                self.log.info("covers key present in json result ")
-            else:
-                self.log.error("covers key missing from json result ")
-                self.fail("covers key missing from json result ")
-            if 'cover' in s:
-                self.log.info("cover keyword present in json children ")
-            else:
-                self.log.error("cover keyword missing from json children ")
-                self.fail("cover keyword missing from json children ")
-            if 'IntersectScan' in s:
-                self.log.error("This is a covered query, Intersec scan should not be used")
-
-
-
-
-##############################################################################################
-#
-#   DATETIME
-##############################################################################################
-
-    def test_clock_millis(self):
-        self.query = "select clock_millis() as now"
-        res = self.run_cbq_query()
-        self.assertFalse("error" in str(res).lower())
-
-
-    def test_clock_str(self):
-        self.query = "select clock_str() as now"
-        now = datetime.datetime.now()
-        res = self.run_cbq_query()
-        expected = "%s-%02d-%02dT" % (now.year, now.month, now.day)
-        self.assertTrue(res["results"][0]["now"].startswith(expected),
-                        "Result expected: %s. Actual %s" % (expected, res["results"]))
-
-    def test_date_add_millis(self):
-        self.query = "select date_add_millis(clock_millis(), 100, 'day') as now"
-        now = time.time()
-        res = self.run_cbq_query()
-        self.assertTrue((res["results"][0]["now"] > now * 1000 + 100*24*60*60),
-                        "Result expected to be in: [%s ... %s]. Actual %s" % (
-                                        now * 1000 + 100*24*60*60, (now + 10) * 1000+ 100*24*60*60, res["results"]))
-
-    def test_date_add_str(self):
-        self.query = "select date_add_str(clock_str(), 10, 'day') as now"
-        now = datetime.datetime.now() + datetime.timedelta(days=10)
-        res = self.run_cbq_query()
-        expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
-        expected_delta = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour + 1)
-        self.assertTrue(res["results"][0]["now"].startswith(expected) or res["results"][0]["now"].startswith(expected_delta),
-                        "Result expected: %s. Actual %s" % (expected, res["results"]))
-
-    def test_date_diff_millis(self):
-        self.query = "select date_diff_millis(clock_millis(), date_add_millis(clock_millis(), 100, 'day'), 'day') as now"
-        res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["now"] == -100,
-                        "Result expected: %s. Actual %s" % (-100, res["results"]))
-
-    def test_date_diff_str(self):
-        self.query = 'select date_diff_str("2014-08-24T01:33:59", "2014-08-24T07:33:59", "minute") as now'
-        res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["now"] == -360,
-                        "Result expected: %s. Actual %s" % (-360, res["results"]))
-        self.query = 'select date_diff_str("2014-08-24T01:33:59", "2014-08-24T07:33:59", "hour") as now'
-        res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["now"] == -6,
-                        "Result expected: %s. Actual %s" % (-6, res["results"]))
-
-    def test_now(self):
-        self.query = "select now_str() as now"
-        now = datetime.datetime.now()
-        today = date.today()
-        res = self.run_cbq_query()
-        expected = "%s-%02d-%02dT" % (today.year, today.month, today.day,)
-        self.assertFalse("error" in str(res).lower())
-
-    def test_hours(self):
-        self.query = 'select date_part_str(now_str(), "hour") as hour, ' +\
-        'date_part_str(now_str(),"minute") as minute, date_part_str(' +\
-        'now_str(),"second") as sec, date_part_str(now_str(),"millisecond") as msec'
-        now = datetime.datetime.now()
-        res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["hour"] == now.hour or res["results"][0]["hour"] == (now.hour + 1),
-                        "Result for hours expected: %s. Actual %s" % (now.hour, res["results"]))
-        self.assertTrue("minute" in res["results"][0], "No minute field")
-        self.assertTrue("sec" in res["results"][0], "No second field")
-        self.assertTrue("msec" in res["results"][0], "No msec field")
-
-    def test_where(self):
-        for bucket in self.buckets:
-            self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
-            ' where date_part_str(now_str(),"month") < join_mo AND date_part_str(now_str(),"year")' +\
-            ' > join_yr AND date_part_str(now_str(),"day") < join_day'
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result["results"], key=lambda doc: (doc['name'],
-                                                                                doc['join_yr'],
-                                                                                doc['join_mo'],
-                                                                                doc['join_day']))
-
-            today = date.today()
-            expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'],
-                                "join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
-                               for doc in self.full_list
-                               if doc['join_yr'] < today.year and\
-                               doc['join_mo'] > today.month and\
-                               doc['join_day'] > today.day]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                        doc['join_yr'],
-                                                                        doc['join_mo'],
-                                                                        doc['join_day']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_date_where(self):
-        for bucket in self.buckets:
-            self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
-            ' where date_part_str(now_str(),"month") < join_mo AND date_part_str(now_str(),"year")' +\
-            ' > join_yr AND date_part_str(now_str(),"day") < join_day'
-            self.prepared_common_body()
-
-    def test_now_millis(self):
-        self.query = "select now_millis() as now"
-        now = time.time()
-        res = self.run_cbq_query()
-        self.assertFalse("error" in str(res).lower())
-
-    def test_str_to_millis(self):
-        now_millis = time.time()
-        now_time = datetime.datetime.fromtimestamp(now_millis)
-        now_millis = now_millis * 1000
-        try:
-            now_time_zone = round((round((datetime.datetime.now()-datetime.datetime.utcnow()).total_seconds())/1800)/2)
-        except AttributeError, ex:
-            raise Exception("Test requires python 2.7 : SKIPPING TEST")
-        now_time_str = "%s-%02d-%02d" % (now_time.year, now_time.month, now_time.day)
-        self.query = "select str_to_millis('%s') as now" % now_time_str
-        res = self.run_cbq_query()
-        self.assertTrue((res["results"][0]["now"] < (now_millis)) and\
-                        (res["results"][0]["now"] > (now_millis - 5184000000)),
-                        "Result expected to be in: [%s ... %s]. Actual %s" % (
-                                       now_millis - 5184000000, now_millis, res["results"]))
-
-    def test_millis_to_str(self):
-        now_millis = time.time()
-        now_time = datetime.datetime.fromtimestamp(now_millis)
-        expected = "%s-%02d-%02dT%02d:%02d" % (now_time.year, now_time.month, now_time.day,
-                                         now_time.hour, now_time.minute)
-        self.query = "select millis_to_str(%s) as now" % (now_millis * 1000)
-        res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["now"].startswith(expected),
-                        "Result expected: %s. Actual %s" % (expected, res["results"]))
-
-    def test_date_part_millis(self):
-        now_millis = time.time()
-        now_time = datetime.datetime.fromtimestamp(now_millis)
-        now_millis = now_millis * 1000
-        self.query = 'select date_part_millis(%s, "hour") as hour, ' % (now_millis) +\
-        'date_part_millis(%s,"minute") as minute, date_part_millis(' % (now_millis) +\
-        '%s,"second") as sec, date_part_millis(%s,"millisecond") as msec' % (now_millis,now_millis)
-        res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["hour"] == now_time.hour,
-                        "Result expected: %s. Actual %s" % (now_time.hour, res["results"]))
-        self.assertTrue(res["results"][0]["minute"] == now_time.minute,
-                        "Result expected: %s. Actual %s" % (now_time.minute, res["results"]))
-        self.assertTrue(res["results"][0]["sec"] == now_time.second,
-                        "Result expected: %s. Actual %s" % (now_time.second, res["results"]))
-        self.assertTrue("msec" in res["results"][0], "There are no msec in results")
-
-
-    def test_where_millis(self):
-        for bucket in self.buckets:
-            self.query = "select join_yr, join_mo, join_day, name from %s" % (bucket.name) +\
-            " where join_mo < 10 and join_day < 10 and str_to_millis(tostr(join_yr) || '-0'" +\
-            " || tostr(join_mo) || '-0' || tostr(join_day)) < now_millis()"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result["results"], key=lambda doc: (doc['name'],
-                                                                                doc['join_yr'],
-                                                                                doc['join_mo'],
-                                                                                doc['join_day']))
-
-            expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'],
-                                "join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
-                               for doc in self.full_list
-                               if doc['join_mo'] < 10 and doc['join_day'] < 10]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
-                                                                        doc['join_yr'],
-                                                                        doc['join_mo'],
-                                                                        doc['join_day']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_order_by_dates(self):
-        orders = ["asc", "desc"]
-        for order in orders:
-            for bucket in self.buckets:
-                self.query = "select millis_to_str(str_to_millis('2010-01-01')) as date"
-                actual_result = self.run_cbq_query()
-                self.assertTrue(actual_result["results"][0]["date"][:10] == '2010-01-01', 'Actual result %s' %  actual_result)
-                self.query = "select join_yr, join_mo, join_day, millis_to_str(str_to_millis(tostr(join_yr) || '-0' ||" +\
-                " tostr(join_mo) || '-0' || tostr(join_day))) as date from %s" % (bucket.name) +\
-                " where join_mo < 10 and join_day < 10 ORDER BY date %s" % order
-                actual_result = self.run_cbq_query()
-                actual_result = ([{"date" : doc["date"][:10],
-                                   "join_yr" : doc['join_yr'],
-                                    "join_mo": doc['join_mo'],
-                                    "join_day": doc['join_day']} for doc in actual_result["results"]])
-
-                expected_result = [{"date" : '%s-0%s-0%s' % (doc['join_yr'],
-                                    doc['join_mo'], doc['join_day']),
-                                    "join_yr" : doc['join_yr'],
-                                    "join_mo": doc['join_mo'],
-                                    "join_day": doc['join_day']}
-                                   for doc in self.full_list
-                                   if doc['join_mo'] < 10 and doc['join_day'] < 10]
-                expected_result = sorted(expected_result, key=lambda doc: (doc['date']), reverse=(order=='desc'))
-                self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   TYPE FNS
-##############################################################################################
-
-    def test_type(self):
-        types_list = [("name", "string"), ("tasks_points", "object"),
-                      ("some_wrong_key", "missing"),
-                      ("skills", "array"), ("VMs[0].RAM", "number"),
-                      ("true", "boolean"), ("test_rate", "number"),
-                      ("test.test[0]", "missing")]
-        for bucket in self.buckets:
-            for name_item, type_item in types_list:
-                self.query = 'SELECT TYPENAME(%s) as type_output FROM %s' % (
-                                                        name_item, bucket.name)
-                actual_result = self.run_cbq_query()
-                for doc in actual_result['results']:
-                    self.assertTrue(doc["type_output"] == type_item,
-                                    "Expected type for %s: %s. Actual: %s" %(
-                                                    name_item, type_item, doc["type_output"]))
-                self.log.info("Type for %s(%s) is checked." % (name_item, type_item))
-
-    def test_check_types(self):
-        types_list = [("name", "ISSTR", True), ("skills[0]", "ISSTR", True),
-                      ("test_rate", "ISSTR", False), ("VMs", "ISSTR", False),
-                      ("false", "ISBOOL", True), ("join_day", "ISBOOL", False),
-                      ("VMs", "ISARRAY", True), ("VMs[0]", "ISARRAY", False),
-                      ("skills[0]", "ISARRAY", False), ("skills", "ISARRAY", True)]
-        for bucket in self.buckets:
-            for name_item, fn, expected_result in types_list:
-                self.query = 'SELECT %s(%s) as type_output FROM %s' % (
-                                                        fn, name_item, bucket.name)
-                actual_result = self.run_cbq_query()
-                for doc in actual_result['results']:
-                    self.assertTrue(doc["type_output"] == expected_result,
-                                    "Expected output for fn %s( %s) : %s. Actual: %s" %(
-                                                fn, name_item, expected_result, doc["type_output"]))
-                self.log.info("Fn %s(%s) is checked. (%s)" % (fn, name_item, expected_result))
-
-    def test_types_in_satisfy(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES ISOBJ(vm) END) AND" % (
-                                                            bucket.name) +\
-                         " ISSTR(email) ORDER BY name"
-
-            if self.analytics:
-                self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES ISOBJ(vm) ) AND" % (
-                                                            bucket.name) +\
-                         " ISSTR(email) ORDER BY name"
-
-            actual_result = self.run_cbq_query()
-
-            expected_result = [{"name" : doc['name']}
-                               for doc in self.full_list]
-
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result['results'], expected_result)
-
-    def test_to_num(self):
-        self.query = 'SELECT tonum("12.12") - tonum("0.12") as num'
-        actual_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results'][0]['num'] == 12,
-                        "Expected: 12. Actual: %s" % (actual_result['results']))
-        self.log.info("TONUM is checked")
-
-    def test_to_str(self):
-        for bucket in self.buckets:
-            self.query = "SELECT TOSTR(join_mo) month FROM %s" % bucket.name
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-
-            self.query = "SELECT REVERSE(TOSTR(join_mo)) rev_month FROM %s" % bucket.name
-            actual_result1 = self.run_cbq_query()
-            actual_result2 = sorted(actual_result1['results'])
-            expected_result = [{"month" : str(doc['join_mo'])} for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            expected_result2 = [{"rev_month" : str(doc['join_mo'])[::-1]} for doc in self.full_list]
-            expected_result2 = sorted(expected_result2)
-            self._verify_results(actual_result, expected_result)
-            self._verify_results(actual_result2, expected_result2)
-
-    def test_to_bool(self):
-        self.query = 'SELECT tobool("true") as boo'
-        actual_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results'][0]['boo'] == True,
-                        "Expected: true. Actual: %s" % (actual_result['results']))
-        self.log.info("TOBOOL is checked")
-
-    def test_to_array(self):
-        for bucket in self.buckets:
-            self.query = "SELECT job_title, toarray(name) as names" +\
-            " FROM %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'], key=lambda doc: (doc['job_title'],
-                                                                   doc['names']))
-            expected_result = [{"job_title" : doc["job_title"],
-                              "names" : [doc["name"]]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title'],
-                                                                       doc['names']))
-            self._verify_results(actual_result, expected_result)
-##############################################################################################
-#
-#   CONCATENATION
-##############################################################################################
-
-    def test_concatenation(self):
-        for bucket in self.buckets:
-            self.query = "SELECT name || \" \" || job_title as employee" +\
-            " FROM %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-
-            actual_result = sorted(actual_list['results'], key=lambda doc: (doc['employee']))
-
-            expected_result = [{"employee" : doc["name"] + " " + doc["job_title"]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['employee']))
-            self._verify_results(actual_result, expected_result)
-
-    def test_concatenation_where(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name, skills' +\
-            ' FROM %s WHERE skills[0]=("skill" || "2010")' % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-
-            self.query = 'SELECT name, skills' +\
-            ' FROM %s WHERE reverse(skills[0])=("0102" || "lliks")' % (bucket.name)
-
-            actual_list1 = self.run_cbq_query()
-
-            actual_result = sorted(actual_list['results'])
-            actual_result2 = sorted(actual_list1['results'])
-            expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
-                               for doc in self.full_list
-                               if doc["skills"][0] == 'skill2010']
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-            self._verify_results(actual_result, actual_result2)
-##############################################################################################
-#
-#   SPLIT
-##############################################################################################
-
-    def test_select_split_fn(self):
-        for bucket in self.buckets:
-            self.query = "SELECT SPLIT(email, '@')[0] as login" +\
-            " FROM %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"login" : doc["email"].split('@')[0]}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_split_where(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s' % (bucket.name) +\
-            ' WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]'
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list
-                               if doc["email"].split('-')[0] == doc["name"].split('-')[1]]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   UNION
-##############################################################################################
-
-    def test_union(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s union select email from %s" % (bucket.name, bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list]
-            expected_result.extend([{"email" : doc["email"]}
-                                   for doc in self.full_list])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_union(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s union select email from %s" % (bucket.name, bucket.name)
-            self.prepared_common_body()
-
-    def test_union_multiply_buckets(self):
-        self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
-        self.query = "select name from %s union select email from %s" % (self.buckets[0].name, self.buckets[1].name)
-        actual_list = self.run_cbq_query()
-        actual_result = sorted(actual_list['results'])
-        expected_result = [{"name" : doc["name"]}
-                            for doc in self.full_list]
-        expected_result.extend([{"email" : doc["email"]}
-                                for doc in self.full_list])
-        expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-        self._verify_results(actual_result, expected_result)
-
-    def test_union_all(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s union all select email from %s" % (bucket.name, bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list]
-            expected_result.extend([{"email" : doc["email"]}
-                                   for doc in self.full_list])
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_union_all_multiply_buckets(self):
-        self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
-        self.query = "select name from %s union all select email from %s" % (self.buckets[0].name, self.buckets[1].name)
-        actual_list = self.run_cbq_query()
-        actual_result = sorted(actual_list['results'])
-        expected_result = [{"name" : doc["name"]}
-                            for doc in self.full_list]
-        expected_result.extend([{"email" : doc["email"]}
-                                for doc in self.full_list])
-        expected_result = sorted(expected_result)
-        self._verify_results(actual_result, expected_result)
-
-    def test_union_where(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s union select email from %s where join_mo > 2" % (bucket.name, bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list]
-            expected_result.extend([{"email" : doc["email"]}
-                                   for doc in self.full_list if doc["join_mo"] > 2])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-
-    def test_union_where_covering(self):
-        created_indexes = []
-        ind_list = ["one","two"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "coveringindex%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
-                elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(email,join_mo) USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, index_name)
-                created_indexes.append(index_name)
-        for bucket in self.buckets:
-            self.query = "explain select name from %s where name is not null union select email from %s where email is not null and join_mo >2 " % (bucket.name, bucket.name)
-            if self.covering_index:
-                self.test_explain_covering_index(index_name[0])
-            self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            #for a in actual_result:
-                #print "{0}".format(a)
-            expected_result = [{"name" : doc["name"]}
-                                for doc in self.full_list]
-            expected_result.extend([{"email" : doc["email"]}
-                                    for doc in self.full_list if doc["join_mo"] > 2])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-            for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
-                self.run_cbq_query()
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self.sleep(15,'wait for index')
-            self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
-            result = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(result['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-
-    def test_union_aggr_fns(self):
-        for bucket in self.buckets:
-            self.query = "select count(name) as names from %s union select count(email) as emails from %s" % (bucket.name, bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"names" : len(self.full_list)}]
-            expected_result.extend([{"emails" : len(self.full_list)}])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-
-    def test_union_aggr_fns_covering(self):
-        created_indexes = []
-        ind_list = ["one", "two"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "coveringindex%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
-                elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(email)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, index_name)
-                created_indexes.append(index_name)
-        for bucket in self.buckets:
-            self.query = "explain select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
-            if self.covering_index:
-                self.test_explain_covering_index(index_name)
-            self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"names" : len(self.full_list)}]
-            expected_result.extend([{"emails" : len(self.full_list)}])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-            for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
-                self.run_cbq_query()
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self.sleep(15,'wait for index')
-            self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
-            result = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(result['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-
-        ############## META NEW ###################
-    def test_meta_basic(self):
-        created_indexes = []
-        ind_list = ["one"]
-        index_name="one"
-
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "metaindex%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(meta().id,meta().cas)  USING %s" % (index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, index_name)
-                created_indexes.append(index_name)
-        for bucket in self.buckets:
-            self.query="explain select meta().id, meta().cas from {0} where meta().id is not null order by meta().id limit 10".format(bucket.name)
-            if self.covering_index:
-                self.test_explain_covering_index(index_name[0])
-
-            self.query="select meta().id, meta().cas from {0} where meta().id is not null order by meta().id limit 10".format(bucket.name)
-
-
-            actual_list = self.run_cbq_query()
-            actual_result = (actual_list['results'])
-
-            for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                self.run_cbq_query()
-
-            self.covering_index = False
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
-            self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id is not null order by meta().id limit 10".format(bucket.name)
-            expected_list = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(expected_list['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-
-            #self.assertEqual(sorted(actual_result) ,sorted(expected_result))
-
-    def test_meta_where(self):
-        created_indexes = []
-        ind_list = ["one"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "meta_where%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX {0} ON {1}(meta().id,meta().cas)  where meta().id like 'query-testemployee6%' USING {2}".format(index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, index_name)
-                created_indexes.append(index_name)
-        for bucket in self.buckets:
-            self.query="explain select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
-            if self.covering_index:
-                self.test_explain_covering_index(index_name[0])
-
-            self.query="select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-
-            for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                self.run_cbq_query()
-
-            self.covering_index = False
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
-            self.query = "select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
-            expected_list = self.run_cbq_query()
-            self.assertTrue(actual_result,sorted(expected_list['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            #self.assertTrue(actual_result == expected_result)
-
-    def test_meta_ambiguity(self):
-         for bucket in self.buckets:
-             self.query = "create index idx on %s(META())" %(bucket.name)
-             self.run_cbq_query()
-             self.query = "create index idx2 on {0}(META({0}))".format(bucket.name)
-             self.run_cbq_query()
-             self.query = "SELECT  META() as meta_c FROM %s  ORDER BY meta_c limit 10" %(bucket.name)
-             actual_result = self.run_cbq_query()
-             self.assertTrue(actual_result['status']=="success")
-             self.query = "SELECT  META(test) as meta_c FROM %s as test  ORDER BY meta_c limit 10" %(bucket.name)
-             actual_result = self.run_cbq_query()
-             self.assertTrue(actual_result['status']=="success")
-             self.query = "SELECT META(t1).id as id FROM default t1 JOIN default t2 ON KEYS t1.id;"
-             self.assertTrue(actual_result['status']=="success")
-             self.query = "drop index %s.idx" %(bucket.name)
-             self.run_cbq_query()
-             self.query = "drop index %s.idx2" %(bucket.name)
-             self.run_cbq_query()
-
-
-
-
-
-    def test_meta_where_greater_than(self):
-        created_indexes = []
-        ind_list = ["one"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "meta_where%s" % ind
-                if ind =="one":
-
-                    self.query = "CREATE INDEX {0} ON {1}(meta().id,meta().cas)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, index_name)
-                created_indexes.append(index_name)
-        for bucket in self.buckets:
-            self.query="explain select meta().id, meta().cas from {0} where meta().id >10 order by meta().id".format(bucket.name)
-            if self.covering_index:
-                self.test_explain_covering_index(index_name[0])
-
-            self.query="select meta().id, meta().cas from {0} where meta().id >10 order by meta().id limit 10".format(bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-
-            for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                self.run_cbq_query()
-
-            self.covering_index = False
-
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
-            self.query = "select meta().id, meta().cas from {0} use index(`#primary`)  where meta().id > 10 order by meta().id limit 10".format(bucket.name)
-            expected_list = self.run_cbq_query()
-            self.assertTrue(actual_result,sorted(expected_list['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-
-            #self.assertTrue(actual_result == expected_result)
-
-    def test_meta_partial(self):
-        created_indexes = []
-        ind_list = ["one"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "meta_where%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX {0} ON {1}(meta().id, name)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += "WITH {'index_type': 'memdb'}"
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, index_name)
-                created_indexes.append(index_name)
-
-        for bucket in self.buckets:
-            self.query="explain select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id limit 10".format(bucket.name)
-            if self.covering_index:
-                self.test_explain_covering_index(index_name[0])
-
-            self.query="select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id limit 10".format(bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-
-            for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                self.run_cbq_query()
-
-            self.covering_index = False
-
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
-            self.query = "select meta().id, name from {0} use index(`#primary`) where meta().id > 10 and name is not null order by meta().id limit 10".format(bucket.name)
-            expected_list = self.run_cbq_query()
-            #expected_result = sorted(expected_list['results'])
-            self.assertTrue(actual_result,sorted(expected_list['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            #self.assertTrue(actual_result == expected_result)
-
-    def test_meta_non_supported(self):
-        created_indexes = []
-        ind_list = ["one"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "meta_cas_%s" % ind
-                if ind =="one":
-                    #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
-                    queries_errors = {'CREATE INDEX ONE ON default(meta().cas) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta().flags) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta().expiration) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta().cas) using VIEW' : ('syntax error', 3000)}
-                    # if self.gsi_type:
-                    #     for query in queries_errors.iterkeys():
-                    #         query += " WITH {'index_type': 'memdb'}"
-                    #self.negative_common_body(queries_errors)
-
-    def test_meta_negative_namespace(self):
-        created_indexes = []
-        ind_list = ["one"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "meta_cas_%s" % ind
-                if ind =="one":
-                    #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
-                    queries_errors = {'CREATE INDEX TWO ON default(meta(invalid).id) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX THREE ON default(meta(invalid).id) using VIEW' : ('syntax error', 3000),
-                                      'CREATE INDEX FOUR ON default(meta()) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX FIVE ON default(meta()) using VIEW' : ('syntax error', 3000)}
-                    # if self.gsi_type:
-                    #     for query in queries_errors.iterkeys():
-                    #         query += " WITH {'index_type': 'memdb'}"
-                    self.negative_common_body(queries_errors)
-
-######################## META NEW END ######################################
-
-    def test_intersect(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list if doc['join_day'] > 5]
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-
-    def test_intersect_covering(self):
-        created_indexes = []
-        ind_list = ["one", "two"]
-        index_name="one"
-        for bucket in self.buckets:
-            for ind in ind_list:
-                index_name = "coveringindex%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (index_name, bucket.name,self.index_type)
-                elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, index_name)
-                created_indexes.append(index_name)
-        for bucket in self.buckets:
-            self.query = "explain select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            if self.covering_index:
-                self.test_explain_covering_index(index_name)
-            self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-            for doc in self.full_list if doc['join_day'] > 5]
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-
-            for ind in ind_list:
-                index_name = "coveringindex%s" % ind
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
-                self.run_cbq_query()
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
-            self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            expected_list = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(expected_list['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-
-
-    def test_intersect_all(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list if doc['join_day'] > 5]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_intersect(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            self.prepared_common_body()
-
-    def test_except_secondsetempty(self):
-        for bucket in self.buckets:
-            self.query = "drop primary index on %s USING %s" % (bucket.name,self.primary_indx_type);
-            self.run_cbq_query()
-        try:
-            self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
-            actual_list = self.run_cbq_query()
-            bucket_names=[]
-            for bucket in self.buckets:
-                bucket_names.append(bucket.name)
-            count = 0
-            for bucket in self.buckets:
-                if((actual_list['results'][count]['keyspace_id']) in bucket_names):
-                    count +=1
-                else:
-                  self.log.error("Wrong keyspace id returned or empty keyspace id returned")
-        finally:
-            for bucket in self.buckets:
-                self.query = "create primary index on %s" % bucket.name
-                self.run_cbq_query()
-
-    def test_except(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s except select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list if not doc['join_day'] > 5]
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
-            self._verify_results(actual_result, expected_result)
-
-    def test_except_all(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s except all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list if not doc['join_day'] > 5]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   WITHIN
-##############################################################################################
-
-    def test_within_list_object(self):
-        for bucket in self.buckets:
-            self.query = "select name, VMs from %s WHERE 5 WITHIN VMs" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
-                               for doc in self.full_list
-                               if len([vm for vm in doc["VMs"] if vm["RAM"] == 5])]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_within_list_object(self):
-        for bucket in self.buckets:
-            self.query = "select name, VMs from %s WHERE 5 WITHIN VMs" % (bucket.name)
-            self.prepared_common_body()
-
-    def test_within_list_of_lists(self):
-        for bucket in self.buckets:
-            self.query = "select name, VMs from %s where name within [['employee-2', 'employee-4'], ['employee-5']] " % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
-                               for doc in self.full_list
-                               if doc["name"] in ['employee-2', 'employee-4', 'employee-5']]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_within_object(self):
-        for bucket in self.buckets:
-            self.query = "select name, tasks_points from %s WHERE 1 WITHIN tasks_points" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"], "tasks_points" : doc["tasks_points"]}
-                               for doc in self.full_list
-                               if doc["tasks_points"]["task1"] == 1 or doc["tasks_points"]["task2"] == 1]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_within_array(self):
-        for bucket in self.buckets:
-            self.query = " select name, skills from %s where 'skill2010' within skills" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
-                               for doc in self.full_list
-                               if 'skill2010' in doc["skills"]]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   RAW
-##############################################################################################
-
-    def test_raw(self):
-        for bucket in self.buckets:
-            self.query = "select raw name from %s " % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            self.query = "select raw reverse(reverse(name)) from %s " % (bucket.name)
-            actual_list1 = self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
-
-            expected_result = [doc["name"] for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-            self._verify_results(actual_result, actual_result1)
-
-    def test_raw_limit(self):
-        for bucket in self.buckets:
-            self.query = "select raw skills[0] from %s limit 5" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [doc["skills"][0] for doc in self.full_list][:5]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_raw_order(self):
-        for bucket in self.buckets:
-            self.query = "select raw name from {0} order by name {1}".format(bucket.name,"desc")
-            actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
-            expected_result = [ doc["name"]
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result,reverse=True)
-           # expected_result = sorted(expected_result,reverse=True)
-            self.assertEqual(actual_result, expected_result)
-            self.query = "select raw name from {0} order by name {1}".format(bucket.name,"asc")
-            actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
-            expected_result = [doc["name"] for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name,"asc")
-            actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
-            expected_result = sorted(actual_result)
-            self.assertEqual(actual_result,expected_result)
-            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name,"desc")
-            actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
-            expected_result = sorted(actual_result,reverse=True)
-            self.assertEqual(actual_result,expected_result)
-
-    def test_push_limit(self):
-        for bucket in self.buckets:
-             self.query = 'insert into %s(KEY, VALUE) VALUES ("f01", {"f1":"f1"})' % (bucket.name)
-             self.run_cbq_query()
-             self.query = 'insert into %s(KEY, VALUE) VALUES ("f02", {"f1":"f1","f2":"f2"})' % (bucket.name)
-             self.run_cbq_query()
-             self.query = 'create index if1 on %s(f1)'%bucket.name
-             self.query = 'select q.id, q.f1,q.f2 from (select meta().id, f1,f2 from %s where f1="f1") q where q.f2 = "f2" limit 1'%bucket.name
-             result = self.run_cbq_query()
-             self.assertTrue(result['metrics']['resultCount']==1)
-             self.query = 'delete from %s use keys["f01","f02"]'%bucket.name
-             self.run_cbq_query()
-
-
-##############################################################################################
-#
-#  Number fns
-##############################################################################################
-
-    def test_abs(self):
-        for bucket in self.buckets:
-            self.query = "select join_day from %s where join_day > abs(-10)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [doc["join_day"] for doc in self.full_list
-                               if doc["join_day"] > abs(-10)]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_acos(self):
-        self.query = "select degrees(acos(0.5))"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': 60}]
-        self._verify_results(actual_list['results'], expected_result)
-
-    def test_asin(self):
-        self.query = "select degrees(asin(0.5))"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': 30}]
-        self._verify_results(actual_list['results'], expected_result)
-
-    def test_tan(self):
-        self.query = "select tan(radians(45))"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': 1}]
-        self._verify_results(actual_list['results'], expected_result)
-
-    def test_ln(self):
-        self.query = "select ln(10) = ln(2) + ln(5)"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': True}]
-        self._verify_results(actual_list['results'], expected_result)
-
-    def test_power(self):
-        self.query = "select power(sin(radians(33)), 2) + power(cos(radians(33)), 2)"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': 1}]
-        self._verify_results(actual_list['results'], expected_result)
-
-    def test_sqrt(self):
-        self.query = "select sqrt(9)"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': 3}]
-        self._verify_results(actual_list['results'], expected_result)
-
-    def test_sign(self):
-        self.query = "select sign(-5)"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': -1}]
-        self._verify_results(actual_list['results'], expected_result)
-        self.query = "select sign(5)"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': 1}]
-        self._verify_results(actual_list['results'], expected_result)
-        self.query = "select sign(0)"
-        actual_list = self.run_cbq_query()
-        expected_result = [{'$1': 0}]
-        self._verify_results(actual_list['results'], expected_result)
-
-##############################################################################################
-#
-#   CONDITIONAL FNS
-##############################################################################################
-
-    def test_nanif(self):
-        for bucket in self.buckets:
-            self.query = "select join_day, join_mo, NANIF(join_day, join_mo) as equality" +\
-                         " from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
-                                "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else 'NaN'}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_posinf(self):
-        for bucket in self.buckets:
-            self.query = "select join_day, join_mo, POSINFIF(join_day, join_mo) as equality" +\
-                         " from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
-                                "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else '+Infinity'}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   String FUNCTIONS
-##############################################################################################
-
-    def test_uuid(self):
-        self.query = "select uuid() as uuid"
-        actual_list = self.run_cbq_query()
-        self.assertTrue('uuid' in actual_list['results'][0] and actual_list['results'][0]['uuid'], 'UUid is not working')
-
-    def test_string_fn_negative(self):
-        queries_errors = {'select name from %s when contains(VMs, "Sale")' : ('syntax error', 3000),
-                          'select TITLE(test_rate) as OS from %s' : ('syntax error', 3000),
-                          'select REPEAT(name, -2) as name from %s' : ('syntax error', 3000),
-                          'select REPEAT(name, a) as name from %s' : ('syntax error', 3000),}
-        self.negative_common_body(queries_errors)
-
-    def test_contains(self):
-        for bucket in self.buckets:
-            self.query = "select name from %s where contains(job_title, 'Sale')" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-
-            self.query = "select name from %s where contains(reverse(job_title), reverse('Sale'))" % (bucket.name)
-            actual_list1= self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
-            self.assertEqual(actual_result1, actual_result)
-            expected_result = [{"name" : doc["name"]}
-                               for doc in self.full_list
-                               if doc['job_title'].find('Sale') != -1]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_initcap(self):
-        for bucket in self.buckets:
-            self.query = "select INITCAP(VMs[0].os) as OS from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_title(self):
-        for bucket in self.buckets:
-            self.query = "select TITLE(VMs[0].os) as OS from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            self.query = "select TITLE(REVERSE(VMs[0].os)) as rev_os from %s" % (bucket.name)
-
-            actual_list1 = self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
-
-
-            expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
-                               for doc in self.full_list]
-            expected_result1 = [{"rev_os" : (doc["VMs"][0]["os"][::-1][0].upper() + doc["VMs"][0]["os"][::-1][1:])} for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            expected_result1 = sorted(expected_result1)
-            self._verify_results(actual_result, expected_result)
-            self._verify_results(actual_result1, expected_result1)
-
-    def test_prepared_title(self):
-        for bucket in self.buckets:
-            self.query = "select TITLE(VMs[0].os) as OS from %s" % (bucket.name)
-            self.prepared_common_body()
-
-    def test_position(self):
-        for bucket in self.buckets:
-            self.query = "select POSITION(VMs[1].name, 'vm') pos from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"pos" : (doc["VMs"][1]["name"].find('vm'))} for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-            self.query = "select POSITION(VMs[1].name, 'server') pos from %s" % (bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"pos" : (doc["VMs"][1]["name"].find('server'))}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-            test_word = 'california'
-        for letter in test_word:
-            actual = self.run_position_query(test_word, letter)
-            expected = test_word.find(letter)
-            self.assertEqual(actual, expected)
-
-        letter = ''
-        actual = self.run_position_query(test_word, letter)
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-        letter = 'd'
-        actual = self.run_position_query(test_word, letter)
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-    def test_position0(self):
-        test_word = 'california'
-        for letter in test_word:
-            actual = self.run_position_query(test_word, letter, position_type = '0')
-            expected = test_word.find(letter)
-            self.assertEqual(actual, expected)
-
-        letter = ''
-        actual = self.run_position_query(test_word, letter, position_type = '0')
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-        letter = 'd'
-        actual = self.run_position_query(test_word, letter, position_type = '0')
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-    def test_position1(self):
-        test_word = 'california'
-        for letter in test_word:
-            actual = self.run_position_query(test_word, letter, position_type = '1')
-            expected = test_word.find(letter) + 1
-            self.assertEqual(actual, expected)
-
-        letter = ''
-        actual = self.run_position_query(test_word, letter, position_type = '1')
-        expected = test_word.find(letter) + 1
-        self.assertEqual(actual, expected)
-
-        letter = 'd'
-        actual = self.run_position_query(test_word, letter, position_type = '1')
-        expected = test_word.find(letter) + 1
-        self.assertEqual(actual, expected)
-
-    def test_regex_contains(self):
-        for bucket in self.buckets:
-            self.query = "select email from %s where REGEXP_CONTAINS(email, '-m..l')" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            self.query = "select email from %s where REGEXP_CONTAINS(reverse(email), 'l..m-')" % (bucket.name)
-            actual_list1 = self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
-            self.assertEquals(actual_result,actual_result1)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"email" : doc["email"]}
-                               for doc in self.full_list
-                               if len(re.compile('-m..l').findall(doc['email'])) > 0]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_regex_like(self):
-        for bucket in self.buckets:
-            self.query = "select email from %s where REGEXP_LIKE(email, '.*-mail.*')" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-
-            expected_result = [{"email" : doc["email"]}
-                               for doc in self.full_list
-                               if re.compile('.*-mail.*').search(doc['email'])]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_regex_position(self):
-        test_word = 'california'
-        for letter in test_word:
-            actual = self.run_regex_query(test_word, letter)
-            expected = test_word.find(letter)
-            self.assertEqual(actual, expected)
-
-        letter = ''
-        actual = self.run_regex_query(test_word, letter)
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-        letter = 'd'
-        actual = self.run_regex_query(test_word, letter)
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-    def test_regex_position0(self):
-        test_word = 'california'
-        for letter in test_word:
-            actual = self.run_regex_query(test_word, letter, regex_type = '0')
-            expected = test_word.find(letter)
-            self.assertEqual(actual, expected)
-
-        letter = ''
-        actual = self.run_regex_query(test_word, letter, regex_type = '0')
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-        letter = 'd'
-        actual = self.run_regex_query(test_word, letter, regex_type = '0')
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-    def test_regex_position1(self):
-        test_word = 'california'
-        for letter in test_word:
-            actual = self.run_regex_query(test_word, letter, regex_type = '1')
-            expected = test_word.find(letter) + 1
-            self.assertEqual(actual, expected)
-
-        letter = ''
-        actual = self.run_regex_query(test_word, letter, regex_type = '1')
-        expected = test_word.find(letter) + 1
-        self.assertEqual(actual, expected)
-
-        letter = 'd'
-        actual = self.run_regex_query(test_word, letter, regex_type = '1')
-        expected = test_word.find(letter)
-        self.assertEqual(actual, expected)
-
-    def test_regex_replace(self):
-        for bucket in self.buckets:
-            self.query = "select name, REGEXP_REPLACE(email, '-mail', 'domain') as mail from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"],
-                                "mail" : doc["email"].replace('-mail', 'domain')}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-            self.query = "select name, REGEXP_REPLACE(email, 'e', 'a', 2) as mail from %s" % (bucket.name)
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"],
-                                "mail" : doc["email"].replace('e', 'a', 2)}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_replace(self):
-        for bucket in self.buckets:
-            self.query = "select name, REPLACE(email, 'a', 'e', 1) as mail from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"],
-                                "mail" : doc["email"].replace('a', 'e', 1)}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_repeat(self):
-        for bucket in self.buckets:
-            self.query = "select REPEAT(name, 2) as name from %s" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"] * 2}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-##############################################################################################
-#
-#   LET
-##############################################################################################
-
-    def test_let_nums(self):
-        for bucket in self.buckets:
-            self.query = "select test_r, test_r > 2 compare from %s let test_r = (test_rate / 2)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"test_r" : doc["test_rate"] / 2,
-                                "compare" : (doc["test_rate"] / 2) > 2}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_let_nums(self):
-        for bucket in self.buckets:
-            self.query = "select test_r, test_r > 2 compare from %s let test_r = (test_rate / 2)" % (bucket.name)
-            self.prepared_common_body()
-
-    def test_let_string(self):
-        for bucket in self.buckets:
-            self.query = "select name, join_date date from %s let join_date = tostr(join_yr) || '-' || tostr(join_mo)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            self.query = "select name, join_date date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by meta().id limit 10" % (bucket.name)
-
-            actual_list2 = self.run_cbq_query()
-            actual_result2 = actual_list2['results']
-            expected_result = [{"name" : doc["name"],
-                                "date" : '%s-%s' % (doc['join_yr'], doc['join_mo'])}
-                               for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            expected_result2 = [{u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}]
-            self._verify_results(actual_result, expected_result)
-            self._verify_results(actual_result2,expected_result2)
-
-    def test_letting(self):
-        for bucket in self.buckets:
-            self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
-            if self.analytics:
-                    self.query = "SELECT d.join_mo, sum_test from %s d WHERE d.join_mo>7 group by d.join_mo letting sum_test = sum(d.tasks_points.task1)" % (bucket.name)
-
-            actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list if doc['join_mo']>7])
-            expected_result = [{"join_mo" : group,
-                              "sum_test" : sum([x["tasks_points"]["task1"] for x in self.full_list
-                                               if x["join_mo"] == group])}
-                               for group in tmp_groups]
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_prepared_letting(self):
-        for bucket in self.buckets:
-            self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
-            self.prepared_common_body()
-
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
 ##############################################################################################
+    def ExplainPlanHelper(self, res):
+        try:
+            rv = res["results"][0]["plan"]
+        except:
+            rv = res["results"][0]
+        return rv
+
+    def PreparePlanHelper(self, res):
+        try:
+            rv = res["results"][0]["plan"]
+        except:
+            rv = res["results"][0]["operator"]
+        return rv
+
+    def gen_docs(self, docs_per_day=1, type='default', values_type=None, name='tuq', start=0, end=0):
+        json_generator = JsonGenerator()
+        generators = []
+        if type == 'default':
+            if self.array_indexing:
+                generators = json_generator.generate_docs_employee_array(docs_per_day, start)
+            elif self.dataset == 'default':
+                #not working
+                generators = json_generator.generate_docs_employee(docs_per_day, start)
+            elif self.dataset == 'sabre':
+                #works
+                generators = json_generator.generate_docs_sabre(docs_per_day, start)
+            elif self.dataset == 'employee':
+                #not working
+                generators = json_generator.generate_docs_employee_data(docs_per_day=docs_per_day, start=start)
+            elif self.dataset == 'simple':
+                #not working
+                generators = json_generator.generate_docs_employee_simple_data(docs_per_day=docs_per_day, start=start)
+            elif self.dataset == 'sales':
+                #not working
+                generators = json_generator.generate_docs_employee_sales_data(docs_per_day=docs_per_day, start=start)
+            elif self.dataset == 'bigdata':
+                #not working
+                generators = json_generator.generate_docs_bigdata(end=(1000*docs_per_day), start=start, value_size=self.value_size)
+            else:
+                self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
+        elif type == 'base64':
+            end = self.num_items if end==0 else None
+            values = ["Engineer", "Sales", "Support"]
+            generators = [JSONNonDocGenerator(name, values, start=start, end=end)]
+
+        elif type == 'tasks':
+            start, end = 0, (28 + 1)
+            template = '{{ "task_name":"{0}", "project": "{1}"}}'
+            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in xrange(0,10)],
+                                                ["CB"], start=start, end=10))
+            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in xrange(10,20)],
+                                                ["MB"], start=10, end=20))
+            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in xrange(20,end)],
+                                                ["IT"], start=20, end=end))
+        elif type == 'join':
+            types = ['Engineer', 'Sales', 'Support']
+            join_yr = [2010, 2011]
+            join_mo = xrange(1, 12 + 1)
+            join_day = xrange(1, 28 + 1)
+            template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
+            template += ' "job_title":"{4}", "tasks_ids":{5}}}'
+            for info in types:
+                for year in join_yr:
+                    for month in join_mo:
+                        for day in join_day:
+                            name = ["employee-%s" % (str(day))]
+                            tasks_ids = ["test_task-%s" % day, "test_task-%s" % (day + 1)]
+                            generators.append(DocumentGenerator("query-test-%s-%s-%s-%s" % (info, year, month, day),
+                                                                template, name, [year], [month], [day], [info], [tasks_ids],
+                                                                start=start, end=docs_per_day))
+
+        elif type == 'json_non_docs':
+            end = self.num_items if end==0 else None
+            if values_type == 'string':
+                values = ['Engineer', 'Sales', 'Support']
+            elif values_type == 'int':
+                values = [100, 200, 300, 400, 500]
+            elif values_type == 'array':
+                values = [[10, 20], [20, 30], [30, 40]]
+            else:
+                return []
+            generators = [JSONNonDocGenerator(name, values, start=start,end=end)]
+
+        elif type == 'nulls':
+            end = self.num_items if not end else None
+            generators = []
+            index = end/3
+            template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0":{1}, "P1":{2}, "P2":{3}}},'
+            template += '"story_point" : {4},"jira_tickets": {5}}}'
+            names = [str(i) for i in xrange(0, index)]
+            rates = xrange(0, index)
+            points = [[1,2,3],]
+            jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
+                            '{"Number": 2, "project": "mb", "description": "test"}]',]
+            generators.append(DocumentGenerator(name, template, names, rates, rates, rates, points, jira_tickets,
+                                                start=start, end=index))
+            template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0": null, "P1":null, "P2":null}},'
+            template += '"story_point" : [1,2,null],"jira_tickets": {1}}}'
+            jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
+                            '{"Number": 2, "project": "mb", "description": null}]',]
+            names = [str(i) for i in xrange(index, index + index)]
+            generators.append(DocumentGenerator(name, template, names, jira_tickets, start=index, end=index + index))
+            template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P4": 2}},'
+            template += '"story_point" : [null,null],"jira_tickets": {1}}}'
+            names = [str(i) for i in xrange(index + index, end)]
+            jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
+                            '{"Number": 2, "project": "mb"}]',]
+            generators.append(DocumentGenerator(name, template, names, jira_tickets, start=index + index, end=end))
+        return generators
+
+    def with_retry(self, func, eval=True, delay=5, tries=10):
+        attempts = 0
+        while attempts < tries:
+            attempts = attempts + 1
+            res = func()
+            if res == eval:
+                return res
+            else:
+                self.sleep(delay, 'incorrect results, sleeping for %s' % delay)
+        raise Exception('timeout, invalid results: %s' % res)
+
+    def is_index_present(self, bucket_name, index_name, fields_set, using):
+        desired_index = (index_name, bucket_name,
+                         frozenset([field.split()[0].replace('`', '').replace('(', '').replace(')', '') for field in fields_set]),
+                         "online", using)
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        current_indexes = [(i['indexes']['name'],
+                            i['indexes']['keyspace_id'],
+                            frozenset([key.replace('`', '').replace('(', '').replace(')', '')
+                                       for key in i['indexes']['index_key']]),
+                            i['indexes']['state'],
+                            i['indexes']['using']) for i in query_response['results']]
+        if desired_index in current_indexes:
+            return True
+        else:
+            return False
+
+    def wait_for_index_present(self, bucket_name, index_name, fields_set, using):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=True, delay=1, tries=30)
+
+    def wait_for_index_drop(self, bucket_name, index_name, fields_set, using):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=False, delay=1, tries=30)
+
+    def get_parsed_indexes(self):
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        current_indexes = [{'name': i['indexes']['name'],
+                            'bucket': i['indexes']['keyspace_id'],
+                            'fields': frozenset([key.replace('`', '').replace('(', '').replace(')', '')
+                                                 for key in i['indexes']['index_key']]),
+                            'state': i['indexes']['state'],
+                            'using': i['indexes']['using'],
+                            'where': i['indexes'].get('condition', ''),
+                            'is_primary': i['indexes'].get('is_primary', False)} for i in query_response['results']]
+        return current_indexes
+
+    def parse_desired_indexes(self, index_list):
+        desired_indexes = [{'name': index['name'],
+                            'bucket': index['bucket'],
+                            'fields': frozenset([field.split()[0] for field in index['fields']]),
+                            'state': index['state'],
+                            'using': index['using'],
+                            'where': index.get('where', ''),
+                            'is_primary': index.get('is_primary', False)} for index in index_list]
+        return desired_indexes
+
+    def make_hashable_index_set(self, parsed_indexes):
+        return frozenset([frozenset(index_dict.items()) for index_dict in parsed_indexes])
+
+    def get_index_vars(self, index):
+        name = index['name']
+        keyspace = index['bucket']
+        fields = index['fields']
+        joined_fields = ', '.join(fields)
+        using = index['using']
+        is_primary = index['is_primary']
+        where = index['where']
+        return name, keyspace, fields, joined_fields, using, is_primary, where
+
+    def drop_undesired_indexes(self, desired_index_set, current_index_set, current_indexes):
+        if desired_index_set != current_index_set:
+            for current_index in current_indexes:
+                if frozenset(current_index.items()) not in desired_index_set:
+                    # drop index
+                    name, keyspace, fields, joined_fields, using, is_primary, where = self.get_index_vars(current_index)
+                    self.log.info("dropping index: %s %s %s" % (keyspace, name, using))
+                    if is_primary:
+                        self.run_cbq_query("DROP PRIMARY INDEX on %s USING %s" % (keyspace, using))
+                    else:
+                        self.run_cbq_query("DROP INDEX %s.%s USING %s" % (keyspace, name, using))
+                    self.wait_for_index_drop(keyspace, name, fields, using)
+
+    def create_desired_indexes(self, desired_index_set, current_index_set, desired_indexes):
+        if desired_index_set != current_index_set:
+            for desired_index in desired_indexes:
+                if frozenset(desired_index.items()) not in current_index_set:
+                    name, keyspace, fields, joined_fields, using, is_primary, where = self.get_index_vars(desired_index)
+                    self.log.info("creating index: %s %s %s" % (keyspace, name, using))
+                    if is_primary:
+                        self.run_cbq_query("CREATE PRIMARY INDEX ON %s USING %s" % (keyspace, using))
+                    else:
+                        if where != '':
+                            self.run_cbq_query("CREATE INDEX %s ON %s(%s) WHERE %s  USING %s" % (name, keyspace, joined_fields, where, using))
+                        else:
+                            self.run_cbq_query("CREATE INDEX %s ON %s(%s) USING %s" % (name, keyspace, joined_fields, using))
+                    self.wait_for_index_present(keyspace, name, fields, using)
+
+    def query_runner(self, test_dict):
+        test_results = dict()
+        restore_indexes = self.get_parsed_indexes()
+        res_dict = dict()
+        res_dict['errors'] = []
+        for test_name in sorted(test_dict.keys()):
+            try:
+                index_list = test_dict[test_name]['indexes']
+                pre_queries = test_dict[test_name]['pre_queries']
+                queries = test_dict[test_name]['queries']
+                post_queries = test_dict[test_name]['post_queries']
+                asserts = test_dict[test_name]['asserts']
+                cleanups = test_dict[test_name]['cleanups']
+
+                # INDEX STAGE
+                current_indexes = self.get_parsed_indexes()
+                desired_indexes = self.parse_desired_indexes(index_list)
+                desired_index_set = self.make_hashable_index_set(desired_indexes)
+                current_index_set = self.make_hashable_index_set(current_indexes)
+
+                # drop all undesired indexes
+                self.drop_undesired_indexes(desired_index_set, current_index_set, current_indexes)
+
+                # create desired indexes
+                current_indexes = self.get_parsed_indexes()
+                current_index_set = self.make_hashable_index_set(current_indexes)
+                self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
+
+                res_dict['pre_q_res'] = []
+                res_dict['q_res'] = []
+                res_dict['post_q_res'] = []
+                res_dict['errors'] = []
+                res_dict['cleanup_res'] = []
+
+                # PRE_QUERIES STAGE
+                self.log.info('Running Pre-query Stage')
+                for func in pre_queries:
+                    res = func(res_dict)
+                    res_dict['pre_q_res'].append(res)
+                # QUERIES STAGE
+                self.log.info('Running Query Stage')
+                for query in queries:
+                    res = self.run_cbq_query(query)
+                    res_dict['q_res'].append(res)
+                # POST_QUERIES STAGE
+                self.log.info('Running Post-query Stage')
+                for func in post_queries:
+                    res = func(res_dict)
+                    res_dict['post_q_res'].append(res)
+                # ASSERT STAGE
+                self.log.info('Running Assert Stage')
+                for func in asserts:
+                    res = func(res_dict)
+                    self.log.info('Pass: ' + test_name)
+                # CLEANUP STAGE
+                self.log.info('Running Cleanup Stage')
+                for func in cleanups:
+                    res = func(res_dict)
+                    res_dict['cleanup_res'].append(res)
+            except Exception as e:
+                self.log.info('Fail: ' + test_name)
+                res_dict['errors'].append((test_name, e, traceback.format_exc(), res_dict))
+
+            test_results[test_name] = res_dict
+
+        ## reset indexes
+        self.log.info('Queries completed, restoring previous indexes')
+        current_indexes = self.get_parsed_indexes()
+        restore_index_set = self.make_hashable_index_set(restore_indexes)
+        current_index_set = self.make_hashable_index_set(current_indexes)
+        self.drop_undesired_indexes(restore_index_set, current_index_set, current_indexes)
+        current_indexes = self.get_parsed_indexes()
+        current_index_set = self.make_hashable_index_set(current_indexes)
+        self.create_desired_indexes(restore_index_set, current_index_set, restore_indexes)
+
+        ## print errors
+        errors = [error for key in test_results.keys() for error in test_results[key]['errors']]
+        has_errors = False
+        if errors != []:
+            has_errors = True
+            error_string = '\n ************************ There are %s errors: ************************ \n \n' % (len(errors))
+            for error in errors:
+                error_string += '************************ Error in query: ' + str(error[0]) + ' ************************ \n'
+                error_string += str(error[2]) + '\n'
+            error_string += '************************ End of Errors ************************ \n'
+            self.log.error(error_string)
+
+        # trigger failure
+        self.assertEqual(has_errors, False)
+
+    def compare(self, test, query, expected_result_list):
+        actual_result_list = []
+        actual_result = self.run_cbq_query(query)
+        for i in xrange(0, 5):
+            if test in ["test_asc_desc_composite_index", "test_meta", "test_asc_desc_array_index"]:
+                actual_result_list.append(actual_result['results'][i]['default']['_id'])
+            elif test in ["test_desc_isReverse_ascOrder"]:
+                actual_result_list.append(actual_result['results'][i]['id'])
+        self.assertEqual(actual_result_list, expected_result_list)
+        query = query.replace("from default", "from default use index(`#primary`)")
+        expected_result = self.run_cbq_query(query)
+        self.assertEqual(actual_result['results'], expected_result['results'])
 
     def negative_common_body(self, queries_errors={}):
         if not queries_errors:
             self.fail("No queries to run!")
+        check_code = False
         for bucket in self.buckets:
-            for query, value in queries_errors.iteritems():
-                error, code = value
+            for query_template, error_arg in queries_errors.iteritems():
+                if isinstance(error_arg,str):
+                    error = error_arg
+                else:
+                    error, code = error_arg
+                    check_code = True
                 try:
+                    query = self.gen_results.generate_query(query_template)
                     actual_result = self.run_cbq_query(query.format(bucket.name))
                 except CBQError as ex:
                     self.log.error(ex)
+                    self.log.error(error)
                     self.assertTrue(str(ex).find(error) != -1,
                                     "Error is incorrect.Actual %s.\n Expected: %s.\n" %(
                                                                 str(ex).split(':')[-1], error))
-                    self.assertTrue(str(ex).find(str(code)) != -1,
-                                    "Error code is incorrect.Actual %s.\n Expected: %s.\n" %(
-                                                                str(ex), code))
+                    if check_code:
+                        self.assertTrue(str(ex).find(str(code)) != -1,
+                                        "Error code is incorrect.Actual %s.\n Expected: %s.\n" % (str(ex), code))
                 else:
-                    self.fail("There was no errors. Error expected: %s" % error)
+                    self.fail("There were no errors. Error expected: %s" % error)
 
     def prepared_common_body(self,server=None):
         self.isprepared = True
         result_no_prepare = self.run_cbq_query(server=server)['results']
         if self.named_prepare:
-            if 'concurrent' not in self.named_prepare:
-                self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
+            self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4] if 'concurrent' not in self.named_prepare else None
             query = "PREPARE %s from %s" % (self.named_prepare,self.query)
         else:
             query = "PREPARE %s" % self.query
@@ -4361,25 +615,25 @@ class QueryTests(BaseTestCase):
             result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan,server=server)['results']
         else:
             result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True,server=server)['results']
-        if(self.cover):
+        if self.cover :
             self.assertTrue("IndexScan in %s" % result_with_prepare)
             self.assertTrue("covers in %s" % result_with_prepare)
             self.assertTrue("filter_covers in %s" % result_with_prepare)
             self.assertFalse('ERROR' in (str(word).upper() for word in result_with_prepare))
-        msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
-        self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
-                          msg % (result_no_prepare[:100],result_no_prepare[-100:],
-                                 result_with_prepare[:100],result_with_prepare[-100:]))
+        msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s" \
+              % (result_no_prepare[:100],result_no_prepare[-100:], result_with_prepare[:100],result_with_prepare[-100:])
+        self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare), msg)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={},
+                      is_prepared=False,
                       encoded_plan=None):
-        self.log.info("-"*100)
+        self.log.info("-" * 100)
         if query is None:
             query = self.query
         if server is None:
-           server = self.master
-           if self.input.tuq_client and "client" in self.input.tuq_client:
-               server = self.tuq_client
+            server = self.master
+            if self.input.tuq_client and "client" in self.input.tuq_client:
+                server = self.tuq_client
         cred_params = {'creds': []}
         rest = RestConnection(server)
         username = rest.username
@@ -4390,59 +644,53 @@ class QueryTests(BaseTestCase):
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
         if self.use_rest:
-           #if (self.coverage == True):
-            #     self._set_env_variable(server)
-            #     n1ql_port = self.input.param("n1ql_port", None)
-            #     if server.ip == "127.0.0.1" and server.n1ql_port:
-            #         n1ql_port = server.n1ql_port
-            #     cmd = "cd %s; " % (testconstants.LINUX_COUCHBASE_BIN_PATH) +\
-            #     "./cbq-engine.test --datastore=http://%s:%s --http=:%s --configstore=http://127.0.0.1:8091 --enterprise=true --https=:18093 -test.coverprofile coverage.cov -system-test >n1ql.log 2>&1 &" %(
-            #                                                     server.ip, server.port,n1ql_port)
-            # # if n1ql_port:
-            # #     cmd = "cd %s; " % (testconstants.LINUX_COUCHBASE_BIN_PATH) +\
-            # #     './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
-            # #                                                     server.ip, server.port, n1ql_port)
-            #     self.shell.execute_command(cmd)
             query_params.update({'scan_consistency': self.scan_consistency})
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
             if self.hint_index and (query.lower().find('select') != -1):
-                from_clause = re.sub(r'let.*', '', re.sub(r'.*from', '', re.sub(r'where.*', '', query)))
-                from_clause = re.sub(r'LET.*', '', re.sub(r'.*FROM', '', re.sub(r'WHERE.*', '', from_clause)))
-                from_clause = re.sub(r'select.*', '', re.sub(r'order by.*', '', re.sub(r'group by.*', '', from_clause)))
-                from_clause = re.sub(r'SELECT.*', '', re.sub(r'ORDER BY.*', '', re.sub(r'GROUP BY.*', '', from_clause)))
+                from_clause = re.sub(r'let.*', '',
+                                     re.sub(r'.*from', '', re.sub(r'where.*', '', query)))
+                from_clause = re.sub(r'LET.*', '',
+                                     re.sub(r'.*FROM', '', re.sub(r'WHERE.*', '', from_clause)))
+                from_clause = re.sub(r'select.*', '', re.sub(r'order by.*', '',
+                                                             re.sub(r'group by.*', '',
+                                                                    from_clause)))
+                from_clause = re.sub(r'SELECT.*', '', re.sub(r'ORDER BY.*', '',
+                                                             re.sub(r'GROUP BY.*', '',
+                                                                    from_clause)))
                 hint = ' USE INDEX (%s using %s) ' % (self.hint_index, self.index_type)
                 query = query.replace(from_clause, from_clause + hint)
+
+            if not is_prepared:
+                self.log.info('RUN QUERY %s' % query)
 
             if self.analytics:
                 query = query + ";"
                 for bucket in self.buckets:
-                    query = query.replace(bucket.name,bucket.name+"_shadow")
-                self.log.info('RUN QUERY %s' % query)
-                result = RestConnection(self.cbas_node).execute_statement_on_cbas(query, "immediate")
+                    query = query.replace(bucket.name, bucket.name + "_shadow")
+                result = RestConnection(self.cbas_node).execute_statement_on_cbas(query,
+                                                                                  "immediate")
                 result = json.loads(result)
-            else :
-                result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
-                                                            is_prepared=is_prepared,
-                                                            named_prepare=self.named_prepare,
-                                                            encoded_plan=encoded_plan,
-                                                            servers=self.servers)
-        else:
-            #self._set_env_variable(server)
-            if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
-                                                            "shell/cbq/cbq ","","","","","","")
             else:
-                #os = self.shell.extract_remote_info().type.lower()
-                if not(self.isprepared):
+                result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
+                                         is_prepared=is_prepared,named_prepare=self.named_prepare,
+                                         encoded_plan=encoded_plan, servers=self.servers)
+        else:
+            if self.version == "git_repo":
+                output = self.shell.execute_commands_inside(
+                    "$GOPATH/src/github.com/couchbase/query/" + \
+                    "shell/cbq/cbq ", "", "", "", "", "", "")
+            else:
+                if not (self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
 
-                    cmd =  "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path,server.ip,server.port,username,password)
+                    cmd = "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (
+                    self.path, server.ip, server.port, username, password)
 
-                    output = self.shell.execute_commands_inside(cmd,query,"","","","","")
-                    if not(output[0] == '{'):
-                        output1 = '{'+str(output)
+                    output = self.shell.execute_commands_inside(cmd, query, "", "", "", "", "")
+                    if not (output[0] == '{'):
+                        output1 = '{' + str(output)
                     else:
                         output1 = output
                     result = json.loads(output1)
@@ -4457,8 +705,7 @@ class QueryTests(BaseTestCase):
         type = info.distribution_type.lower()
         if type in ["ubuntu", "centos", "red hat"]:
             url = "https://s3.amazonaws.com/packages.couchbase.com/releases/couchbase-query/dp1/"
-            url += "couchbase-query_%s_%s_linux.tar.gz" %(
-                                version, info.architecture_type)
+            url += "couchbase-query_%s_%s_linux.tar.gz" %(version, info.architecture_type)
         #TODO for windows
         return url
 
@@ -4478,18 +725,14 @@ class QueryTests(BaseTestCase):
             cmd = "rm -rf {0}/src/github.com".format(gopath)
             self.shell.execute_command(cmd)
             cmd= 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'go get github.com/couchbaselabs/tuqtng;' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; ' +\
-                'go get -d -v ./...; cd .'
+                ' export PATH=$PATH:$GOROOT/bin && go get github.com/couchbaselabs/tuqtng;' +\
+                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go get -d -v ./...; cd .'
             self.shell.execute_command(cmd)
             cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd .'
+                ' export PATH=$PATH:$GOROOT/bin && cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd .'
             self.shell.execute_command(cmd)
             cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd .'
+                ' export PATH=$PATH:$GOROOT/bin && cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd .'
             self.shell.execute_command(cmd)
         else:
             cbq_url = self.build_url(self.version)
@@ -4498,12 +741,9 @@ class QueryTests(BaseTestCase):
             cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
             self.shell.execute_command(cmd)
 
-
     def _start_command_line_query(self, server, options='', user=None, password=None):
-        auth_row = None
         out = ''
-        if user and password:
-            auth_row = '%s:%s@' % (user, password)
+        auth_row = '%s:%s@' % (user, password) if user and password else None
         os = self.shell.extract_remote_info().type.lower()
         if self.flat_json:
             if os == 'windows':
@@ -4525,12 +765,10 @@ class QueryTests(BaseTestCase):
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
                 cmd = "cd %s/src/github.com/couchbase/query/server/cbq-engine; " % (gopath) +\
-                "./cbq-engine.exe -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(
-                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
+                "./cbq-engine.exe -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(('', auth_row)[auth_row is not None], server.ip, server.port, options)
             else:
                 cmd = "cd %s/src/github.com/couchbase/query/server/cbq-engine; " % (gopath) +\
-                "./cbq-engine -datastore http://%s%s:%s/ %s >n1ql.log 2>&1 &" %(
-                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
+                "./cbq-engine -datastore http://%s%s:%s/ %s >n1ql.log 2>&1 &" % (('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
         elif self.version == "sherlock":
             if self.services_init and self.services_init.find('n1ql') != -1:
@@ -4540,51 +778,40 @@ class QueryTests(BaseTestCase):
             if os == 'windows':
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine.exe -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(
-                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
+                "./cbq-engine.exe -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(('', auth_row)[auth_row is not None], server.ip, server.port, options)
             else:
                 couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(
-                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
+                "./cbq-engine -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
             self.log.info(out)
         else:
             if os != 'windows':
-                cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(server.ip, server.port)
             else:
-                cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(server.ip, server.port)
             self.shell.execute_command(cmd)
         return out
 
+    #This method has no usages anywhere
     def _set_env_variable(self, server):
         self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
         self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
         self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
-        #self.shell.execute_command("/etc/init.d/couchbase-server restart")
-        #self.sleep(30)
 
+    #This method has no usages anywhere
     def _parse_query_output(self, output):
-         if output.find("cbq>") == 0:
-             output = output[output.find("cbq>") + 4:].strip()
-         if output.find("tuq_client>") == 0:
-             output = output[output.find("tuq_client>") + 11:].strip()
-         if output.find("cbq>") != -1:
-             output = output[:output.find("cbq>")].strip()
-         if output.find("tuq_client>") != -1:
-             output = output[:output.find("tuq_client>")].strip()
-         return json.loads(output)
-
-    def generate_docs(self, docs_per_day, start=0):
-        json_generator = JsonGenerator()
-        if self.array_indexing:
-            return json_generator.generate_docs_employee_array( docs_per_day, start)
-        else:
-            return json_generator.generate_docs_employee( docs_per_day, start)
+        if output.find("cbq>") == 0:
+            output = output[output.find("cbq>") + 4:].strip()
+        if output.find("tuq_client>") == 0:
+            output = output[output.find("tuq_client>") + 11:].strip()
+        if output.find("cbq>") != -1:
+            output = output[:output.find("cbq>")].strip()
+        if output.find("tuq_client>") != -1:
+            output = output[:output.find("tuq_client>")].strip()
+        return json.loads(output)
 
     def _verify_results(self, actual_result, expected_result):
         if self.max_verify is not None:
@@ -4592,22 +819,16 @@ class QueryTests(BaseTestCase):
             expected_result = expected_result[:self.max_verify]
             self.assertTrue(actual_result == expected_result, "Results are incorrect")
             return
-
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
             self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:100], extra[:100]))
-            self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
-                                            len(actual_result), len(expected_result)))
-
-        msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
-        "Expected first and last 100: %s.\n  ... \n %s"
-        self.assertTrue(actual_result == expected_result,
-                          msg % (actual_result[:100],actual_result[-100:],
-                                 expected_result[:100],expected_result[-100:]))
+            self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result)))
+        msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s Expected first and last 100: %s.\n  ... \n %s" \
+              % (actual_result[:100], actual_result[-100:], expected_result[:100], expected_result[-100:])
+        self.assertTrue(actual_result == expected_result, msg)
 
     def check_missing_and_extra(self, actual, expected):
-        missing = []
-        extra = []
+        missing, extra = [], []
         for item in actual:
             if not (item in expected):
                  extra.append(item)
@@ -4638,7 +859,6 @@ class QueryTests(BaseTestCase):
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
 
-
     def load_directory(self, generators_load):
         gens_load = []
         for generator_load in generators_load:
@@ -4663,13 +883,16 @@ class QueryTests(BaseTestCase):
             finally:
                shell.disconnect()
 
+    #Going to implement this stupidly for now, basically two different flags are used in tuq and newtuq,
+    #dont want to go through every single conf and change it to one unified flag, so going to put in
+    # both flags logic for now, will fix later
     def create_primary_index_for_3_0_and_greater(self):
-        if self.skip_index:
+        if self.skip_index or self.skip_primary_index:
             self.log.info("Not creating index")
             return
         if self.flat_json:
-                    return
-        self.sleep(30, 'Sleep for some time prior to index creation')
+            return
+        self.sleep(15, 'Sleep for some time prior to index creation')
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         if versions[0].startswith("4") or versions[0].startswith("3") or versions[0].startswith("5"):
@@ -4683,8 +906,6 @@ class QueryTests(BaseTestCase):
                 if (res['metrics']['resultCount'] == 0):
                     self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
                     self.log.info("Creating primary index for %s ..." % bucket.name)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     try:
                         self.run_cbq_query()
                         self.primary_index_created= True
@@ -4707,3 +928,1731 @@ class QueryTests(BaseTestCase):
                         return
             self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
+
+##############################################################################################
+#
+#   newtuq COMMON FUNCTIONS
+##############################################################################################
+
+    def run_query_from_template(self, query_template):
+        self.query = self.gen_results.generate_query(query_template)
+        expected_result = self.gen_results.generate_expected_result()
+        actual_result = self.run_cbq_query()
+        return actual_result, expected_result
+
+    def run_query_with_subquery_select_from_template(self, query_template):
+        subquery_template = re.sub(r'.*\$subquery\(', '', query_template)
+        subquery_template = subquery_template[:subquery_template.rfind(')')]
+        keys_num = int(re.sub(r'.*KEYS \$', '', subquery_template).replace('KEYS $', ''))
+        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load,keys=self._get_keys(keys_num))
+        subquery_template = re.sub(r'USE KEYS.*', '', subquery_template)
+        sub_results = TuqGenerators(self.log, subquery_full_list)
+        self.query = sub_results.generate_query(subquery_template)
+        expected_sub = sub_results.generate_expected_result()
+        alias = re.sub(r',.*', '', re.sub(r'.*\$subquery\(.*\)', '', query_template))
+        alias = re.sub(r'.*as','', re.sub(r'FROM.*', '', alias)).strip()
+        if not alias:
+            alias = '$1'
+        for item in self.gen_results.full_set:
+            item[alias] = expected_sub[0]
+        query_template = re.sub(r',.*\$subquery\(.*\).*%s' % alias, ',%s' % alias, query_template)
+        self.query = self.gen_results.generate_query(query_template)
+        expected_result = self.gen_results.generate_expected_result()
+        actual_result = self.run_cbq_query()
+        return actual_result, expected_result
+
+    def run_query_with_subquery_from_template(self, query_template):
+        subquery_template = re.sub(r'.*\$subquery\(', '', query_template)
+        subquery_template = subquery_template[:subquery_template.rfind(')')]
+        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load)
+        sub_results = TuqGenerators(self.log, subquery_full_list)
+        self.query = sub_results.generate_query(subquery_template)
+        expected_sub = sub_results.generate_expected_result()
+        alias = re.sub(r',.*', '', re.sub(r'.*\$subquery\(.*\)', '', query_template))
+        alias = re.sub(r'.*as ', '', alias).strip()
+        self.gen_results = TuqGenerators(self.log, expected_sub)
+        query_template = re.sub(r'\$subquery\(.*\).*%s' % alias, ' %s' % alias, query_template)
+        self.query = self.gen_results.generate_query(query_template)
+        expected_result = self.gen_results.generate_expected_result()
+        actual_result = self.run_cbq_query()
+        return actual_result, expected_result
+
+    def _get_keys(self, key_num):
+        keys = []
+        for gen in self.gens_load:
+            gen_copy = copy.deepcopy(gen)
+            for i in xrange(gen_copy.end):
+                key, _ = gen_copy.next()
+                keys.append(key)
+                if len(keys) == key_num:
+                    return keys
+        return keys
+
+    def run_active_requests(self, e, t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                result = self.run_cbq_query("select * from system:active_requests")
+                self.assertTrue(result['metrics']['resultCount'] == 1)
+                requestId = result['requestID']
+                result = self.run_cbq_query(
+                    'delete from system:active_requests where requestId  =  "%s"' % requestId)
+                time.sleep(20)
+                result = self.run_cbq_query(
+                    'select * from system:active_requests  where requestId  =  "%s"' % requestId)
+                self.assertTrue(result['metrics']['resultCount'] == 0)
+                result = self.run_cbq_query("select * from system:completed_requests")
+                requestId = result['requestID']
+                result = self.run_cbq_query(
+                    'delete from system:completed_requests where requestId  =  "%s"' % requestId)
+                time.sleep(10)
+                result = self.run_cbq_query(
+                    'select * from system:completed_requests where requestId  =  "%s"' % requestId)
+                self.assertTrue(result['metrics']['resultCount'] == 0)
+
+
+##############################################################################################
+#
+#   tuq_sanity.py helpers
+##############################################################################################
+
+    def expected_substr(self, a_string, start, index):
+        if start is 0:
+            substring = a_string[index:]
+            if index >= len(a_string):
+                return None
+            elif index < -len(a_string):
+                return None
+            else:
+                return substring
+        if start is 1:
+            substring = a_string[index - start:] if index > 0 else a_string[index:]
+            if index >= len(a_string):
+                return None
+            elif index < -len(a_string):
+                return None
+            else:
+                return substring
+
+    def run_regex_query(self, word, substring, regex_type=''):
+        self.query = "select REGEXP_POSITION%s('%s', '%s')" % (regex_type, word, substring)
+        results = self.run_cbq_query()
+        return results['results'][0]['$1']
+
+    def run_position_query(self, word, substring, position_type = ''):
+        self.query = "select POSITION%s('%s', '%s')" % (position_type, word, substring)
+        results = self.run_cbq_query()
+        return results['results'][0]['$1']
+
+    def check_explain_covering_index(self,index):
+        for bucket in self.buckets:
+            res = self.run_cbq_query()
+            s = pprint.pformat( res, indent=4 )
+            if index in s:
+                self.log.info("correct index used in json result ")
+            else:
+                self.log.error("correct index not used in json result ")
+                self.fail("correct index not used in json result ")
+            if 'covers' in s:
+                self.log.info("covers key present in json result ")
+            else:
+                self.log.error("covers key missing from json result ")
+                self.fail("covers key missing from json result ")
+            if 'cover' in s:
+                self.log.info("cover keyword present in json children ")
+            else:
+                self.log.error("cover keyword missing from json children ")
+                self.fail("cover keyword missing from json children ")
+            self.log.error("This is a covered query, Intersec scan should not be used") if 'IntersectScan' in s else None
+##############################################################################################
+#
+#   upgrade_n1qlrbac.py helpers
+##############################################################################################
+    def query_select_insert_update_delete_helper(self):
+        self.create_users(users=[{'id': 'john_insert', 'name': 'johnInsert', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_update', 'name': 'johnUpdate', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_delete', 'name': 'johnDelete', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_select', 'name': 'johnSelect', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_select2', 'name': 'johnSelect2', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_rep', 'name': 'johnRep', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_bucket_admin', 'name': 'johnBucketAdmin', 'password':'password'}])
+        items = [("query_insert",'john_insert'), ("query_update",'john_update'), ("query_delete",'john_delete'),
+                         ("query_select",'john_select'), ("bucket_admin",'john_bucket_admin'), ("query_select",'john_select2')]
+        for bucket in self.buckets:
+            for item in items:
+                self.query = "GRANT {0} on {2} to {1}".format(item[0],item[1],bucket.name)
+                self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+
+            self.query = "GRANT {0} to {1}".format("replication_admin",'john_rep')
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+
+    def query_select_insert_update_delete_helper_default(self):
+        self.create_users(users=[{'id': 'john_insert', 'name': 'johnInsert', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_update', 'name': 'johnUpdate', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_delete', 'name': 'johnDelete', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_select', 'name': 'johnSelect', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_select2', 'name': 'johnSelect2', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_rep', 'name': 'johnRep', 'password':'password'}])
+        self.create_users(users=[{'id': 'john_bucket_admin', 'name': 'johnBucketAdmin', 'password':'password'}])
+        self.query = "GRANT {0} to {1}".format("replication_admin",'john_rep')
+        self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+
+    def change_and_update_permission(self, query_type, permission, user, bucket, cmd, error_msg):
+        self.query = "GRANT {0} on {1} to {2}".format(permission, bucket, user) if query_type == 'with_bucket' else None
+        self.query = "GRANT {0} to {1}".format(permission,user) if query_type == 'without_bucket' else None
+        self.n1ql_helper.run_cbq_query(query=self.query, server=self.n1ql_node) if query_type in ['with_bucket', 'without_bucket'] else None
+        output, error = self.shell.execute_command(cmd)
+        self.shell.log_command_output(output, error)
+        self.assertTrue(any("success" in line for line in output), error_msg.format(bucket, user))
+        self.log.info("Query executed successfully")
+
+    def check_permissions_helper(self):
+        for bucket in self.buckets:
+            cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+                  "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"test\", { \"value1\": \"one1\" })'"% \
+                  (self.curl_path,'john_insert', 'password', self.master.ip, bucket.name)
+            self.change_and_update_permission(None, None, 'johnInsert', bucket.name, cmd, "Unable to insert into {0} as user {1}")
+
+            old_name = "employee-14"
+            new_name = "employee-14-2"
+            cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
+                  "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
+                format('john_update', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
+            self.change_and_update_permission(None, None, 'johnUpdate', bucket.name, cmd, "Unable to update into {0} as user {1}")
+
+            del_name = "employee-14"
+            cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
+                  "'statement=DELETE FROM {3} a WHERE name = '{4}''". \
+                format('john_delete', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+            self.change_and_update_permission(None, None, 'john_delete', bucket.name, cmd, "Unable to delete from {0} as user {1}")
+
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
+                format('john_select2', 'password', self.master.ip,bucket.name,self.curl_path)
+            self.change_and_update_permission(None, None, 'john_select2', bucket.name, cmd, "Unable to select from {0} as user {1}")
+
+    def create_and_verify_system_catalog_users_helper(self):
+        self.create_users(users=[{'id': 'john_system', 'name': 'john', 'password':'password'}])
+        self.query = "GRANT {0} to {1}".format("query_system_catalog",'john_system')
+        self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+        for bucket in self.buckets:
+            cmds = ["{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                    "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:namespaces'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                    "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:datastores'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                    "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:indexes'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                    "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:completed_requests'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                    "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:active_requests'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                    "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:prepareds'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                    "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:my_user_info'". \
+                        format('john_system','password', self.master.ip, bucket.name,self.curl_path)]
+            for cmd in cmds:
+                self.change_and_update_permission(None, None, 'john_system', bucket.name, cmd, "Unable to select from {0} as user {1}")
+
+    def check_system_catalog_helper(self):
+        """
+        These test might fail for now as system catalog tables are not
+        fully implemented based on query PM's doc.
+        :return:
+        """
+        self.system_catalog_helper_delete_for_upgrade()
+        self.system_catalog_helper_select_for_upgrade()
+
+    def query_assert_success(self, query):
+        self.query = query
+        res = self.run_cbq_query(query=self.query)
+        self.assertEqual(res['status'], 'success')
+
+    def system_catalog_helper_select_for_upgrade(self):
+        for query in ['select * from system:datastores', 'select * from system:namespaces',
+                      'select * from system:keyspaces']:
+            self.query_assert_success(query)
+        self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
+        res = self.run_cbq_query(query=query)
+        self.sleep(10)
+        for query in ['select * from system:indexes', 'select * from system:dual',
+                      "prepare st1 from select * from {0} union select * from {0} union select * from {0}".format(self.buckets[0].name),
+                      'execute st1']:
+            self.query_assert_success(query)
+
+    def system_catalog_helper_delete_for_upgrade(self):
+        self.queries = ['delete from system:datastores', 'delete from system:namespaces', 'delete from system:keyspaces',
+                        'delete from system:indexes', 'delete from system:user_info', 'delete from system:nodes',
+                        'delete from system:applicable_roles']
+        for query in self.queries:
+            try:
+                self.run_cbq_query(query=query)
+            except Exception, ex:
+                self.log.error(ex)
+                self.assertNotEqual(str(ex).find("'code': 11003"), -1)
+        try:
+            query = 'delete from system:dual'
+            self.run_cbq_query(query=query)
+        except Exception,ex:
+            self.log.error(ex)
+            self.assertNotEqual(str(ex).find("'code': 11000"), -1)
+
+        queries = ['delete from system:completed_requests', 'delete from system:active_requests where state!="running"',
+                   'delete from system:prepareds']
+        for query in queries:
+            res = self.run_cbq_query(query=query)
+            self.assertEqual(res['status'], 'success')
+
+        queries = ['select * from system:completed_requests', 'select * from system:active_requests',
+                   'select * from system:prepareds']
+        for query in queries:
+            res = self.run_cbq_query(query=query)
+            self.assertEqual(res['status'], 'success')
+
+    def change_and_verify_pre_upgrade_ldap_users_permissions(self):
+        for bucket in self.buckets:
+            # change permission of john_bucketadmin1 and verify its able to execute the correct query.
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
+                format('bucket0', 'password', self.master.ip,bucket.name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_select", 'bucket0', bucket.name, cmd,
+                                              "Unable to select from {0} as user {1}")
+
+            # change permission of john_bucketadminAll and verify its able to execute the correct query.
+            cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" })'" \
+                  % (self.curl_path,'bucket0', 'password',self.master.ip,bucket.name)
+            self.change_and_update_permission('with_bucket', "query_insert", 'bucket0', bucket.name, cmd,
+                                              "Unable to insert into {0} as user {1}")
+
+            # change permission of cluster_user and verify its able to execute the correct query.
+            old_name = "employee-14"
+            new_name = "employee-14-2"
+            cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
+                  "name = '{5}' limit 1'".format('bucket0', 'password',self.master.ip,bucket.name,new_name,
+                                                 old_name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_update", 'bucket0', bucket.name, cmd,
+                                              "Unable to update  {0} as user {1}")
+
+            #change permission of bucket0 and verify its able to execute the correct query.
+            del_name = "employee-14"
+            cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d 'statement=DELETE FROM {3} a WHERE name = '{4}''". \
+                format('bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_delete", 'bucket0', bucket.name, cmd,
+                                              "Unable to delete from {0} as user {1}")
+
+            # change permission of cbadminbucket user and verify its able to execute the correct query.
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'". \
+                format('cbadminbucket','password', self.master.ip, bucket.name,self.curl_path)
+            self.change_and_update_permission('without_bucket', "query_system_catalog", 'cbadminbucket',
+                                              'cbadminbucket', cmd, "Unable to select from system:keyspaces as user {0}")
+
+    def create_ldap_auth_helper(self):
+        """
+        Helper function for creating ldap users pre-upgrade
+        :return:
+        """
+        # not able to create bucket admin on passwordless bucket pre upgrade
+        users = [
+            {'id': 'john_bucketadminAll', 'name': 'john_bucketadminAll', 'password': 'password'},
+            {'id': 'cluster_user','name':'cluster_user','password':'password'},
+            {'id': 'read_user','name':'read_user','password':'password'},
+            {'id': 'cadmin','name':'cadmin','password':'password'},]
+        RbacBase().create_user_source(users, 'ldap', self.master)
+        rolelist = [{'id': 'john_bucketadminAll', 'name': 'john_bucketadminAll','roles': 'bucket_admin[*]'},
+                    {'id': 'cluster_user', 'name': 'cluster_user','roles': 'cluster_admin'},
+                    {'id': 'read_user', 'name': 'read_user','roles': 'ro_admin'},
+                    {'id': 'cadmin', 'name': 'cadmin','roles': 'admin'}]
+        RbacBase().add_user_role(rolelist, RestConnection(self.master), 'ldap')
+
+    def verify_pre_upgrade_users_permissions_helper(self,test = ''):
+
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
+            format('bucket0', 'password', self.master.ip,'bucket0',self.curl_path)
+        self.change_and_update_permission(None, None, 'bucket0', 'bucket0', cmd, "Unable to select from {0} as user {1}")
+
+        if test == 'online_upgrade':
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
+                format('cbadminbucket', 'password', self.master.ip,'default',self.curl_path)
+        else:
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
+                format('cbadminbucket', 'password', self.master.ip,'bucket0',self.curl_path)
+
+        self.change_and_update_permission(None, None, 'cbadminbucket', 'bucket0', cmd, "Unable to select from {0} as user {1}")
+
+        cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'". \
+            format('cbadminbucket', 'password', self.master.ip,self.curl_path)
+        self.change_and_update_permission(None, None, 'cbadminbucket', 'system:keyspaces', cmd, "Unable to select from {0} as user {1}")
+
+        for bucket in self.buckets:
+            cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+                  "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"5\", { \"value1\": \"one1\" })'"% \
+                  (self.curl_path,'bucket0', 'password', self.master.ip, bucket.name)
+
+            self.change_and_update_permission(None, None, 'bucket0', bucket.name, cmd, "Unable to insert into {0} as user {1}")
+
+            old_name = "employee-14"
+            new_name = "employee-14-2"
+            cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
+                  "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
+                format('bucket0', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
+            self.change_and_update_permission(None, None, 'bucket0', bucket.name, cmd, "Unable to update into {0} as user {1}")
+
+            del_name = "employee-14"
+            cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d 'statement=DELETE FROM {3} a WHERE name = '{4}''". \
+                format('bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+            self.change_and_update_permission(None, None, 'bucket0', bucket.name, cmd, "Unable to delete from {0} as user {1}")
+
+    def use_pre_upgrade_users_post_upgrade(self):
+        for bucket in self.buckets:
+            cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+                  "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"test2\", { \"value1\": \"one1\" })'"% \
+                  (self.curl_path,'cbadminbucket', 'password', self.master.ip, bucket.name)
+            self.change_and_update_permission(None, None, 'johnInsert', bucket.name, cmd, "Unable to insert into {0} as user {1}")
+
+            old_name = "employee-14"
+            new_name = "employee-14-2"
+            cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
+                  "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
+                format('cbadminbucket', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
+            self.change_and_update_permission(None, None, 'johnUpdate', bucket.name, cmd, "Unable to update into {0} as user {1}")
+
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
+                format(bucket.name, 'password', self.master.ip,bucket.name,self.curl_path)
+            self.change_and_update_permission(None, None, bucket.name, bucket.name, cmd, "Unable to select from {0} as user {1}")
+
+    def change_permissions_and_verify_pre_upgrade_users(self):
+        for bucket in self.buckets:
+            # change permission of john_cluster and verify its able to execute the correct query.
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
+                format(bucket.name, 'password', self.master.ip, bucket.name, self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_select", bucket.name,
+                                              bucket.name, cmd, "Unable to select from {0} as user {1}")
+
+            # change permission of ro_non_ldap and verify its able to execute the correct query.
+            old_name = "employee-14"
+            new_name = "employee-14-2"
+            cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
+                  "name = '{5}' limit 1'".format('cbadminbucket', 'readonlypassword',self.master.ip,bucket.name,new_name, old_name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_update", 'cbadminbucket',
+                                              bucket.name, cmd, "Unable to update  {0} as user {1}")
+
+            # change permission of john_admin and verify its able to execute the correct query.
+            del_name = "employee-14"
+            cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
+                  "'statement=DELETE FROM {3} a WHERE name = '{4}''". \
+                format('cbadminbucket', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_delete", 'cbadminbucket',
+                                              bucket.name, cmd, "Unable to update  {0} as user {1}")
+
+            # change permission of bob user and verify its able to execute the correct query.
+
+            self.change_and_update_permission('without_bucket', "query_system_catalog", 'cbadminbucket',
+                                              bucket.name, cmd, "Unable to select from system:keyspaces as user {1}")
+
+    def change_permissions_and_verify_new_users(self):
+        for bucket in self.buckets:
+            # change permission of john_insert and verify its able to execute the correct query.
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
+                format('john_insert', 'password', self.master.ip, bucket.name, self.curl_path)
+            self.change_and_update_permission('with_bucket', "bucket_admin", 'john_insert',
+                                              bucket.name, cmd, "Unable to select from {0} as user {1}")
+
+            # change permission of john_update and verify its able to execute the correct query.
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=INSERT INTO {3} values(\"k055\", 123  )' " \
+                .format('john_update', 'password',self.master.ip,bucket.name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_insert", 'john_update',
+                                              bucket.name, cmd, "Unable to insert into {0} as user {1}")
+
+            # change permission of john_select and verify its able to execute the correct query.
+            old_name = "employee-14"
+            new_name = "employee-14-2"
+            cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
+                  "name = '{5}' limit 1'".format('john_select', 'password', self.master.ip, bucket.name, new_name,
+                                                 old_name, self.curl_path)
+            self.change_and_update_permission('without_bucket', "cluster_admin", 'john_select',
+                                              bucket.name, cmd, "Unable to update  {0} as user {1}")
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
+                format('john_select', 'password', self.master.ip,bucket.name,self.curl_path)
+            output, error = self.shell.execute_command(cmd)
+            self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
+                            format(bucket.name, 'john_select'))
+
+            # change permission of john_select2 and verify its able to execute the correct query.
+            del_name = "employee-14"
+            cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d 'statement=DELETE FROM {3} a WHERE name = '{4}''". \
+                format('john_select2', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_delete", 'john_select2',
+                                              bucket.name, cmd, "Unable to delete from {0} as user {1}")
+
+            # change permission of john_delete and verify its able to execute the correct query.
+            cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
+                format('john_delete', 'password', self.master.ip,bucket.name,self.curl_path)
+            self.change_and_update_permission('with_bucket', "query_select", 'john_delete',
+                                              bucket.name, cmd, "Unable to select from {0} as user {1}")
+
+    def create_users(self, users=None):
+        """
+        :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
+                                        'password': 'passw0rd'}
+        :return: Nothing
+        """
+        users = self.users if not users else None
+        RbacBase().create_user_source(users, 'builtin', self.master)
+        self.log.info("SUCCESS: User(s) %s created" % ','.join([user['name'] for user in users]))
+
+    def create_users_before_upgrade_non_ldap(self):
+        """
+        password needs to be added statically for these users
+        on the specific machine where ldap is enabled.
+        """
+        cli_cmd = "{0}couchbase-cli -c {1}:8091 -u Administrator -p password".format(self.path, self.master.ip)
+        cmds = [("create a read only user account", cli_cmd+" user-manage --set --ro-username=ro_non_ldap --ro-password=readonlypassword"),
+                ("create a bucket admin on bucket0 user account", cli_cmd+" admin-role-manage --set-users=bob --set-names=Bob --roles=bucket_admin[bucket0]"),
+                ("create a bucket admin on all buckets user account", cli_cmd+" admin-role-manage --set-users=mary --set-names=Mary --roles=bucket_admin[*]"),
+                ("create a cluster admin user account", cli_cmd+"admin-role-manage --set-users=john_cluster --set-names=john_cluster --roles=cluster_admin"),
+                ("create a admin user account", cli_cmd+" admin-role-manage --set-users=john_admin --set-names=john_admin --roles=admin")]
+        for cmd in cmds:
+            self.log.info(cmd[0])
+            self.shell.execute_command(cmd[1])
+        users = [{'id': 'Bob', 'name': 'Bob', 'password': 'password', 'roles': 'admin'},
+                 {'id': 'mary', 'name': 'Mary', 'password': 'password', 'roles': 'cluster_admin'},
+                 {'id': 'john_cluster','name':'john_cluster','password':'password', 'roles': 'cluster_admin'},
+                 {'id': 'ro_non_ldap','name':'ro_non_ldap','password':'readonlypassword', 'roles': 'ro_admin'},
+                 {'id': 'john_admin','name':'john_admin','password':'password', 'roles': 'admin'}]
+
+        RbacBase().create_user_source(users, 'ldap', self.master)
+        RbacBase().add_user_role(users, RestConnection(self.master), 'ldap')
+
+    def _perform_offline_upgrade(self):
+        for server in self.servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+            self.upgrade_servers.append(server)
+        upgrade_threads = self._async_update(self.upgrade_to, self.servers)
+        for upgrade_thread in upgrade_threads:
+            upgrade_thread.join()
+        self.sleep(20)
+        self.add_built_in_server_user()
+        self.sleep(20)
+        self.upgrade_servers = self.servers
+
+    def _perform_online_upgrade_with_rebalance(self):
+        self.nodes_upgrade_path = self.input.param("nodes_upgrade_path", "").split("-")
+        for service in self.nodes_upgrade_path:
+            nodes = self.get_nodes_from_services_map(service_type=service, get_all_nodes=True)
+
+            self.log.info("----- Upgrading all {0} nodes -----".format(service))
+            for node in nodes:
+                node_rest = RestConnection(node)
+                node_info = "{0}:{1}".format(node.ip, node.port)
+                node_services_list = node_rest.get_nodes_services()[node_info]
+                node_services = [",".join(node_services_list)]
+
+                if "n1ql" in node_services_list:
+                    n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+                    if len(n1ql_nodes) > 1:
+                        for n1ql_node in n1ql_nodes:
+                            if node.ip != n1ql_node.ip:
+                                self.n1ql_node = n1ql_node
+                                break
+
+                self.log.info("Rebalancing the node out...")
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
+                rebalance.result()
+                active_nodes = []
+                for active_node in self.servers:
+                    active_nodes.append(active_node) if active_node.ip != node.ip else None
+
+                self.log.info("Upgrading the node...")
+                upgrade_th = self._async_update(self.upgrade_to, [node])
+                for th in upgrade_th:
+                    th.join()
+
+                self.log.info("==== Upgrade Complete ====")
+                self.log.info("Adding node back to cluster...")
+                rebalance = self.cluster.async_rebalance(active_nodes, [node], [], services=node_services)
+                rebalance.result()
+                self.sleep(60)
+                node_version = RestConnection(node).get_nodes_versions()
+                self.log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
+
+    def _perform_online_upgrade_with_failover(self):
+        self.nodes_upgrade_path = self.input.param("nodes_upgrade_path", "").split("-")
+        for service in self.nodes_upgrade_path:
+            nodes = self.get_nodes_from_services_map(service_type=service, get_all_nodes=True)
+
+            self.log.info("----- Upgrading all {0} nodes -----".format(service))
+            for node in nodes:
+                node_rest = RestConnection(node)
+                node_info = "{0}:{1}".format(node.ip, node.port)
+                node_services_list = node_rest.get_nodes_services()[node_info]
+                node_services = [",".join(node_services_list)]
+
+                self.log.info("Rebalancing the node out...")
+                failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=False)
+                failover_task.result()
+                active_nodes = []
+                for active_node in self.servers:
+                    active_nodes.append(active_node) if active_node.ip != node.ip else None
+                self.log.info("Upgrading the node...")
+                upgrade_th = self._async_update(self.upgrade_to, [node])
+                for th in upgrade_th:
+                    th.join()
+
+                self.log.info("==== Upgrade Complete ====")
+                self.sleep(30)
+
+                self.log.info("Adding node back to cluster...")
+                rest = RestConnection(self.master)
+                nodes_all = rest.node_statuses()
+                for cluster_node in nodes_all:
+                    if cluster_node.ip == node.ip:
+                        self.log.info("Adding Back: {0}".format(node))
+                        rest.add_back_node(cluster_node.id)
+                        rest.set_recovery_type(otpNode=cluster_node.id, recoveryType="full")
+
+                self.log.info("Adding node back to cluster...")
+                rebalance = self.cluster.async_rebalance(active_nodes, [], [])
+                rebalance.result()
+                self.sleep(60)
+                node_version = RestConnection(node).get_nodes_versions()
+                self.log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
+
+##############################################################################################
+#
+# n1ql_rbac_2.py helpers
+# Again very specific, some things are generalizable, perhaps rbac should have its own query base test,
+# also a huge number of helpers will clutter this up
+##############################################################################################
+    def create_users(self, users=None):
+        """
+        :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
+                                        'password': 'passw0rd'}
+        :return: Nothing
+        """
+        users = self.users if not users else None
+        RbacBase().create_user_source(users,'builtin',self.master)
+        self.log.info("SUCCESS: User(s) %s created" % ','.join([user['name'] for user in users]))
+
+    def assign_role(self, rest=None, roles=None):
+        rest = RestConnection(self.master) if not rest else None
+        #Assign roles to users
+        roles = self.roles if not roles else None
+        RbacBase().add_user_role(roles, rest,'builtin')
+        for user_role in roles:
+            self.log.info("SUCCESS: Role(s) %s assigned to %s"
+                          %(user_role['roles'], user_role['id']))
+
+    def delete_role(self, rest=None, user_ids=None):
+        if not rest:
+            rest = RestConnection(self.master)
+        if not user_ids:
+            user_ids = [user['id'] for user in self.roles]
+        RbacBase().remove_user_role(user_ids, rest)
+        self.sleep(20, "wait for user to get deleted...")
+        self.log.info("user roles revoked for %s" % ", ".join(user_ids))
+
+    def get_user_list(self):
+        """
+        :return:  a list of {'id': 'userid', 'name': 'some_name ,
+        'password': 'passw0rd'}
+        """
+        user_list = []
+        for user in self.inp_users:
+            user_list.append({att: user[att] for att in ('id', 'name', 'password')})
+        return user_list
+
+    def get_user_role_list(self):
+        """
+        :return:  a list of {'id': 'userid', 'name': 'some_name ,
+         'roles': 'admin:fts_admin[default]'}
+        """
+        user_role_list = []
+        for user in self.inp_users:
+            user_role_list.append({att: user[att] for att in ('id', 'name', 'roles')})
+        return user_role_list
+
+    def retrieve_roles(self):
+        return self.retrieve_rbac('roles')
+
+    def retrieve_users(self):
+        return self.retrieve_rbac('users')
+
+    def retrieve_rbac(self, type):
+        if type == 'users':
+            url = "/settings/rbac/users"
+            prepend = " Retrieve User Roles"
+        if type == 'roles':
+            url = "/settings/rbac/roles"
+            prepend = " Retrieve all User roles"
+        rest = RestConnection(self.master)
+        api = rest.baseUrl + url
+        status, content, header = rest._http_request(api, 'GET')
+        self.log.info("{4} - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header, prepend))
+        return status, content, header
+
+    def grant_role(self, role=None):
+        role = self.roles[0]['roles'] if not role else None
+        if self.all_buckets:
+            list = []
+            for bucket in self.buckets:
+                list.append(bucket.name)
+            names = ','.join(list)
+            self.query = "GRANT {0} on {1} to {2}".format(role,names, self.users[0]['id'])
+            actual_result = self.run_cbq_query()
+        elif "," in role:
+            roles = role.split(",")
+            for role in roles:
+                role1 = role.split("(")[0]
+                name = role.split("(")[1][:-1]
+                self.query = "GRANT {0} on {1} to {2}".format(role1,name, self.users[0]['id'])
+                actual_result =self.run_cbq_query()
+        elif "(" in role:
+            role1 = role.split("(")[0]
+            name = role.split("(")[1][:-1]
+            self.query = "GRANT {0} on {1} to {2}".format(role1,name, self.users[0]['id'])
+            actual_result = self.run_cbq_query()
+        else:
+            self.query = "GRANT {0} to {1}".format(role, self.users[0]['id'])
+            actual_result = self.run_cbq_query()
+        msg = "Unable to grant role {0} to {1}".format(role, self.users[0]['id'])
+        self.assertTrue(actual_result['status'] == 'success', msg)
+
+    def revoke_role(self, role=None):
+        if not role:
+            role = self.roles[0]['roles']
+            role += "(`*`)" if self.all_buckets else None
+        self.query = "REVOKE {0} FROM {1}".format(role, self.users[0]['id'])
+        actual_result = self.run_cbq_query()
+        msg = "Unable to revoke role {0} from {1}".format(role, self.users[0]['id'])
+        self.assertTrue(actual_result['status'] == 'success', msg)
+
+    def curl_with_roles(self, query):
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement={3}'". \
+            format(self.users[0]['id'], self.users[0]['password'], self.master.ip, query, self.curl_path)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        new_list = [string.strip() for string in output]
+        concat_string = ''.join(new_list)
+        json_output = json.loads(concat_string)
+        try:
+            return json_output
+        except ValueError:
+            return error
+
+    def system_catalog_helper_select(self, test, role=""):
+        res = self.curl_with_roles('select * from system:datastores')
+        self.assertTrue(res['metrics']['resultCount'] == 1)
+        res = self.curl_with_roles('select * from system:namespaces')
+        self.assertTrue(res['metrics']['resultCount'] == 1)
+        res = self.curl_with_roles('select * from system:keyspaces')
+
+        if role in ["query_update(default)", "query_delete(default)", "query_insert(default)"]:
+            self.assertTrue(res['status'] == 'success')
+        elif role.startswith("query_") or role.startswith("select") or role in ["bucket_full_access(default)", "query_delete(default)"]:
+            self.assertTrue(res['metrics']['resultCount'] == 1)
+        else:
+            self.assertTrue(res['metrics']['resultCount'] == 2)
+
+        self.query = 'create primary index on {0}'.format(self.buckets[0].name)
+        try:
+            self.curl_with_roles(self.query)
+        except Exception, ex:
+            self.log.error(ex)
+
+        if role not in ["query_insert(default)", "query_update(default)", "query_delete(default)"]:
+            self.query = 'create primary index on {0}'.format(self.buckets[1].name)
+            try:
+                self.curl_with_roles(self.query)
+            except Exception, ex:
+                self.log.error(ex)
+
+        if role not in ["views_admin(standard_bucket0)", "views_admin(default)", "query_insert(default)",
+                        "query_update(default)", "query_delete(default)"]:
+            self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
+            res = self.curl_with_roles(self.query)
+            self.sleep(10)
+            self.query = 'create index idx2 on {0}(name)'.format(self.buckets[1].name)
+            self.curl_with_roles(self.query)
+            self.sleep(10)
+            self.query = 'select * from system:indexes'
+            res = self.curl_with_roles(self.query)
+
+        if role in ["admin", "cluster_admin", "bucket_admin"]:
+            self.assertTrue(res['metrics']['resultCount'] == 4)
+        elif role in ["bucket_admin(default)", "bucket_admin(standard_bucket0)", "query_system_catalog", "ro_admin", "replication_admin"]:
+            self.assertTrue(res['status'] == 'success')
+
+        self.query = 'select * from system:dual'
+        res = self.curl_with_roles(self.query)
+        self.assertTrue(res['metrics']['resultCount'] == 1)
+        self.query = 'select * from system:user_info'
+        res = self.curl_with_roles(self.query)
+
+        if role == "admin":
+            self.assertTrue(res['status'] == 'success')
+        elif role == "cluster_admin":
+            self.assertTrue(str(res).find("'code': 13014") != -1)
+
+        self.query = 'select * from system:nodes'
+        res = self.curl_with_roles(self.query)
+
+        if role == "bucket_full_access(default)":
+            self.assertTrue(res['status'] == 'stopped')
+        elif role in ["select(default)", "query_select(default)", "select(standard_bucket0)", "query_select(standard_bucket0)"]:
+            self.assertTrue(str(res).find("'code': 13014") != -1)
+        elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)"]:
+            self.assertTrue(res['status'] == 'stopped')
+        else:
+            self.assertTrue(res['status'] == 'success')
+
+        self.query = 'select * from system:applicable_roles'
+        res = self.curl_with_roles(self.query)
+
+        if role == "admin":
+            self.assertTrue(res['status'] == 'success')
+        elif role == "ro_admin":
+            self.assertTrue(res['status'] == 'success')
+        elif role == "cluster_admin" or role == "bucket_admin(default)":
+            self.assertTrue(str(res).find("'code': 13014") != -1)
+
+        # if (role == "query_insert(default)" or role == "query_delete(default)" or role
+        # == "query_update(default)"):
+        #     self.assertTrue(res['status']=='stopped')
+        # elif(role == "bucket_admin(standard_bucket0)" or role == "views_admin(
+        # standard_bucket0)" or role == "views_admin(default)" or role == "views_admin"
+        # or role == "replication_admin" or role == "query_system_catalog" or role ==
+        # "ro_admin"):
+        #     self.assertTrue(str(res).find("'code': 13014")!=-1)
+        # else:
+        #     self.assertTrue(res['metrics']['resultCount']> 0)
+        if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)",
+                        "query_update(default)", "bucket_full_access(default)", "query_system_catalog", "views_admin(default)"]:
+            self.query = "prepare st1 from select * from default union select * from default union select * from default"
+            res = self.curl_with_roles(self.query)
+            self.query = 'execute st1'
+            res = self.curl_with_roles(self.query)
+            if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "replication_admin"]:
+                self.assertTrue(str(res).find("'code': 4040") != -1)
+            elif role == "select(default)" or role == "query_select(default)":
+                self.assertTrue(res['metrics']['resultCount'] == 0)
+            else:
+                self.assertTrue(res['status'] == 'success')
+
+            if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)"]:
+                self.query = "prepare st2 from select * from default union select * from " \
+                             "standard_bucket0 union select * from default"
+                res = self.curl_with_roles(self.query)
+
+                if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)",
+                            "views_admin(default)", "views_admin", "bucket_admin(default)", "replication_admin",
+                            "query_system_catalog", "select(default)", "query_select(default)"]:
+                    self.assertTrue(str(res).find("'code': 13014") != -1)
+                else:
+                    self.assertTrue(res['metrics']['resultCount'] > 0)
+
+                self.query = 'execute st2'
+                res = self.curl_with_roles(self.query)
+                if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "views_admin(default)",
+                            "views_admin", "bucket_admin(default)", "replication_admin", "query_system_catalog",
+                            "select(default)", "query_select(default)"]:
+                    self.assertTrue(str(res).find("'code': 4040") != -1)
+                else:
+                    self.assertTrue(res['status'] == 'success')
+
+                self.query = 'select * from system:completed_requests'
+                res = self.curl_with_roles(self.query)
+
+                if role == "select(default)" or role == "query_select(default)":
+                    self.assertTrue(str(res).find("'code': 13014") != -1)
+                elif role == "bucket_admin(standard_bucket0)":
+                    self.assertTrue(res['metrics']['resultCount'] > 0)
+                else:
+                    self.assertTrue(res['status'] == 'success')
+
+        if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)",
+                        "bucket_full_access(default)", "ro_admin"]:
+            self.query = 'select * from system:prepareds'
+            res = self.curl_with_roles(self.query)
+
+            if role == "select(default)" or role == "query_select(default)":
+                self.assertTrue(str(res).find("'code': 13014") != -1)
+            else:
+                self.assertTrue(res['status'] == 'success')
+
+            self.query = 'select * from system:active_requests'
+            res = self.curl_with_roles(self.query)
+
+            if role == "select(default)" or role == "query_select(default)":
+                self.assertTrue(str(res).find("'code': 13014") != -1)
+            else:
+                self.assertTrue(res['metrics']['resultCount'] > 0)
+
+            self.query = 'drop index {0}.idx1'.format(self.buckets[0].name)
+            res = self.curl_with_roles(self.query)
+            self.query = 'drop index {0}.idx2'.format(self.buckets[1].name)
+            res = self.curl_with_roles(self.query)
+            self.query = 'select * from system:indexes'
+            res = self.curl_with_roles(self.query)
+
+        if role == "views_admin(default)":
+            self.assertTrue(res['status'] == 'success')
+        elif role in ["bucket_admin(standard_bucket0)", "bucket_admin(default)", "select(default)", "query_select(default)"]:
+            self.assertTrue(res['metrics']['resultCount'] == 1)
+        elif role in ["query_insert(default)", "query_delete(default)", "query_update(default)"]:
+            self.assertTrue(res['metrics']['resultCount'] == 0)
+            # elif (role == "ro_admin"):
+            #     self.assertTrue(res['metrics']['resultCount']==2)
+
+    def try_query_assert(self, query, find_string):
+        try:
+            self.curl_with_roles(query)
+        except Exception as ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find(find_string) != -1)
+
+    def system_catalog_helper_insert(self, test, role=""):
+        self.try_query_assert('insert into system:datastores values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:namespaces values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:keyspaces values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:indexes values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:dual values("k051", { "id":123  } )', "System datastore error Mutations not allowed on system:dual.")
+        self.try_query_assert('insert into system:user_info values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:nodes values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:applicable_roles values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:prepareds values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:completed_requests values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+        self.try_query_assert('insert into system:active_requests values("k051", { "id":123  } )', "System datastore :  Not implemented ")
+
+    def system_catalog_helper_update(self, test, role=""):
+        self.try_query_assert('update system:datastores use keys "%s" set name="%s"' % ("id", "test"), "'code': 11000")
+        self.try_query_assert('update system:namespaces use keys "%s" set name="%s"' % ("id", "test"), "'code': 11003")
+        self.try_query_assert('update system:keyspaces use keys "%s" set name="%s"' % ("id", "test"), "'code': 11003")
+        self.try_query_assert('update system:indexes use keys "%s" set name="%s"' % ("id", "test"), "'code': 11003")
+        self.try_query_assert('update system:dual use keys "%s" set name="%s"' % ("id", "test"), "'code': 11003")
+        self.try_query_assert('update system:user_info use keys "%s" set name="%s"' % ("id", "test"), "'code': 5200")
+        self.try_query_assert('update system:nodes use keys "%s" set name="%s"' % ("id", "test"), "'code': 11003}")
+        # panic seen here as of now,hence commenting it out for now.
+        self.try_query_assert('update system:applicable_roles use keys "%s" set name="%s"' % ("id", "test"), "'code': 11000")
+        self.try_query_assert('update system:active_requests use keys "%s" set name="%s"' % ("id", "test"), "'code': 11000")
+        self.try_query_assert('update system:completed_requests use keys "%s" set name="%s"' % ("id", "test"), "'code': 11000")
+        self.try_query_assert('update system:prepareds use keys "%s" set name="%s"' % ("id", "test"), "'code': 11000")
+
+    # Query does not support drop these tables or buckets yet.We can add the test once it
+    #  is supported.
+    # Right now we cannot compare results in assert.
+    # def system_catalog_helper_drop(self,query_params_with_roles,test = ""):
+    #     self.query = 'drop system:datastores'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:namespaces'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:keyspaces'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:indexes'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:dual'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:user_info'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:nodes'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:applicable_roles'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:prepareds'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:completed_requests'
+    #     res = self.run_cbq_query()
+    #     print res
+    #     self.query = 'drop system:active_requests'
+    #     res = self.run_cbq_query()
+    #     print res
+
+    def query_with_roles(self, query, find_string):
+        self.query = query
+        res = self.curl_with_roles(self.query)
+        self.assertTrue(str(res).find(find_string) != -1)
+
+    def system_catalog_helper_delete(self, test, role="admin"):
+        self.query_with_roles('delete from system:datastores', "'code': 11003")
+        self.query_with_roles('delete from system:namespaces', "'code': 11003")
+        # To be fixed in next version
+        # self.query_with_roles('delete from system:keyspaces', "'code': 11003")
+        self.query_with_roles('delete from system:indexes', "'code': 11003")
+        self.query_with_roles('delete from system:dual', "'code': 11000")
+
+        self.query_with_roles('delete from system:user_info', "'code': 11003")
+        self.query_with_roles('delete from system:nodes', "'code': 11003")
+        self.query_with_roles('delete from system:applicable_roles', "'code': 11003")
+        self.query = 'delete from system:completed_requests'
+        res = self.curl_with_roles(self.query)
+        role_list = ["query_delete(default)", "query_delete(standard_bucket0)", "delete(default)", "bucket_full_access(default)"]
+        self.assertNotEquals(res['status'], 'success') if role in role_list else self.assertTrue(res['status'] == 'success')
+        self.query = 'delete from system:active_requests'
+        res = self.curl_with_roles(self.query)
+        self.assertTrue(res['status'] == 'stopped')
+        if role not in role_list:
+            self.query = 'delete from system:prepareds'
+            res = self.curl_with_roles(self.query)
+            self.assertTrue(res['status'] == 'success')
+
+    def select_my_user_info(self):
+        self.query = 'select * from system:my_user_info'
+        res = self.curl_with_roles(self.query)
+        self.assertTrue(res['status'] == 'success')
+
+##############################################################################################
+#
+#  tuq_curl.py and tuq_curl_whitelist.py helpers
+#
+##############################################################################################
+
+    '''Convert output of remote_util.execute_commands_inside to json'''
+    def convert_to_json(self,output_curl):
+        new_curl = "{" + output_curl
+        json_curl = json.loads(new_curl)
+        return json_curl
+
+    '''Convert output of remote_util.execute_command to json
+       (stripping all white space to match execute_command_inside output)'''
+    def convert_list_to_json(self,output_of_curl):
+        new_list = [string.replace(" ", "") for string in output_of_curl]
+        concat_string = ''.join(new_list)
+        json_output=json.loads(concat_string)
+        return json_output
+
+    '''Convert output of remote_util.execute_command to json to match the output of run_cbq_query'''
+    def convert_list_to_json_with_spacing(self,output_of_curl):
+        new_list = [string.strip() for string in output_of_curl]
+        concat_string = ''.join(new_list)
+        json_output=json.loads(concat_string)
+        return json_output
+
+##############################################################################################
+#
+#  tuq_advancedcbqshell.py helpers
+#
+##############################################################################################
+
+    #Should probably just make this an if statement inside of remote_util to modify the problematic line of code
+    def execute_commands_inside(self, main_command, query, queries, bucket1, password, bucket2, source,
+                                subcommands=[], min_output_size=0,
+                                end_msg='', timeout=250):
+        shell = RemoteMachineShellConnection(self.master)
+        shell.extract_remote_info()
+        filename = "/tmp/test2"
+        iswin = False
+
+        if shell.info.type.lower() == 'windows':
+            iswin = True
+            filename = "/cygdrive/c/tmp/test.txt"
+
+        filedata = ""
+        if not (query == ""):
+            main_command = main_command + " -s=\"" + query + '"'
+        elif (shell.remote and not (queries == "")):
+            sftp = shell._ssh_client.open_sftp()
+            filein = sftp.open(filename, 'w')
+            for query in queries:
+                filein.write(query)
+                filein.write('\n')
+            fileout = sftp.open(filename, 'r')
+            filedata = fileout.read()
+            fileout.close()
+        elif not (queries == ""):
+            f = open(filename, 'w')
+            for query in queries:
+                f.write(query)
+                f.write('\n')
+            f.close()
+            fileout = open(filename, 'r')
+            filedata = fileout.read()
+            fileout.close()
+
+        newdata = filedata.replace("bucketname", bucket2)
+        newdata = newdata.replace("user", bucket1)
+        newdata = newdata.replace("pass", password)
+        newdata = newdata.replace("bucket1", bucket1)
+
+        newdata = newdata.replace("user1", bucket1)
+        newdata = newdata.replace("pass1", password)
+        newdata = newdata.replace("bucket2", bucket2)
+        newdata = newdata.replace("user2", bucket2)
+        newdata = newdata.replace("pass2", password)
+
+        if (shell.remote and not (queries == "")):
+            f = sftp.open(filename, 'w')
+            f.write(newdata)
+            f.close()
+        elif not (queries == ""):
+            f = open(filename, 'w')
+            f.write(newdata)
+            f.close()
+        if not (queries == ""):
+            if (source):
+                if iswin:
+                    main_command = main_command + "  -s=\"\SOURCE " + 'c:\\\\tmp\\\\test.txt'
+                else:
+                    main_command = main_command + "  -s=\"\SOURCE " + filename + '"'
+            else:
+                if iswin:
+                    main_command = main_command + " -f=" + 'c:\\\\tmp\\\\test.txt'
+                else:
+                    main_command = main_command + " -f=" + filename
+
+        log.info("running command on {0}: {1}".format(self.master.ip, main_command))
+        output = ""
+        if shell.remote:
+            stdin, stdout, stderro = shell._ssh_client.exec_command(main_command)
+            time.sleep(20)
+            count = 0
+            for line in stdout.readlines():
+                if (count >= 0):
+                    output += line.strip()
+                    output = output.strip()
+                    if "Inputwasnotastatement" in output:
+                        output = "status:FAIL"
+                        break
+                    if "timeout" in output:
+                        output = "status:timeout"
+                else:
+                    count += 1
+            stdin.close()
+            stdout.close()
+            stderro.close()
+        else:
+            p = Popen(main_command, shell=True, stdout=PIPE, stderr=PIPE)
+            stdout, stderro = p.communicate()
+            output = stdout
+            print output
+            time.sleep(1)
+        if (shell.remote and not (queries == "")):
+            sftp.remove(filename)
+            sftp.close()
+        elif not (queries == ""):
+            os.remove(filename)
+
+        return (output)
+
+##############################################################################################
+#
+#  date_time_functions.py helpers
+#   These are very specific to this testing, should probably go back
+##############################################################################################
+
+    def _generate_date_part_millis_query(self, expression, part, timezone=None):
+        if not timezone:
+            query = 'SELECT DATE_PART_MILLIS({0}, "{1}")'.format(expression, part)
+        else:
+            query = 'SELECT DATE_PART_MILLIS({0}, "{1}", "{2}")'.format(expression, part, timezone)
+        return query
+
+    def _generate_date_format_str_query(self, expression, format):
+        query = 'SELECT DATE_FORMAT_STR("{0}", "{1}")'.format(expression, format)
+        return query
+
+    def _generate_date_range_str_query(self, initial_date, final_date, part, increment=None):
+        if increment is None:
+            query = 'SELECT DATE_RANGE_STR("{0}", "{1}", "{2}")'.format(initial_date, final_date, part)
+        else:
+            query = 'SELECT DATE_RANGE_STR("{0}", "{1}", "{2}", {3})'.format(initial_date, final_date, part, increment)
+        return query
+
+    def _generate_date_range_millis_query(self, initial_millis, final_millis, part, increment=None):
+        if increment is None:
+            query = 'SELECT DATE_RANGE_MILLIS({0}, {1}, "{2}")'.format(initial_millis, final_millis, part)
+        else:
+            query = 'SELECT DATE_RANGE_MILLIS({0}, {1}, "{2}", {3})'.format(initial_millis, final_millis, part, increment)
+        return query
+
+    def _convert_to_millis(self, expression):
+        query = 'SELECT STR_TO_MILLIS("{0}")'.format(expression)
+        results = self.run_cbq_query(query)
+        return results["results"][0]["$1"]
+
+    def _is_date_part_present(self, expression):
+        return (len(expression.split("-")) > 1)
+
+    def _is_time_part_present(self, expression):
+        return (len(expression.split(":")) > 1)
+
+##############################################################################################
+#
+#  n1ql_options.py helpers
+#   Seem specific to this test file, most should go back (curl helper looks like it could be leveraged elsewhere)
+##############################################################################################
+
+    def curl_helper(self, statement):
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement={3}'". \
+            format('Administrator', 'password', self.master.ip, statement, self.curl_path)
+        return self.run_helper_cmd(cmd)
+
+    def prepare_helper(self, statement):
+        cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&$type="Engineer"&$name="employee-4"\''. \
+            format('Administrator', 'password', self.master.ip, statement, self.curl_path)
+        return self.run_helper_cmd(cmd)
+
+    def prepare_helper2(self, statement):
+        cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&args=["Engineer","employee-4"]\''. \
+            format('Administrator', 'password', self.master.ip, statement, self.curl_path)
+        return self.run_helper_cmd(cmd)
+
+    def run_helper_cmd(self, cmd):
+        shell = RemoteMachineShellConnection(self.master)
+        output, error = shell.execute_command(cmd)
+        new_list = [string.strip() for string in output]
+        concat_string = ''.join(new_list)
+        json_output = json.loads(concat_string)
+        return json_output
+
+##############################################################################################
+#
+#  n1ql_ro_user.py helpers
+#   Seem specific to this test file, most should go back
+##############################################################################################
+
+    def _kill_all_processes_cbq(self):
+        if hasattr(self, 'shell'):
+            o = self.shell.execute_command("ps -aef| grep cbq-engine")
+            if len(o):
+                for cbq_engine in o[0]:
+                    if cbq_engine.find('grep') == -1:
+                        pid = [item for item in cbq_engine.split(' ') if item][1]
+                        self.shell.execute_command("kill -9 %s" % pid)
+
+##############################################################################################
+#
+#   tuq_xdcr.py helpers
+#   I think these helpers should go back into tuq_xdcr, importing upgradetests has some slight drawbacks for tuq
+##############################################################################################
+
+    def _override_clusters_structure(self):
+        UpgradeTests._override_clusters_structure(self)
+
+    def _create_buckets(self, nodes):
+        UpgradeTests._create_buckets(self, nodes)
+
+    def _setup_topology_chain(self):
+        UpgradeTests._setup_topology_chain(self)
+
+    def _set_toplogy_star(self):
+        UpgradeTests._set_toplogy_star(self)
+
+    def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
+        UpgradeTests._join_clusters(self, src_cluster_name, src_master,
+                                    dest_cluster_name, dest_master)
+
+    def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
+        UpgradeTests._replicate_clusters(self, src_master, dest_cluster_name, buckets)
+
+    def _get_bucket(self, bucket_name, server):
+        return UpgradeTests._get_bucket(self, bucket_name, server)
+
+##############################################################################################
+#
+#   tuq_views_ops.py helpers
+##############################################################################################
+
+    def _compare_view_and_tool_result(self, view_result, tool_result, check_values=True):
+        self.log.info("Comparing result ...")
+        formated_tool_res = [{"key" : [doc["join_yr"], doc["join_mo"]], "value" : doc["name"]} for doc in tool_result]
+        formated_view_res = [{"key" : row["key"], "value": row["value"]} for row in view_result]
+        msg = "Query results are not equal. Tool %s, view %s" %(len(formated_tool_res), len(formated_view_res))
+        self.assertEqual(len(formated_tool_res), len(formated_view_res), msg)
+        self.log.info("Length is equal")
+        msg =  "Query results sorting are not equal./n Actual %s, Expected %s" %(formated_tool_res[:100],formated_view_res[:100])
+        self.assertEqual([row["key"] for row in formated_tool_res], [row["key"] for row in formated_view_res], msg)
+        self.log.info("Sorting is equal")
+        if check_values:
+            formated_tool_res = sorted(formated_tool_res, key=lambda doc: (doc['key'], doc['value']))
+            formated_view_res = sorted(formated_view_res, key=lambda doc: (doc['key'], doc['value']))
+            msg = "Query results sorting are not equal. View but not tool has [%s]" %([r for r in view_result if r in formated_tool_res])
+            self.assertTrue(formated_tool_res == formated_view_res, msg)
+            self.log.info("Items are equal")
+
+##############################################################################################
+#
+#   tuq_tutorial.py helpers
+##############################################################################################
+
+    def _create_headers(self):
+        authorization = ""
+        return {'Content-Type': 'application/x-www-form-urlencoded','Authorization': 'Basic %s' % authorization, 'Accept': '*/*'}
+
+    def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
+        headers = self._create_headers() if not headers else None
+        end_time = time.time() + timeout
+        while True:
+            try:
+                response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers)
+                if response['status'] in ['200', '201', '202']:
+                    return True, content, response
+                else:
+                    try:
+                        json_parsed = json.loads(content)
+                    except ValueError as e:
+                        json_parsed = {}
+                        json_parsed["error"] = "status: {0}, content: {1}".format(response['status'], content)
+                    reason = "unknown"
+                    reason = json_parsed["error"] if "error" in json_parsed else None
+                    self.log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content.rstrip('\n')))
+                    return False, content, response
+            except socket.error as e:
+                self.log.error("socket error while connecting to {0} error {1} ".format(api, e))
+                if time.time() > end_time:
+                    raise Exception("nothing")
+            time.sleep(3)
+##############################################################################################
+#
+#   tuq_nulls.py helpers
+##############################################################################################
+
+##############################################################################################
+#
+#   tuq_json_non_docs.py helpers
+##############################################################################################
+
+##############################################################################################
+#
+#   tuq_join.py helpers
+##############################################################################################
+
+    def _get_for_sort(self, doc):
+        if not 'emp' in doc:
+            return ''
+        if 'name' in doc['emp']:
+            return doc['emp']['name'], doc['emp']['join_yr'], \
+                   doc['emp']['join_mo'], doc['emp']['job_title']
+        else:
+            return doc['emp']['task_name']
+
+    def _delete_ids(self, result):
+        for item in result:
+            if 'emp' in item:
+                del item['emp']['_id']
+            else:
+                None
+            if 'tasks' in item:
+                for task in item['tasks']:
+                    if task and '_id' in task:
+                        del task['_id']
+                    else:
+                        None
+
+    def _generate_full_joined_docs_list(self, join_type=JOIN_INNER, particular_key=None):
+        joined_list = []
+        all_docs_list = self.generate_full_docs_list(self.gens_load)
+        if join_type.upper() == JOIN_INNER:
+            for item in all_docs_list:
+                keys = item["tasks_ids"]
+                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
+                for tasks_item in tasks_items:
+                    item_to_add = copy.deepcopy(item)
+                    item_to_add.update(tasks_item)
+                    joined_list.append(item_to_add)
+        elif join_type.upper() == JOIN_LEFT:
+            for item in all_docs_list:
+                keys = item["tasks_ids"]
+                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
+                for key in keys:
+                    item_to_add = copy.deepcopy(item)
+                    if key in [doc["_id"] for doc in tasks_items]:
+                        item_to_add.update([doc for doc in tasks_items if key == doc['_id']][0])
+                        joined_list.append(item_to_add)
+            joined_list.extend([{}] * self.gens_tasks[-1].end)
+        elif join_type.upper() == JOIN_RIGHT:
+            raise Exception("RIGHT JOIN doen't exists in corrunt implementation")
+        else:
+            raise Exception("Unknown type of join")
+        return joined_list
+
+    def _generate_full_nested_docs_list(self, join_type=JOIN_INNER, particular_key=None):
+        nested_list = []
+        all_docs_list = self.generate_full_docs_list(self.gens_load)
+        if join_type.upper() == JOIN_INNER:
+            for item in all_docs_list:
+                keys = item["tasks_ids"]
+                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
+                nested_list.append({"items_nested" : tasks_items, "item" : item}) if tasks_items else None
+        elif join_type.upper() == JOIN_LEFT:
+            for item in all_docs_list:
+                keys = item["tasks_ids"]
+                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
+                nested_list.append({"items_nested" : tasks_items, "item" : item}) if tasks_items else None
+            tasks_doc_list = self.generate_full_docs_list(self.gens_tasks)
+            for item in tasks_doc_list:
+                nested_list.append({"item" : item})
+        elif join_type.upper() == JOIN_RIGHT:
+            raise Exception("RIGHT JOIN doen't exists in corrunt implementation")
+        else:
+            raise Exception("Unknown type of join")
+        return nested_list
+
+##############################################################################################
+#
+#   tuq_index.py helpers
+##############################################################################################
+
+    def run_intersect_scan_query(self, query_method):
+        indexes = []
+        query = None
+        index_name_prefix = "inter_index_" + str(uuid.uuid4())[:4]
+        index_fields = self.input.param("index_field", '').split(';')
+        try:
+            for bucket in self.buckets:
+                for field in index_fields:
+                    index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
+                    query = "CREATE INDEX %s ON %s(%s) USING %s" % (
+                        index_name, bucket.name, ','.join(field.split(';')), self.index_type)
+                    self.run_cbq_query(query=query)
+                    self._wait_for_index_online(bucket, index_name)
+                    indexes.append(index_name)
+                fn = getattr(self, query_method)
+                query = fn()
+        finally:
+            return indexes, query
+
+    def run_intersect_scan_explain_query(self, indexes_names, query_temp):
+        for bucket in self.buckets:
+            query_temp = query_temp % bucket.name if (query_temp.find('%s') > 0) else None
+            query = 'EXPLAIN %s' % (query_temp)
+            res = self.run_cbq_query(query=query)
+            plan = self.ExplainPlanHelper(res)
+            self.log.info('-'*100)
+            if (query.find("CREATE INDEX") < 0):
+                result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
+                    else plan["~children"][0]
+                if not(result['scans'][0]['#operator']=='DistinctScan'):
+                    if not (result["#operator"] == 'UnionScan'):
+                        self.assertTrue(result["#operator"] == 'IntersectScan',
+                                        "Index should be intersect scan and is %s" % (plan))
+                    # actual_indexes = []
+                    # for scan in result['scans']:
+                    #     print scan
+                    #     if (scan['#operator'] == 'IndexScan'):
+                    #         actual_indexes.append([result['scans'][0]['index']])
+                    #
+                    #     elif (scan['#operator'] == 'DistinctScan'):
+                    #         actual_indexes.append([result['scans'][0]['scan']['index']])
+                    #     else:
+                    #          actual_indexes.append(scan['index'])
+                    if result["#operator"] == 'UnionScan':
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                          for results in result['scans'] for scan in results['scans']]
+                    else:
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                          for scan in result['scans']]
+                    actual_indexes = [x.encode('UTF8') for x in actual_indexes]
+                    self.log.info('actual indexes "{0}"'.format(actual_indexes))
+                    self.log.info('compared against "{0}"'.format(indexes_names))
+                    self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+            else:
+                result = plan
+                self.assertTrue(result['#operator'] == 'CreateIndex',
+                                "Operator is not create index and is %s" % (result))
+            self.log.info('-'*100)
+
+    def _delete_indexes(self, indexes):
+        count = 0
+        for bucket in self.buckets:
+            query = "DROP INDEX %s.%s USING %s" % (bucket.name, indexes[count], self.index_type)
+            count =count+1
+            try:
+                self.run_cbq_query(query=query)
+            except:
+                pass
+
+    def _verify_view_is_present(self, view_name, bucket):
+        if self.primary_indx_type.lower() == 'gsi':
+            return
+        ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
+        self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)
+
+    def _is_index_in_list(self, bucket, index_name):
+        query = "SELECT * FROM system:indexes"
+        res = self.run_cbq_query(query)
+        for item in res['results']:
+            if 'keyspace_id' not in item['indexes']:
+                self.log.error(item)
+                continue
+            if item['indexes']['keyspace_id'] == bucket.name and item['indexes']['name'] == index_name:
+                return True
+        return False
+
+##############################################################################################
+#
+#   tuq_dml.py helpers
+##############################################################################################
+
+    def _insert_gen_keys(self, num_docs, prefix='a1_'):
+        def convert(data):
+            if isinstance(data, basestring):
+                return str(data)
+            elif isinstance(data, collections.Mapping):
+                return dict(map(convert, data.iteritems()))
+            elif isinstance(data, collections.Iterable):
+                return type(data)(map(convert, data))
+            else:
+                return data
+        keys = []
+        values = []
+        for gen_load in self.gens_load:
+            gen = copy.deepcopy(gen_load)
+            if len(keys) == num_docs:
+                break
+            for i in xrange(gen.end):
+                if len(keys) == num_docs:
+                    break
+                key, value = gen.next()
+                key = prefix + key
+                value = convert(json.loads(value))
+                for bucket in self.buckets:
+                    self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, key, value)
+                    actual_result = self.run_cbq_query()
+                    self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+                keys.append(key)
+                values.append(value)
+        return keys, values
+
+    def _keys_are_deleted(self, keys):
+        TIMEOUT_DELETED = 300
+        end_time = time.time() + TIMEOUT_DELETED
+        #Checks for keys deleted ...
+        while time.time() < end_time:
+            for bucket in self.buckets:
+                self.query = 'select meta(%s).id from %s'  % (bucket.name, bucket.name)
+                actual_result = self.run_cbq_query()
+                found = False
+                for key in keys:
+                    if actual_result['results'].count({'id' : key}) != 0:
+                        found = True
+                        break
+                if not found:
+                    return
+            self.sleep(3)
+        self.fail('Keys %s are still present' % keys)
+
+    def _common_insert(self, keys, values):
+        for bucket in self.buckets:
+            for i in xrange(len(keys)):
+                v = '"%s"' % values[i] if isinstance(values[i], str) else values[i]
+                self.query = 'INSERT into %s (key , value) VALUES ("%s", "%s")' % (bucket.name, keys[i], values[i])
+                actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+
+    def _common_check(self, key, expected_item_value, upsert=False):
+        clause = 'UPSERT' if upsert else 'INSERT'
+        for bucket in self.buckets:
+            inserted = expected_item_value
+            inserted = '"%s"' % expected_item_value if isinstance(expected_item_value, str) else None
+            inserted = 'null' if expected_item_value is None else None
+            self.query = '%s into %s (key , value) VALUES ("%s", %s)' % (clause, bucket.name, key, inserted)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.query = 'select * from %s use keys ["%s"]'  % (bucket.name, key)
+            try:
+                actual_result = self.run_cbq_query()
+            except:
+                pass
+            self.sleep(15, 'Wait for index rebuild')
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['results'].count({bucket.name : expected_item_value}), 1,
+                             'Item did not appear')
+
+    def _common_check_values(self, keys, expected_item_values, upsert=False):
+        clause = 'UPSERT' if upsert else 'INSERT'
+        for bucket in self.buckets:
+            values = ''
+            for k, v in zip(keys, expected_item_values):
+                inserted = v
+                if isinstance(v, str):
+                    inserted = '"%s"' % v
+                if v is None:
+                    inserted = 'null'
+                values += '("%s", %s),' % (k, inserted)
+            self.query = '%s into %s (key , value) VALUES %s' % (clause, bucket.name, values[:-1])
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.query = 'select * from %s use keys ["%s"]'  % (bucket.name, '","'.join(keys))
+            try:
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, '#primary')
+            except:
+                pass
+            self.sleep(15, 'Wait for index rebuild')
+            actual_result = self.run_cbq_query()
+            for value in expected_item_values:
+                self.assertEqual(actual_result['results'].count({bucket.name : value}), expected_item_values.count(value),
+                                 'Item did not appear')
+
+    def load_with_dir(self, generators_load, exp=0, flag=0,
+                      kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
+                      timeout_secs=30, op_type='create', start_items=0):
+        gens_load = {}
+        for bucket in self.buckets:
+            tmp_gen = []
+            for generator_load in generators_load:
+                tmp_gen.append(copy.deepcopy(generator_load))
+            gens_load[bucket] = copy.deepcopy(tmp_gen)
+        items = 0
+        for gen_load in gens_load[self.buckets[0]]:
+            items += (gen_load.end - gen_load.start)
+        shell = RemoteMachineShellConnection(self.master)
+        try:
+            for bucket in self.buckets:
+                self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
+                self.log.info("Delete directory's content %s/data/default/%s ..." % (self.directory, bucket.name))
+                shell.execute_command('rm -rf %s/data/default/*' % self.directory)
+                self.log.info("Create directory %s/data/default/%s..." % (self.directory, bucket.name))
+                shell.execute_command('mkdir -p %s/data/default/%s' % (self.directory, bucket.name))
+                self.log.info("Load %s documents to %s/data/default/%s..." % (items, self.directory, bucket.name))
+                for gen_load in gens_load:
+                    for i in xrange(gen_load.end):
+                        key, value = gen_load.next()
+                        out = shell.execute_command("echo '%s' > %s/data/default/%s/%s.json" % (value, self.directory,
+                                                                                                bucket.name, key))
+                self.log.info("LOAD IS FINISHED")
+        finally:
+            shell.disconnect()
+        self.num_items = items + start_items
+        self.log.info("LOAD IS FINISHED")
+
+    def _delete_ids(self, result):
+        for item in result:
+            if '_id' in item:
+                del item['_id']
+            else:
+                None
+            for bucket in self.buckets:
+                if bucket.name in item and 'id' in item[bucket.name]:
+                    del item[bucket.name]['_id']
+
+##############################################################################################
+#
+#   tuq_concurrent.py helpers
+##############################################################################################
+
+    def query_thread(self, method_name):
+        try:
+            fn = getattr(self, method_name)
+            fn()
+        except Exception as ex:
+            self.log.error("***************ERROR*************\n At least one of query threads is crashed: {0}".format(ex))
+            self.thread_crashed.set()
+            raise ex
+        finally:
+            self.thread_stopped.set() if not self.thread_stopped.is_set() else None
+
+##############################################################################################
+#
+#   tuq_cluster_ops.py helpers
+##############################################################################################
+
+    def _create_multiple_indexes(self, index_field):
+        indexes = []
+        self.assertTrue(self.buckets, 'There are no buckets! check your parameters for run')
+        for bucket in self.buckets:
+            index_name = 'idx_%s_%s_%s' % (bucket.name, index_field, str(uuid.uuid4())[:4])
+            query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(index_field.split(';')), self.indx_type)
+            self.run_cbq_query(query=query)
+
+            if self.indx_type.lower() == 'gsi':
+                self._wait_for_index_online(bucket, index_name)
+        indexes.append(index_name)
+        return indexes
+
+    def _delete_multiple_indexes(self, indexes):
+        for bucket in self.buckets:
+            for index_name in set(indexes):
+                try:
+                    self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+                except:
+                    pass
+
+##############################################################################################
+#
+#   tuq_base64.py helpers
+##############################################################################################
+
+    def _generate_full_docs_list_base64(self, gens_load):
+        all_docs_list = []
+        for gen_load in gens_load:
+            doc_gen = copy.deepcopy(gen_load)
+            while doc_gen.has_next():
+                _, val = doc_gen.next()
+                all_docs_list.append(val)
+        return all_docs_list
+
+    def _verify_results(self, actual_result, expected_result):
+        msg = "Results are incorrect. Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result))
+        self.assertEquals(len(actual_result), len(expected_result), msg)
+        msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s Expected first and last 100: %s." \
+              "\n  ... \n %s" % (actual_result[:100],actual_result[-100:],expected_result[:100],expected_result[-100:])
+        self.assertTrue(sorted(actual_result) == sorted(expected_result), msg)
+
+##############################################################################################
+#
+#   tuq_index.py helpers   these are called in tuq_index.py, not standalone tests
+##############################################################################################
+
+    def run_test_case(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN 'winter'" + \
+                         " WHEN join_mo < 6 AND join_mo > 2 THEN 'spring' " + \
+                         "WHEN join_mo < 9 AND join_mo > 5 THEN 'summer' " + \
+                         "ELSE 'autumn' END AS period FROM %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
+                doc['name'],
+                doc['period']))
+
+            expected_result = [{"name" : doc['name'],
+                                "period" : ((('autumn','summer')[doc['join_mo'] in [6,7,8]],
+                                             'spring')[doc['join_mo'] in [3,4,5]],'winter')
+                                [doc['join_mo'] in [12,1,2]]}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['period']))
+            self._verify_results(actual_result, expected_result)
+
+    def run_test_group_by_aggr_fn(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) + \
+                         "WHERE join_mo>7 GROUP BY tasks_points.task1 " + \
+                         "HAVING COUNT(tasks_points.task1) > 0 AND "  + \
+                         "(MIN(join_day)=1 OR MAX(join_yr=2011)) " + \
+                         "ORDER BY tasks_points.task1"
+            actual_result = self.run_cbq_query()
+
+            if self.analytics:
+                self.query = "SELECT d.tasks_points.task1 AS task from %s d " % (bucket.name) + \
+                             "WHERE d.join_mo>7 GROUP BY d.tasks_points.task1 " + \
+                             "HAVING COUNT(d.tasks_points.task1) > 0 AND "  + \
+                             "(MIN(d.join_day)=1 OR MAX(d.join_yr=2011)) " + \
+                             "ORDER BY d.tasks_points.task1"
+
+            tmp_groups = set([doc['tasks_points']["task1"] for doc in self.full_list])
+            expected_result = [{"task" : group} for group in tmp_groups
+                               if [doc['tasks_points']["task1"]
+                                   for doc in self.full_list].count(group) >0 and \
+                               (min([doc["join_day"] for doc in self.full_list
+                                     if doc['tasks_points']["task1"] == group]) == 1 or \
+                                max([doc["join_yr"] for doc in self.full_list
+                                     if doc['tasks_points']["task1"] == group]) == 2011)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result['results'], expected_result)

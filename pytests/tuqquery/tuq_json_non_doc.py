@@ -8,7 +8,7 @@ class JSONNonDocTests(QueryTests):
             self.skip_generation=True
             super(JSONNonDocTests, self).setUp()
             self.value_type = self.input.param("value_type", "int")
-            self.gens_load = self.generate_docs(self.value_type)
+            self.gens_load = self.gen_docs(type='json_non_docs', values_type=self.value_type)
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket,
                                       timeout=self.wait_timeout * 5)
@@ -73,16 +73,3 @@ class JSONNonDocTests(QueryTests):
             expected_result = [doc for doc in expected_result if doc[0] > 20 or doc[1] > 20 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
-    def generate_docs(self, values_type, name="tuq", start=0, end=0):
-        if end==0:
-            end = self.num_items
-        if values_type == 'string':
-            values = ['Engineer', 'Sales', 'Support']
-        elif values_type == 'int':
-            values = [100, 200, 300, 400, 500]
-        elif values_type == 'array':
-            values = [[10, 20], [20, 30], [30, 40]]
-        else:
-            return []
-        generators = [JSONNonDocGenerator(name, values, start=start,end=end)]
-        return generators

@@ -26,7 +26,6 @@ class N1QLRBACTests(QueryTests):
               ' http://%s:%s/pools/default/buckets'% (self.rest.username,self.rest.password,self.master.ip,self.port)
         o =self.shell.execute_command(cmd)
 
-
     def tearDown(self):
         super(N1QLRBACTests, self).tearDown()
 
@@ -53,7 +52,6 @@ class N1QLRBACTests(QueryTests):
         self.shell.execute_command(cmd)
         cmd = 'curl http://%s:%s/settings/rbac/users -u %s:%s'%(self.master.ip,self.port,'User2','pwd2')
         self.shell.execute_command(cmd)
-
 
     def test_users_crud_operation(self):
         #Query the list of users. It should be empty, returning an empty list, [ ]
