@@ -13,7 +13,7 @@ class JoinTests(QueryTests):
     def setUp(self):
         try:
             super(JoinTests, self).setUp()
-            self.gens_tasks = self.gen_docs(self, type='tasks')
+            self.gens_tasks = self.gen_docs(type='join')
             self.type_join = self.input.param("type_join", JOIN_INNER)
         except Exception, ex:
             self.log.error("ERROR SETUP FAILED: %s" % str(ex))
@@ -270,10 +270,6 @@ class JoinTests(QueryTests):
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
-
-
-
-
 
     def test_where_join_keys_not_equal(self):
         for bucket in self.buckets:

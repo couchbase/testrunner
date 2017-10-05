@@ -283,6 +283,7 @@ class QueryTests(BaseTestCase):
     def gen_docs(self, docs_per_day=1, type='default', values_type=None, name='tuq', start=0, end=0):
         json_generator = JsonGenerator()
         generators = []
+        self.log.info('Generating %s data...' % type)
         if type == 'default':
             if self.array_indexing:
                 generators = json_generator.generate_docs_employee_array(docs_per_day, start)
@@ -2253,10 +2254,15 @@ class QueryTests(BaseTestCase):
     def _generate_full_joined_docs_list(self, join_type=JOIN_INNER, particular_key=None):
         joined_list = []
         all_docs_list = self.generate_full_docs_list(self.gens_load)
+        self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
+        self.log.info(str(all_docs_list[0:5]))
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
+                self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
+                self.log.info(str(item))
                 keys = item["tasks_ids"]
-                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                if particular_key is not None:
+                    keys = [item["tasks_ids"][particular_key]]
                 tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
                 for tasks_item in tasks_items:
                     item_to_add = copy.deepcopy(item)
@@ -2265,7 +2271,8 @@ class QueryTests(BaseTestCase):
         elif join_type.upper() == JOIN_LEFT:
             for item in all_docs_list:
                 keys = item["tasks_ids"]
-                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                if particular_key is not None:
+                    keys = [item["tasks_ids"][particular_key]]
                 tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
                 for key in keys:
                     item_to_add = copy.deepcopy(item)
@@ -2274,7 +2281,7 @@ class QueryTests(BaseTestCase):
                         joined_list.append(item_to_add)
             joined_list.extend([{}] * self.gens_tasks[-1].end)
         elif join_type.upper() == JOIN_RIGHT:
-            raise Exception("RIGHT JOIN doen't exists in corrunt implementation")
+            raise Exception("RIGHT JOIN doen't exists in current implementation")
         else:
             raise Exception("Unknown type of join")
         return joined_list
@@ -2282,18 +2289,26 @@ class QueryTests(BaseTestCase):
     def _generate_full_nested_docs_list(self, join_type=JOIN_INNER, particular_key=None):
         nested_list = []
         all_docs_list = self.generate_full_docs_list(self.gens_load)
+        self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
+        self.log.info(str(all_docs_list[0:5]))
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
+                self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
+                self.log.info(str(item))
                 keys = item["tasks_ids"]
-                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                if particular_key is not None:
+                    keys = [item["tasks_ids"][particular_key]]
                 tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
-                nested_list.append({"items_nested" : tasks_items, "item" : item}) if tasks_items else None
+                if tasks_items:
+                    nested_list.append({"items_nested" : tasks_items, "item" : item})
         elif join_type.upper() == JOIN_LEFT:
             for item in all_docs_list:
                 keys = item["tasks_ids"]
-                keys=[item["tasks_ids"][particular_key]] if particular_key is not None else None
+                if particular_key is not None:
+                    keys = [item["tasks_ids"][particular_key]]
                 tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
-                nested_list.append({"items_nested" : tasks_items, "item" : item}) if tasks_items else None
+                if tasks_items:
+                    nested_list.append({"items_nested" : tasks_items, "item" : item})
             tasks_doc_list = self.generate_full_docs_list(self.gens_tasks)
             for item in tasks_doc_list:
                 nested_list.append({"item" : item})

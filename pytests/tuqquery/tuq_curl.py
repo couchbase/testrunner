@@ -41,7 +41,7 @@ class QueryCurlTests(QueryTests):
         super(QueryCurlTests, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
         self.info = self.shell.extract_remote_info()
-        self.curl_path = "%scurl" % self.path if self.info.type.lower() == 'windows' else self.curl_path = "curl"
+        self.curl_path = "%scurl" % self.path if self.info.type.lower() == 'windows' else "curl"
         self.rest = RestConnection(self.master)
         self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s" \
                                              % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)

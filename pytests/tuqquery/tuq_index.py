@@ -22,7 +22,6 @@ class QueriesViewsTests(QueryTests):
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
         self.log.info('-'*100)
-
         self.shell.execute_command("killall -9 cbq-engine")
         self.shell.execute_command("killall -9 indexes")
         self.sleep(60, 'wait for indexer, cbq processes to come back up ..')
@@ -986,7 +985,7 @@ class QueriesViewsTests(QueryTests):
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_field", '').split(';')
         index_name = "test"
-        if (self.DGM == True):
+        if self.DGM == True:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         for bucket in self.buckets:
             try:
