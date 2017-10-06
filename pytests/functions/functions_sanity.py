@@ -9,7 +9,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def setUp(self):
         super(FunctionsSanity, self).setUp()
         if self.create_functions_buckets:
-            self.bucket_size = max(100, self.quota / 3)
+            self.bucket_size = 100
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)
