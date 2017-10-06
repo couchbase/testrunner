@@ -13,5 +13,5 @@
   "disable_gsi_indexes": false,
   "disable_ft_indexes": false,
   "disable_data": false,
-  "filter_vbuckets": []
+  "filter_vbuckets": {"enabled": false, "list": []}
 }

@@ -3643,13 +3643,15 @@ class RestConnection(object):
         else:
             return status, json.loads(content)
 
-    def set_downgrade_storage_mode_with_rest(self, downgrade=True, username="Administrator", password="password"):
+    def set_downgrade_storage_mode_with_rest(self, downgrade=True, username="Administrator",
+                                                                   password="password"):
         authorization = base64.encodestring('%s:%s' % (username, password))
         if downgrade:
             api = self.index_baseUrl + 'settings/storageMode?downgrade=true'
         else:
             api = self.index_baseUrl + 'settings/storageMode?downgrade=false'
-        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s'
+                                                                 % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers)
         if not status:
             raise Exception(content)
