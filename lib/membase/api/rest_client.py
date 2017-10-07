@@ -3895,7 +3895,7 @@ class RestConnection(object):
         Save the Function so that it is visible in UI
     '''
     def save_function(self, name, body, username="Administrator", password="password"):
-        authorization = base64.encodestring('%s:%s' % (username, password))
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "_p/event/saveAppTempStore/?name=" + name
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -3909,7 +3909,7 @@ class RestConnection(object):
             Deploy the Function
     '''
     def deploy_function(self, name, body, username="Administrator", password="password"):
-        authorization = base64.encodestring('%s:%s' % (username, password))
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "_p/event/setApplication/?name=" + name
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
