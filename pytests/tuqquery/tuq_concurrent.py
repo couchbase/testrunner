@@ -5,8 +5,9 @@ from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from tuqquery.tuq import QueryTests
 from view.viewquerytests import StoppableThread
+from tuqquery.tuq_sanity import QuerySanityTests
 
-class ConcurrentTests(QueryTests):
+class ConcurrentTests(QuerySanityTests, QueryTests):
     def setUp(self):
         super(ConcurrentTests, self).setUp()
         self.thread_crashed = Event()

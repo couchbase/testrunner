@@ -22,6 +22,7 @@ from couchbase_helper.tuq_generators import TuqGenerators
 #from xdcr.upgradeXDCR import UpgradeTests
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
 
+
 JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
 JOIN_RIGHT = "RIGHT"
@@ -128,7 +129,10 @@ class QueryTests(BaseTestCase):
             if os != 'windows':
                 self.sleep(10, 'sleep before load')
             if not self.skip_load:
-                self.load_directory(self.gens_load) if self.flat_json else self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
+                if self.flat_json:
+                    self.load_directory(self.gens_load)
+                else:
+                    self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True

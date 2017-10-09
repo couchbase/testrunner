@@ -7,7 +7,7 @@ class NULLTests(QueryTests):
         self.analytics = False
         super(NULLTests, self).setUp()
         self.gens_load = self.gen_docs(type='nulls')
-        self.full_list = self.generate_full_docs_list_nulls(self.gens_load)
+        self.full_list = self.generate_full_docs_list(self.gens_load)
 
     def suite_setUp(self):
         super(NULLTests, self).suite_setUp()
