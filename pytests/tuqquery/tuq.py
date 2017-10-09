@@ -2413,8 +2413,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_equal_not_equal(self):
-        template= "SELECT join_day, join_mo FROM %s WHERE " +\
-            "join_day == 1 and join_mo != 2 ORDER BY join_day, join_mo"
+        template= "SELECT join_day, join_mo FROM %s WHERE join_day == 1 and join_mo != 2 ORDER BY join_day, join_mo"
         for bucket in self.buckets:
             self.query = template % (bucket.name)
             actual_result = self.run_cbq_query()

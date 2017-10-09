@@ -1194,18 +1194,19 @@ class QueriesViewsTests(QueryTests):
 
     def run_intersect_scan_explain_query(self, indexes_names, query_temp):
         for bucket in self.buckets:
-            if (query_temp.find('%s') > 0):
+            if query_temp.find('%s') > 0:
                 query_temp = query_temp % bucket.name
-            query = 'EXPLAIN %s' % (query_temp)
+            query = 'EXPLAIN %s' % query_temp
             res = self.run_cbq_query(query=query)
             plan = ExplainPlanHelper(res)
             self.log.info('-'*100)
             if (query.find("CREATE INDEX") < 0):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
-                        else plan["~children"][0]
+                    else plan["~children"][0]
                 if not(result['scans'][0]['#operator']=='DistinctScan'):
-                    self.assertTrue(result["#operator"] == 'IntersectScan',
-                                    "Index should be intersect scan and is %s" % (plan))
+                    if not (result["#operator"] == 'UnionScan'):
+                        self.assertTrue(result["#operator"] == 'IntersectScan',
+                                        "Index should be intersect scan and is %s" % (plan))
                     # actual_indexes = []
                     # for scan in result['scans']:
                     #     print scan
@@ -1218,10 +1219,12 @@ class QueriesViewsTests(QueryTests):
                     #          actual_indexes.append(scan['index'])
 
 
-                    actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
-                            for scan in result['scans']]
-                    actual_indexes = [x.encode('UTF8') for x in actual_indexes]
-
+                    if result["#operator"] == 'UnionScan':
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                          for results in result['scans'] for scan in results['scans']]
+                    else:
+                        actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
+                                          for scan in result['scans']]
                     self.log.info('actual indexes "{0}"'.format(actual_indexes))
                     self.log.info('compared against "{0}"'.format(indexes_names))
                     self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
