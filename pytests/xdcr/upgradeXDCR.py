@@ -42,6 +42,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.upgrade_same_version = self.input.param("upgrade_same_version", 0)
         self.ddocs_src = []
         self.ddocs_dest = []
+        self.skip_this_version = False
 
     def create_buckets(self):
         XDCRNewBaseTest.setUp(self)
@@ -63,7 +64,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
     def tearDown(self):
         try:
-            XDCRNewBaseTest.tearDown(self)
+            if not self.skip_this_version:
+                XDCRNewBaseTest.tearDown(self)
         finally:
             self.cluster.shutdown(force=True)
 
@@ -162,6 +164,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def offline_cluster_upgrade(self):
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
+            self.skip_this_version = True
             return
         # install on src and dest nodes
         self._install(self.servers[:self.src_init + self.dest_init ])
@@ -352,6 +355,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def online_cluster_upgrade(self):
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
+            self.skip_this_version = True
             return
         self._install(self.servers[:self.src_init + self.dest_init])
         prev_initial_version = self.initial_version
@@ -523,6 +527,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def incremental_offline_upgrade(self):
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
+            self.skip_this_version = True
             return
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
         self._install(self.servers[:self.src_init + self.dest_init ])
@@ -735,6 +740,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.c2_version = self.upgrade_versions[0]
         if self.c1_version[:3] >= self.c2_version[:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
+            self.skip_this_version = True
             return
         # install older version on C1
         self._install(self.servers[:self.src_init])
