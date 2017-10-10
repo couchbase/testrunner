@@ -284,6 +284,8 @@ class RestConnection(object):
             if hasattr(serverInfo, 'fts_port'):
                 if serverInfo.fts_port:
                     self.fts_port = serverInfo.fts_port
+            if hasattr(serverInfo, 'eventing_port'):
+                self.eventing_port = serverInfo.eventing_port
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
@@ -299,10 +301,12 @@ class RestConnection(object):
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
         self.query_baseUrl = "http://{0}:{1}/".format(self.ip, self.query_port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
+        self.eventing_baseUrl = "http://{0}:{1}/".format(self.ip, 8095)
         if self.hostname:
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
             self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8093)
+            self.eventing_baseUrl = "http://{0}:{1}/".format(self.hostname, 8095)
 
         # Initialization of CBAS related params
         self.cbas_base_url = ""
@@ -3918,6 +3922,40 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return content
+
+    '''
+             Ensure that the eventing node is out of bootstrap node
+    '''
+    def get_deployed_eventing_apps(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "getDeployedApps"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+             Get Eventing stats
+    '''
+    def get_eventing_stats(self, name, eventing_map=None):
+        if eventing_map is None:
+            eventing_map = {}
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "getEventProcessingStats?name=" + name
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if status:
+            json_parsed = json.loads(content)
+            for key in json_parsed.keys():
+                tokens = key.split(":")
+                val = json_parsed[key]
+                if len(tokens) == 1:
+                    field = tokens[0]
+                    eventing_map[field] = val
+        return eventing_map
 
 
 class MembaseServerVersion:

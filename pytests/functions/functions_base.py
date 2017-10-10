@@ -1,9 +1,10 @@
 import logging
+import random
+import datetime
 from TestInput import TestInputSingleton
 from lib.membase.api.rest_client import RestConnection
 from pytests.basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
-
 from pytests.query_tests_helper import QueryHelperTests
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,8 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.docs_per_day = self.input.param("doc-per-day", 1)
+        random.seed(datetime.time)
+        self.function_name = "Function_{0}".format(random.randint(1, 1000000000))
 
     def tearDown(self):
         super(FunctionsBaseTest, self).tearDown()
@@ -37,7 +40,8 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=10000, cleanup_timers=False,
                                   dcp_stream_boundary="everything", deployment_status=True, log_level="TRACE",
-                                  rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket", skip_timer_threshold=86400,
+                                  rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
+                                  skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=1, processing_status=True,
                                   cpp_worker_thread_count=1):
@@ -69,3 +73,51 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['processing_status'] = processing_status
         body['settings']['cpp_worker_thread_count'] = cpp_worker_thread_count
         return body
+
+    def wait_for_bootstrap_to_complete(self, name):
+        result = self.rest.get_deployed_eventing_apps()
+        count = 0
+        while name not in result and count < 20:
+            self.sleep(30, message="Waiting for eventing node to come out of bootstrap state...")
+            count += 1
+            result = self.rest.get_deployed_eventing_apps()
+        if count == 20:
+            raise Exception(
+                'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
+
+    def verify_eventing_results(self, name, expected_dcp_mutations):
+        count = 0
+        stats = self.rest.get_eventing_stats(name)
+        actual_dcp_mutations = stats["DCP_MUTATION"]
+        # wait for eventing node to process dcp mutations
+        log.info("Number of DCP mutations processed till now : {0}".format(actual_dcp_mutations))
+        while actual_dcp_mutations != expected_dcp_mutations and count < 20:
+            self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
+            count += 1
+            stats = self.rest.get_eventing_stats(name)
+            actual_dcp_mutations = stats["DCP_MUTATION"]
+            log.info("Number of DCP mutations processed till now : {0}".format(actual_dcp_mutations))
+        if count == 20:
+            raise Exception(
+                "Eventing has not processed all the dcp mutations. Current : {0} Expected : {1}".format(
+                    actual_dcp_mutations,
+                    expected_dcp_mutations))
+        # wait for bucket operations to complete and verify it went through successfully
+        count = 0
+        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
+            self.sleep(30, message="Waiting for handler code to complete all bucket operations...")
+            count += 1
+            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        self.assertEqual(expected_dcp_mutations, stats_dst["curr_items"],
+                         "Bucket operations from handler code took lot of time to complete or didn't go through")
+
+    def deploy_function(self, body):
+        # save the function so that it appears in UI
+        content = self.rest.save_function(self.function_name, body)
+        log.info("saveApp API : {0}".format(content))
+        # deploy the function
+        content = self.rest.deploy_function(self.function_name, body)
+        log.info("deployApp API : {0}".format(content))
+        # wait for the function to come out of bootstrap state
+        self.wait_for_bootstrap_to_complete(self.function_name)
