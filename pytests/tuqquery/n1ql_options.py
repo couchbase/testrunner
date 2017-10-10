@@ -3,6 +3,7 @@ import math
 from remote.remote_util import RemoteMachineShellConnection
 
 from tuqquery.tuq import QueryTests
+from pytests.tuqquery.tuq import ExplainPlanHelper
 
 
 class OptionsTests(QueryTests):
@@ -370,6 +371,18 @@ class OptionsRestTests(QueryTests):
          json_output=json.loads(concat_string)
          return json_output
 
+    # Test for MB-25664:panic when right side of LIKE is depends on field
+    def test_like_field_in_document(self):
+        for bucket in self.buckets:
+            self.query = "CREATE INDEX %s ON %s(name)" % ("ix",bucket.name)
+            self.run_cbq_query()
+            self.query = 'EXPLAIN SELECT meta().id from %s where name like job_title'% (bucket.name)
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertEqual(plan['~children'][0]['index'],'ix')
+            self.query = 'SELECT meta().id from %s where name like job_title'% (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['metrics']['resultCount'],0)
 
 
 
