@@ -33,6 +33,7 @@ class FunctionsSanity(FunctionsBaseTest):
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
 
     def test_delete_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -45,6 +46,7 @@ class FunctionsSanity(FunctionsBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
 
     def test_expiry_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -54,6 +56,7 @@ class FunctionsSanity(FunctionsBaseTest):
         self.deploy_function(body)
         # Wait for eventing to catch up with all the expiry mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
 
     def test_update_mutation_for_dcp_stream_boundary_from_now(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -67,3 +70,4 @@ class FunctionsSanity(FunctionsBaseTest):
                   batch_size=self.batch_size, op_type='update')
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)

@@ -3902,7 +3902,7 @@ class RestConnection(object):
     '''
         Save the Function so that it is visible in UI
     '''
-    def save_function(self, name, body, username="Administrator", password="password"):
+    def save_function(self, name, body):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "_p/event/saveAppTempStore/?name=" + name
         api = self.baseUrl + url
@@ -3916,13 +3916,39 @@ class RestConnection(object):
     '''
             Deploy the Function
     '''
-    def deploy_function(self, name, body, username="Administrator", password="password"):
+    def deploy_function(self, name, body):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "_p/event/setApplication/?name=" + name
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,
                                                      params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            Delete the Function from UI
+    '''
+    def delete_function_from_temp_store(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/deleteAppTempStore/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            Delete the Function
+    '''
+    def delete_function(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/deleteApplication/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
         if not status:
             raise Exception(content)
         return content

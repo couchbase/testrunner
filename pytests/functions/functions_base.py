@@ -121,3 +121,12 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
         log.info("deployApp API : {0}".format(content))
         # wait for the function to come out of bootstrap state
         self.wait_for_bootstrap_to_complete(self.function_name)
+
+    def undeploy_and_delete_function(self, body):
+        body['settings']['deployment_status'] = False
+        # undeploy the function
+        content = self.rest.deploy_function(self.function_name, body)
+        log.info("undeploy Application : {0}".format(content))
+        # delete the function from the UI and backend
+        self.rest.delete_function_from_temp_store(self.function_name)
+        self.rest.delete_function(self.function_name)
