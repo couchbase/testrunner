@@ -4,7 +4,7 @@ from tuq_join import JoinTests
 from tuq_sanity import QuerySanityTests
 
 
-class QueriesViewsTests(QueryTests, QuerySanityTests):
+class QueriesViewsTests(QuerySanityTests):
 
     FIELDS_TO_INDEX = ['name', 'job_title', 'join_yr']
     COMPLEX_FIELDS_TO_INDEX = ['VMs', 'tasks_points', 'skills']
