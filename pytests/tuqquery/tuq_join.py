@@ -429,7 +429,7 @@ class JoinTests(QueryTests):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, task, tasks_ids)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(name, task, tasks_ids)  USING %s" % (index_name, bucket.name, self.index_type)
                     # if self.gsi_type:
                     #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -437,15 +437,14 @@ class JoinTests(QueryTests):
                 created_indexes.append(index_name)
         for bucket in self.buckets:
           try:
-            self.query = "EXPLAIN SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
+            self.query = "EXPLAIN SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name, self.type_join)
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
-            self.query = "SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
+            self.query = "SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name, self.type_join)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self.generate_full_docs_list(self.gens_load)
-            expected_result = [{"task" : task, "name" : doc["name"]}
-            for doc in expected_result for task in doc['tasks_ids']]
+            expected_result = [{"task": task, "name": doc["name"]} for doc in expected_result for task in doc['tasks_ids']]
             if self.type_join.upper() == JOIN_LEFT:
                 expected_result.extend([{}] * self.gens_tasks[-1].end)
             expected_result = sorted(expected_result)
@@ -453,7 +452,7 @@ class JoinTests(QueryTests):
             self.run_cbq_query()
             self.query = "SELECT emp.name, task FROM %s emp use index (`#primary`) %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
             result = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(result['results']))
+            self.assertEqual(actual_result, sorted(result['results']))
             #self._verify_results(actual_result, expected_result)
           finally:
             self.query= "drop primary index on %s" % bucket.name
@@ -461,7 +460,6 @@ class JoinTests(QueryTests):
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
-
 
     def test_prepared_unnest(self):
         for bucket in self.buckets:

@@ -2563,7 +2563,7 @@ class QueriesIndexTests(QueryTests):
                 bucket.name,bucket.name) + \
                              "order BY name limit 10"
                 actual_result = self.run_cbq_query()
-                plan = ExplainPlanHelper(actual_result)
+                plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
                 self.query = "select name from %s WHERE department = 'Support' and ANY i IN %s.hobbies.hobby SATISFIES i = 'art' END " % (
                 bucket.name,bucket.name) + \
@@ -4524,8 +4524,6 @@ class QueriesIndexTests(QueryTests):
                             task.result()
                     except Exception, ex:
                         self.log.info(ex)
-
-
                 self.query = "explain select name,ceil(test_rate) as rate from %s where name LIKE '%s' and ceil(test_rate) > 5"  % (bucket.name,"employee")
                 if self.covering_index:
                     self.test_explain_covering_index(index_name)

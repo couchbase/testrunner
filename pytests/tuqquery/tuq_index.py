@@ -1,13 +1,10 @@
-import math
-import time
 import uuid
 from tuq import QueryTests
 from tuq_join import JoinTests
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError
+from tuq_sanity import QuerySanityTests
 
-class QueriesViewsTests(QueryTests):
+
+class QueriesViewsTests(QueryTests, QuerySanityTests):
 
     FIELDS_TO_INDEX = ['name', 'job_title', 'join_yr']
     COMPLEX_FIELDS_TO_INDEX = ['VMs', 'tasks_points', 'skills']

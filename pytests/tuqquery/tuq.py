@@ -91,7 +91,8 @@ class QueryTests(BaseTestCase):
             self.n1ql_certs_path = "/cygdrive/c/Program\ Files/Couchbase/server/var/lib/couchbase/n1qlcerts"
         elif type.lower() == "mac":
             self.path = testconstants.MAC_COUCHBASE_BIN_PATH
-        self.gsi_type = self.input.param("gsi_type", 'plasma') if self.primary_indx_type.lower() == "gsi" else None
+        if self.primary_indx_type.lower() == "gsi":
+            self.gsi_type = self.input.param("gsi_type", 'plasma')
         if self.input.param("reload_data", False):
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [], [self.cbas_node], services=['cbas'])
@@ -110,15 +111,15 @@ class QueryTests(BaseTestCase):
             if self.analytics == False:
                 self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
-        self.log.info('Temp fix for MB-16888')
-        if self.cluster_ops == False:
-            self.shell.execute_command("killall -9 cbq-engine")
-            self.shell.execute_command("killall -9 indexer")
-            self.sleep(20, 'wait for indexer')
-        self.log.info('-'*100)
+        #self.log.info('Temp fix for MB-16888')
+        #if self.cluster_ops == False:
+        #    self.shell.execute_command("killall -9 cbq-engine")
+        #    self.shell.execute_command("killall -9 indexer")
+        #    self.sleep(20, 'wait for indexer')
+        #self.log.info('-'*100)
         if self.analytics:
             self.setup_analytics()
-            self.sleep(30,'wait for analytics setup')
+            self.sleep(30, 'wait for analytics setup')
         if self.monitoring:
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
@@ -202,7 +203,8 @@ class QueryTests(BaseTestCase):
         for index_stats in json_parsed:
             bucket = index_stats["Index"].split(":")[0]
             index_name = index_stats["Index"].split(":")[1]
-            index_storage_stats[bucket] = {} if not bucket in index_storage_stats.keys() else None
+            if not bucket in index_storage_stats.keys():
+                index_storage_stats[bucket] = {}
             index_storage_stats[bucket][index_name] = index_stats["Stats"]
         return index_storage_stats
 
@@ -212,7 +214,8 @@ class QueryTests(BaseTestCase):
         :return:
         """
         def validate_disk_writes(indexer_nodes=None):
-            indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True) if not indexer_nodes else None
+            if not indexer_nodes:
+                indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             for node in indexer_nodes:
                 indexer_rest = RestConnection(node)
                 content = self.get_index_storage_stats()
@@ -223,7 +226,8 @@ class QueryTests(BaseTestCase):
             return True
 
         def kv_mutations(self, docs=1):
-            docs = self.docs_per_day if not docs else None
+            if not docs:
+                docs = self.docs_per_day
             gens_load = self.gen_docs(docs)
             self.full_docs_list = self.generate_full_docs_list(gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
@@ -312,7 +316,8 @@ class QueryTests(BaseTestCase):
             else:
                 self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
         elif type == 'base64':
-            end = self.num_items if end==0 else None
+            if end == 0:
+                end = self.num_items
             values = ["Engineer", "Sales", "Support"]
             generators = [JSONNonDocGenerator(name, values, start=start, end=end)]
 
@@ -343,7 +348,8 @@ class QueryTests(BaseTestCase):
                                                                 start=start, end=docs_per_day))
 
         elif type == 'json_non_docs':
-            end = self.num_items if end==0 else None
+            if end==0:
+                end = self.num_items
             if values_type == 'string':
                 values = ['Engineer', 'Sales', 'Support']
             elif values_type == 'int':
@@ -352,17 +358,18 @@ class QueryTests(BaseTestCase):
                 values = [[10, 20], [20, 30], [30, 40]]
             else:
                 return []
-            generators = [JSONNonDocGenerator(name, values, start=start,end=end)]
+            generators = [JSONNonDocGenerator(name, values, start=start, end=end)]
 
         elif type == 'nulls':
-            end = self.num_items if not end else None
+            if not end:
+                end = self.num_items
             generators = []
             index = end/3
             template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0":{1}, "P1":{2}, "P2":{3}}},'
             template += '"story_point" : {4},"jira_tickets": {5}}}'
             names = [str(i) for i in xrange(0, index)]
             rates = xrange(0, index)
-            points = [[1,2,3],]
+            points = [[1, 2, 3], ]
             jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
                             '{"Number": 2, "project": "mb", "description": "test"}]',]
             generators.append(DocumentGenerator(name, template, names, rates, rates, rates, points, jira_tickets,
@@ -606,33 +613,31 @@ class QueryTests(BaseTestCase):
                 else:
                     self.fail("There were no errors. Error expected: %s" % error)
 
-    def prepared_common_body(self,server=None):
+    def prepared_common_body(self, server=None):
         self.isprepared = True
         result_no_prepare = self.run_cbq_query(server=server)['results']
         if self.named_prepare:
-            self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4] if 'concurrent' not in self.named_prepare else None
-            query = "PREPARE %s from %s" % (self.named_prepare,self.query)
+            if 'concurrent' not in self.named_prepare:
+                self.named_prepare = self.named_prepare + "_" +str(uuid.uuid4())[:4]
+            query = "PREPARE %s from %s" % (self.named_prepare, self.query)
         else:
             query = "PREPARE %s" % self.query
-        prepared = self.run_cbq_query(query=query,server=server)['results'][0]
+        prepared = self.run_cbq_query(query=query, server=server)['results'][0]
         if self.encoded_prepare and len(self.servers) > 1:
             encoded_plan=prepared['encoded_plan']
-            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan,server=server)['results']
+            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan, server=server)['results']
         else:
-            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True,server=server)['results']
-        if self.cover :
+            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, server=server)['results']
+        if self.cover:
             self.assertTrue("IndexScan in %s" % result_with_prepare)
             self.assertTrue("covers in %s" % result_with_prepare)
             self.assertTrue("filter_covers in %s" % result_with_prepare)
             self.assertFalse('ERROR' in (str(word).upper() for word in result_with_prepare))
         msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s" \
-              % (result_no_prepare[:100],result_no_prepare[-100:], result_with_prepare[:100],result_with_prepare[-100:])
+              % (result_no_prepare[:100], result_no_prepare[-100:], result_with_prepare[:100], result_with_prepare[-100:])
         self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare), msg)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={},
-                      is_prepared=False,
-                      encoded_plan=None):
-        self.log.info("-" * 100)
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None):
         if query is None:
             query = self.query
         if server is None:
@@ -678,7 +683,7 @@ class QueryTests(BaseTestCase):
                 result = json.loads(result)
             else:
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
-                                         is_prepared=is_prepared,named_prepare=self.named_prepare,
+                                         is_prepared=is_prepared, named_prepare=self.named_prepare,
                                          encoded_plan=encoded_plan, servers=self.servers)
         else:
             if self.version == "git_repo":
@@ -748,7 +753,8 @@ class QueryTests(BaseTestCase):
 
     def _start_command_line_query(self, server, options='', user=None, password=None):
         out = ''
-        auth_row = '%s:%s@' % (user, password) if user and password else None
+        if user and password:
+            auth_row = '%s:%s@' % (user, password)
         os = self.shell.extract_remote_info().type.lower()
         if self.flat_json:
             if os == 'windows':
@@ -1070,7 +1076,8 @@ class QueryTests(BaseTestCase):
             else:
                 self.log.error("cover keyword missing from json children ")
                 self.fail("cover keyword missing from json children ")
-            self.log.error("This is a covered query, Intersec scan should not be used") if 'IntersectScan' in s else None
+            if 'IntersectScan' in s:
+                self.log.error("This is a covered query, Intersec scan should not be used")
 ##############################################################################################
 #
 #   upgrade_n1qlrbac.py helpers
@@ -1105,9 +1112,12 @@ class QueryTests(BaseTestCase):
         self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
 
     def change_and_update_permission(self, query_type, permission, user, bucket, cmd, error_msg):
-        self.query = "GRANT {0} on {1} to {2}".format(permission, bucket, user) if query_type == 'with_bucket' else None
-        self.query = "GRANT {0} to {1}".format(permission,user) if query_type == 'without_bucket' else None
-        self.n1ql_helper.run_cbq_query(query=self.query, server=self.n1ql_node) if query_type in ['with_bucket', 'without_bucket'] else None
+        if query_type == 'with_bucket':
+            self.query = "GRANT {0} on {1} to {2}".format(permission, bucket, user)
+        if query_type == 'without_bucket':
+            self.query = "GRANT {0} to {1}".format(permission, user)
+        if query_type in ['with_bucket', 'without_bucket']:
+            self.n1ql_helper.run_cbq_query(query=self.query, server=self.n1ql_node)
         output, error = self.shell.execute_command(cmd)
         self.shell.log_command_output(output, error)
         self.assertTrue(any("success" in line for line in output), error_msg.format(bucket, user))
@@ -1402,7 +1412,8 @@ class QueryTests(BaseTestCase):
                                         'password': 'passw0rd'}
         :return: Nothing
         """
-        users = self.users if not users else None
+        if not users:
+            users = self.users
         RbacBase().create_user_source(users, 'builtin', self.master)
         self.log.info("SUCCESS: User(s) %s created" % ','.join([user['name'] for user in users]))
 
@@ -1468,8 +1479,8 @@ class QueryTests(BaseTestCase):
                 rebalance.result()
                 active_nodes = []
                 for active_node in self.servers:
-                    active_nodes.append(active_node) if active_node.ip != node.ip else None
-
+                    if active_node.ip != node.ip:
+                        active_nodes.append(active_node)
                 self.log.info("Upgrading the node...")
                 upgrade_th = self._async_update(self.upgrade_to, [node])
                 for th in upgrade_th:
@@ -1500,7 +1511,8 @@ class QueryTests(BaseTestCase):
                 failover_task.result()
                 active_nodes = []
                 for active_node in self.servers:
-                    active_nodes.append(active_node) if active_node.ip != node.ip else None
+                    if active_node.ip != node.ip:
+                        active_nodes.append(active_node)
                 self.log.info("Upgrading the node...")
                 upgrade_th = self._async_update(self.upgrade_to, [node])
                 for th in upgrade_th:
@@ -1537,14 +1549,17 @@ class QueryTests(BaseTestCase):
                                         'password': 'passw0rd'}
         :return: Nothing
         """
-        users = self.users if not users else None
+        if not users:
+            users = self.users
         RbacBase().create_user_source(users,'builtin',self.master)
         self.log.info("SUCCESS: User(s) %s created" % ','.join([user['name'] for user in users]))
 
     def assign_role(self, rest=None, roles=None):
-        rest = RestConnection(self.master) if not rest else None
+        if not rest:
+            rest = RestConnection(self.master)
         #Assign roles to users
-        roles = self.roles if not roles else None
+        if not roles:
+            roles = self.roles
         RbacBase().add_user_role(roles, rest,'builtin')
         for user_role in roles:
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
@@ -1599,7 +1614,8 @@ class QueryTests(BaseTestCase):
         return status, content, header
 
     def grant_role(self, role=None):
-        role = self.roles[0]['roles'] if not role else None
+        if not role:
+            role = self.roles[0]['roles']
         if self.all_buckets:
             list = []
             for bucket in self.buckets:
@@ -1628,7 +1644,8 @@ class QueryTests(BaseTestCase):
     def revoke_role(self, role=None):
         if not role:
             role = self.roles[0]['roles']
-            role += "(`*`)" if self.all_buckets else None
+            if self.all_buckets:
+                role += "(`*`)"
         self.query = "REVOKE {0} FROM {1}".format(role, self.users[0]['id'])
         actual_result = self.run_cbq_query()
         msg = "Unable to revoke role {0} from {1}".format(role, self.users[0]['id'])
@@ -2196,7 +2213,8 @@ class QueryTests(BaseTestCase):
         return {'Content-Type': 'application/x-www-form-urlencoded','Authorization': 'Basic %s' % authorization, 'Accept': '*/*'}
 
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
-        headers = self._create_headers() if not headers else None
+        if not headers:
+            headers = self._create_headers()
         end_time = time.time() + timeout
         while True:
             try:
@@ -2210,7 +2228,8 @@ class QueryTests(BaseTestCase):
                         json_parsed = {}
                         json_parsed["error"] = "status: {0}, content: {1}".format(response['status'], content)
                     reason = "unknown"
-                    reason = json_parsed["error"] if "error" in json_parsed else None
+                    if "error" in json_parsed:
+                        reason = json_parsed["error"]
                     self.log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content.rstrip('\n')))
                     return False, content, response
             except socket.error as e:
@@ -2218,6 +2237,7 @@ class QueryTests(BaseTestCase):
                 if time.time() > end_time:
                     raise Exception("nothing")
             time.sleep(3)
+            
 ##############################################################################################
 #
 #   tuq_nulls.py helpers
@@ -2258,11 +2278,9 @@ class QueryTests(BaseTestCase):
     def _generate_full_joined_docs_list(self, join_type=JOIN_INNER, particular_key=None):
         joined_list = []
         all_docs_list = self.generate_full_docs_list(self.gens_load)
-        self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
         self.log.info(str(all_docs_list[0:5]))
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
-                self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
                 self.log.info(str(item))
                 keys = item["tasks_ids"]
                 if particular_key is not None:
@@ -2293,11 +2311,9 @@ class QueryTests(BaseTestCase):
     def _generate_full_nested_docs_list(self, join_type=JOIN_INNER, particular_key=None):
         nested_list = []
         all_docs_list = self.generate_full_docs_list(self.gens_load)
-        self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
         self.log.info(str(all_docs_list[0:5]))
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
-                self.log.info('QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ')
                 self.log.info(str(item))
                 keys = item["tasks_ids"]
                 if particular_key is not None:
@@ -2348,7 +2364,8 @@ class QueryTests(BaseTestCase):
 
     def run_intersect_scan_explain_query(self, indexes_names, query_temp):
         for bucket in self.buckets:
-            query_temp = query_temp % bucket.name if (query_temp.find('%s') > 0) else None
+            if query_temp.find('%s') > 0:
+                query_temp = query_temp % bucket.name
             query = 'EXPLAIN %s' % (query_temp)
             res = self.run_cbq_query(query=query)
             plan = self.ExplainPlanHelper(res)
@@ -2478,8 +2495,10 @@ class QueryTests(BaseTestCase):
         clause = 'UPSERT' if upsert else 'INSERT'
         for bucket in self.buckets:
             inserted = expected_item_value
-            inserted = '"%s"' % expected_item_value if isinstance(expected_item_value, str) else None
-            inserted = 'null' if expected_item_value is None else None
+            if isinstance(expected_item_value, str):
+                inserted = '"%s"' % expected_item_value
+            if expected_item_value is None:
+                inserted = 'null'
             self.query = '%s into %s (key , value) VALUES ("%s", %s)' % (clause, bucket.name, key, inserted)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
@@ -2575,7 +2594,8 @@ class QueryTests(BaseTestCase):
             self.thread_crashed.set()
             raise ex
         finally:
-            self.thread_stopped.set() if not self.thread_stopped.is_set() else None
+            if not self.thread_stopped.is_set():
+                self.thread_stopped.set()
 
 ##############################################################################################
 #
@@ -2675,3 +2695,30 @@ class QueryTests(BaseTestCase):
                                      if doc['tasks_points']["task1"] == group]) == 2011)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
             self._verify_results(actual_result['results'], expected_result)
+
+##############################################################################################
+#
+#   tuq_2i_index.py helpers   these are called in tuq_2i_index.py, not standalone tests
+##############################################################################################
+
+    def test_explain_covering_index(self,index):
+        for bucket in self.buckets:
+            res = self.run_cbq_query()
+            s = pprint.pformat( res, indent=4 )
+            if index in s:
+                self.log.info("correct index used in json result ")
+            else:
+                self.log.error("correct index not used in json result ")
+                self.fail("correct index not used in json result ")
+            if 'covers' in s:
+                self.log.info("covers key present in json result ")
+            else:
+                self.log.error("covers key missing from json result ")
+                self.fail("covers key missing from json result ")
+            if 'cover' in s:
+                self.log.info("cover keyword present in json children ")
+            else:
+                self.log.error("cover keyword missing from json children ")
+                self.fail("cover keyword missing from json children ")
+            if 'IntersectScan' in s:
+                self.log.error("This is a covered query, Intersec scan should not be used")
