@@ -90,7 +90,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             raise Exception("OS not supported.")
 
-        self.backup_validation_files_location = "/tmp/backuprestore"
+        self.backup_validation_files_location = "/tmp/backuprestore" + self.master.ip
         self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
@@ -202,7 +202,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 backup_directory = WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
-            validation_files_location = "/tmp/backuprestore"
+            validation_files_location = "%sbackuprestore" % self.tmp_path + self.master.ip
             if info == 'linux':
                 command = "rm -rf {0}".format(backup_directory)
                 output, error = remote_client.execute_command(command)
@@ -222,6 +222,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.log.error("was not able to cleanup cluster the first time")
                         self.backup_reset_clusters(servers)
             if os.path.exists(validation_files_location):
+                self.log.info("delete dir %s" % validation_files_location)
                 shutil.rmtree(validation_files_location)
 
     @property
