@@ -83,6 +83,7 @@ class TestInputServer(object):
         self.n1ql_port = ''
         self.index_port = ''
         self.fts_port = ''
+        self.eventing_port = ''
         self.es_username = ''
         self.es_password = ''
         self.upgraded = False
@@ -282,6 +283,8 @@ class TestInputParser():
                     server.n1ql_port = global_properties['n1ql_port']
                 if server.index_port == '' and 'index_port' in global_properties:
                     server.index_port = global_properties['index_port']
+                if server.eventing_port == '' and 'eventing_port' in global_properties:
+                    server.eventing_port = global_properties['eventing_port']
                 if server.es_username == '' and 'es_username' in global_properties:
                     server.es_username = global_properties['es_username']
                 if server.es_password == '' and 'es_password' in global_properties:
@@ -387,6 +390,8 @@ class TestInputParser():
                         server.index_port = config.get(section, option)
                     if option == 'fts_port':
                         server.fts_port = config.get(section, option)
+                    if option == 'eventing_port':
+                        server.eventing_port = config.get(section, option)
                 break
                 #get username
                 #get password

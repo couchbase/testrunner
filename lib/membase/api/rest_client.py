@@ -253,12 +253,15 @@ class RestConnection(object):
             self.port = serverInfo["port"]
             self.index_port = 9102
             self.fts_port = 8094
-            self.query_port=8093
+            self.query_port = 8093
+            self.eventing_port = 8095
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
             if "fts_port" in serverInfo.keys():
                 if serverInfo['fts_port']:
                     self.fts_port = serverInfo["fts_port"]
+            if "eventing_port" in serverInfo.keys():
+                self.eventing_port = serverInfo["eventing_port"]
             self.hostname = ''
             self.services = ''
             if "hostname" in serverInfo:
@@ -274,6 +277,7 @@ class RestConnection(object):
             self.index_port = 9102
             self.fts_port = 8094
             self.query_port = 8093
+            self.eventing_port = 8095
             self.services = "kv"
             if hasattr(serverInfo, "services"):
                 self.services = serverInfo.services
@@ -301,12 +305,12 @@ class RestConnection(object):
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
         self.query_baseUrl = "http://{0}:{1}/".format(self.ip, self.query_port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
-        self.eventing_baseUrl = "http://{0}:{1}/".format(self.ip, 8095)
+        self.eventing_baseUrl = "http://{0}:{1}/".format(self.ip, self.eventing_port)
         if self.hostname:
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
             self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8093)
-            self.eventing_baseUrl = "http://{0}:{1}/".format(self.hostname, 8095)
+            self.eventing_baseUrl = "http://{0}:{1}/".format(self.hostname, self.eventing_port)
 
         # Initialization of CBAS related params
         self.cbas_base_url = ""
