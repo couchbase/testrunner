@@ -1,11 +1,9 @@
 import re
 from os.path import expanduser
 from unittest import TestCase
-
 from membase.api.rest_client import RestConnection
-from uibasetest import *
-from uisampletests import NavigationHelper
-
+from ui.uibasetest import *
+from ui.uisampletests import NavigationHelper
 
 class QueryWorkbenchTests(BaseUITestCase):
     """
@@ -28,26 +26,27 @@ class QueryWorkbenchTests(BaseUITestCase):
     def test_create_indexes(self):
         expected_results = self.input.param('expected_result', None)
         if expected_results is not None:
-            expected_results = expected_results.replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')\
-                .split('|')  # 4.7 vs 4.6 versions
+            # 4.7 vs 4.6 versions
+            expected_results = expected_results.replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape').split('|')
         summary_result = self.input.param('summary_result', '')
         summary_result = summary_result.replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')
         result_mode = self.input.param('mode', 'JSON')
         if self.rest.get_nodes()[0].version <= '4.7' and result_mode in ['Plan Text', 'Plan']:
-            self.log.info("skipp 'Plan Text', 'Plan' modes in version < 4.7")
+            self.log.info("skip 'Plan Text', 'Plan' modes in version < 4.7")
             return
-        init_query = self.input.param('init_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode(
-            'unicode_escape')
-        check_query = self.input.param('check_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode(
-            'unicode_escape')
+        init_query = self.input.param('init_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')
+        check_query = self.input.param('check_query', '').replace('_STAR_', '*').replace('_SEM_', ';').decode('unicode_escape')
 
+        # go to query workbench page
         NavigationHelper(self).navigate('Query')
+
         if init_query:
             self.queryHelper.execute_query(init_query)
             self.queryHelper.controls.query_top_screen().view_next.click()
-            self.assertEqual('{"no_data_yet": "hit execute to run query"}',
-                             self.queryHelper.controls.query_results_box().result_json_mode.get_text())
+            next_text = '{"no_data_yet": "hit execute to run query"}'
+            self.assertEqual(next_text, self.queryHelper.controls.query_results_box().result_json_mode.get_text())
         self.queryHelper.execute_query(check_query)
+
         if expected_results is not None:
             self.queryHelper.check_result(expected_results, mode=result_mode)
         if summary_result:
@@ -154,12 +153,16 @@ class QueryWorkbenchHelper(TestCase):
             result = self.controls.query_results_box().result_plan_mode.get_text()
         elif mode == 'Plan Text':
             result = self.controls.query_results_box().result_plan_text_mode.get_text()
-        search_obj = None
-        for expected_result in expected_results:
-            search_obj = re.search(expected_result, result, re.M | re.I)
-            if search_obj:
-                break
-        self.assertTrue(search_obj, msg='Incorrect query result: %s' % result)
+        #search_obj = None
+        #print(expected_results)
+        #for expected_result in expected_results:
+        #    search_obj = re.search(expected_result, result, re.M | re.I)
+        #    if search_obj:
+        #        break
+        #self.assertTrue(search_obj, msg='Incorrect query result: %s \n Needed: %s' % (result, search_obj))
+        expected = ' '.join(expected_results[0].rstrip().split())
+        actual = ' '.join(result.rstrip().split())
+        self.assertTrue(expected == actual, 'Incorrect query result: %s \n Needed: %s' % (actual, expected))
 
     def check_summary_result(self, expected_result, mode='JSON'):
         self.select_result_mode(mode)

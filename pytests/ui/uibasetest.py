@@ -153,7 +153,6 @@ class BaseUITestCase(unittest.TestCase):
         self.sleep(10)
         return status
 
-
     def setUp(self):
         try:
             self.log = logger.Logger.get_logger()
@@ -185,7 +184,6 @@ class BaseUITestCase(unittest.TestCase):
                                                desired_capabilities=DesiredCapabilities.FIREFOX)
             elif self.browser == 'chrome':
                 self.log.info("Test Couchbase Server UI in Chrome")
-
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
                                                .format(self.machine.ip,
                                                        self.machine.port),
@@ -196,6 +194,9 @@ class BaseUITestCase(unittest.TestCase):
             self.driver.get("http://" + self.servers[0].ip + ":8091")
             self.username = self.input.membase_settings.rest_username
             self.password = self.input.membase_settings.rest_password
+            ### temp work around, maximize_window is buggy
+            self.driver.set_window_size(2048, 1200)
+            ###
             self.driver.maximize_window()
         except Exception as ex:
             self.input.test_params["stop-on-failure"] = True
@@ -255,7 +256,7 @@ class BaseUITestCase(unittest.TestCase):
         time.sleep(timeout)
 
 
-class Control():
+class Control:
     def __init__(self, selenium, by=None, web_element=None):
         self.selenium = selenium
         self.by = by
@@ -273,10 +274,8 @@ class Control():
 
     def highlightElement(self):
         if self.by:
-            self.selenium.execute_script("document.evaluate(\"{0}\",document,null,\
-                           XPathResult.ANY_TYPE, null).iterateNext().setAttribute(\
-                                              'style','background-color:yellow');" \
-                                         .format(self.by))
+            print("document.evaluate(\"{0}\", document, null, XPathResult.ANY_TYPE, null).iterateNext().setAttribute('style','background-color:yellow');".format(self.by))
+            self.selenium.execute_script("document.evaluate(\"{0}\",document, null, XPathResult.ANY_TYPE, null).iterateNext().setAttribute('style','background-color:yellow');".format(self.by))
 
     def type_native(self, text):
         # In OS X, Ctrl-A doesn't work to select all, instead Command+A has to be used.
@@ -400,7 +399,7 @@ class ControlsHelper():
             return self.locators.get(section, locator)
 
 
-class BaseHelperControls():
+class BaseHelperControls:
     def __init__(self, driver):
         helper = ControlsHelper(driver)
         self._user_field = helper.find_control('login', 'user_field')
@@ -411,7 +410,7 @@ class BaseHelperControls():
         self.error = helper.find_control('login', 'error')
 
 
-class BaseHelper():
+class BaseHelper:
     def __init__(self, tc):
         self.tc = tc
         self.controls = BaseHelperControls(self.tc.driver)
