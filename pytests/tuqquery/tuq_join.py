@@ -9,11 +9,13 @@ JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
 JOIN_RIGHT = "RIGHT"
 
+
 class JoinTests(QueryTests):
     def setUp(self):
         try:
+            self.dataset = 'join'
             super(JoinTests, self).setUp()
-            self.gens_tasks = self.gen_docs(type='task')
+            self.gens_tasks = self.gen_docs(type='tasks')
             self.type_join = self.input.param("type_join", JOIN_INNER)
         except Exception, ex:
             self.log.error("ERROR SETUP FAILED: %s" % str(ex))

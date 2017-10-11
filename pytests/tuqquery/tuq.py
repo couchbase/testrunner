@@ -55,7 +55,8 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.analytics = self.input.param("analytics", False)
-        self.dataset = self.input.param("dataset", "default")
+        if self.dataset is None:
+            self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.index_type = self.input.param("index_type", 'GSI')
         self.skip_primary_index = self.input.param("skip_primary_index", False)
@@ -313,6 +314,22 @@ class QueryTests(BaseTestCase):
             elif self.dataset == 'bigdata':
                 #not working
                 generators = json_generator.generate_docs_bigdata(end=(1000*docs_per_day), start=start, value_size=self.value_size)
+            elif self.dataset == 'join':
+                types = ['Engineer', 'Sales', 'Support']
+                join_yr = [2010, 2011]
+                join_mo = xrange(1, 12 + 1)
+                join_day = xrange(1, 28 + 1)
+                template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
+                template += ' "job_title":"{4}", "tasks_ids":{5}}}'
+                for info in types:
+                    for year in join_yr:
+                        for month in join_mo:
+                            for day in join_day:
+                                name = ["employee-%s" % (str(day))]
+                                tasks_ids = ["test_task-%s" % day, "test_task-%s" % (day + 1)]
+                                generators.append(DocumentGenerator("query-test-%s-%s-%s-%s" % (info, year, month, day),
+                                                                    template, name, [year], [month], [day], [info], [tasks_ids],
+                                                                    start=start, end=docs_per_day))
             else:
                 self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
         elif type == 'base64':
@@ -330,22 +347,6 @@ class QueryTests(BaseTestCase):
                                                 ["MB"], start=10, end=20))
             generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in xrange(20,end)],
                                                 ["IT"], start=20, end=end))
-        elif type == 'join':
-            types = ['Engineer', 'Sales', 'Support']
-            join_yr = [2010, 2011]
-            join_mo = xrange(1, 12 + 1)
-            join_day = xrange(1, 28 + 1)
-            template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
-            template += ' "job_title":"{4}", "tasks_ids":{5}}}'
-            for info in types:
-                for year in join_yr:
-                    for month in join_mo:
-                        for day in join_day:
-                            name = ["employee-%s" % (str(day))]
-                            tasks_ids = ["test_task-%s" % day, "test_task-%s" % (day + 1)]
-                            generators.append(DocumentGenerator("query-test-%s-%s-%s-%s" % (info, year, month, day),
-                                                                template, name, [year], [month], [day], [info], [tasks_ids],
-                                                                start=start, end=docs_per_day))
 
         elif type == 'json_non_docs':
             if end==0:
