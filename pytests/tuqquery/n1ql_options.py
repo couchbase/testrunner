@@ -384,5 +384,23 @@ class OptionsRestTests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['metrics']['resultCount'],0)
 
+    # Test for MB-25737:group by on empty table should not give any results
+    def test_groupby_empty_bucket(self):
+        for bucket in self.buckets:
+            self.query = "delete from %s where meta().id is not missing" %(bucket.name)
+            self.run_cbq_query()
+            self.query = "select job_title from %s group by job_title"%(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['metrics']['resultCount'],0)
+            self.query = 'select job_title from %s where meta().id like "%s" group by job_title'%(bucket.name,"query-test%")
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['metrics']['resultCount'],0)
+            self.query = "select job_title,sum(job_title) from %s group by job_title"%(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['metrics']['resultCount'],0)
+
+
+
+
 
 
