@@ -70,6 +70,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.root_path = LINUX_ROOT_PATH
         self.os_name = "linux"
         self.tmp_path = "/tmp/"
+        self.long_help_flag = "--help"
+        self.short_help_flag = "-h"
         if info == 'linux':
             self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")

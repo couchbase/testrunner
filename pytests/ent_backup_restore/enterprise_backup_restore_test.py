@@ -365,8 +365,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}",\
+                                                                                line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
@@ -826,17 +827,24 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
            few first lines to make sure manual page displayed.
         """
         display_option = self.input.param("display", "-h")
-        subcommand = self.input.param("subcommand", None)
-        if subcommand is None:
+        if self.input.param("subcommand", None) is None:
             subcommand = ""
+        else:
+            subcommand = self.input.param("subcommand", None)
         cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
+        if display_option == "--help":
+            display_option = self.long_help_flag
+        elif display_option == "-h":
+            self.long_help_flag = self.short_help_flag
         cmd += " %s %s " % (subcommand, display_option)
+
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         output, error = shell.execute_command("%s " % (cmd))
-        shell.log_command_output(output, error)
+        if self.debug_logs:
+            shell.log_command_output(output, error)
         self.log.info("Verify print out help message")
         if display_option == "-h":
-            if not subcommand:
+            if subcommand == "":
                 content = ['cbbackupmgr [<command>] [<args>]', '',
                            '  backup    Backup a Couchbase cluster']
             elif subcommand == "help":
@@ -845,26 +853,19 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             else:
                 content = ['cbbackupmgr %s [<args>]' % subcommand, '',
                            'Required Flags:']
-            self.log.info("output: " + str(output[:3]))
-            self.log.info("content: " + str(content))
             self.validate_help_content(output[:3], content)
         elif display_option == "--help":
             content = None
-            if not subcommand:
+            if subcommand == "":
                 content = \
-                    ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)',
-                     '', '', '', 'NAME',
-                     '       cbbackupmgr - A utility for backing up and restoring a Couchbase',
-                     '       cluster', '', 'SYNOPSIS',
-                     '       cbbackupmgr [--version] [--help] <command> [<args>]']
-                self.validate_help_content(output[:10], content)
+                    ['CBBACKUPMGR(1) Backup Manual CBBACKUPMGR(1)']
+                self.validate_help_content(output, content)
             else:
                 subcmd_cap = subcommand.upper()
                 content = \
                     ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
-                     % (subcmd_cap, subcmd_cap),
-                     '', '', '', 'NAME']
-                self.validate_help_content(output[:5], content)
+                     % (subcmd_cap, subcmd_cap)]
+                self.validate_help_content(output, content)
         shell.disconnect()
 
     def test_backup_restore_with_optional_flags(self):
@@ -2479,7 +2480,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error or "Index created" not in output[-1]:
+        if error:
+            if "Index created" in output[-1]:
+                self.log.error("\nThere is an error when create an index %s " % error[0])
+        if "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         self.backup_cluster_validate()
         rest_target = RestConnection(self.backupset.restore_cluster_host)
