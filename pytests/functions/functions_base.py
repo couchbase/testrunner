@@ -113,6 +113,7 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
                          "Bucket operations from handler code took lot of time to complete or didn't go through")
 
     def deploy_function(self, body):
+        self.sleep(30)
         # save the function so that it appears in UI
         content = self.rest.save_function(self.function_name, body)
         log.info("saveApp API : {0}".format(content))
