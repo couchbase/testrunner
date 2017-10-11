@@ -78,7 +78,7 @@ class QuerySubqueryTests(QueryTests):
         self.assertTrue(actual_result['metrics']['mutationCount']==10080)
 
     def test_update_subquery_in_where_clause(self):
-        self.gens_load = self.generate_docs(self.docs_per_day)
+        self.gens_load = self.gen_docs(self.docs_per_day)
         self.load(self.gens_load, flag=self.item_flag)
         updated_value = "new_name"
         self.query = 'UPDATE default a set name = "{0}" where "centos" in ( SELECT RAW VMs.os FROM a.VMs) limit 2 returning a.name '.format(updated_value)
