@@ -261,7 +261,8 @@ class RestConnection(object):
                 if serverInfo['fts_port']:
                     self.fts_port = serverInfo["fts_port"]
             if "eventing_port" in serverInfo.keys():
-                self.eventing_port = serverInfo["eventing_port"]
+                if serverInfo['eventing_port']:
+                    self.eventing_port = serverInfo["eventing_port"]
             self.hostname = ''
             self.services = ''
             if "hostname" in serverInfo:
@@ -289,7 +290,8 @@ class RestConnection(object):
                 if serverInfo.fts_port:
                     self.fts_port = serverInfo.fts_port
             if hasattr(serverInfo, 'eventing_port'):
-                self.eventing_port = serverInfo.eventing_port
+                if serverInfo.eventing_port:
+                    self.eventing_port = serverInfo.eventing_port
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
