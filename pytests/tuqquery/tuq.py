@@ -55,8 +55,7 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.analytics = self.input.param("analytics", False)
-        if self.dataset is None:
-            self.dataset = self.input.param("dataset", "default")
+        self.dataset = getattr(self, 'dataset',  self.input.param("dataset", "default"))
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.index_type = self.input.param("index_type", 'GSI')
         self.skip_primary_index = self.input.param("skip_primary_index", False)
@@ -2279,10 +2278,8 @@ class QueryTests(BaseTestCase):
     def _generate_full_joined_docs_list(self, join_type=JOIN_INNER, particular_key=None):
         joined_list = []
         all_docs_list = self.generate_full_docs_list(self.gens_load)
-        self.log.info(str(all_docs_list[0:5]))
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
-                self.log.info(str(item))
                 keys = item["tasks_ids"]
                 if particular_key is not None:
                     keys = [item["tasks_ids"][particular_key]]
@@ -2312,10 +2309,8 @@ class QueryTests(BaseTestCase):
     def _generate_full_nested_docs_list(self, join_type=JOIN_INNER, particular_key=None):
         nested_list = []
         all_docs_list = self.generate_full_docs_list(self.gens_load)
-        self.log.info(str(all_docs_list[0:5]))
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
-                self.log.info(str(item))
                 keys = item["tasks_ids"]
                 if particular_key is not None:
                     keys = [item["tasks_ids"][particular_key]]
