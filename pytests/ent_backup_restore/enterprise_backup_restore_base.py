@@ -1446,9 +1446,14 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             ip_to_failover = ip
         else:
             ip_to_failover = self.servers[1].ip
+        failovered = False
         for node in nodes_all:
             if node.ip == ip_to_failover:
-                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                status = rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                if status:
+                    failovered = True
+        if failovered and self.graceful:
+            rest.monitorRebalance()
 
     def async_failover_and_recover(self):
         """
@@ -1459,8 +1464,12 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         nodes_all = rest.node_statuses()
         for node in nodes_all:
             if node.ip == self.servers[1].ip:
-                rest.fail_over(otpNode=node.id, graceful=self.graceful)
-                self.sleep(60)
+                failovered = False
+                status = rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                if status:
+                    failovered = True
+                if failovered and self.graceful:
+                    rest.monitorRebalance()
                 rest.set_recovery_type(otpNode=node.id,
                                        recoveryType=self.recoveryType)
                 rest.add_back_node(otpNode=node.id)
