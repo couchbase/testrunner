@@ -16,88 +16,111 @@ class AscDescTests(QueryTests):
     def tearDown(self):
         super(AscDescTests, self).tearDown()
 
-    # Helper function to run queries and compare results statically and with primary index
     def compare(self, test, query, expected_result_list):
-            actual_result_list = []
-            actual_result = self.run_cbq_query()
-            for i in xrange(0,5):
-               if(test == "test_asc_desc_composite_index" or test == "test_meta" or test=="test_asc_desc_array_index") :
-                 actual_result_list.append(actual_result['results'][i]['default']['_id'])
-               elif(test == "test_desc_isReverse_ascOrder"):
-                 actual_result_list.append(actual_result['results'][i]['id'])
-            self.assertEqual(actual_result_list, expected_result_list)
-            self.query = query.replace("from default","from default use index(`#primary`)")
-            expected_result = self.run_cbq_query()
-            self.assertEqual(actual_result['results'], expected_result['results'])
+        actual_result_list = []
+        actual_result = self.run_cbq_query(query)
+        for i in xrange(0, 5):
+            if test in ["test_asc_desc_composite_index", "test_meta", "test_asc_desc_array_index"]:
+                actual_result_list.append(actual_result['results'][i]['default']['_id'])
+            elif test in ["test_desc_isReverse_ascOrder"]:
+                actual_result_list.append(actual_result['results'][i]['id'])
+        self.assertEqual(actual_result_list, expected_result_list)
+        query = query.replace("from default", "from default use index(`#primary`)")
+        expected_result = self.run_cbq_query(query)
+        self.assertEqual(actual_result['results'], expected_result['results'])
 
     # This test is for composite index on different fields where it makes sure the query uses the particular asc/desc index
     # and results are compared against query run against primary index and static results generated and sorted manually.
     def test_asc_desc_composite_index(self):
+
+        test_dict = dict()
+        index_type = self.index_type.lower()
+
+        # extra defs
+        static_res_2 = ['query-testemployee96373.2660745-3', 'query-testemployee96373.2660745-2', 'query-testemployee96373.2660745-1',
+                        'query-testemployee96373.2660745-0','query-testemployee92486.5251626-5']
+        static_res_4 = ['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1', 'query-testemployee10153.1877827-2',
+                        'query-testemployee10153.1877827-3', 'query-testemployee10153.1877827-4']
+        static_res_6 = ['query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3', 'query-testemployee10153.1877827-4',
+                        'query-testemployee10153.1877827-5', 'query-testemployee10194.855617-0']
+
+        # index defs
+        #primary_index = ("#primary", "default", [], "online", index_type)
+        primary_index = {'name': '#primary',
+                         'bucket': 'default',
+                         'fields': [],
+                         'state': 'online',
+                         'using': index_type,
+                         'is_primary': True}
+        #index_1 = ("idx", "default", ["join_yr ASC", " _id DESC"], "online", index_type)
+        index_1 = {'name': 'idx',
+                   'bucket': 'default',
+                   'fields': ["join_yr ASC", " _id DESC"],
+                   'state': 'online',
+                   'using': index_type,
+                   'is_primary': False}
+
+        # pre query defs
+
+        # query defs
+        query_1 = 'explain SELECT * FROM default WHERE join_yr > 10 ORDER BY join_yr, _id DESC LIMIT 100 OFFSET 200'
+        query_2 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY join_yr, _id DESC,_id LIMIT 10 OFFSET 2'
+        query_3 = 'explain SELECT * FROM default WHERE join_yr > 10 ORDER BY join_yr,meta().id ASC LIMIT 10 OFFSET 2'
+        query_4 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY meta().id,join_yr ASC LIMIT 10'
+        query_5 = 'explain SELECT * FROM default WHERE join_yr > 10 and _id like "query-test%" ORDER BY join_yr desc,_id asc LIMIT 10 OFFSET 2'
+        query_6 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY _id,join_yr asc LIMIT 10 OFFSET 2'
+        query_7 = 'explain SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ORDER BY join_yr asc,meta().id ASC LIMIT 10 OFFSET 2'
+        query_8 = 'SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ORDER BY meta().id,join_yr asc LIMIT 10 OFFSET 2'
+        query_9 = 'SELECT * FROM default WHERE join_yr > 10 ORDER BY meta().id,join_yr DESC LIMIT 10'
+
+        # post query defs
+        explain_1 = lambda x: self.ExplainPlanHelper(x['q_res'][0])
+
+        # assert defs
+        assert_1 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['index'], 'idx')
+        assert_2 = lambda x: self.compare("test_asc_desc_composite_index", query_2, static_res_2)
+        assert_4 = lambda x: self.compare("test_asc_desc_composite_index", query_4, static_res_4)
+        assert_6 = lambda x: self.compare("test_asc_desc_composite_index", query_6, static_res_6)
+        assert_7 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['scans'][0]['index'], 'idx')
+        assert_8 = lambda x: ("test_asc_desc_composite_index", query_8, static_res_6)
+        assert_9 = lambda x: self.compare("test_asc_desc_composite_index", query_9, static_res_4)
+
+        # cleanup defs
+
         for bucket in self.buckets:
-            created_indexes = []
-            try:
-                idx = "idx"
-                self.query = "CREATE INDEX %s ON default(join_yr ASC, _id DESC)"%(idx)
-                actual_result = self.run_cbq_query()
-                self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
-                created_indexes.append(idx)
+            bname = bucket.name
+            test_dict["1-%s" % (bname)] = {"indexes": [primary_index, index_1],
+                                           "pre_queries": [],
+                                           "queries": [query_1],
+                                           "post_queries": [explain_1],
+                                           "asserts": [assert_1],
+                                           "cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr, _id DESC LIMIT 100 OFFSET 200'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr, _id DESC,_id LIMIT 10 OFFSET 2'
-                static_expected_results_list = ['query-testemployee96373.2660745-3', 'query-testemployee96373.2660745-2',
-                                                'query-testemployee96373.2660745-1', 'query-testemployee96373.2660745-0',
-                                                'query-testemployee92486.5251626-5']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
+            test_dict["2-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_2],
+                                           "post_queries": [], "asserts": [assert_2], "cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY join_yr,meta().id ASC LIMIT 10 OFFSET 2'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY meta().id,join_yr ASC LIMIT 10'
-                static_expected_results_list = ['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
-                                                'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                 'query-testemployee10153.1877827-4']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
+            test_dict["3-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_3],
+                                           "post_queries": [explain_1], "asserts": [assert_1],"cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and _id like "query-test%" ' \
-                             'ORDER BY join_yr desc,_id asc LIMIT 10 OFFSET 2'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY _id,join_yr asc LIMIT 10 OFFSET 2'
-                static_expected_results_list = ['query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                'query-testemployee10153.1877827-4', 'query-testemployee10153.1877827-5',
-                                                'query-testemployee10194.855617-0']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
+            test_dict["4-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_4],
+                                           "post_queries": [], "asserts": [assert_4], "cleanups": []}
 
-                self.query = 'explain SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ' \
-                             'ORDER BY join_yr asc,meta().id ASC LIMIT 10 OFFSET 2'
-                actual_result = self.run_cbq_query()
-                plan=ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['scans'][0]['index']==idx)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 and meta().id like "query-test%" ' \
-                             'ORDER BY meta().id,join_yr asc LIMIT 10 OFFSET 2'
-                #static_expected_results_list is same as previous assert
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
-                self.query = 'SELECT * FROM default WHERE join_yr > 10 ' \
-                             'ORDER BY meta().id,join_yr DESC LIMIT 10'
-                static_expected_results_list = ['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
-                                                'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                'query-testemployee10153.1877827-4']
-                self.compare("test_asc_desc_composite_index",self.query,static_expected_results_list)
-            finally:
-                for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
-                    self.run_cbq_query()
+            test_dict["5-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_5],
+                                           "post_queries": [explain_1], "asserts": [assert_1], "cleanups": []}
+
+            test_dict["6-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_6],
+                                           "post_queries": [], "asserts": [assert_6], "cleanups": []}
+
+            test_dict["7-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_7],
+                                           "post_queries": [explain_1], "asserts": [assert_7], "cleanups": []}
+
+            test_dict["8-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_8],
+                                            "post_queries": [], "asserts": [assert_8], "cleanups": []}
+
+            test_dict["9-%s" % (bname)] = {"indexes": [primary_index, index_1], "pre_queries": [], "queries": [query_9],
+                                            "post_queries": [], "asserts": [assert_9], "cleanups": []}
+
+        self.query_runner(test_dict)
 
     # This test test various combination of fields in an array index.
     def test_asc_desc_array_index(self):
