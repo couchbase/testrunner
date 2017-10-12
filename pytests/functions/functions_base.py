@@ -124,6 +124,7 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
 
     def undeploy_and_delete_function(self, body):
         body['settings']['deployment_status'] = False
+        body['settings']['processing_status'] = False
         # undeploy the function
         content = self.rest.deploy_function(self.function_name, body)
         log.info("undeploy Application : {0}".format(content))
