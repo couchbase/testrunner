@@ -196,6 +196,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.input.param("skip_cleanup", False):
             remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
             info = remote_client.extract_remote_info().type.lower()
+            self.tmp_path = "/tmp/"
             if info == 'linux' or info == 'mac':
                 backup_directory = "/tmp/entbackup"
             elif info == 'windows':
