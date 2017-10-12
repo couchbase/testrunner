@@ -517,7 +517,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 replicas=False,
                                 mode="memory",
                                 expected_error=None):
-        output, error =self.backup_restore(expected_error=expected_error)
+        output, error =self.backup_restore()
         if expected_error:
             output.extend(error)
             error_found = False
