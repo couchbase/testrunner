@@ -399,6 +399,32 @@ class OptionsRestTests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['metrics']['resultCount'],0)
 
+    # Test for MB-25762-ARRAY KEY predicate is not pushed to indexer it should not cover without whole array in the index
+    def test_array_key(self):
+        for bucket in self.buckets:
+            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, "k01",{"k0":"XYZ","ka":["def"]} )
+            self.run_cbq_query()
+            self.query = 'CREATE INDEX %s ON %s(k0,k1,DISTINCT ARRAY v FOR v IN ka END)' %("ix11",bucket.name)
+            self.run_cbq_query()
+            self.query = 'explain SELECT META().id FROM %s WHERE k0 = "XYZ" AND ANY v IN ka SATISFIES v LIKE "%s" END' %(bucket.name,"def%")
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("cover" not in plan)
+            self.query = 'SELECT META().id FROM %s WHERE k0 = "XYZ" AND ANY v IN ka SATISFIES v LIKE "%s" END' %(bucket.name,"def%")
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['metrics']['resultCount'],1)
+            self.query = 'CREATE INDEX %s ON %s(k0,k1,ka,DISTINCT ARRAY v FOR v IN ka END)' %("ix12",bucket.name)
+            self.run_cbq_query()
+            import pdb;pdb.set_trace()
+            self.query = 'explain SELECT META().id FROM %s WHERE k0 = "XYZ" AND ANY v IN ka SATISFIES v LIKE "%s" END' %(bucket.name,"def%")
+            actual_result = self.run_cbq_query()
+            plan = ExplainPlanHelper(actual_result)
+            self.assertTrue("cover" in str(plan))
+            self.query = 'SELECT META().id FROM %s WHERE k0 = "XYZ" AND ANY v IN ka SATISFIES v LIKE "%s" END' %(bucket.name,"def%")
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['metrics']['resultCount'],1)
+
+
 
 
 
