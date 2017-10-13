@@ -1,7 +1,8 @@
 import math
 from tuq import QueryTests
+from tuq_sanity import QuerySanityTests
 
-class ReadOnlyUserTests(QueryTests):
+class ReadOnlyUserTests(QuerySanityTests, QueryTests):
     def setUp(self):
         super(ReadOnlyUserTests, self).setUp()
         self.username = self.input.param('username', 'RON1ql')

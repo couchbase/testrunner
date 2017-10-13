@@ -2,6 +2,7 @@ import json
 import uuid
 import copy
 from tuqquery.tuq import QueryTests
+from tuq_sanity import QuerySanityTests
 from couchbase_helper.documentgenerator import DocumentGenerator
 import time
 
@@ -10,7 +11,7 @@ JOIN_LEFT = "LEFT"
 JOIN_RIGHT = "RIGHT"
 
 
-class JoinTests(QueryTests):
+class JoinTests(QuerySanityTests, QueryTests):
     def setUp(self):
         try:
             self.dataset = 'join'

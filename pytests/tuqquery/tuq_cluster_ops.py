@@ -8,8 +8,9 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from backuptests import BackupHelper
+from tuq_sanity import QuerySanityTests
 
-class QueriesOpsTests(QueryTests):
+class QueriesOpsTests(QuerySanityTests, QueryTests):
     def setUp(self):
         self.cluster_ops=True
         super(QueriesOpsTests, self).setUp()

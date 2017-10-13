@@ -291,7 +291,7 @@ class QueryTests(BaseTestCase):
     def gen_docs(self, docs_per_day=1, type='default', values_type=None, name='tuq', start=0, end=0):
         json_generator = JsonGenerator()
         generators = []
-        self.log.info('Generating %s data...' % type)
+        self.log.info('Generating %s:%s data...' % (type, self.dataset))
         if type == 'default':
             if self.array_indexing:
                 generators = json_generator.generate_docs_employee_array(docs_per_day, start)

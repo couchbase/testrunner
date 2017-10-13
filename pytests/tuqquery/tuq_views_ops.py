@@ -3,8 +3,9 @@ from tuqquery.tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from couchbase_helper.document import View
+from tuq_sanity import QuerySanityTests
 
-class QueriesViewsTests(QueryTests):
+class QueriesViewsTests(QuerySanityTests, QueryTests):
     def setUp(self):
         self.ddoc_name = "tuq_ddoc"
         super(QueriesViewsTests, self).setUp()
