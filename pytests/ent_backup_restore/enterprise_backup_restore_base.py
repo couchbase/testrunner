@@ -89,6 +89,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
+        self.backupset.directory += self.master.ip
 
         self.backup_validation_files_location = "/tmp/backuprestore" + self.master.ip
         self.backupset.backup_host = self.input.clusters[1][0]
@@ -203,6 +204,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 backup_directory = WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
+            backup_directory += self.master.ip
             validation_files_location = "%sbackuprestore" % self.tmp_path + self.master.ip
             if info == 'linux':
                 command = "rm -rf {0}".format(backup_directory)
@@ -211,7 +213,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             elif info == 'windows':
                 remote_client.remove_directory_recursive(backup_directory)
             if info == 'linux':
-                command = "rm -rf /cbqe3043/entbackup".format(backup_directory)
+                command = "rm -rf /cbqe3043/entbackup"
                 output, error = remote_client.execute_command(command)
                 remote_client.log_command_output(output, error)
             if self.input.clusters:

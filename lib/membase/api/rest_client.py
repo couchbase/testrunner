@@ -1309,6 +1309,8 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         if status:
             log.info('fail_over node {0} successful'.format(otpNode))
+            log.info('fail_over node {0} successful.  Graceful mode: {1}'
+                                              .format(otpNode, graceful))
         else:
             log.error('fail_over node {0} error : {1}'.format(otpNode, content))
             raise FailoverFailedException(content)
