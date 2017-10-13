@@ -39,8 +39,14 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
                 self._initialize_nodes(Cluster(),
                                        self.servers[:self.nodes_init])
             else:
-                self._initialize_nodes(Cluster(), self.input.clusters[0][
-                                                  :self.nodes_init])
+                rest = RestConnection(self.input.clusters[0][0])
+                rest.force_eject_node()
+                master_services = self.get_services([self.backupset.cluster_host],
+                                                 self.services_init, start_node=0)
+                info = rest.get_nodes_self()
+                if info.memoryQuota and int(info.memoryQuota) > 0:
+                     self.quota = info.memoryQuota
+                rest.init_node()
             self.log.info("Done reset cluster")
         self.sleep(10)
         """ Add built-in user cbadminbucket to second cluster """
