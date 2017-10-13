@@ -2033,7 +2033,7 @@ class QueryTests(BaseTestCase):
                 else:
                     main_command = main_command + " -f=" + filename
 
-        log.info("running command on {0}: {1}".format(self.master.ip, main_command))
+        self.log.info("running command on {0}: {1}".format(self.master.ip, main_command))
         output = ""
         if shell.remote:
             stdin, stdout, stderro = shell._ssh_client.exec_command(main_command)
