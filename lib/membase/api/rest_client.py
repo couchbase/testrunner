@@ -254,7 +254,7 @@ class RestConnection(object):
             self.index_port = 9102
             self.fts_port = 8094
             self.query_port = 8093
-            self.eventing_port = 8095
+            self.eventing_port = 8096
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
             if "fts_port" in serverInfo.keys():
@@ -278,7 +278,7 @@ class RestConnection(object):
             self.index_port = 9102
             self.fts_port = 8094
             self.query_port = 8093
-            self.eventing_port = 8095
+            self.eventing_port = 8096
             self.services = "kv"
             if hasattr(serverInfo, "services"):
                 self.services = serverInfo.services
