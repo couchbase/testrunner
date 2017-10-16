@@ -2645,7 +2645,13 @@ class RemoteMachineShellConnection:
                     log.warning("Ignore dirname error message during couchbase "
                                 "startup/stop/restart for CentOS 6.6 (MB-12536)")
                     success = True
+                elif "Created symlink from /etc/systemd/system" in line:
+                    log.info("This error is due to fix_failed_install.py script that only "
+                             "happens in centos 7")
+                    success = True
                 else:
+                    log.info("\nIf couchbase server is running with this error."
+                              "\nGo to log_command_output to add error mesg to bypass it.")
                     success = False
         for line in output:
             log.info(line)
