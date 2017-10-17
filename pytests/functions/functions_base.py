@@ -85,23 +85,26 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
             raise Exception(
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
-    def verify_eventing_results(self, name, expected_dcp_mutations):
-        count = 0
-        stats = self.rest.get_eventing_stats(name)
-        actual_dcp_mutations = stats["DCP_MUTATION"]
-        # wait for eventing node to process dcp mutations
-        log.info("Number of DCP mutations processed till now : {0}".format(actual_dcp_mutations))
-        while actual_dcp_mutations != expected_dcp_mutations and count < 20:
-            self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
-            count += 1
+    def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False):
+        # we can't rely on DCP_MUTATION stats when doc timers events are set.
+        # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
+        if not doc_timer_events:
+            count = 0
             stats = self.rest.get_eventing_stats(name)
             actual_dcp_mutations = stats["DCP_MUTATION"]
+            # wait for eventing node to process dcp mutations
             log.info("Number of DCP mutations processed till now : {0}".format(actual_dcp_mutations))
-        if count == 20:
-            raise Exception(
-                "Eventing has not processed all the dcp mutations. Current : {0} Expected : {1}".format(
-                    actual_dcp_mutations,
-                    expected_dcp_mutations))
+            while actual_dcp_mutations != expected_dcp_mutations and count < 20:
+                self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
+                count += 1
+                stats = self.rest.get_eventing_stats(name)
+                actual_dcp_mutations = stats["DCP_MUTATION"]
+                log.info("Number of DCP mutations processed till now : {0}".format(actual_dcp_mutations))
+            if count == 20:
+                raise Exception(
+                    "Eventing has not processed all the dcp mutations. Current : {0} Expected : {1}".format(
+                        actual_dcp_mutations,
+                        expected_dcp_mutations))
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
