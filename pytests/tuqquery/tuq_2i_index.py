@@ -35,6 +35,8 @@ class QueriesIndexTests(QueryTests):
 
     '''MB-22321: test that ordered intersectscan is used for pagination use cases'''
     def test_orderedintersectscan(self):
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
         rest = RestConnection(self.master)
         rest.load_sample("beer-sample")
         created_indexes = []
@@ -61,6 +63,8 @@ class QueriesIndexTests(QueryTests):
 
     '''MB-22412: equality predicates and constant keys should be removed from order by clause'''
     def test_remove_equality_orderby(self):
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
         rest = RestConnection(self.master)
         rest.load_sample("beer-sample")
         created_indexes = []
@@ -83,6 +87,8 @@ class QueriesIndexTests(QueryTests):
     '''MB-22470: Like matching should use suffixes index if it is available, also need to test token
        indexes'''
     def test_use_suffixes_and_tokens(self):
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
         rest = RestConnection(self.master)
         rest.load_sample("beer-sample")
         created_indexes = []

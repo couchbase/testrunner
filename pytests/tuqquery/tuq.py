@@ -75,7 +75,7 @@ class QueryTests(BaseTestCase):
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
         self.plasma_dgm = self.input.param("plasma_dgm", False)
-        self.DGM = self.input.param("DGM",False)
+        self.DGM = self.input.param("DGM", False)
         self.covering_index = self.input.param("covering_index", False)
         self.cluster_ops = self.input.param("cluster_ops",False)
         self.server = self.master
