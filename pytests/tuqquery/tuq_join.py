@@ -42,8 +42,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_joined_docs_list(join_type=self.type_join)
             expected_result = [doc for doc in full_list if not doc]
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                     "project" : doc['project']}
+            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'], "project" : doc['project']}
                                     for doc in full_list if doc and 'project' in doc])
             #expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
                                     #for doc in full_list if doc and not 'project' in doc])
@@ -66,8 +65,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_joined_docs_list(join_type=self.type_join)
             expected_result = [doc for doc in full_list if not doc]
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                     "project" : doc['project'], "task_name" : doc['task_name']}
+            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'], "project" : doc['project'], "task_name" : doc['task_name']}
                                     for doc in full_list if doc and 'project' in doc])
             #expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
             #                        for doc in full_list if doc and not 'project' in doc])
@@ -83,15 +81,13 @@ class JoinTests(QuerySanityTests, QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
-            expected_result = [{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                "new_project" : doc['project']}
-                               for doc in expected_result if doc and 'project' in doc and\
-                               doc['project'] == 'IT']
+            expected_result = [{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'], "new_project" : doc['project']}
+                               for doc in expected_result if doc and 'project' in doc and doc['project'] == 'IT']
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_bidirectional_join(self):
-            self.query = "create index idxbidirec on %s(join_day)" %self.buckets[0].name ;
+            self.query = "create index idxbidirec on %s(join_day)" % self.buckets[0].name
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = "explain SELECT employee.name, employee.join_day " +\
@@ -353,7 +349,7 @@ class JoinTests(QuerySanityTests, QueryTests):
     def test_where_join_keys_equal_more_covering(self):
         created_indexes = []
         ind_list = ["one"]
-        index_name="one"
+        index_name = "one"
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
@@ -427,11 +423,11 @@ class JoinTests(QuerySanityTests, QueryTests):
     def test_unnest_covering(self):
         created_indexes = []
         ind_list = ["one"]
-        index_name="one"
+        index_name = "one"
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
-                if ind =="one":
+                if ind == "one":
                     self.query = "CREATE INDEX %s ON %s(name, task, tasks_ids)  USING %s" % (index_name, bucket.name, self.index_type)
                     # if self.gsi_type:
                     #     self.query += " WITH {'index_type': 'memdb'}"
@@ -453,7 +449,8 @@ class JoinTests(QuerySanityTests, QueryTests):
             expected_result = sorted(expected_result)
             self.query = "create primary index on %s" % bucket.name
             self.run_cbq_query()
-            self.query = "SELECT emp.name, task FROM %s emp use index (`#primary`) %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
+            self.sleep(15, 'wait for index')
+            self.query = "SELECT emp.name, task FROM %s emp use index (`#primary`) %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name, self.type_join)
             result = self.run_cbq_query()
             self.assertEqual(actual_result, sorted(result['results']))
             #self._verify_results(actual_result, expected_result)
@@ -461,7 +458,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             self.query= "drop primary index on %s" % bucket.name
             self.run_cbq_query()
             for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
 
     def test_prepared_unnest(self):
@@ -482,9 +479,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             all_docs_list = self.generate_full_docs_list(self.gens_load)
-            expected_result= [{'name': doc['name'],
-                                     'cn' : 29}
-                                    for doc in all_docs_list]
+            expected_result= [{'name': doc['name'],'cn' : 29} for doc in all_docs_list]
             expected_result.extend([{'cn' : 29}] * 29)
             self._verify_results(actual_result, expected_result)
 
@@ -497,8 +492,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             actual_result = sorted(actual_result['results'])
             expected_result_subquery = {"cn" : 29}
             expected_result = [{'names' : [expected_result_subquery]}] * len(self.generate_full_docs_list(self.gens_load))
-            expected_result.extend([{'task_name': doc['task_name'],
-                                     'names' : [expected_result_subquery]}
+            expected_result.extend([{'task_name': doc['task_name'], 'names' : [expected_result_subquery]}
                                     for doc in self.generate_full_docs_list(self.gens_tasks)])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
@@ -518,10 +512,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name'],
-                                'join_day' : doc['join_day']}
-                               for doc in all_docs_list
-                               if  doc['join_day'] == 1]
+            expected_result = [{'name' : doc['name'], 'join_day' : doc['join_day']} for doc in all_docs_list if doc['join_day'] == 1]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -534,10 +525,8 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name'],
-                                'join_day' : doc['join_day']}
-                               for doc in all_docs_list
-                               if doc['join_day'] == 1]
+            expected_result = [{'name' : doc['name'], 'join_day' : doc['join_day']}
+                               for doc in all_docs_list if doc['join_day'] == 1]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -549,10 +538,8 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name'],
-                                'tasks_ids' : doc['tasks_ids']}
-                               for doc in all_docs_list
-                               if doc['tasks_ids'] in ['test_task-1', 'test_task-2']]
+            expected_result = [{'name' : doc['name'], 'tasks_ids' : doc['tasks_ids']}
+                               for doc in all_docs_list if doc['tasks_ids'] in ['test_task-1', 'test_task-2']]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -564,10 +551,8 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name'],
-                                'tasks_ids' : doc['tasks_ids']}
-                               for doc in all_docs_list
-                               if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids'])]
+            expected_result = [{'name' : doc['name'], 'tasks_ids' : doc['tasks_ids']}
+                               for doc in all_docs_list if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids'])]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -579,11 +564,8 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name'],
-                                'tasks_ids' : doc['tasks_ids'],
-                                'join_day': doc['join_day']}
-                               for doc in all_docs_list
-                               if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and doc['join_day'] >=2]
+            expected_result = [{'name' : doc['name'], 'tasks_ids' : doc['tasks_ids'], 'join_day': doc['join_day']}
+                               for doc in all_docs_list if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and doc['join_day'] >=2]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -595,11 +577,8 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name'],
-                                'tasks_ids' : doc['tasks_ids'],
-                                'join_day': doc['join_day']}
-                               for doc in all_docs_list
-                               if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and doc['join_day'] <=2]
+            expected_result = [{'name' : doc['name'], 'tasks_ids' : doc['tasks_ids'], 'join_day': doc['join_day']}
+                               for doc in all_docs_list if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and doc['join_day'] <=2]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -611,12 +590,8 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name'],
-                                'tasks_ids' : doc['tasks_ids'],
-                                'join_day': doc['join_day']}
-                               for doc in all_docs_list
-                               if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and
-                                  doc['join_day'] <=12]
+            expected_result = [{'name' : doc['name'], 'tasks_ids' : doc['tasks_ids'], 'join_day': doc['join_day']}
+                               for doc in all_docs_list if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and doc['join_day'] <=12]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -628,9 +603,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             tasks_ids = [doc["task_name"] for doc in self.generate_full_docs_list(self.gens_tasks)]
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name']}
-                               for doc in all_docs_list
-                               if doc['tasks_ids'][0] in tasks_ids]
+            expected_result = [{'name' : doc['name']} for doc in all_docs_list if doc['tasks_ids'][0] in tasks_ids]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -642,9 +615,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             tasks_ids = [doc["task_name"] for doc in self.generate_full_docs_list(self.gens_tasks) if doc['project'] == 'MB']
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name']}
-                               for doc in all_docs_list
-                               if doc['tasks_ids'][0] in tasks_ids]
+            expected_result = [{'name' : doc['name']} for doc in all_docs_list if doc['tasks_ids'][0] in tasks_ids]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -656,9 +627,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             tasks_ids = [doc["task_name"] for doc in self.generate_full_docs_list(self.gens_tasks)]
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'name' : doc['name']}
-                               for doc in all_docs_list
-                               if doc['tasks_ids'][0] in tasks_ids and doc['join_mo']>5]
+            expected_result = [{'name' : doc['name']} for doc in all_docs_list if doc['tasks_ids'][0] in tasks_ids and doc['join_mo']>5]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -668,9 +637,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self.generate_full_docs_list(self.gens_tasks)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'task_name' : doc['task_name']}
-                               for doc in all_docs_list
-                               if doc['project'] == 'CB']
+            expected_result = [{'task_name' : doc['task_name']} for doc in all_docs_list if doc['project'] == 'CB']
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -681,9 +648,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             all_docs_list = self._generate_full_joined_docs_list(join_type=self.type_join)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = [{'Name' : doc['name'], 'proj' : doc['project']}
-                               for doc in all_docs_list
-                               if doc['join_mo'] > 10]
+            expected_result = [{'Name' : doc['name'], 'proj' : doc['project']} for doc in all_docs_list if doc['join_mo'] > 10]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 ##############################################################################################
@@ -730,9 +695,7 @@ class JoinTests(QuerySanityTests, QueryTests):
             self._verify_results(actual_result, expected_result)
 
             key2_select, value2_select = gen_select.next()
-            self.query = 'SELECT * FROM %s USE KEYS ARRAY emp._id FOR emp IN [%s,%s] END' % (bucket.name,
-                                                                                      value_select,
-                                                                                      value2_select)
+            self.query = 'SELECT * FROM %s USE KEYS ARRAY emp._id FOR emp IN [%s,%s] END' % (bucket.name, value_select, value2_select)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self.generate_full_docs_list(self.gens_tasks, keys=[key_select, key2_select])
@@ -748,43 +711,30 @@ class JoinTests(QuerySanityTests, QueryTests):
 
     def test_simple_nest_keys(self):
         for bucket in self.buckets:
-            self.query = "SELECT * FROM %s emp %s NEST %s tasks " % (
-                                                bucket.name, self.type_join, bucket.name) +\
-                         "ON KEYS emp.tasks_ids"
+            self.query = "SELECT * FROM %s emp %s NEST %s tasks ON KEYS emp.tasks_ids" % (bucket.name, self.type_join, bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
             self._delete_ids(actual_result)
             actual_result = self.sort_nested_list(actual_result, key='task_name')
-            actual_result = sorted(actual_result, key=lambda doc:
-                                   self._get_for_sort(doc))
+            actual_result = sorted(actual_result, key=lambda doc: self._get_for_sort(doc))
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
-            expected_result = [{"emp" : doc['item'], "tasks" : doc['items_nested']}
-                               for doc in full_list if doc and 'items_nested' in doc]
-            expected_result.extend([{"emp" : doc['item']}
-                                    for doc in full_list if not 'items_nested' in doc])
+            expected_result = [{"emp" : doc['item'], "tasks" : doc['items_nested']} for doc in full_list if doc and 'items_nested' in doc]
+            expected_result.extend([{"emp" : doc['item']} for doc in full_list if not 'items_nested' in doc])
             self._delete_ids(expected_result)
             expected_result = self.sort_nested_list(expected_result, key='task_name')
-            expected_result = sorted(expected_result, key=lambda doc:
-                                   self._get_for_sort(doc))
+            expected_result = sorted(expected_result, key=lambda doc: self._get_for_sort(doc))
             self._verify_results(actual_result, expected_result)
 
     def test_simple_nest_key(self):
         for bucket in self.buckets:
-            self.query = "SELECT * FROM %s emp %s NEST %s tasks " % (
-                                                bucket.name, self.type_join, bucket.name) +\
-                         "KEY emp.tasks_ids[0]"
+            self.query = "SELECT * FROM %s emp %s NEST %s tasks KEY emp.tasks_ids[0]" % (bucket.name, self.type_join, bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc:
-                                                            self._get_for_sort(doc))
+            actual_result = sorted(actual_result['results'], key=lambda doc: self._get_for_sort(doc))
             self._delete_ids(actual_result)
-            full_list = self._generate_full_nested_docs_list(particular_key=0,
-                                                             join_type=self.type_join)
-            expected_result = [{"emp" : doc['item'], "tasks" : doc['items_nested']}
-                               for doc in full_list if doc and 'items_nested' in doc]
-            expected_result.extend([{"emp" : doc['item']}
-                                    for doc in full_list if not 'items_nested' in doc])
-            expected_result = sorted(expected_result, key=lambda doc:
-                                                            self._get_for_sort(doc))
+            full_list = self._generate_full_nested_docs_list(particular_key=0, join_type=self.type_join)
+            expected_result = [{"emp" : doc['item'], "tasks" : doc['items_nested']} for doc in full_list if doc and 'items_nested' in doc]
+            expected_result.extend([{"emp" : doc['item']} for doc in full_list if not 'items_nested' in doc])
+            expected_result = sorted(expected_result, key=lambda doc: self._get_for_sort(doc))
             self._delete_ids(expected_result)
             self._verify_results(actual_result, expected_result)
 

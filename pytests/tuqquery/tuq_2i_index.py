@@ -49,15 +49,13 @@ class QueriesIndexTests(QueryTests):
             time.sleep(15)
             created_indexes.append(idx)
             created_indexes.append(idx2)
-            self.query = "explain select * from `beer-sample` where name like 'A%' " \
-                         "and abv > 0 order by abv limit 10"
+            self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 0 order by abv limit 10"
             result = self.run_cbq_query()
-            self.assertTrue(result['results'][0]['plan']['~children'][0]['~children'][0]['#operator']
-                            == 'OrderedIntersectScan')
+            self.assertEqual(result['results'][0]['plan']['~children'][0]['~children'][0]['#operator'], 'OrderedIntersectScan')
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
-                actual_result = self.run_cbq_query()
+                self.run_cbq_query()
             if self.delete_sample:
                 rest.delete_bucket("beer-sample")
 
@@ -78,7 +76,7 @@ class QueriesIndexTests(QueryTests):
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
-                actual_result = self.run_cbq_query()
+                self.run_cbq_query()
             if self.delete_sample:
                 rest.delete_bucket("beer-sample")
 
@@ -112,14 +110,13 @@ class QueriesIndexTests(QueryTests):
             time.sleep(15)
             created_indexes.append(idx2)
             # Test that has_token uses tokens index
-            self.query = "EXPLAIN SELECT description FROM `beer-sample` WHERE HAS_TOKEN(description, " \
-                         "'Great' )"
+            self.query = "EXPLAIN SELECT description FROM `beer-sample` WHERE HAS_TOKEN(description, 'Great' )"
             result = self.run_cbq_query()
             self.assertTrue(result['results'][0]['plan']['~children'][0]['scan']['index'] == idx2)
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX `beer-sample`.%s USING %s" % (idx, self.index_type)
-                actual_result = self.run_cbq_query()
+                self.run_cbq_query()
             if self.delete_sample:
                 rest.delete_bucket("beer-sample")
 
@@ -277,68 +274,66 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             try:
                 idx = "idx"
-                self.query = "CREATE INDEX %s ON %s ( join_day,join_yr,_id )" %(idx,bucket.name)+\
-                             " USING %s" % (self.index_type)
+                self.query = "CREATE INDEX %s ON %s ( join_day,join_yr,_id ) USING %s" % (idx, bucket.name, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 idx = "idx2"
-                self.query = "CREATE INDEX %s ON %s ( _id )" %(idx,bucket.name)+\
-                             " USING %s" % (self.index_type)
+                self.query = "CREATE INDEX %s ON %s ( _id )  USING %s" % (idx, bucket.name, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
-                self.query = "Explain SELECT meta().id FROM %s WHERE join_day = 5 LIMIT 10"  %(bucket.name)
+                self.query = "Explain SELECT meta().id FROM %s WHERE join_day = 5 LIMIT 10" % bucket.name
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='10')
-                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 LIMIT 5 OFFSET 10" %(bucket.name)
+                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 LIMIT 5 OFFSET 10" % bucket.name
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='5')
                 self.assertTrue(plan['~children'][0]['~children'][0]['offset']=='10')
 
-                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 10" %(bucket.name)
+                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 10" % bucket.name
                 actual_result = self.run_cbq_query()
-                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 10" %(bucket.name)
+                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 10" % bucket.name
                 expected_result= self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
 
-                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 3" %(bucket.name)
+                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 3" % bucket.name
                 actual_result = self.run_cbq_query()
-                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 3" %(bucket.name)
+                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET 3" % bucket.name
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
 
-                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 order by _id LIMIT 5 OFFSET 0" %(bucket.name)
+                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 order by _id LIMIT 5 OFFSET 0" % bucket.name
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['index']=='idx')
                 self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator']=='IndexScan2')
-                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 LIMIT 5 OFFSET 0" %(bucket.name)
+                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 LIMIT 5 OFFSET 0" % bucket.name
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='5')
                 self.assertTrue("offset" not in plan['~children'][0]['~children'][0])
 
-                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by _id LIMIT 5 OFFSET 0" %(bucket.name)
+                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by _id LIMIT 5 OFFSET 0" % bucket.name
                 actual_result = self.run_cbq_query()
-                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by _id LIMIT 5 OFFSET 0" %(bucket.name)
+                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by _id LIMIT 5 OFFSET 0" % bucket.name
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
 
-                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 LIMIT 5 OFFSET -1" %(bucket.name)
+                self.query="explain SELECT meta().id FROM %s WHERE join_day > 5 LIMIT 5 OFFSET -1" % bucket.name
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='5')
                 self.assertTrue("offset" not in plan['~children'][0]['~children'][0])
-                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET -1" %(bucket.name)
+                self.query="SELECT meta().id FROM %s WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET -1" % bucket.name
                 actual_result = self.run_cbq_query()
-                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET -1" %(bucket.name)
+                self.query="SELECT meta().id FROM %s use index(`#primary`) WHERE join_day > 5 order by meta().id LIMIT 5 OFFSET -1" % bucket.name
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
 
@@ -367,13 +362,12 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(plan['~children'][0]['~children'][0]['scans'][1]['index']=='idx2')
 
                 idx2= "idx3"
-                self.query = "CREATE INDEX %s ON %s ( VMs[0].RAM,_id  ) where join_yr > 2010" %(idx2,bucket.name)+\
-                             " USING %s" % (self.index_type)
+                self.query = "CREATE INDEX %s ON %s ( VMs[0].RAM,_id  ) where join_yr > 2010  USING %s" %(idx2, bucket.name, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx2)
-                self.query = "explain select * from %s where VMs[0].RAM > 5 and join_yr > 2010 order by VMs[0].RAM limit 2 offset 1"  %(bucket.name)
+                self.query = "explain select * from %s where VMs[0].RAM > 5 and join_yr > 2010 order by VMs[0].RAM limit 2 offset 1"  % bucket.name
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='2')
