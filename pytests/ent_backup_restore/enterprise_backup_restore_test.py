@@ -760,7 +760,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         for bucket in self.buckets:
             for node in clusters:
-                shell.execute_command("%scbstats%s %s:11210 -b %s stop" % \
+                shell.execute_command("%scbepctl%s %s:11210 -b %s stop" % \
                                       (self.cli_command_location,
                                        self.cmd_ext,
                                        node.ip,
@@ -1502,13 +1502,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
-                                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                                          no_progress_bar=self.no_progress_bar,
-                                                          cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+        backup_result = self.cluster.async_backup_cluster(
+                                            cluster_host=self.backupset.cluster_host,
+                                            backup_host=self.backupset.backup_host,
+                                            directory=self.backupset.directory,
+                                            name=self.backupset.name,
+                                            resume=self.backupset.resume,
+                                            purge=self.backupset.purge,
+                                            no_progress_bar=self.no_progress_bar,
+                                            cli_command_location=self.cli_command_location,
+                                            cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.pause_memcached()
@@ -1606,7 +1609,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         try:
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.pause_memcached(self.os_name)
-            self.sleep(10)
+            self.sleep(17, "time needs for memcached process completely stopped")
             backup_result = self.cluster.async_backup_cluster(
                                                 cluster_host=self.backupset.cluster_host,
                                                 backup_host=self.backupset.backup_host,

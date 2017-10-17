@@ -684,7 +684,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_merge(self):
         self.log.info("backups before merge: " + str(self.backups))
-        self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
+        self.log.info("number_of_backups_taken before merge: " \
+                                                   + str(self.number_of_backups_taken))
         if self.backupset.deleted_backups:
             self.backupset.end -= len(self.backupset.deleted_backups)
         try:
@@ -695,8 +696,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "merge --archive {0} --repo {1} --start {2} --end {3}".format(self.backupset.directory, self.backupset.name,
-                                                                         backup_start, backup_end)
+        args = "merge --archive {0} --repo {1} --start {2} --end {3}"\
+                                      .format(self.backupset.directory,
+                                              self.backupset.name,
+                                              backup_start, backup_end)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -709,14 +712,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info("process cbbackupmge may be killed")
             return False, [] , "cbbackupmgr may be killed"
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
+                                                    self.backupset.name)
         o, e = remote_client.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
         self.number_of_backups_taken -= (self.backupset.end - self.backupset.start + 1)
         self.number_of_backups_taken += 1
         self.log.info("backups after merge: " + str(self.backups))
-        self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        self.log.info("number_of_backups_taken after merge: "
+                                                   + str(self.number_of_backups_taken))
         return True, output, "Merging backup succeeded"
 
     def backup_merge_validate(self, repeats=1, skip_validation=False):
