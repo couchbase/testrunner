@@ -11,6 +11,8 @@ from lib.membase.helper.bucket_helper import BucketOperationHelper
 from testconstants import FTS_QUOTA, CBAS_QUOTA, INDEX_QUOTA, MIN_KV_QUOTA
 from threading import Thread
 import threading
+from security.rbac_base import RbacBase
+
 
 class CBASBaseTest(BaseTestCase):
     def setUp(self, add_defualt_cbas_node = True):
@@ -207,7 +209,8 @@ class CBASBaseTest(BaseTestCase):
     
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
                               cb_server_ip=None,
-                              validate_error_msg=False):
+                              validate_error_msg=False,
+                              username = None, password = None):
         """
         Creates a bucket on CBAS
         """
@@ -217,7 +220,8 @@ class CBASBaseTest(BaseTestCase):
             '''DP3 doesn't need to specify cb server ip as cbas node is part of the cluster.'''
             cmd_create_bucket = "create bucket " + cbas_bucket_name + " with {\"name\":\"" + cb_bucket_name + "\"};"
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_create_bucket)
+            cmd_create_bucket,username=username, password=password)
+
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -228,7 +232,8 @@ class CBASBaseTest(BaseTestCase):
 
     def create_dataset_on_bucket(self, cbas_bucket_name, cbas_dataset_name,
                                  where_field=None, where_value = None,
-                                 validate_error_msg=False):
+                                 validate_error_msg=False, username = None,
+                                 password = None):
         """
         Creates a shadow dataset on a CBAS bucket
         """
@@ -238,7 +243,7 @@ class CBASBaseTest(BaseTestCase):
             cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";".format(
                 cbas_dataset_name, cbas_bucket_name, where_field, where_value)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_create_dataset)
+            cmd_create_dataset, username=username, password=password)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -248,7 +253,8 @@ class CBASBaseTest(BaseTestCase):
                 return True
 
     def connect_to_bucket(self, cbas_bucket_name, cb_bucket_password=None,
-                          validate_error_msg=False, cb_bucket_username="Administrator"):
+                          validate_error_msg=False, cb_bucket_username="Administrator",
+                          username=None, password=None):
         """
         Connects to a CBAS bucket
         """
@@ -258,7 +264,7 @@ class CBASBaseTest(BaseTestCase):
             '''DP3 doesn't need to specify Username/Password as cbas node is part of the cluster.'''
             cmd_connect_bucket = "connect bucket " + cbas_bucket_name
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_connect_bucket)
+            cmd_connect_bucket, username=username, password=password)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -269,7 +275,8 @@ class CBASBaseTest(BaseTestCase):
 
     def disconnect_from_bucket(self, cbas_bucket_name,
                                disconnect_if_connected=False,
-                               validate_error_msg=False):
+                               validate_error_msg=False, username=None,
+                               password=None):
         """
         Disconnects from a CBAS bucket
         """
@@ -281,7 +288,7 @@ class CBASBaseTest(BaseTestCase):
                 cbas_bucket_name)
 
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_disconnect_bucket)
+            cmd_disconnect_bucket, username=username, password=password)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -290,13 +297,14 @@ class CBASBaseTest(BaseTestCase):
             else:
                 return True
 
-    def drop_dataset(self, cbas_dataset_name, validate_error_msg=False):
+    def drop_dataset(self, cbas_dataset_name, validate_error_msg=False,
+                     username=None, password=None):
         """
         Drop dataset from CBAS
         """
         cmd_drop_dataset = "drop dataset {0};".format(cbas_dataset_name)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_drop_dataset)
+            cmd_drop_dataset, username=username, password=password)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -305,13 +313,13 @@ class CBASBaseTest(BaseTestCase):
             else:
                 return True
 
-    def drop_cbas_bucket(self, cbas_bucket_name, validate_error_msg=False):
+    def drop_cbas_bucket(self, cbas_bucket_name, validate_error_msg=False, username=None, password=None):
         """
         Drop a CBAS bucket
         """
         cmd_drop_bucket = "drop bucket {0};".format(cbas_bucket_name)
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
-            cmd_drop_bucket)
+            cmd_drop_bucket, username=username, password=password)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:
@@ -574,7 +582,7 @@ class CBASBaseTest(BaseTestCase):
         else:
             return None
 
-    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None, timeout=120, client_context_id=None):
+    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None, timeout=120, client_context_id=None, username=None, password=None):
         """
         Executes a statement on CBAS using the REST API using REST Client
         """
@@ -584,7 +592,7 @@ class CBASBaseTest(BaseTestCase):
         try:
             self.log.info("Running query on cbas: %s"%statement)
             response = rest.execute_statement_on_cbas(statement, mode, pretty,
-                                                      timeout, client_context_id)
+                                                      timeout, client_context_id, username, password)
             response = json.loads(response)
             if "errors" in response:
                 errors = response["errors"]
@@ -779,3 +787,15 @@ class CBASBaseTest(BaseTestCase):
                     break
             result &= index_found
         return result, content
+
+    def _create_user_and_grant_role(self, username, role, source='builtin'):
+        user = [{'id':username,'password':'password','name':'Some Name'}]
+        response = RbacBase().create_user_source(user,source,self.master)
+        user_role_list = [{'id':username,'name':'Some Name','roles':role}]
+        response = RbacBase().add_user_role(user_role_list, self.rest, source)
+
+    def _drop_user(self, username):
+        user = [username]
+        response = RbacBase().remove_user_role(user,self.rest)
+
+

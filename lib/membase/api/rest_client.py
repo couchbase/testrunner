@@ -747,6 +747,13 @@ class RestConnection(object):
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
 
+    def _create_capi_headers_with_auth(self, username, password):
+        authorization = base64.encodestring(
+            '%s:%s' % (username, password))
+        return {'Content-Type': 'application/json',
+                'Authorization': 'Basic %s' % authorization,
+                'Accept': '*/*'}
+
     def _create_headers_with_auth(self, username, password):
         authorization = base64.encodestring('%s:%s' % (username, password))
         return {'Authorization': 'Basic %s' % authorization}
@@ -977,12 +984,14 @@ class RestConnection(object):
             raise Exception("list rebalance tokens failed")
 
     def execute_statement_on_cbas(self, statement, mode, pretty=True,
-                                  timeout=70, client_context_id=None):
+                                  timeout=70, client_context_id=None,
+                                  username=None, password=None):
+        if not username:
+            username = self.username
+        if not password:
+            password = self.password
         api = self.cbas_base_url + "/analytics/service"
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
-        headers = {'Content-Type': 'application/json',
-                'Authorization': 'Basic %s' % authorization,
-                'Accept': '*/*'}
+        headers = self._create_capi_headers_with_auth(username, password)
 
         params = {'statement': statement, 'mode': mode, 'pretty': pretty,
                   'client_context_id': client_context_id}
@@ -1008,13 +1017,15 @@ class RestConnection(object):
                 status, content))
             raise Exception("Analytics Service API failed")
 
-    def delete_active_request_on_cbas(self, client_context_id):
+    def delete_active_request_on_cbas(self, client_context_id, username=None, password=None):
+        if not username:
+            username = self.username
+        if not password:
+            password = self.password
+
         api = self.cbas_base_url + "/analytics/admin/active_requests?client_context_id={0}".format(
             client_context_id)
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
-        headers = {'Content-Type': 'application/json',
-                'Authorization': 'Basic %s' % authorization,
-                'Accept': '*/*'}
+        headers = self._create_capi_headers_with_auth(username, password)
 
         status, content, header = self._http_request(api, 'DELETE',
                                                      headers=headers,

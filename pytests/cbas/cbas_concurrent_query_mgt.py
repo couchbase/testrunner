@@ -185,3 +185,45 @@ class CBASConcurrentQueryMgtTests(CBASBaseTest):
         status = self.delete_request(client_context_id)
         if str(status) != "200":
             self.fail("Status is not 200")
+
+    def test_rest_api_authorization_cancel_request(self):
+        validation_failed = False
+
+        self._setupForTest()
+
+        roles = [{"role": "ro_admin",
+                  "expected_status": 401},
+                 {"role": "cluster_admin",
+                  "expected_status": 200},
+                 {"role": "admin",
+                  "expected_status": 200},
+                 {"role": "analytics_manager[*]",
+                  "expected_status": 200},
+                 {"role": "analytics_reader",
+                  "expected_status": 200}]
+
+        for role in roles:
+            self._create_user_and_grant_role("testuser", role["role"])
+            self.sleep(5)
+
+            client_context_id = "abcd1234"
+            statement = "select sleep(count(*),5000) from {0} where mutated=0;".format(
+                self.cbas_dataset_name)
+            status, metrics, errors, results, handle = self.execute_statement_on_cbas_via_rest(
+                statement, mode="async", client_context_id=client_context_id)
+
+            status = self.delete_request(client_context_id)
+            if str(status) != str(role["expected_status"]):
+                self.log.info(
+                    "Error cancelling request as user with {0} role. Response = {1}".format(
+                        role["role"], status))
+                validation_failed = True
+            else:
+                self.log.info(
+                    "Cancelling request as user with {0} role worked as expected".format(
+                        role["role"]))
+
+            self._drop_user("testuser")
+
+        self.assertFalse(validation_failed,
+                         "Authentication errors with some APIs. Check the test log above.")
