@@ -6,6 +6,7 @@ import uuid
 import time
 import logging
 import stat
+import copy
 import TestInput
 from subprocess import Popen, PIPE
 
@@ -27,8 +28,9 @@ from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
 from testconstants import RPM_DIS_NAME
-from testconstants import LINUX_DISTRIBUTION_NAME
-from testconstants import WIN_COUCHBASE_BIN_PATH
+from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_COUCHBASE_BIN_PATH,\
+                          LINUX_CB_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH
 from testconstants import CB_VERSION_NAME
@@ -200,6 +202,13 @@ class RemoteMachineShellConnection:
                                                    {0}".format(e, self.ip))
                     exit(1)
         log.info("Connected to {0}".format(serverInfo.ip))
+        self.cmd_ext = ""
+        self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        self.extract_remote_info()
+        os_type = self.info.type.lower()
+        if os_type == "windows":
+            self.cmd_ext = ".exe"
+            self.bin_path = WIN_COUCHBASE_BIN_PATH
 
     def sleep(self, timeout=1, message=""):
         log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
@@ -326,8 +335,16 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("taskkill /F /T /IM epmd.exe*")
             self.log_command_output(o, r)
-            o, r = self.execute_command("taskkill /F /T /IM erl.exe*")
+            o, r = self.execute_command("taskkill /F /T /IM erl*")
             self.log_command_output(o, r)
+            o, r = self.execute_command("tasklist | grep erl.exe")
+            kill_all = False
+            while len(o) >= 1 and not kill_all:
+                self.execute_command("taskkill /F /T /IM erl*")
+                o, r = self.execute_command("tasklist | grep erl.exe")
+                if len(o) == 0:
+                    kill_all = True
+                    log.info("all erlang processes were killed")
         else:
             o, r = self.execute_command("kill "
                         " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
@@ -1086,6 +1103,23 @@ class RemoteMachineShellConnection:
             log.error('Can not write build name file to bat file {0}'.format(found))
         sftp.close()
         return capture_iss_file
+
+    def compact_vbuckets(self, vbuckets, nodes, upto_seq):
+        """
+            compact each vbucket with cbcompact tools
+        """
+        for node in nodes:
+            log.info("Purge 'deleted' keys in all %s vbuckets in node %s.  It will take times "
+                                                                         % (vbuckets, node.ip))
+            for vbucket in range(0, vbuckets):
+                cmd = "%scbcompact%s %s:11210 compact %d --dropdeletes "\
+                                             "--purge-only-upto-seq=%d" \
+                                                  % (self.bin_path,
+                                                     self.cmd_ext,
+                                                     node.ip, vbucket,
+                                                     upto_seq)
+                self.execute_command(cmd, debug=False)
+        log.info("done compact")
 
     def set_vbuckets_win(self, vbuckets):
         bin_path = WIN_COUCHBASE_BIN_PATH
@@ -2800,13 +2834,26 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
 
-    def pause_memcached(self):
-        o, r = self.execute_command("killall -SIGSTOP memcached")
-        self.log_command_output(o, r)
+    def pause_memcached(self, os="linux"):
+        log.info("*** pause memcached process ***")
+        if os == "windows":
+            self.check_cmd("pssuspend")
+            cmd = "pssuspend $(tasklist | grep  memcached | gawk '{printf $2}')"
+            o, r = self.execute_command(cmd)
+            self.log_command_output(o, [])
+        else:
+            o, r = self.execute_command("killall -SIGSTOP memcached")
+            self.log_command_output(o, r)
 
-    def unpause_memcached(self):
-        o, r = self.execute_command("killall -SIGCONT memcached")
-        self.log_command_output(o, r)
+    def unpause_memcached(self, os="linux"):
+        log.info("*** unpause memcached process ***")
+        if os == "windows":
+            cmd = "pssuspend -r $(tasklist | grep  memcached | gawk '{printf $2}')"
+            o, r = self.execute_command(cmd)
+            self.log_command_output(o, [])
+        else:
+            o, r = self.execute_command("killall -SIGCONT memcached")
+            self.log_command_output(o, r)
 
     def pause_beam(self):
         o, r = self.execute_command("killall -SIGSTOP beam")
@@ -3631,19 +3678,28 @@ class RemoteUtilHelper(object):
             else:
                 log.error("erlang process failed to suspend")
         else:
+            copy_server = copy.deepcopy(server)
+            command_1 = "/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT"
+            command_2 = "/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT"
+            command_3 = "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
+            if shell.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME \
+                             and server.ssh_username != "root":
+                copy_server.ssh_username = "root"
+                shell.disconnect()
+                log.info("=== connect to server with user %s " % copy_server.ssh_username)
+                shell = RemoteMachineShellConnection(copy_server)
+                o, r = shell.execute_command("whoami")
+                shell.log_command_output(o, r)
             # Reject incoming connections on port 1000->65535
-            o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT")
+            o, r = shell.execute_command(command_1)
             shell.log_command_output(o, r)
-
             # Reject outgoing connections on port 1000->65535
             if bidirectional:
-                o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT")
+                o, r = shell.execute_command(command_2)
                 shell.log_command_output(o, r)
-
             if xdcr:
-                o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+                o, r = shell.execute_command(command_3)
                 shell.log_command_output(o, r)
-
             log.info("enabled firewall on {0}".format(server))
             o, r = shell.execute_command("/sbin/iptables --list")
             shell.log_command_output(o, r)
