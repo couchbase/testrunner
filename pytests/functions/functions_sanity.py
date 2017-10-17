@@ -76,7 +76,7 @@ class FunctionsSanity(FunctionsBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc,meta) {\n    var docId = meta.docid;\n    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( ':docId' ,'Hello World');\n    query.execQuery();\n}\n",
+                                              "function OnUpdate(doc,meta) {\n    var docId = meta.docid;\n    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( :docId ,'Hello World');\n    query.execQuery();\n}\n",
                                               )
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
