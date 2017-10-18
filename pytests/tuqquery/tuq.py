@@ -2156,30 +2156,31 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
 #
 #   tuq_xdcr.py helpers
-#   I think these helpers should go back into tuq_xdcr, importing upgradetests has some slight drawbacks for tuq
+#
 ##############################################################################################
 
-    def _override_clusters_structure(self):
-        UpgradeTests._override_clusters_structure(self)
-
-    def _create_buckets(self, nodes):
-        UpgradeTests._create_buckets(self, nodes)
-
-    def _setup_topology_chain(self):
-        UpgradeTests._setup_topology_chain(self)
-
-    def _set_toplogy_star(self):
-        UpgradeTests._set_toplogy_star(self)
-
-    def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
-        UpgradeTests._join_clusters(self, src_cluster_name, src_master,
-                                    dest_cluster_name, dest_master)
-
-    def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
-        UpgradeTests._replicate_clusters(self, src_master, dest_cluster_name, buckets)
-
-    def _get_bucket(self, bucket_name, server):
-        return UpgradeTests._get_bucket(self, bucket_name, server)
+    # Tentative fixes for this implemented inside of tuq_xdcr itself, leaving these here until we have verified fix
+    # def _override_clusters_structure(self):
+    #     UpgradeTests._override_clusters_structure(self)
+    #
+    # def _create_buckets(self, nodes):
+    #     UpgradeTests._create_buckets(self, nodes)
+    #
+    # def _setup_topology_chain(self):
+    #     UpgradeTests._setup_topology_chain(self)
+    #
+    # def _set_toplogy_star(self):
+    #     UpgradeTests._set_toplogy_star(self)
+    #
+    # def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
+    #     UpgradeTests._join_clusters(self, src_cluster_name, src_master,
+    #                                 dest_cluster_name, dest_master)
+    #
+    # def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
+    #     UpgradeTests._replicate_clusters(self, src_master, dest_cluster_name, buckets)
+    #
+    # def _get_bucket(self, bucket_name, server):
+    #     return UpgradeTests._get_bucket(self, bucket_name, server)
 
 ##############################################################################################
 #

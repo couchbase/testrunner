@@ -20,7 +20,7 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
                 self._replication_direction_str = "bidirection"
             else:
                 self._replication_direction_str = "unidirection"
-            self._override_clusters_structure()
+            UpgradeTests._override_clusters_structure()
         except:
             self.cluster.shutdown()
 
@@ -43,7 +43,7 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         XDCRReplicationBaseTest.setUp(self)
         self.load(self.gens_load)
         self._wait_for_replication_to_catchup()
-        bucket = self._get_bucket('default', self.src_master)
+        bucket = UpgradeTests._get_bucket('default', self.src_master)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         fn = getattr(self, self.method_name)
         fn()
