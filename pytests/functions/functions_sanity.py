@@ -39,7 +39,7 @@ class FunctionsSanity(FunctionsBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name,
-                                              "function OnDelete(doc) {\n    log('document', doc);\n    dst_bucket[doc.docid] = 'hello world';\n}\n")
+                                              "function OnDelete(doc) {\n    log('document', doc);\n    dst_bucket[doc.id] = 'hello world';\n}\n")
         self.deploy_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -52,7 +52,7 @@ class FunctionsSanity(FunctionsBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, exp=1)
         body = self.create_save_function_body(self.function_name,
-                                              "function OnDelete(doc) {\n    log('document', doc);\n    dst_bucket[doc.docid] = 'hello world';\n}\n")
+                                              "function OnDelete(doc) {\n    log('document', doc);\n    dst_bucket[doc.id] = 'hello world';\n}\n")
         self.deploy_function(body)
         # Wait for eventing to catch up with all the expiry mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
