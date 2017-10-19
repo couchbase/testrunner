@@ -1289,38 +1289,46 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
     def merge_with_memcached_crash_and_restart(self):
         self.log.info("backups before merge: " + str(self.backups))
-        self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
-        merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
-                                                        backups=self.backups,
-                                                        directory=self.backupset.directory, name=self.backupset.name,
-                                                        cli_command_location=self.cli_command_location,
-                                                        start=int(self.backupset.start),
-                                                        end=int(self.backupset.end)
-                                                        )
-        conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        conn.pause_memcached()
-        conn.unpause_memcached()
+        self.log.info("number_of_backups_taken before merge: "\
+                                             + str(self.number_of_backups_taken))
+        merge_result = self.cluster.async_merge_cluster(
+                                            backup_host=self.backupset.backup_host,
+                                            backups=self.backups,
+                                            directory=self.backupset.directory,
+                                            name=self.backupset.name,
+                                            cli_command_location=self.cli_command_location,
+                                            start=int(self.backupset.start),
+                                            end=int(self.backupset.end))
+        conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn_bk.pause_memcached()
+        conn_bk.unpause_memcached()
+        conn_bk.disconnect()
         output = merge_result.result(timeout=200)
         self.assertTrue("Merge completed successfully" in output[0],
                         "Merge failed with memcached crash and restart within 180 seconds")
         self.log.info("Merge succeeded with memcached crash and restart within 180 seconds")
         self.sleep(30)
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
+                                                    self.backupset.name)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
         o, e = conn.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
         self.number_of_backups_taken -= (self.backupset.end - self.backupset.start + 1)
         self.number_of_backups_taken += 1
         self.log.info("backups after merge: " + str(self.backups))
-        self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        self.log.info("number_of_backups_taken after merge: "\
+                                        + str(self.number_of_backups_taken))
         if self.number_of_repeats < 2:
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+                                              self.number_of_backups_taken,
                                               self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+                                                self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                             self.backup_validation_files_location, merge=True)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
 
     def merge_with_erlang_crash_and_restart(self):
@@ -1716,7 +1724,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         BucketOperationHelper.delete_bucket_or_assert(self.master,
                                                       bucket_to_delete,
                                                       self)
-        self.buckets.pop()
+        self.buckets = RestConnection(self.master).get_buckets()
         for task in ops_tasks:
             task.result()
 
