@@ -3270,6 +3270,8 @@ class RemoteMachineShellConnection:
         else:
             o, r = self.execute_command("killall -SIGSTOP memcached")
             self.log_command_output(o, r)
+        log.info("wait 30 seconds to make node down.")
+        time.sleep(30)
 
     def unpause_memcached(self, os="linux"):
         log.info("*** unpause memcached process ***")

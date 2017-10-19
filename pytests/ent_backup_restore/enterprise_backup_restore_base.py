@@ -1245,36 +1245,43 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             task.result()
 
     def backup_with_memcached_crash_and_restart(self):
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
-                                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                                          no_progress_bar=self.no_progress_bar,
-                                                          cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+        backup_result = self.cluster.async_backup_cluster(
+                                           cluster_host=self.backupset.cluster_host,
+                                           backup_host=self.backupset.backup_host,
+                                           directory=self.backupset.directory,
+                                           name=self.backupset.name,
+                                           resume=self.backupset.resume,
+                                           purge=self.backupset.purge,
+                                           no_progress_bar=self.no_progress_bar,
+                                           cli_command_location=self.cli_command_location,
+                                           cb_version=self.cb_version)
         self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.pause_memcached()
-        conn.unpause_memcached()
+        conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn_bk.pause_memcached()
+        conn_bk.unpause_memcached()
+        conn_bk.disconnect()
         output = backup_result.result(timeout=200)
         self.assertTrue("Backup successfully completed" in output[0],
                         "Backup failed with memcached crash and restart within 180 seconds")
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
         self.sleep(30)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
+                                                    self.backupset.name)
         o, e = conn.execute_command(command)
         if o:
             self.backups.append(o[0])
         conn.log_command_output(o, e)
         self.number_of_backups_taken += 1
         self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+                                          self.number_of_backups_taken,
                                           self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+                                            self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
+                                         self.backup_validation_files_location, merge=True)
 
     def backup_with_erlang_crash_and_restart(self):
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
@@ -1780,7 +1787,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         BucketOperationHelper.delete_bucket_or_assert(self.master,
                                                       bucket_to_delete,
                                                       self)
-        self.buckets.pop()
+        self.buckets = RestConnection(self.master).get_buckets()
         for task in ops_tasks:
             task.result()
 
