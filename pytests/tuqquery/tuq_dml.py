@@ -349,6 +349,22 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result, expected_result,
                              'Item did not appear')
 
+    #Test for creating duplicate prepared statement leaves cache locked
+    def test_duplicate_prepared(self):
+        self.query = 'prepare s1 from select * from `default`'
+        self.run_cbq_query()
+        self.query = 'prepare s1 from select * from `standard_bucket0`'
+        try:
+            self.run_cbq_query()
+        except Exception,ex:
+            self.assertTrue(str(ex).find('Unable to add name: duplicate name: s1') != -1, 'Incorrect error message thrown')
+        self.query = 'delete from system:prepareds'
+        self.run_cbq_query()
+        self.query = 'select * from system:prepareds'
+        actual_result = self.run_cbq_query()
+        self.assertEquals(actual_result['metrics']['resultCount'],0)
+
+
     def test_prepared_insert_json(self):
         num_docs = self.input.param('num_docs', 10)
         keys = []

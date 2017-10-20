@@ -2598,8 +2598,8 @@ class QueryTests(BaseTestCase):
             res = self.run_cbq_query()
 	    plan = ExplainPlanHelper(res)
             if("IN" in self.query):
-                self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "DistinctScan",
-                        "DistinctScan Operator is not used by this query")
+                self.assertTrue ("DistinctScan" not in plan,
+                        "DistinctScan Operator is being used by this query")
             else:
                 self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
                         "UnionScan Operator is not used by this query")
