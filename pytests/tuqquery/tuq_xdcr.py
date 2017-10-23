@@ -20,7 +20,7 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
                 self._replication_direction_str = "bidirection"
             else:
                 self._replication_direction_str = "unidirection"
-            self._override_clusters_structure()
+            UpgradeTests._override_clusters_structure()
         except:
             self.cluster.shutdown()
 
@@ -32,8 +32,7 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
             XDCRReplicationBaseTest.tearDown(self)
         except:
                 self.cluster.shutdown()
-        if not self._testMethodName in ['suite_tearDown',
-                                        'suite_setUp']:
+        if not self._testMethodName in ['suite_tearDown', 'suite_setUp']:
             return
         super(XDCRTests, self).tearDown()
 
@@ -44,7 +43,7 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         XDCRReplicationBaseTest.setUp(self)
         self.load(self.gens_load)
         self._wait_for_replication_to_catchup()
-        bucket = self._get_bucket('default', self.src_master)
+        bucket = UpgradeTests._get_bucket('default', self.src_master)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         fn = getattr(self, self.method_name)
         fn()
@@ -65,25 +64,3 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         fn()
         if self.with_reb:
             task.result()
-
-    def _override_clusters_structure(self):
-        UpgradeTests._override_clusters_structure(self)
-
-    def _create_buckets(self, nodes):
-        UpgradeTests._create_buckets(self, nodes)
-
-    def _setup_topology_chain(self):
-        UpgradeTests._setup_topology_chain(self)
-
-    def _set_toplogy_star(self):
-        UpgradeTests._set_toplogy_star(self)
-
-    def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
-        UpgradeTests._join_clusters(self, src_cluster_name, src_master,
-                                    dest_cluster_name, dest_master)
-
-    def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
-        UpgradeTests._replicate_clusters(self, src_master, dest_cluster_name, buckets)
-
-    def _get_bucket(self, bucket_name, server):
-        return UpgradeTests._get_bucket(self, bucket_name, server)

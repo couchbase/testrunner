@@ -6,11 +6,7 @@ class NULLTests(QueryTests):
         self.skip_generation = True
         self.analytics = False
         super(NULLTests, self).setUp()
-        self.gens_load = self.generate_docs()
-#        for bucket in self.buckets:
-#            self.cluster.bucket_flush(self.master, bucket=bucket,
-#                                  timeout=self.wait_timeout * 5)
-#        self.load(self.gens_load)
+        self.gens_load = self.gen_docs(type='nulls')
         self.full_list = self.generate_full_docs_list(self.gens_load)
 
     def suite_setUp(self):
@@ -510,34 +506,3 @@ class NULLTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
 
-    def generate_docs(self, name="tuq", start=0, end=0):
-        if not end:
-            end = self.num_items
-        generators = []
-        index = end/3
-        template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0":{1}, "P1":{2}, "P2":{3}}},'
-        template += '"story_point" : {4},"jira_tickets": {5}}}'
-        names = [str(i) for i in xrange(0, index)]
-        rates = xrange(0, index)
-        points = [[1,2,3],]
-        jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' +\
-                       '{"Number": 2, "project": "mb", "description": "test"}]',]
-        generators.append(DocumentGenerator(name, template,
-                                            names, rates, rates, rates, points, jira_tickets,
-                                            start=start, end=index))
-        template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0": null, "P1":null, "P2":null}},'
-        template += '"story_point" : [1,2,null],"jira_tickets": {1}}}'
-        jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' +\
-                       '{"Number": 2, "project": "mb", "description": null}]',]
-        names = [str(i) for i in xrange(index, index + index)]
-        generators.append(DocumentGenerator(name, template,
-                                            names, jira_tickets,
-                                            start=index, end=index + index))
-        template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P4": 2}},'
-        template += '"story_point" : [null,null],"jira_tickets": {1}}}'
-        names = [str(i) for i in xrange(index + index, end)]
-        jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' +\
-                       '{"Number": 2, "project": "mb"}]',]
-        generators.append(DocumentGenerator(name, template,
-                                            names, jira_tickets, start=index + index, end=end))
-        return generators

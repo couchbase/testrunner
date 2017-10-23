@@ -3,13 +3,10 @@ import copy
 import uuid
 import collections
 import json
-from tuq import ExplainPlanHelper
 from remote.remote_util import RemoteMachineShellConnection
 from tuqquery.tuq import QueryTests
 from couchbase_helper.documentgenerator import DocumentGenerator
 
-
-TIMEOUT_DELETED = 300
 
 class DMLQueryTests(QueryTests):
     def setUp(self):
@@ -40,7 +37,6 @@ class DMLQueryTests(QueryTests):
         self.test_update_where()
         self.test_insert_with_select()
         self.test_delete_where_clause_json()
-
 
 ############################################################################################################################
 #
@@ -637,7 +633,7 @@ class DMLQueryTests(QueryTests):
             self.query = 'explain delete from %s  use keys %s'  % (bucket.name, keys_to_delete)
             actual_result = self.run_cbq_query()
             self.log.info(actual_result["results"])
-	    plan = ExplainPlanHelper(actual_result)
+            plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(plan["~children"][0]["#operator"]=="KeyScan","KeysScan is not being used in delete query")
 
     def test_delete_keys_use_index_clause(self):
@@ -954,6 +950,7 @@ class DMLQueryTests(QueryTests):
         self.query = 'SELECT count(*) FROM %s '  % (self.buckets[0].name)
         actual_result = self.run_cbq_query()
         self.assertEqual(len(actual_result['results']), 1, 'Query was not run successfully')
+
 ############################################################################################################################
 #
 # UPDATE
@@ -1239,148 +1236,3 @@ class DMLQueryTests(QueryTests):
                     self.run_cbq_query()
                 except:
                     pass
-
-
-############################################################################################################################
-
-    def _insert_gen_keys(self, num_docs, prefix='a1_'):
-        def convert(data):
-            if isinstance(data, basestring):
-                return str(data)
-            elif isinstance(data, collections.Mapping):
-                return dict(map(convert, data.iteritems()))
-            elif isinstance(data, collections.Iterable):
-                return type(data)(map(convert, data))
-            else:
-                return data
-        keys = []
-        values = []
-        for gen_load in self.gens_load:
-            gen = copy.deepcopy(gen_load)
-            if len(keys) == num_docs:
-                    break
-            for i in xrange(gen.end):
-                if len(keys) == num_docs:
-                    break
-                key, value = gen.next()
-                key = prefix + key
-                value = convert(json.loads(value))
-                for bucket in self.buckets:
-                    self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, key, value)
-                    actual_result = self.run_cbq_query()
-                    self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-                keys.append(key)
-                values.append(value)
-        return keys, values
-
-    def _keys_are_deleted(self, keys):
-        end_time = time.time() + TIMEOUT_DELETED
-        #Checks for keys deleted ...
-        while time.time() < end_time:
-            for bucket in self.buckets:
-                self.query = 'select meta(%s).id from %s'  % (bucket.name, bucket.name)
-                actual_result = self.run_cbq_query()
-                found = False
-                for key in keys:
-                    if actual_result['results'].count({'id' : key}) != 0:
-                        found = True
-                        break
-                if not found:
-                    return
-            self.sleep(3)
-        self.fail('Keys %s are still present' % keys)
-
-    def _common_insert(self, keys, values):
-        for bucket in self.buckets:
-            for i in xrange(len(keys)):
-                v = '"%s"' % values[i] if isinstance(values[i], str) else values[i]
-                self.query = 'INSERT into %s (key , value) VALUES ("%s", "%s")' % (bucket.name, keys[i], values[i])
-                actual_result = self.run_cbq_query()
-                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-
-    def _common_check(self, key, expected_item_value, upsert=False):
-        clause = 'UPSERT' if upsert else 'INSERT'
-        for bucket in self.buckets:
-            inserted = expected_item_value
-            if isinstance(expected_item_value, str):
-                inserted = '"%s"' % expected_item_value
-            if expected_item_value is None:
-                inserted = 'null'
-            self.query = '%s into %s (key , value) VALUES ("%s", %s)' % (clause, bucket.name, key, inserted)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select * from %s use keys ["%s"]'  % (bucket.name, key)
-            try:
-                actual_result = self.run_cbq_query()
-            except:
-                pass
-            self.sleep(15, 'Wait for index rebuild')
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['results'].count({bucket.name : expected_item_value}), 1,
-                             'Item did not appear')
-
-    def _common_check_values(self, keys, expected_item_values, upsert=False):
-        clause = 'UPSERT' if upsert else 'INSERT'
-        for bucket in self.buckets:
-            values = ''
-            for k, v in zip(keys, expected_item_values):
-                inserted = v
-                if isinstance(v, str):
-                    inserted = '"%s"' % v
-                if v is None:
-                    inserted = 'null'
-                values += '("%s", %s),' % (k, inserted)
-            self.query = '%s into %s (key , value) VALUES %s' % (clause, bucket.name, values[:-1])
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select * from %s use keys ["%s"]'  % (bucket.name, '","'.join(keys))
-            try:
-                self.run_cbq_query()
-                self._wait_for_index_online(bucket, '#primary')
-            except:
-                pass
-            self.sleep(15, 'Wait for index rebuild')
-            actual_result = self.run_cbq_query()
-            for value in expected_item_values:
-                self.assertEqual(actual_result['results'].count({bucket.name : value}), expected_item_values.count(value),
-                                'Item did not appear')
-
-    def load_with_dir(self, generators_load, exp=0, flag=0,
-             kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
-             timeout_secs=30, op_type='create', start_items=0):
-        gens_load = {}
-        for bucket in self.buckets:
-            tmp_gen = []
-            for generator_load in generators_load:
-                tmp_gen.append(copy.deepcopy(generator_load))
-            gens_load[bucket] = copy.deepcopy(tmp_gen)
-        items = 0
-        for gen_load in gens_load[self.buckets[0]]:
-                items += (gen_load.end - gen_load.start)
-        shell = RemoteMachineShellConnection(self.master)
-        try:
-            for bucket in self.buckets:
-                self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
-                self.log.info("Delete directory's content %s/data/default/%s ..." % (self.directory, bucket.name))
-                shell.execute_command('rm -rf %s/data/default/*' % self.directory)
-                self.log.info("Create directory %s/data/default/%s..." % (self.directory, bucket.name))
-                shell.execute_command('mkdir -p %s/data/default/%s' % (self.directory, bucket.name))
-                self.log.info("Load %s documents to %s/data/default/%s..." % (items, self.directory, bucket.name))
-                for gen_load in gens_load:
-                    for i in xrange(gen_load.end):
-                        key, value = gen_load.next()
-                        out = shell.execute_command("echo '%s' > %s/data/default/%s/%s.json" % (value, self.directory,
-                                                                                                bucket.name, key))
-                self.log.info("LOAD IS FINISHED")
-        finally:
-            shell.disconnect()
-        self.num_items = items + start_items
-        self.log.info("LOAD IS FINISHED")
-
-    def _delete_ids(self, result):
-        for item in result:
-            if '_id' in item:
-                del item['_id']
-            for bucket in self.buckets:
-                if bucket.name in item and 'id' in item[bucket.name]:
-                    del item[bucket.name]['_id']

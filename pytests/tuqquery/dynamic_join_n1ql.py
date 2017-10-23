@@ -1,6 +1,6 @@
 import copy
 import re
-from tuqquery.newtuq import QueryTests
+from tuqquery.tuq import QueryTests
 from couchbase_helper.documentgenerator import DocumentGenerator
 
 

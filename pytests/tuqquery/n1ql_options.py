@@ -1,10 +1,6 @@
-import json
-import math
-from remote.remote_util import RemoteMachineShellConnection
 
 from tuqquery.tuq import QueryTests
 from pytests.tuqquery.tuq import ExplainPlanHelper
-
 
 class OptionsTests(QueryTests):
     def setUp(self):
@@ -338,39 +334,6 @@ class OptionsRestTests(QueryTests):
             actual_result = self.curl_helper(statement)
             self.assertTrue(actual_result['metrics']['resultCount'] == 144)
 
-
-
-
-    def curl_helper(self,statement):
-         shell = RemoteMachineShellConnection(self.master)
-         cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement={3}'".\
-                format('Administrator', 'password', self.master.ip,statement ,self.curl_path)
-         output, error = shell.execute_command(cmd)
-         new_list = [string.strip() for string in output]
-         concat_string = ''.join(new_list)
-         json_output=json.loads(concat_string)
-         return json_output
-
-    def prepare_helper(self,statement):
-         shell = RemoteMachineShellConnection(self.master)
-         cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&$type="Engineer"&$name="employee-4"\''.\
-                format('Administrator', 'password', self.master.ip,statement ,self.curl_path)
-         output, error = shell.execute_command(cmd)
-         new_list = [string.strip() for string in output]
-         concat_string = ''.join(new_list)
-         json_output=json.loads(concat_string)
-         return json_output
-
-    def prepare_helper2(self,statement):
-         shell = RemoteMachineShellConnection(self.master)
-         cmd = '{4} -u {0}:{1} http://{2}:8093/query/service -d \'prepared="{3}"&args=["Engineer","employee-4"]\''.\
-                format('Administrator', 'password', self.master.ip,statement ,self.curl_path)
-         output, error = shell.execute_command(cmd)
-         new_list = [string.strip() for string in output]
-         concat_string = ''.join(new_list)
-         json_output=json.loads(concat_string)
-         return json_output
-
     # Test for MB-25664:panic when right side of LIKE is depends on field
     def test_like_field_in_document(self):
         for bucket in self.buckets:
@@ -423,10 +386,4 @@ class OptionsRestTests(QueryTests):
             self.query = 'SELECT META().id FROM %s WHERE k0 = "XYZ" AND ANY v IN ka SATISFIES v LIKE "%s" END' %(bucket.name,"def%")
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['metrics']['resultCount'],1)
-
-
-
-
-
-
 

@@ -3,24 +3,17 @@ import threading
 import json
 import uuid
 import time
-
-from newtuq import QueryTests
+from tuq import QueryTests
 from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
 
-
-
 class QueryMonitoringTests(QueryTests):
     def setUp(self):
         super(QueryMonitoringTests, self).setUp()
-        self.named_prepare = self.input.param("named_prepare", None)
-        self.encoded_prepare = self.input.param("encoded_prepare", False)
-        self.cover = self.input.param("cover", False)
         self.threadFailure = False
         self.run_cbq_query('delete from system:completed_requests')
         self.run_cbq_query('delete from system:prepareds')
-        self.rest = RestConnection(self.master)
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
         self.rest.set_completed_requests_max_entries(self.master, 4000)
 
@@ -821,95 +814,3 @@ class QueryMonitoringTests(QueryTests):
         self.assertTrue(result['metrics']['resultCount'] == 0)
 
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
-
-##############################################################################################
-#
-#   Common Helper Functions
-#
-##############################################################################################
-
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
-                      encoded_plan=None):
-        self.log.info("-"*100)
-        if query is None:
-            query = self.query
-        if server is None:
-           server = self.master
-           if self.input.tuq_client and "client" in self.input.tuq_client:
-               server = self.tuq_client
-        cred_params = {'creds': []}
-        rest = RestConnection(server)
-        username = rest.username
-        password = rest.password
-        cred_params['creds'].append({'user': username, 'pass': password})
-        for bucket in self.buckets:
-            if bucket.saslPassword:
-                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
-        query_params.update(cred_params)
-        if self.use_rest:
-            query_params.update({'scan_consistency': self.scan_consistency})
-            self.log.info('RUN QUERY %s' % query)
-            if hasattr(self, 'query_params') and self.query_params:
-                query_params = self.query_params
-
-            if self.analytics:
-                query = query + ";"
-                for bucket in self.buckets:
-                    query = query.replace(bucket.name,bucket.name+"_shadow")
-                self.log.info('RUN QUERY %s' % query)
-                result = rest.analytics_tool(query, 8095, query_params=query_params,
-                                                               is_prepared=is_prepared, named_prepare=self.named_prepare,
-                                                               encoded_plan=encoded_plan, servers=self.servers)
-
-            else :
-                result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
-                                                           is_prepared=is_prepared, named_prepare=self.named_prepare,
-                                                           encoded_plan=encoded_plan, servers=self.servers)
-        else:
-            if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
-                                                            "shell/cbq/cbq ","","","","","","")
-            else:
-                if not(self.isprepared):
-                    query = query.replace('"', '\\"')
-                    query = query.replace('`', '\\`')
-                    cmd = "%s/cbq  -engine=http://%s:%s/ -q -u %s -p %s" % (
-                    self.path, server.ip, server.port, username, password)
-
-                    output = self.shell.execute_commands_inside(cmd,query,"","","","","")
-                    if not(output[0] == '{'):
-                        output1 = '{'+str(output)
-                    else:
-                        output1 = output
-                    result = json.loads(output1)
-        if isinstance(result, str) or 'errors' in result:
-            raise CBQError(result, server.ip)
-        if 'metrics' in result:
-            self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
-        return result
-
-    def prepared_common_body(self,server=None):
-        self.isprepared = True
-        result_no_prepare = self.run_cbq_query(server=server)['results']
-        if self.named_prepare:
-            if 'concurrent' not in self.named_prepare:
-                self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
-            query = "PREPARE %s from %s" % (self.named_prepare,self.query)
-        else:
-            query = "PREPARE %s" % self.query
-        prepared = self.run_cbq_query(query=query,server=server)['results'][0]
-        if self.encoded_prepare and len(self.servers) > 1:
-            encoded_plan=prepared['encoded_plan']
-            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan,
-                                                     server=server)['results']
-        else:
-            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True,server=server)['results']
-        if(self.cover):
-            self.assertTrue("IndexScan in %s" % result_with_prepare)
-            self.assertTrue("covers in %s" % result_with_prepare)
-            self.assertTrue("filter_covers in %s" % result_with_prepare)
-            self.assertFalse('ERROR' in (str(word).upper() for word in result_with_prepare))
-        msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
-        self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
-                          msg % (result_no_prepare[:100],result_no_prepare[-100:],
-                                 result_with_prepare[:100],result_with_prepare[-100:]))

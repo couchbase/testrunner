@@ -1,9 +1,6 @@
 import logging
 import threading
 import json
-import uuid
-import time
-
 from tuq_monitoring import QueryMonitoringTests
 
 class QueryProfilingTests(QueryMonitoringTests):
@@ -222,6 +219,7 @@ class QueryProfilingTests(QueryMonitoringTests):
         thread1.join()
         result = self.run_cbq_query('select * from system:completed_requests')
         self.log.info(json.dumps(result, sort_keys=True, indent=3))
+
 
     def run_parallel_query(self, server):
         logging.info('parallel query is active')

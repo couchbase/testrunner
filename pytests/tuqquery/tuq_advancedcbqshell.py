@@ -20,8 +20,7 @@ class AdvancedQueryTests(QueryTests):
         self.cbqpath = '%scbq -quiet -u %s -p %s' % (self.path, self.username, self.password)
 
     def tearDown(self):
-        if self._testMethodName == 'suite_tearDown':
-            self.skip_buckets_handle = False
+        self.skip_buckets_handle = False if self._testMethodName == 'suite_tearDown' else None
         super(AdvancedQueryTests, self).tearDown()
 
     def test_url(self):
@@ -494,108 +493,3 @@ class AdvancedQueryTests(QueryTests):
                 queries = ['drop primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,True )
                 print o
-
-##############################################################################################
-#
-#   Helper Functions
-#
-##############################################################################################
-
-    def execute_commands_inside(self, main_command, query, queries, bucket1, password, bucket2, source,
-                                subcommands=[], min_output_size=0,
-                                end_msg='', timeout=250):
-        shell = RemoteMachineShellConnection(self.master)
-        shell.extract_remote_info()
-        filename = "/tmp/test2"
-        iswin = False
-
-        if shell.info.type.lower() == 'windows':
-            iswin = True
-            filename = "/cygdrive/c/tmp/test.txt"
-
-        filedata = ""
-        if not (query == ""):
-            main_command = main_command + " -s=\"" + query + '"'
-        elif (shell.remote and not (queries == "")):
-            sftp = shell._ssh_client.open_sftp()
-            filein = sftp.open(filename, 'w')
-            for query in queries:
-                filein.write(query)
-                filein.write('\n')
-            fileout = sftp.open(filename, 'r')
-            filedata = fileout.read()
-            fileout.close()
-        elif not (queries == ""):
-            f = open(filename, 'w')
-            for query in queries:
-                f.write(query)
-                f.write('\n')
-            f.close()
-            fileout = open(filename, 'r')
-            filedata = fileout.read()
-            fileout.close()
-
-        newdata = filedata.replace("bucketname", bucket2)
-        newdata = newdata.replace("user", bucket1)
-        newdata = newdata.replace("pass", password)
-        newdata = newdata.replace("bucket1", bucket1)
-
-        newdata = newdata.replace("user1", bucket1)
-        newdata = newdata.replace("pass1", password)
-        newdata = newdata.replace("bucket2", bucket2)
-        newdata = newdata.replace("user2", bucket2)
-        newdata = newdata.replace("pass2", password)
-
-        if (shell.remote and not (queries == "")):
-            f = sftp.open(filename, 'w')
-            f.write(newdata)
-            f.close()
-        elif not (queries == ""):
-            f = open(filename, 'w')
-            f.write(newdata)
-            f.close()
-        if not (queries == ""):
-            if (source):
-                if iswin:
-                    main_command = main_command + "  -s=\"\SOURCE " + 'c:\\\\tmp\\\\test.txt'
-                else:
-                    main_command = main_command + "  -s=\"\SOURCE " + filename + '"'
-            else:
-                if iswin:
-                    main_command = main_command + " -f=" + 'c:\\\\tmp\\\\test.txt'
-                else:
-                    main_command = main_command + " -f=" + filename
-
-        log.info("running command on {0}: {1}".format(self.master.ip, main_command))
-        output = ""
-        if shell.remote:
-            stdin, stdout, stderro = shell._ssh_client.exec_command(main_command)
-            time.sleep(20)
-            count = 0
-            for line in stdout.readlines():
-                if (count >= 0):
-                    output += line.strip()
-                    output = output.strip()
-                    if "Inputwasnotastatement" in output:
-                        output = "status:FAIL"
-                        break
-                    if "timeout" in output:
-                        output = "status:timeout"
-                else:
-                    count += 1
-            stdin.close()
-            stdout.close()
-            stderro.close()
-        else:
-            p = Popen(main_command, shell=True, stdout=PIPE, stderr=PIPE)
-            stdout, stderro = p.communicate()
-            output = stdout
-            print output
-            time.sleep(1)
-        if (shell.remote and not (queries == "")):
-            sftp.remove(filename)
-            sftp.close()
-        elif not (queries == ""):
-            os.remove(filename)
-
-        return (output)
