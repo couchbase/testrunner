@@ -1,4 +1,5 @@
 import logging
+import random
 
 from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.query_definitions import QueryDefinition
@@ -31,10 +32,12 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
             index_name = "index_name_"+str(x)
-            query_definition = QueryDefinition(index_name=index_name, index_fields = ["job_title"],
-                        query_template = self.query_template, groups = ["simple"])
+            query_definition = QueryDefinition(
+                index_name=index_name, index_fields=["VMs"],
+                query_template=self.query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
-        self.multi_create_index(buckets=self.buckets, query_definitions=self.load_query_definitions,
+        self.multi_create_index(buckets=self.buckets,
+                                query_definitions=self.load_query_definitions,
                                 deploy_node_info=self.deploy_node_info)
         log.info("Setting indexer memory quota to 256 MB...")
         rest.set_indexer_memoryQuota(indexMemoryQuota=256)
@@ -121,7 +124,14 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                 log.info("Indexer out of OOM...")
                 break
         self.sleep(60)
-        self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
+        check_for_oom = self._validate_indexer_status_oom()
+        count = 0
+        while check_for_oom and count < 15:
+            self.sleep(60)
+            check_for_oom = self._validate_indexer_status_oom()
+            count += 1
+        if count == 15:
+            self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.load_query_definitions, verify_results=False)
@@ -322,7 +332,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.create_index(self.buckets[0].name, replica_definition, deploy_node_info)
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
         self.multi_query_using_index(buckets=self.buckets,
-                    query_definitions=[replica_definition])
+                    query_definitions=[replica_definition], verify_results=False)
 
     def test_oom_create_build_index(self):
         """
