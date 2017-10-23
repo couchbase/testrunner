@@ -20,7 +20,8 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
         self.input.test_params.update({"default_bucket": False})
         super(FunctionsBaseTest, self).setUp()
         self.server = self.master
-        self.rest = RestConnection(self.master)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
         self.log.info(
             "Setting the min possible memory quota so that adding mode nodes to the cluster wouldn't be a problem.")
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)

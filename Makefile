@@ -53,7 +53,7 @@ e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 
 test-functions-sanity-tests:
-	python scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-single-node.ini conf/functions/functions_sanity.conf $(VERBOSE) $(DEBUG)
+	python scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr_n1ql_2i.ini conf/functions/functions_sanity.conf $(VERBOSE) $(DEBUG)
 
 test-xdcr-merge:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/py-xdcrmerge.conf
