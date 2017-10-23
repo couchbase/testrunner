@@ -9,7 +9,7 @@ from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, WIN_COUCHBASE_SAMPLE_PATH
                           WIN_COUCHBASE_LOGS_PATH, WIN_TMP_PATH,\
                           WIN_BACKUP_PATH
 import logger
-import random
+import random, subprocess
 import time
 import zlib
 
@@ -45,7 +45,13 @@ class CliBaseTest(BaseTestCase):
         self.full_v = None
         self.short_v = None
         self.build_number = None
-        self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
+        cmd = 'curl %s:8091/diag/eval -u Administrator:password ' % self.master.ip
+        cmd += '-d "path_config:component_path(bin)."'
+        bin_path = subprocess.check_output(cmd, shell=True)
+        if "bin" not in bin_path:
+            self.fail("Check if cb server install on %s" % self.master.ip)
+        else:
+            self.cli_command_path = bin_path.replace('"', '') + "/"
         self.root_path = LINUX_ROOT_PATH
         self.tmp_path = "/tmp/"
         self.cmd_backup_path = LINUX_BACKUP_PATH
@@ -62,12 +68,10 @@ class CliBaseTest(BaseTestCase):
             self.tmp_path = WIN_TMP_PATH
             self.cmd_backup_path = WIN_BACKUP_C_PATH
             self.backup_path = WIN_BACKUP_PATH
-            self.cli_command_path = WIN_COUCHBASE_BIN_PATH
             self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH
             self.log_path = WIN_COUCHBASE_LOGS_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
-            self.cli_command_path = MAC_COUCHBASE_BIN_PATH
         self.full_v, self.short_v, self.build_number = self.shell.get_cbversion(type)
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
