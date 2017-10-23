@@ -83,11 +83,44 @@ class FunctionsSanity(FunctionsBaseTest):
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
 
-    def test_doc_timer_events_from_handler_code(self):
+    def test_doc_timer_events_from_handler_code_with_n1ql(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name,
                                               "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    docTimer(timerCallback, meta.id, expiry);\n}\nfunction timerCallback(docid, expiry) {\n    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'timerCallback');\n    query.execQuery();\n}\n",
+                                              )
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_cron_timer_events_from_handler_code_with_n1ql(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,
+                                              "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    cronTimer(NDtimerCallback, meta.id, expiry);\n}\nfunction NDtimerCallback(docid, expiry) {\n    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback');\n    query.execQuery();\n}\n",
+                                              )
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_doc_timer_events_from_handler_code_with_bucket_ops(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,
+                                              "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    docTimer(timerCallback, meta.id, expiry);\n}\nfunction timerCallback(docid, expiry) {\n    dst_bucket[docid] = 'from timerCallback';\n}\n",
+                                              )
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_cron_timer_events_from_handler_code_with_bucket_ops(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,
+                                              "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    cronTimer(NDtimerCallback, meta.id, expiry);\n}\nfunction NDtimerCallback(docid, expiry) {\n    dst_bucket[docid] = 'from NDtimerCallback';\n}\n",
                                               )
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
