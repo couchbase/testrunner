@@ -1,5 +1,5 @@
 import copy
-import os, re
+import os, re, subprocess
 import shutil
 import urllib
 
@@ -60,7 +60,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cmd_ext = ""
         self.should_fail = self.input.param("should-fail", False)
         self.database_path = COUCHBASE_DATA_PATH
-        self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
+        cmd =  'curl %s:8091/diag/eval -u Administrator:password ' % self.master.ip
+        cmd += '-d "path_config:component_path(bin)."'
+        bin_path  = subprocess.check_output(cmd, shell=True)
+        if "bin" not in bin_path:
+            self.fail("Check if cb server install on %s" % self.master.ip)
+        else:
+            self.cli_command_location = bin_path.replace('"','') + "/"
         self.debug_logs = self.input.param("debug_logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.passwd_env = self.input.param("passwd-env", False)
@@ -74,18 +80,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.long_help_flag = "--help"
         self.short_help_flag = "-h"
         if info == 'linux':
-            self.cli_command_location = LINUX_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         elif info == 'windows':
             self.os_name = "windows"
             self.cmd_ext = ".exe"
             self.database_path = WIN_COUCHBASE_DATA_PATH
-            self.cli_command_location = WIN_COUCHBASE_BIN_PATH_RAW
             self.root_path = WIN_ROOT_PATH
             self.tmp_path = WIN_TMP_PATH
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
-            self.cli_command_location = MAC_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
             raise Exception("OS not supported.")
