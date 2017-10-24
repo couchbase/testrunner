@@ -1,11 +1,12 @@
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.functions.functions_base import FunctionsBaseTest, log
+from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_base import EventingBaseTest, log
 
 
-class FunctionsSanity(FunctionsBaseTest):
+class EventingSanity(EventingBaseTest):
     def setUp(self):
-        super(FunctionsSanity, self).setUp()
+        super(EventingSanity, self).setUp()
         if self.create_functions_buckets:
             self.bucket_size = 100
             log.info(self.bucket_size)
@@ -23,13 +24,12 @@ class FunctionsSanity(FunctionsBaseTest):
         self.expiry = 3
 
     def tearDown(self):
-        super(FunctionsSanity, self).tearDown()
+        super(EventingSanity, self).tearDown()
 
     def test_create_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc, meta) {\n    log('document', doc);\n    dst_bucket[meta.id] = 'hello world';\n}\nfunction OnDelete(doc) {\n}")
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -38,8 +38,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_delete_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnDelete(doc) {\n    log('document', doc);\n    dst_bucket[doc.id] = 'hello world';\n}\n")
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_DELETE)
         self.deploy_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -51,8 +50,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_expiry_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, exp=1)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnDelete(doc) {\n    log('document', doc);\n    dst_bucket[doc.id] = 'hello world';\n}\n")
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_DELETE)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the expiry mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -61,8 +59,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_update_mutation_for_dcp_stream_boundary_from_now(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc,meta) {\n    log('document', doc);\n    dst_bucket[meta.id] = 'hello world';\n}\n",
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # update all documents
@@ -75,9 +72,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_n1ql_query_execution_from_handler_code(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc,meta) {\n    var docId = meta.id;\n    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( :docId ,'Hello World');\n    query.execQuery();\n}\n",
-                                              )
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -86,9 +81,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_doc_timer_events_from_handler_code_with_n1ql(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    docTimer(timerCallback, meta.id, expiry);\n}\nfunction timerCallback(docid, expiry) {\n    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'timerCallback');\n    query.execQuery();\n}\n",
-                                              )
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE_WITH_DOC_TIMER)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
@@ -97,9 +90,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_cron_timer_events_from_handler_code_with_n1ql(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    cronTimer(NDtimerCallback, meta.id, expiry);\n}\nfunction NDtimerCallback(docid, expiry) {\n    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback');\n    query.execQuery();\n}\n",
-                                              )
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
@@ -108,9 +99,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_doc_timer_events_from_handler_code_with_bucket_ops(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    docTimer(timerCallback, meta.id, expiry);\n}\nfunction timerCallback(docid, expiry) {\n    dst_bucket[docid] = 'from timerCallback';\n}\n",
-                                              )
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
@@ -119,9 +108,7 @@ class FunctionsSanity(FunctionsBaseTest):
     def test_cron_timer_events_from_handler_code_with_bucket_ops(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,
-                                              "function OnUpdate(doc,meta) {\n    expiry = Math.round((new Date()).getTime() / 1000) + 5;\n    cronTimer(NDtimerCallback, meta.id, expiry);\n}\nfunction NDtimerCallback(docid, expiry) {\n    dst_bucket[docid] = 'from NDtimerCallback';\n}\n",
-                                              )
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)

@@ -1,6 +1,7 @@
 import logging
 import random
 import datetime
+import os
 from TestInput import TestInputSingleton
 from lib.membase.api.rest_client import RestConnection
 from pytests.basetestcase import BaseTestCase
@@ -10,7 +11,7 @@ from pytests.query_tests_helper import QueryHelperTests
 log = logging.getLogger(__name__)
 
 
-class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
+class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def setUp(self):
         if self._testMethodDoc:
             log.info("\n\nStarting Test: %s \n%s" % (self._testMethodName, self._testMethodDoc))
@@ -18,7 +19,7 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
             log.info("\n\nStarting Test: %s" % (self._testMethodName))
         self.input = TestInputSingleton.input
         self.input.test_params.update({"default_bucket": False})
-        super(FunctionsBaseTest, self).setUp()
+        super(EventingBaseTest, self).setUp()
         self.server = self.master
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
@@ -36,7 +37,7 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
         self.function_name = "Function_{0}".format(random.randint(1, 1000000000))
 
     def tearDown(self):
-        super(FunctionsBaseTest, self).tearDown()
+        super(EventingBaseTest, self).tearDown()
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=10000, cleanup_timers=False,
@@ -48,8 +49,11 @@ class FunctionsBaseTest(QueryHelperTests, BaseTestCase):
                                   cpp_worker_thread_count=1):
         body = {}
         body['appname'] = appname
-        # body['id'] = id
-        body['appcode'] = appcode
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, appcode)
+        fh = open(abs_file_path, "r")
+        body['appcode'] = fh.read()
+        fh.close()
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
