@@ -109,6 +109,8 @@ class DrainRateTests(unittest.TestCase):
         #start whenever drain_queue is > 0
         rest = RestConnection(self.master)
         start = time.time()
+        self.log.info("wait 2 seconds for bucket stats are up")
+        time.sleep(2)
         stats = rest.get_bucket_stats(self.bucket)
         self.log.info("current ep_queue_size: {0}".format(stats["ep_queue_size"]))
         self.drained = RebalanceHelper.wait_for_persistence(self.master, self.bucket, timeout=300)
