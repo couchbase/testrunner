@@ -2,7 +2,7 @@ from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest, log
-
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 class EventingSanity(EventingBaseTest):
     def setUp(self):
@@ -44,16 +44,18 @@ class EventingSanity(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, on_delete=True)
         self.undeploy_and_delete_function(body)
 
     def test_expiry_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, exp=1)
+        # set expiry pager interval
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_DELETE)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the expiry mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, on_delete=True)
         self.undeploy_and_delete_function(body)
 
     def test_update_mutation_for_dcp_stream_boundary_from_now(self):
