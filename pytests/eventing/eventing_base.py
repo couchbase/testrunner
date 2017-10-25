@@ -34,7 +34,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.docs_per_day = self.input.param("doc-per-day", 1)
         random.seed(datetime.time)
-        self.function_name = "Function_{0}".format(random.randint(1, 1000000000))
+        self.function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
 
     def tearDown(self):
         super(EventingBaseTest, self).tearDown()

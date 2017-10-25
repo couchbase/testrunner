@@ -4,6 +4,7 @@ from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest, log
 from membase.helper.cluster_helper import ClusterOperationHelper
 
+
 class EventingSanity(EventingBaseTest):
     def setUp(self):
         super(EventingSanity, self).setUp()
@@ -74,7 +75,8 @@ class EventingSanity(EventingBaseTest):
     def test_n1ql_query_execution_from_handler_code(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE,
+                                              sock_batch_size=10, worker_count=4, cpp_worker_thread_count=4)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
