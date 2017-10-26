@@ -126,6 +126,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                          "Bucket operations from handler code took lot of time to complete or didn't go through")
 
     def deploy_function(self, body):
+        body['settings']['deployment_status'] = True
+        body['settings']['processing_status'] = True
         # save the function so that it appears in UI
         content = self.rest.save_function(self.function_name, body)
         log.info("saveApp API : {0}".format(content))
@@ -138,11 +140,19 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.wait_for_bootstrap_to_complete(self.function_name)
 
     def undeploy_and_delete_function(self, body):
+        self.undeploy_function(body)
+        self.delete_function()
+
+    def undeploy_function(self, body):
         body['settings']['deployment_status'] = False
         body['settings']['processing_status'] = False
         # undeploy the function
         content = self.rest.deploy_function(self.function_name, body)
-        log.info("undeploy Application : {0}".format(content))
+        log.info("Undeploy Application : {0}".format(content))
+
+    def delete_function(self):
         # delete the function from the UI and backend
         self.rest.delete_function_from_temp_store(self.function_name)
         self.rest.delete_function(self.function_name)
+        log.info("Delete Application : {0}".format(self.function_name))
+

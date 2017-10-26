@@ -119,3 +119,15 @@ class EventingSanity(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
         self.undeploy_and_delete_function(body)
+
+    def test_function_life_cycle_operations_in_a_loop(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        for i in xrange(1, 5):
+            self.cluster.bucket_flush(self.master, self.dst_bucket_name)
+            self.deploy_function(body)
+            self.undeploy_function(body)
+        # Wait for eventing to catch up with all the create mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
