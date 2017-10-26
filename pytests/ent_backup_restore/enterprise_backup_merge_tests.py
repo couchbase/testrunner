@@ -1,6 +1,7 @@
 from couchbase_helper.cluster import Cluster
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupMergeBase
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 
 
 class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):

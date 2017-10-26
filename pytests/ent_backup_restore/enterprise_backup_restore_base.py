@@ -67,6 +67,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Check if cb server install on %s" % self.master.ip)
         else:
             self.cli_command_location = bin_path.replace('"','') + "/"
+            if "C:" in self.cli_command_location:
+                self.cli_command_location = \
+                                   self.cli_command_location.replace("C:","/cygdrive/c")
         self.debug_logs = self.input.param("debug-logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.passwd_env = self.input.param("passwd-env", False)
