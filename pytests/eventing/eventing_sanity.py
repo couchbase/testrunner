@@ -30,7 +30,8 @@ class EventingSanity(EventingBaseTest):
     def test_create_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
+                                              sock_batch_size=10, worker_count=4, cpp_worker_thread_count=4)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -75,8 +76,9 @@ class EventingSanity(EventingBaseTest):
     def test_n1ql_query_execution_from_handler_code(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE,
-                                              sock_batch_size=10, worker_count=4, cpp_worker_thread_count=4)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
+        # Enable this after MB-26527 is fixed
+        # sock_batch_size=10, worker_count=4, cpp_worker_thread_count=4)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
