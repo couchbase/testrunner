@@ -30,8 +30,7 @@ class EventingSanity(EventingBaseTest):
     def test_create_mutation_for_dcp_stream_boundary_from_beginning(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
-                                              sock_batch_size=10, worker_count=4, cpp_worker_thread_count=4)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -64,7 +63,8 @@ class EventingSanity(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
-                                              dcp_stream_boundary="from_now")
+                                              dcp_stream_boundary="from_now", sock_batch_size=10, worker_count=4,
+                                              cpp_worker_thread_count=4)
         self.deploy_function(body)
         # update all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
