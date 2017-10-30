@@ -146,6 +146,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def undeploy_function(self, body):
         body['settings']['deployment_status'] = False
         body['settings']['processing_status'] = False
+        # save the function so that it disappears from UI
+        content = self.rest.save_function(self.function_name, body)
+        log.info("saveApp API : {0}".format(content))
         # undeploy the function
         content = self.rest.deploy_function(self.function_name, body)
         log.info("Undeploy Application : {0}".format(content))
