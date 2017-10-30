@@ -524,6 +524,108 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
         return fts_query, es_query
 
+    @staticmethod
+    def construct_geo_location_query(lon=None, lat=None,
+                                     distance=None, dist_unit=None):
+        """
+        Returns a geo location query for Couchbase and Elastic search
+        """
+        from lib.couchbase_helper.data import LON_LAT
+        if not lon:
+            lon_lat = random.choice(LON_LAT)
+            lon = lon_lat[0]
+            lat = lon_lat[1]
+            distance = random.choice([10, 100, 500, 1000, 10000])
+            dist_unit = random.choice(["km", "mi"])
+
+        fts_query = {
+            "location": {
+                "lon": lon,
+                "lat": lat
+            },
+            "distance": str(distance)+dist_unit,
+            "field": "geo"
+        }
+
+        es_query= {
+            "query": {
+                "match_all" : {}
+            },
+            "filter" : {
+                "geo_distance" : {
+                     "distance" : str(distance)+dist_unit,
+                     "geo" : {
+                         "lat" : lat,
+                         "lon" : lon
+                     }
+                }
+            }
+        }
+
+        if bool(random.getrandbits(1)):
+            fts_query['location'] = [lon, lat]
+            es_query['filter']['geo_distance']['geo'] = [lon, lat]
+
+        return fts_query, es_query
+
+    @staticmethod
+    def construct_geo_bounding_box_query(lon1=None, lat1=None,
+                                     lon2=None, lat2=None):
+        """
+        Returns a geo bounding box query for Couchbase and Elastic search
+        """
+        from lib.couchbase_helper.data import LON_LAT
+        if not lon1:
+            lon_lat1 = random.choice(LON_LAT)
+            lon_lat2 = random.choice(LON_LAT)
+            lon1 = lon_lat1[0]
+            lat1 = lon_lat1[1]
+            lon2 = lon_lat2[0]
+            lat2 = lon_lat2[1]
+
+        fts_query = {
+            "top_left": {
+                "lon": lon1,
+                "lat": lat1
+            },
+            "bottom_right": {
+                "lon": lon2,
+                "lat": lat2
+            },
+            "field": "geo"
+        }
+
+        es_query = {
+            "query" : {
+                "match_all" : {}
+            },
+            "filter" : {
+                "geo_bounding_box" : {
+                    "geo" : {
+                        "top_left" : {
+                            "lat" : lat1,
+                            "lon" : lon1
+                        },
+                        "bottom_right" : {
+                            "lat" : lat2,
+                            "lon" : lon2
+                        }
+                    }
+                }
+            }
+        }
+
+
+        if bool(random.getrandbits(1)):
+            fts_query['top_left'] = [lon1, lat1]
+            fts_query['bottom_right'] = [lon2, lat2]
+            es_query['filter']['geo_bounding_box']['geo']['top_left'] = \
+                [lon1, lat1]
+            es_query['filter']['geo_bounding_box']['geo']['bottom_right'] = \
+                [lon2, lat2]
+
+        return fts_query, es_query
+
     def construct_compound_query(self):
         """
         This is used to consolidate more than one type of query

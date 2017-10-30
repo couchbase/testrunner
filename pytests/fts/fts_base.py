@@ -3208,6 +3208,18 @@ class FTSBaseTest(unittest.TestCase):
                                 end=num_keys)
         self._cb_cluster.load_all_buckets_from_generator(gen)
 
+    def load_earthquakes(self, num_keys=None):
+        """
+        Loads geo-spatial jsons from earthquakes.json .
+        """
+        if not num_keys:
+            num_keys = self._num_items
+
+        gen = GeoSpatialDataLoader("earthquake",
+                                    start=0,
+                                    end=num_keys)
+        self._cb_cluster.load_all_buckets_from_generator(gen)
+
     def perform_update_delete(self, fields_to_update=None):
         """
           Call this method to perform updates/deletes on your cluster.
@@ -3372,6 +3384,7 @@ class FTSBaseTest(unittest.TestCase):
                 continue
             retry_count = retry
             prev_count = 0
+            es_index_count = 0
             while retry_count > 0:
                 try:
                     index_doc_count = index.get_indexed_doc_count()
@@ -3383,17 +3396,27 @@ class FTSBaseTest(unittest.TestCase):
                                          index_doc_count))
                     else:
                         self.es.update_index('es_index')
+                        es_index_count = self.es.get_index_count('es_index')
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
                                       " %s, docs in ES index: %s "
                                       % (bucket_doc_count,
                                          index.name,
                                          index_doc_count,
-                                         self.es.get_index_count('es_index')))
+                                         es_index_count))
+                    if bucket_doc_count == 0:
+                        self.sleep(5,
+                            "looks like docs haven't been loaded yet...")
+                        continue
+
                     if item_count and index_doc_count > item_count:
                         break
 
                     if bucket_doc_count == index_doc_count:
-                        break
+                        if self.compare_es:
+                            if bucket_doc_count == es_index_count:
+                                break
+                        else:
+                            break
 
                     if prev_count < index_doc_count or prev_count > index_doc_count:
                         prev_count = index_doc_count
@@ -3550,6 +3573,40 @@ class FTSBaseTest(unittest.TestCase):
 
         return index.fts_queries
 
+    def generate_random_geo_queries(self, index, num_queries=1, sort=False):
+        """
+        Generates a bunch of geo location and bounding box queries for
+        fts and es.
+        :param index: fts index object
+        :param num_queries: no of queries to be generated
+        :return: fts or fts and es queries
+        """
+        import random
+        from random_query_generator.rand_query_gen import FTSESQueryGenerator
+        gen_queries = 0
+
+        while gen_queries < num_queries:
+            if bool(random.getrandbits(1)):
+                fts_query, es_query = FTSESQueryGenerator.\
+                    construct_geo_location_query()
+            else:
+                fts_query, es_query = FTSESQueryGenerator. \
+                    construct_geo_bounding_box_query()
+
+            index.fts_queries.append(
+                json.loads(json.dumps(fts_query, ensure_ascii=False)))
+
+            if self.compare_es:
+                self.es.es_queries.append(
+                        json.loads(json.dumps(es_query, ensure_ascii=False)))
+            gen_queries += 1
+
+        if self.es:
+            return index.fts_queries, self.es.es_queries
+        else:
+            return index.fts_queries
+
+
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None):
         """
@@ -3652,6 +3709,68 @@ class FTSBaseTest(unittest.TestCase):
                               doc['_type'],
                               key)
 
+    def create_geo_index_and_load(self):
+        """
+        Indexes geo spatial data
+        Normally when we have a nested object, we first "insert child mapping"
+        and then refer to the fields inside it. But, for geopoint, the
+        structure "geo" is the data being indexed. Refer: CBQE-4030
+        :return: the index object
+        """
+        if self.compare_es:
+            self.log.info("Creating a geo-index on Elasticsearch...")
+            self.es.delete_indices()
+            es_mapping = {
+                 "earthquake": {
+                     "properties": {
+                         "geo": {
+                             "type": "geo_point"
+                             }
+                         }
+                     }
+                 }
+            self.create_es_index_mapping(es_mapping=es_mapping)
+
+        self.log.info("Creating geo-index ...")
+        from fts_base import FTSIndex
+        geo_index = FTSIndex(
+            cluster=self._cb_cluster,
+            name="geo-index",
+            source_name="default",
+        )
+        geo_index.index_definition["params"] = {
+            "mapping": {
+                "types": {
+                    "earthquake": {
+                        "enabled": True,
+                        "properties": {
+                            "geo": {
+                                "dynamic": False,
+                                "enabled": True,
+                                "fields": [{
+                                    "include_in_all": True,
+                                    "name": "geo",
+                                    "type": "geopoint",
+                                    "store": False,
+                                    "index": True
+                                }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        geo_index.create()
+        self.is_index_partitioned_balanced(geo_index)
+
+        self.dataset = "earthquakes"
+        self.log.info("Loading earthquakes.json ...")
+        self.async_load_data()
+
+        self.wait_for_indexing_complete()
+        return geo_index
+
     def create_index_es(self, index_name="es_index"):
         self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
         self.log.info("Created empty index %s on Elastic Search node with "
@@ -3674,20 +3793,23 @@ class FTSBaseTest(unittest.TestCase):
                                      encoding=encoding,
                                      start=start,
                                      end=start + num_items)
+        elif dataset == "earthquakes":
+            return GeoSpatialDataLoader(name="earthquake",
+                                     start=start,
+                                     end=start + num_items)
 
     def populate_create_gen(self):
-        if self.dataset == "emp":
-            self.create_gen = self.get_generator(
-                self.dataset, num_items=self._num_items)
-        elif self.dataset == "wiki":
-            self.create_gen = self.get_generator(
-                self.dataset, num_items=self._num_items)
-        elif self.dataset == "all":
+        if self.dataset == "all":
+            # only emp and wiki
             self.create_gen = []
             self.create_gen.append(self.get_generator(
                 "emp", num_items=self._num_items / 2))
             self.create_gen.append(self.get_generator(
                 "wiki", num_items=self._num_items / 2))
+        else:
+            self.create_gen = self.get_generator(
+                self.dataset, num_items=self._num_items)
+
 
     def populate_update_gen(self, fields_to_update=None):
         if self.dataset == "emp":

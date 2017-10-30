@@ -48,3 +48,17 @@ COUNTRY_CODE = ["Ind123", "US123", "UK123", "Jap123", "Fra123", "Ger123", "Chi12
         "Net123", "Bra123", "Cos123", "Cam123", "Fij123", "Fin123", "hai123", "Hon123", "Ice123",
         "Ira123", "Ira123", "Ita123", "Gre123", "Jam123", "Ken123", "Kuw123", "Mac123", "Spa123",
         "Mor123", "Mal123", "Nor123"]
+
+LON_LAT = [[-118.77, 34.243],# Southern Cal
+           [-122.82, 38.83], # Northern Cal
+           [-119.23, 39.59], # Nevada
+           [52.90, 27.33], # Iran
+           [-85.30, 10.02], # Costa rica
+           [-126,39, 43.17], # Oregon
+           [-115.22, 32], # Mexico
+           [-155.46, 19.29], # Hawaii,
+           [-66.54, 19.32], # Puerto Rico
+           [-149.34, 61.28], # Alaska
+           [-73.04, 6.76], # Columbia
+           [-64.35, 19.59] # Virgin Islands
+          ]

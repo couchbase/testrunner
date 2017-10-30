@@ -1278,9 +1278,9 @@ class ESRunQueryCompare(Task):
     def execute(self, task_manager):
         self.es_compare = True
         try:
-            self.log.info("---------------------------------------------------"
-                          "--------------- Query # %s -----------------------"
-                          "------------------------------------------"
+            self.log.info("---------------------------------------"
+                          "-------------- Query # %s -------------"
+                          "---------------------------------------"
                           % str(self.query_index+1))
             try:
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
@@ -1313,10 +1313,10 @@ class ESRunQueryCompare(Task):
             except ServerUnavailableException:
                 self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
-            if self.es and self.es_query['query']:
+            if self.es and self.es_query:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
                 self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
-                              (json.dumps(self.es_query['query'],  ensure_ascii=False),
+                              (json.dumps(self.es_query,  ensure_ascii=False),
                                self.es_index_name,
                                es_hits,
                                es_time))

@@ -509,3 +509,106 @@ class WikiJSONGenerator(KVGenerator):
         self.itr += 1
         return self.name+str(10000000+self.itr),\
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")
+
+
+class GeoSpatialDataLoader(KVGenerator):
+
+    def __init__(self, name, encoding="utf-8", op_type="create",
+                 *args, **kwargs):
+
+        """Geo Spatial doc loader
+
+        gen = GeoSpatialDataLoader(prefix,"encoding="utf-8",
+                                start=0,end=1000)
+        Args:
+            prefix: prefix for key
+            encoding: utf-8/ascii/utf-16 encoding of JSON doc
+            *args: A list for each argument in the template
+            *kwargs: Special constrains for the document generator
+
+
+        Sample earthquakes doc:
+
+        {
+            "Src": "ak",
+            "geo": {
+                "lat": 64.4679,
+                "lon": -148.0767
+            },
+            "Region": "Central Alaska",
+            "Datetime": "Wednesday, September 26, 2012 15:07:51 UTC",
+            "Depth": 11.7,
+            "Version": 1,
+            "type": "earthquake",
+            "Eqid": 10565543,
+            "Magnitude": 1.3,
+            "NST": 5
+        }
+
+
+        """
+
+        self.args = args
+        self.name = name
+        self.gen_docs = {}
+        self.encoding = encoding
+
+        size = 0
+        if not len(self.args) == 0:
+            size = 1
+            for arg in self.args:
+                size *= len(arg)
+
+        KVGenerator.__init__(self, name, 0, size)
+        random.seed(0)
+
+        if 'start' in kwargs:
+            self.start = int(kwargs['start'])
+            self.itr = int(kwargs['start'])
+        if 'end' in kwargs:
+            self.end = int(kwargs['end'])
+
+        if op_type == "create":
+            self.read_from_dump()
+        elif op_type == "delete":
+            # for deletes, just keep/return empty docs with just type field
+            for count in xrange(self.start, self.end):
+                self.gen_docs[count] = {'type': 'earthquake'}
+
+    def read_from_dump(self):
+        count = 0
+        done = False
+        try:
+            with open("lib/couchbase_helper/geospatial/"
+                           "earthquakes.json") as f:
+                while not done:
+                    for doc in json.load(f):
+                        if bool(random.getrandbits(1)):
+                           doc['geo'] = [doc['geo']['lon'], doc['geo']['lat']]
+                        doc['Eqid'] = str(doc['Eqid'])
+                        doc['Version'] = str(doc['Version'])
+                        doc['mutated'] = 0
+                        doc['type'] = 'earthquake'
+                        self.gen_docs[count] = doc
+                        if count >= self.end:
+                            f.close()
+                            done = True
+                            break
+                        count += 1
+            f.close()
+        except IOError:
+            print ("Unable to find file lib/couchbase_helper/"
+                       "geospatial/earthquakes.json, data not loaded!")
+
+    def next(self):
+        if self.itr >= self.end:
+            raise StopIteration
+        doc = {}
+        try:
+            doc = self.gen_docs[self.itr]
+        except TypeError:
+            # happens with 'delete' gen
+            pass
+        self.itr += 1
+        return self.name+str(self.itr),\
+               json.dumps(doc, indent=3).encode(self.encoding, "ignore")
