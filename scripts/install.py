@@ -128,8 +128,8 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(params["server"])
         #remote_client.membase_uninstall()
 
-        self.nsis = 'nsis' in params and params['nsis'].lower() == 'true'
-        remote_client.couchbase_uninstall(windows_nsis=self.nsis)
+        self.msi = 'msi' in params and params['msi'].lower() == 'true'
+        remote_client.couchbase_uninstall(windows_msi=self.msi,product=params['product'])
         remote_client.disconnect()
 
 
@@ -192,6 +192,11 @@ class Installer(object):
             else:
                 linux_repo = False
         if ok:
+            if "msi" in params and params["msi"].lower() == "true":
+                msi = True
+            else:
+                msi = False
+        if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
@@ -224,27 +229,19 @@ class Installer(object):
         print "\n*** OS version of this server %s is %s ***" % (remote_client.ip,
                                                        info.distribution_version)
         if info.distribution_version.lower() == "suse 12":
+            print "\ngo to suse"
             if version[:5] not in COUCHBASE_FROM_SPOCK:
                 mesg = "%s does not support cb version %s \n" % \
                          (info.distribution_version, version[:5])
                 remote_client.stop_current_python_running(mesg)
         if info.type.lower() == "windows":
+            print "\ngo to windows"
             if "-" in version:
-                msi_build = version.split("-")
-                """
-                    In spock from build 2924 and later release, we only support
-                    msi installation method on windows
-                """
-                if msi_build[0] in COUCHBASE_FROM_SPOCK:
+                cb_build = version.split("-")
+                if cb_build[0] in COUCHBASE_FROM_SPOCK:
                     info.deliverable_type = "msi"
-                elif "5" > msi_build[0] and int(info.windows_name) == 2016:
-                    log.info("\n========\n"
-                        "         Build version %s does not support on\n"
-                        "         Windows Server 2016\n"
-                        "========"  % msi_build[0])
-                    os.system("ps aux | grep python | grep %d " % os.getpid())
-                    time.sleep(5)
-                    os.system('kill %d' % os.getpid())
+                else:
+                    info.deliverable_type = "exe"
             else:
                 print "Incorrect version format"
                 sys.exit()
@@ -537,6 +534,12 @@ class CouchbaseServerInstaller(Installer):
                         rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
                                                         services=set_services)
+                    if "index" in set_services:
+                        if "storage_mode" in params:
+                            storageMode = params["storage_mode"]
+                        else:
+                            storageMode = "forestdb"
+                        rest.set_indexer_storage_mode(storageMode=storageMode)
                     rest.init_cluster(username=server.rest_username,
                                          password=server.rest_password)
 

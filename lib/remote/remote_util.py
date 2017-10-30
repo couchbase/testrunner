@@ -13,6 +13,7 @@ from subprocess import Popen, PIPE
 import logger
 from builds.build_query import BuildQuery
 import testconstants
+from testconstants import VERSION_FILE
 from testconstants import WIN_REGISTER_ID
 from testconstants import MEMBASE_VERSIONS
 from testconstants import COUCHBASE_VERSIONS
@@ -24,9 +25,10 @@ from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_FROM_VERSION_3
-from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import COUCHBASE_RELEASE_VERSIONS_3, CB_RELEASE_BUILDS
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
-from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
+from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
+                          COUCHBASE_FROM_SPOCK
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_COUCHBASE_BIN_PATH,\
                           LINUX_CB_PATH
@@ -1807,7 +1809,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
 
-    def couchbase_uninstall(self,windows_nsis=False):
+    def couchbase_uninstall(self, windows_msi=False, product=None):
         log.info('{0} *****In couchbase uninstall****'.format( self.ip))
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
@@ -1819,50 +1821,50 @@ class RemoteMachineShellConnection:
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         fv, sv, bn = self.get_cbversion(type)
-        if windows_nsis:
-            log.info('{0} ***** NSIS Uninstall'.format( self.ip))
-
-            # only one command?
-            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
-
-            # from Hari
-            f1 = open('/tmp/u.bat', 'w')
-            f1.write('"c:\\Program Files\\Couchbase\\Server\\uninstall.exe" /S')
-            f1.close()
-            self.copy_file_local_to_remote('/tmp/u.bat', '/cygdrive/c/automation/u.bat')
-
-            #output, error = self.execute_command("cmd /c \"c:\Program Files\Couchbase\Server\uninstall.exe\" /S")
-            output, error = self.execute_command("chmod +x /cygdrive/c/automation/u.bat; /cygdrive/c/automation/u.bat")
-            self.sleep(30, 'waiting 30 seconds to complete the uninstallation')
-
-            self.log_command_output(output, error)
-            log.info('{0} ***** NSIS Uninstall - complete'.format(self.ip))
-        elif type == 'windows':
+        if type == 'windows':
             product = "cb"
             query = BuildQuery()
             os_type = "exe"
+            if windows_msi:
+                os_type = "msi"
+                self.info.deliverable_type = "msi"
             task = "uninstall"
             bat_file = "uninstall.bat"
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
-            if self.file_exists(version_path, version_file):
-                build_name, short_version, full_version = \
-                    self.find_build_version(version_path, version_file, product)
             capture_iss_file = ""
             log.info("kill any in/uninstall process from version 3 in node %s"
                                                                         % self.ip)
             self.terminate_processes(self.info, \
                                      [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
-            exist = self.file_exists(version_path, version_file)
+            exist = self.file_exists(version_path, VERSION_FILE)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
-                cb_releases_version = ["2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
-                                       "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1",
-                                       "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
-                                       "3.1.3", "3.1.5"]
+                cb_releases_version = []
+                for x in CB_RELEASE_BUILDS:
+                    if int(CB_RELEASE_BUILDS[x]):
+                        cb_releases_version.append(x)
+
                 build_name, short_version, full_version = \
-                    self.find_build_version(version_path, version_file, product)
+                    self.find_build_version(version_path, VERSION_FILE, product)
+
+                if "-" in full_version:
+                    cb_build = full_version.split("-")
+                    if cb_build[0] in COUCHBASE_FROM_SPOCK:
+                        os_type = "msi"
+                        windows_msi = True
+                        self.info.deliverable_type = "msi"
+                    else:
+                        self.info.deliverable_type = "exe"
+                        windows_msi = False
+                else:
+                    mesg = " ***** ERROR: ***** \n" \
+                           " Couchbase Server version format is not correct. \n" \
+                           " It should be 0.0.0-DDDD format\n" \
+                           % (self.ip, os.getpid())
+                    self.stop_current_python_running(mesg)
+
                 build_repo = MV_LATESTBUILD_REPO
                 if full_version[:5] not in COUCHBASE_VERSION_2 and \
                    full_version[:5] not in COUCHBASE_VERSION_3:
@@ -1870,12 +1872,13 @@ class RemoteMachineShellConnection:
                         build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
                     else:
                         sys.exit("version is not support yet")
-                log.info("*****VERSION file exists.  Start to uninstall {0} on {1} server"\
-                                                           .format(product, self.ip))
+                log.info("*****VERSION file exists."
+                                   "Start to uninstall {0} on {1} server"
+                                   .format(product, self.ip))
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
-                build_name = build_name.rstrip() + ".exe"
+                build_name = build_name.rstrip() + ".%s" % os_type
                 log.info('Check if {0} is in tmp directory on {1} server'\
                                                        .format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
@@ -1896,10 +1899,12 @@ class RemoteMachineShellConnection:
                             os_version=self.info.distribution_version.lower())
                     else:
                         builds, changes = query.get_all_builds(version=full_version,
-                                        deliverable_type=self.info.deliverable_type,
+                                      deliverable_type=self.info.deliverable_type,
                                       architecture_type=self.info.architecture_type,
-                                         edition_type=product_name, repo=build_repo,
-                            distribution_version=self.info.distribution_version.lower())
+                                      edition_type=product_name, repo=build_repo,
+                                      distribution_version=\
+                                            self.info.distribution_version.lower())
+
                         build = query.find_build(builds, product_name, os_type,
                                                    self.info.architecture_type,
                                                                   full_version,
@@ -1911,16 +1916,16 @@ class RemoteMachineShellConnection:
                                              .format(short_version, self.ip))
                     else:
                         log.error('Download {0}.exe failed'.format(short_version))
-                dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
-                self.create_multiple_dir(dir_paths)
-                self.copy_files_local_to_remote('resources/windows/automation',
+                if not windows_msi:
+                    dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+                    self.create_multiple_dir(dir_paths)
+                    self.copy_files_local_to_remote('resources/windows/automation',
                                                       '/cygdrive/c/automation')
-                self.stop_couchbase()
-                # modify bat file to run uninstall schedule task
-                #self.create_windows_capture_file(task, product, full_version)
-                capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
+                    # modify bat file to run uninstall schedule task
+                    #self.create_windows_capture_file(task, product, full_version)
+                    capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
                                         bat_file, product, short_version, task)
-                self.stop_schedule_tasks()
+                    self.stop_schedule_tasks()
 
                 """ Remove this workaround when bug MB-14504 is fixed """
                 log.info("Kill any un/install process leftover in sherlock")
@@ -1930,26 +1935,33 @@ class RemoteMachineShellConnection:
                                     'schedule uninstall on {0}'.format(self.ip))
                 """ End remove this workaround when bug MB-14504 is fixed """
 
-                """ the code below need to remove when bug MB-11328
-                                                            is fixed in 3.0.1 """
-                output, error = self.kill_erlang(os="windows")
-                self.log_command_output(output, error)
-                """ end remove code """
-
+                self.stop_couchbase()
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
-                output, error = \
+                if windows_msi:
+                    log.info("******** uninstall via msi method ***********")
+                    output, error = \
+                        self.execute_command("cd /cygdrive/c/tmp; msiexec /x %s /qn"\
+                                             % build_name)
+                    self.log_command_output(output, error)
+                    var_dir = "/cygdrive/c/Program\ Files/Couchbase/Server/var"
+                    self.execute_command("rm -rf %s" % var_dir)
+                else:
+                    output, error = \
                         self.execute_command("cmd /c schtasks /run /tn removeme")
-                self.log_command_output(output, error)
+                    self.log_command_output(output, error)
                 deleted = self.wait_till_file_deleted(version_path, \
-                                            version_file, timeout_in_seconds=600)
+                                            VERSION_FILE, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
                 if full_version[:3] != "2.5":
-                    ended = self.wait_till_process_ended(full_version[:10])
-                    if not ended:
-                        sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
+                    uninstall_process = full_version[:10]
+                    if not windows_msi:
+                        ended = self.wait_till_process_ended(uninstall_process)
+                        if not ended:
+                            sys.exit("****  Node %s failed to uninstall  ****"
+                                                              % (self.ip))
                 if full_version[:3] == "2.5":
                     self.sleep(20, "next step is to install")
                 else:
@@ -1972,7 +1984,7 @@ class RemoteMachineShellConnection:
                             'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
                     self.log_command_output(output, error)
                 """ end remove code """
-                if capture_iss_file:
+                if capture_iss_file and not windows_msi:
                     log.info("Delete {0} in windows automation directory" \
                                                           .format(capture_iss_file))
                     output, error = self.execute_command("rm -f \
