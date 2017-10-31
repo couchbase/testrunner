@@ -3941,6 +3941,20 @@ class RestConnection(object):
         return content
 
     '''
+            Undeploy the Function
+    '''
+    def undeploy_function(self, name, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/setSettings/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
             Delete the Function from UI
     '''
     def delete_function_from_temp_store(self, name):

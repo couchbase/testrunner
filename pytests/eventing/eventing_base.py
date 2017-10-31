@@ -150,7 +150,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         content = self.rest.save_function(self.function_name, body)
         log.info("saveApp API : {0}".format(content))
         # undeploy the function
-        content = self.rest.deploy_function(self.function_name, body)
+        content = self.rest.undeploy_function(self.function_name, body['settings'])
         log.info("Undeploy Application : {0}".format(content))
 
     def delete_function(self):
