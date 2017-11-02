@@ -124,6 +124,11 @@ class CliBaseTest(BaseTestCase):
             self.backup_path = WIN_BACKUP_PATH
             self.sample_files_path = WIN_COUCHBASE_SAMPLE_PATH_C
             self.log_path = WIN_COUCHBASE_LOGS_PATH
+            win_format = "C:/Program Files"
+            cygwin_format = "/cygdrive/c/Program\ Files"
+            if win_format in self.cli_command_path:
+                self.cli_command_path = self.cli_command_path.replace(win_format,
+                                                                      cygwin_format)
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
         self.full_v, self.short_v, self.build_number = self.shell.get_cbversion(type)
