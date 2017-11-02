@@ -130,12 +130,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['processing_status'] = True
         # save the function so that it appears in UI
         content = self.rest.save_function(self.function_name, body)
-        log.info("saveApp API : {0}".format(content))
         # deploy the function
         log.info("Deploying the following handler code")
         log.info("\n{0}".format(body['appcode']))
         content = self.rest.deploy_function(self.function_name, body)
-        log.info("deployApp API : {0}".format(content))
+        log.info("deploy Application : {0}".format(content))
         # wait for the function to come out of bootstrap state
         self.wait_for_bootstrap_to_complete(self.function_name)
 
@@ -148,9 +147,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['processing_status'] = False
         # save the function so that it disappears from UI
         content = self.rest.save_function(self.function_name, body)
-        log.info("saveApp API : {0}".format(content))
         # undeploy the function
-        content = self.rest.undeploy_function(self.function_name, body['settings'])
+        content = self.rest.set_settings_for_function(self.function_name, body['settings'])
         log.info("Undeploy Application : {0}".format(content))
 
     def delete_function(self):
@@ -158,4 +156,22 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.rest.delete_function_from_temp_store(self.function_name)
         self.rest.delete_function(self.function_name)
         log.info("Delete Application : {0}".format(self.function_name))
+
+    def pause_function(self, body):
+        body['settings']['deployment_status'] = True
+        body['settings']['processing_status'] = False
+        # save the function so that it is visible in UI
+        content = self.rest.save_function(self.function_name, body)
+        # undeploy the function
+        content = self.rest.set_settings_for_function(self.function_name, body['settings'])
+        log.info("Pause Application : {0}".format(content))
+
+    def resume_function(self, body):
+        body['settings']['deployment_status'] = True
+        body['settings']['processing_status'] = True
+        # save the function so that it is visible in UI
+        content = self.rest.save_function(self.function_name, body)
+        # undeploy the function
+        content = self.rest.set_settings_for_function(self.function_name, body['settings'])
+        log.info("Resume Application : {0}".format(content))
 

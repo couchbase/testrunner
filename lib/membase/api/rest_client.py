@@ -3943,7 +3943,7 @@ class RestConnection(object):
     '''
             Undeploy the Function
     '''
-    def undeploy_function(self, name, body):
+    def set_settings_for_function(self, name, body):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "_p/event/setSettings/?name=" + name
         api = self.baseUrl + url
@@ -3979,6 +3979,28 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return content
+
+    '''
+            Export the Function
+    '''
+    def export_function(self, name):
+        export_map = {}
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/getAppTempStore/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        if status:
+            json_parsed = json.loads(content)
+            for key in json_parsed[0].keys(): # returns an array
+                tokens = key.split(":")
+                val = json_parsed[0][key]
+                if len(tokens) == 1:
+                    field = tokens[0]
+                    export_map[field] = val
+        return export_map
 
     '''
              Ensure that the eventing node is out of bootstrap node
