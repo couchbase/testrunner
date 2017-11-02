@@ -60,6 +60,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cmd_ext = ""
         self.should_fail = self.input.param("should-fail", False)
         self.database_path = COUCHBASE_DATA_PATH
+
         cmd =  'curl %s:8091/diag/eval -u Administrator:password ' % self.master.ip
         cmd += '-d "path_config:component_path(bin)."'
         bin_path  = subprocess.check_output(cmd, shell=True)
@@ -67,9 +68,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Check if cb server install on %s" % self.master.ip)
         else:
             self.cli_command_location = bin_path.replace('"','') + "/"
-            if "C:" in self.cli_command_location:
-                self.cli_command_location = \
-                                   self.cli_command_location.replace("C:","/cygdrive/c")
+
         self.debug_logs = self.input.param("debug-logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.passwd_env = self.input.param("passwd-env", False)
@@ -97,6 +96,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.tmp_path = WIN_TMP_PATH
             self.long_help_flag = "help"
             self.short_help_flag = "h"
+            win_format = "C:/Program Files"
+            cygwin_format = "/cygdrive/c/Program\ Files"
+            if win_format in self.cli_command_location:
+                self.cli_command_location = self.cli_command_location.replace(win_format,
+                                                                              cygwin_format)
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
