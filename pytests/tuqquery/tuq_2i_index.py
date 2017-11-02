@@ -1992,7 +1992,7 @@ class QueriesIndexTests(QueryTests):
         self.run_cbq_query()
         self.query = 'explain SELECT v.os FROM default USE index (ix300) UNNEST default.VMs AS v WHERE  v.os = "centos"'
         actual_result = self.run_cbq_query()
-        plan = ExplainPlanHelper(actual_result)
+        plan = self.ExplainPlanHelper(actual_result)
         self.assertTrue("ix300" in str(plan))
         self.assertTrue("covers" in str(plan))
         self.query = 'SELECT v.os FROM default USE index (ix300) UNNEST default.VMs AS v WHERE  v.os = "centos"'
