@@ -228,8 +228,8 @@ class TokenTests(QueryTests):
             self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 6"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']== idx1)
-            self.assertTrue(plan['~children'][0]['scans'][1]['scan']['index']==idx3)
+            self.assertTrue(idx1 in str(plan))
+            self.assertTrue(idx3 in str(plan))
             self.query = "CREATE INDEX {0} ON `beer-sample`( ALL address )".format(idx4)
             self.run_cbq_query()
             self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
@@ -244,8 +244,8 @@ class TokenTests(QueryTests):
                          "place LIKE '100 %' end"
             actual_result=self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index']== idx4)
-            self.assertTrue(plan['~children'][0]['scans'][1]['scan']['index']==idx3)
+            self.assertTrue(idx4 in str(plan))
+            self.assertTrue(idx3 in str(plan))
         finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX `beer-sample`.%s" % ( idx)

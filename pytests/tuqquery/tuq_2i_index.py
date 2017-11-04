@@ -3119,9 +3119,6 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
 
     def test_dynamic_names(self):
-            self.query = "CREATE PRIMARY INDEX ON %s" % "default"
-            self.run_cbq_query()
-            self.sleep(15,'wait for index')
             self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
             actual_result = self.run_cbq_query()
             expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
@@ -3130,10 +3127,8 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
             self.query = 'select * from {0}'.format("default")
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['metrics']['resultCount']==24196)
+            self.assertEqual(actual_result['metrics']['resultCount'],24196)
             self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format("default")
-            self.run_cbq_query()
-            self.query = "DROP PRIMARY INDEX ON %s" % "default"
             self.run_cbq_query()
 
     def test_between_spans(self):
