@@ -417,8 +417,6 @@ class QueriesIndexTests(QueryTests):
                 self.query="explain SELECT * FROM default WHERE join_day not in [1,2,3,4,5,6,7,8,9,10] and join_yr != 2010 LIMIT 4 OFFSET 10"
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['limit']=='4')
-                self.assertTrue(plan['~children'][0]['~children'][0]['offset']=='10')
                 self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']=='idx')
                 self.query="SELECT * FROM default WHERE join_day not in [1,2,3,4,5,6,7,8,9,10] and join_yr != 2010 order by _id LIMIT 4 OFFSET 10"
                 actual_result = self.run_cbq_query()

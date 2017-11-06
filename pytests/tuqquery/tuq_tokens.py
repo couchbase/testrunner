@@ -228,8 +228,7 @@ class TokenTests(QueryTests):
             self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 6"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(idx1 in str(plan))
-            self.assertTrue(idx3 in str(plan))
+            self.assertTrue("idx_suffixes" in str(plan))
             self.query = "CREATE INDEX {0} ON `beer-sample`( ALL address )".format(idx4)
             self.run_cbq_query()
             self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
