@@ -455,6 +455,66 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_list()
         self.backup_restore_validate()
 
+    def test_backup_with_update_on_disk_of_snapshot_markers(self):
+        """
+            This test is for MB-25727 (using cbbackupwrapper)
+            Check when cbwrapper will be dropped to remove this test.
+            No default bucket, default_bucket=false
+            Create bucket0
+            Load 100K items to bucket0
+            Stop persistence on server via cbepctl
+            Load another 100K items.
+            Run full backup with cbbackupwrapper
+            Load another 100K items.
+            Run diff backup. Backup process will hang with error in memcached as shown above
+            :return: None
+        """
+        gen1 = BlobGenerator("ent-backup1", "ent-backup-", self.value_size, end=100000)
+        gen2 = BlobGenerator("ent-backup2", "ent-backup-", self.value_size, end=100000)
+        gen3 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size, end=100000)
+        rest_conn = RestConnection(self.backupset.cluster_host)
+        rest_conn.create_bucket(bucket="bucket0", ramQuotaMB=1024)
+        self.buckets = rest_conn.get_buckets()
+        authentication = "-u Administrator -p password"
+
+        self._load_all_buckets(self.master, gen1, "create", 0)
+        self.log.info("Stop persistent")
+        cluster_nodes = rest_conn.get_nodes()
+        clusters = copy.deepcopy(cluster_nodes)
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        for node in clusters:
+             shell.execute_command("%scbepctl%s %s:11210 -b %s stop %s" % \
+                                  (self.cli_command_location,
+                                   self.cmd_ext,
+                                   node.ip,
+                                   "bucket0",
+                                   authentication))
+        shell.disconnect()
+        self.log.info("Load 2nd batch docs")
+        self._load_all_buckets(self.master, gen2, "create", 0)
+        self.log.info("Run full backup with cbbackupwrapper")
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        backup_dir = self.tmp_path + "backup" + self.master.ip
+        shell.execute_command("rm -rf %s" % backup_dir)
+        shell.execute_command("mkdir %s" % backup_dir)
+        shell.execute_command("cd %s;./cbbackupwrapper%s http://%s:8091 %s -m full %s"
+                                       % (self.cli_command_location, self.cmd_ext,
+                                          self.backupset.cluster_host.ip,
+                                          backup_dir,
+                                          authentication))
+        self.log.info("Load 3rd batch docs")
+        self._load_all_buckets(self.master, gen3, "create", 0)
+        self.log.info("Run diff backup with cbbackupwrapper")
+        output, _ = shell.execute_command("cd %s;./cbbackupwrapper%s http://%s:8091 %s -m diff %s"
+                                              % (self.cli_command_location, self.cmd_ext,
+                                                 self.backupset.cluster_host.ip,
+                                                 backup_dir,
+                                                 authentication))
+
+        if output and "SUCCESSFULLY COMPLETED" not in output[1]:
+            self.fail("Failed to backup as the fix in MB-25727")
+
+
     def test_restore_with_invalid_bucket_config_json(self):
         """
             When bucket-config.json in latest backup corrupted,
