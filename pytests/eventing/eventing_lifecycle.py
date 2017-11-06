@@ -1,6 +1,9 @@
+import json
+import os
+
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
 from pytests.eventing.eventing_base import EventingBaseTest, log
 
 
@@ -121,4 +124,21 @@ class EventingLifeCycle(EventingBaseTest):
         self.assertTrue(output["appcode"] == body["appcode"], msg="Handler code mismatch from the exported function")
         self.assertTrue(cmp(output["settings"], body["settings"]) == 0,
                         msg="Settings mismatch from the exported function")
+        self.undeploy_and_delete_function(body)
+
+    def test_import_function(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # read the exported function
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, EXPORTED_FUNCTION.N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER)
+        fh = open(abs_file_path, "r")
+        body = json.loads(fh.read())
+        # import the previously exported function
+        # we don't have specific API for import, we reuse the API's
+        self.rest.save_function("test_import_function", body)  # we have hardcoded function name as it's imported
+        self.rest.deploy_function("test_import_function", body)  # we have hardcoded function name as it's imported
+        self.wait_for_bootstrap_to_complete("test_import_function")  # we have hardcoded function name as it's imported
+        # Wait for eventing to catch up with all the create mutations and verify results
+        self.verify_eventing_results("test_import_function", self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)

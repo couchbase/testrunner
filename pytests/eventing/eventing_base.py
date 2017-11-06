@@ -30,6 +30,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
+        self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.docs_per_day = self.input.param("doc-per-day", 1)
@@ -46,7 +47,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=1, processing_status=True,
-                                  cpp_worker_thread_count=1):
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -57,6 +58,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
+        if multi_dst_bucket:
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
         body['depcfg']['source_bucket'] = self.src_bucket_name
         body['settings'] = {}
@@ -129,49 +132,49 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
         # save the function so that it appears in UI
-        content = self.rest.save_function(self.function_name, body)
+        content = self.rest.save_function(body['appname'], body)
         # deploy the function
         log.info("Deploying the following handler code")
         log.info("\n{0}".format(body['appcode']))
-        content = self.rest.deploy_function(self.function_name, body)
+        content = self.rest.deploy_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content))
         # wait for the function to come out of bootstrap state
-        self.wait_for_bootstrap_to_complete(self.function_name)
+        self.wait_for_bootstrap_to_complete(body['appname'])
 
     def undeploy_and_delete_function(self, body):
         self.undeploy_function(body)
-        self.delete_function()
+        self.delete_function(body)
 
     def undeploy_function(self, body):
         body['settings']['deployment_status'] = False
         body['settings']['processing_status'] = False
         # save the function so that it disappears from UI
-        content = self.rest.save_function(self.function_name, body)
+        content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content = self.rest.set_settings_for_function(self.function_name, body['settings'])
+        content = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Undeploy Application : {0}".format(content))
 
-    def delete_function(self):
+    def delete_function(self, body):
         # delete the function from the UI and backend
-        self.rest.delete_function_from_temp_store(self.function_name)
-        self.rest.delete_function(self.function_name)
-        log.info("Delete Application : {0}".format(self.function_name))
+        self.rest.delete_function_from_temp_store(body['appname'])
+        self.rest.delete_function(body['appname'])
+        log.info("Delete Application : {0}".format(body['appname']))
 
     def pause_function(self, body):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = False
         # save the function so that it is visible in UI
-        content = self.rest.save_function(self.function_name, body)
+        content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content = self.rest.set_settings_for_function(self.function_name, body['settings'])
+        content = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Pause Application : {0}".format(content))
 
     def resume_function(self, body):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
         # save the function so that it is visible in UI
-        content = self.rest.save_function(self.function_name, body)
+        content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content = self.rest.set_settings_for_function(self.function_name, body['settings'])
+        content = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Resume Application : {0}".format(content))
 
