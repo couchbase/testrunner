@@ -557,6 +557,7 @@ class CouchbaseServerInstaller(Installer):
                 """ set cbauth environment variables from Watson version
                     it is checked version inside method """
                 remote_client.set_cbauth_env(server)
+                remote_client.is_ntp_installed()
                 remote_client.disconnect()
                 # TODO: Make it work with windows
                 if "erlang_threads" in params:
