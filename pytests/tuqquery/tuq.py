@@ -895,7 +895,7 @@ class QueryTests(BaseTestCase):
             return
         if self.flat_json:
             return
-        self.sleep(15, 'Sleep for some time prior to index creation')
+        self.sleep(30, 'Sleep for some time prior to index creation')
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         if versions[0].startswith("4") or versions[0].startswith("3") or versions[0].startswith("5"):
@@ -903,7 +903,7 @@ class QueryTests(BaseTestCase):
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
                     self.query = "DROP PRIMARY INDEX ON %s using %s" % (bucket.name, self.primary_indx_type)
-                    self.sleep(3, 'Sleep for some time after index drop')
+                    self.sleep(6, 'Sleep for some time after index drop')
                 self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
                 res = self.run_cbq_query(self.query)
                 if (res['metrics']['resultCount'] == 0):
@@ -917,7 +917,7 @@ class QueryTests(BaseTestCase):
                     except Exception, ex:
                         self.log.info(str(ex))
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=6000):
+    def _wait_for_index_online(self, bucket, index_name, timeout=12000):
         end_time = time.time() + timeout
         while time.time() < end_time:
             query = "SELECT * FROM system:indexes where name='%s'" % index_name

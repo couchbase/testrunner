@@ -716,7 +716,7 @@ class DMLQueryTests(QueryTests):
                             [value_to_delete] * (num_docs))
         keys_to_delete = ['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs, self.num_items)]
         for bucket in self.buckets:
-            self.query = 'delete from %s d where d="%s"'  % (bucket.name, value_to_delete)
+            self.query = 'delete from %s d where d="%s"' % (bucket.name, value_to_delete)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
