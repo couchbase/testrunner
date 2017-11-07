@@ -567,6 +567,7 @@ class CouchbaseServerInstaller(Installer):
                 remote_client.check_man_page()
                 """ add unzip command on server if it is not available """
                 remote_client.check_cmd("unzip")
+                remote_client.is_ntp_installed()
                 remote_client.disconnect()
                 # TODO: Make it work with windows
                 if "erlang_threads" in params:
