@@ -1,11 +1,7 @@
-import time
 import copy
 import uuid
-import collections
 import json
-from remote.remote_util import RemoteMachineShellConnection
 from tuqquery.tuq import QueryTests
-from couchbase_helper.documentgenerator import DocumentGenerator
 
 
 class DMLQueryTests(QueryTests):
@@ -706,6 +702,13 @@ class DMLQueryTests(QueryTests):
                     pass
 
     def test_delete_where_clause_non_doc(self):
+        for bucket in self.buckets:
+            try:
+                self.run_cbq_query("CREATE PRIMARY INDEX ON `%s` USING %s" % (bucket.name, self.index_type.lower()))
+                self.wait_for_index_present(bucket.name, '#primary', {}, self.index_type.lower())
+            except:
+                pass
+
         num_docs = self.input.param('docs_to_delete', 3)
         key_prefix = 'automation%s' % str(uuid.uuid4())[:5]
         value = 'n1ql automation'
@@ -715,10 +718,19 @@ class DMLQueryTests(QueryTests):
         self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs, self.num_items)],
                             [value_to_delete] * (num_docs))
         keys_to_delete = ['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs, self.num_items)]
+
+        test_dict = dict()
+        index_type = self.index_type.lower()
+        indexes = []
         for bucket in self.buckets:
-            self.query = 'delete from %s d where d="%s"' % (bucket.name, value_to_delete)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            indexes.append({'name': '#primary', 'bucket': bucket.name, 'fields': [],
+                            'state': 'online', 'using': index_type, 'is_primary': True})
+
+        for bucket in self.buckets:
+            test_dict[bucket.name] = {"indexes": indexes, "pre_queries": [],  "queries": ['delete from %s d where d="%s"' % (bucket.name, value_to_delete)], "post_queries": [],
+                                      "asserts": [lambda x: self.assertEqual(x['q_res'][0]['status'], 'success', 'Query was not run successfully')], "cleanups": []}
+
+        self.query_runner(test_dict)
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_where_clause_json(self):

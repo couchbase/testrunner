@@ -844,42 +844,43 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_long_values(self):
-            self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%("default")
+        for bucket in self.buckets:
+            self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%(bucket.name)
             self.run_cbq_query()
-            self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%("default")
+            self.query = 'insert into %s values("k031", { "id":-9223372036854775807  } )'%(bucket.name)
             self.run_cbq_query()
-            self.query = 'insert into %s values("k021", { "id":1470691191458562048 } )'%("default")
+            self.query = 'insert into %s values("k021", { "id":1470691191458562048 } )'%(bucket.name)
             self.run_cbq_query()
-            self.query = 'insert into %s values("k011", { "id":9223372036854775807 } )'%("default")
+            self.query = 'insert into %s values("k011", { "id":9223372036854775807 } )'%(bucket.name)
             self.run_cbq_query()
-            self.query = 'insert into %s values("k041", { "id":9223372036854775808 } )'%("default")
+            self.query = 'insert into %s values("k041", { "id":9223372036854775808 } )'%(bucket.name)
             self.run_cbq_query()
             scheme = "couchbase"
             host=self.master.ip
             if self.master.ip == "127.0.0.1":
                 scheme = "http"
                 host="{0}:{1}".format(self.master.ip,self.master.port)
-            self.query = 'select * from default where meta().id = "{0}"'.format("k051")
+            self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k051")
             actual_result = self.run_cbq_query()
-            print "k051 results is {0}".format(actual_result['results'][0]["default"])
+            print "k051 results is {0}".format(actual_result['results'][0][bucket.name])
             #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775808})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k031")
+            self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k031")
             actual_result = self.run_cbq_query()
-            print "k031 results is {0}".format(actual_result['results'][0]["default"])
+            print "k031 results is {0}".format(actual_result['results'][0][bucket.name])
             #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775807})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k021")
+            self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k021")
             actual_result = self.run_cbq_query()
-            print "k021 results is {0}".format(actual_result['results'][0]["default"])
+            print "k021 results is {0}".format(actual_result['results'][0][bucket.name])
             #self.assertEquals(actual_result['results'][0]["default"],{'id': 1470691191458562048})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k011")
+            self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k011")
             actual_result = self.run_cbq_query()
-            print "k011 results is {0}".format(actual_result['results'][0]["default"])
+            print "k011 results is {0}".format(actual_result['results'][0][bucket.name])
             #self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854775807})
-            self.query = 'select * from default where meta().id = "{0}"'.format("k041")
+            self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k041")
             actual_result = self.run_cbq_query()
-            print "k041 results is {0}".format(actual_result['results'][0]["default"])
+            print "k041 results is {0}".format(actual_result['results'][0][bucket.name])
             #self.assertEquals(actual_result['results'][0]["default"],{'id':  9223372036854776000L})
-            self.query = 'delete from default where meta().id in ["k051","k021","k011","k041","k031"]'
+            self.query = 'delete from '+bucket.name+' where meta().id in ["k051","k021","k011","k041","k031"]'
             self.run_cbq_query()
 
             # client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
@@ -1058,27 +1059,28 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_agg_counters(self):
-        vals = []
-        keys = []
-        for i in range(10):
-            new_val = random.randint(0, 99)
-            new_counter = "counter_US"+str(i)
-            vals.append(new_val)
-            keys.append(new_counter)
-            self.query = 'INSERT INTO default VALUES ("%s",%s)' % (new_counter, new_val)
-            self.run_cbq_query()
+        for bucket in self.buckets:
+            vals = []
+            keys = []
+            for i in range(10):
+                new_val = random.randint(0, 99)
+                new_counter = "counter_US"+str(i)
+                vals.append(new_val)
+                keys.append(new_counter)
+                self.query = 'INSERT INTO %s VALUES ("%s",%s)' % (bucket.name, new_counter, new_val)
+                self.run_cbq_query()
 
-        self.query = 'SELECT sum(default) FROM default USE KEYS %s;' % (str(keys))
-        actual_results = self.run_cbq_query()
-        self.assertEqual(actual_results['results'][0]['$1'], sum(vals))
+            self.query = 'SELECT sum(%s) FROM %s USE KEYS %s;' % (bucket.name, bucket.name, str(keys))
+            actual_results = self.run_cbq_query()
+            self.assertEqual(actual_results['results'][0]['$1'], sum(vals))
 
-        self.query = 'SELECT avg(default) FROM default USE KEYS %s;' % (str(keys))
-        actual_results = self.run_cbq_query()
-        self.assertEqual(actual_results['results'][0]['$1'], float(sum(vals)) / max(len(vals), 1))
+            self.query = 'SELECT avg(%s) FROM %s USE KEYS %s;' % (bucket.name, bucket.name, str(keys))
+            actual_results = self.run_cbq_query()
+            self.assertEqual(actual_results['results'][0]['$1'], float(sum(vals)) / max(len(vals), 1))
 
-        self.query = 'DELETE FROM default USE KEYS %s;' % (str(keys))
-        actual_results = self.run_cbq_query()
-        self.assertEqual(actual_results['results'], [])
+            self.query = 'DELETE FROM %s USE KEYS %s;' % (bucket.name, str(keys))
+            actual_results = self.run_cbq_query()
+            self.assertEqual(actual_results['results'], [])
 
 
     def test_sum(self):
@@ -1386,28 +1388,29 @@ class QuerySanityTests(QueryTests):
             self.assertTrue( "u'x1': {u'name': 1}" in str(actual_result['results']))
 
     def test_let_missing(self):
-      created_indexes = []
-      try:
-            self.query = 'CREATE INDEX ix1 on default(x1)'
-            self.run_cbq_query()
-            created_indexes.append("ix1")
-            self.query = 'INSERT INTO default VALUES ("k01",{"x1":5, "type":"doc", "x2": "abc"}), ' \
-                         '("k02",{"x1":5, "type":"d", "x2": "def"})'
-            self.run_cbq_query()
-            self.query = 'EXPLAIN SELECT x1, x2 FROM default o LET o = CASE WHEN o.type = "doc" THEN o ELSE MISSING END WHERE x1 = 5'
-            try:
-                    self.run_cbq_query(self.query)
-            except CBQError as ex:
-                    self.assertTrue(str(ex).find("Duplicate variable o already in scope") != -1,
-                                    "Error is incorrect.")
-            else:
-                    self.fail("There was no errors.")
-            self.query = 'delete from default use keys["k01","k02"]'
-            self.run_cbq_query()
-      finally:
-            for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
-                    actual_result = self.run_cbq_query()
+      for bucket in self.buckets:
+          created_indexes = []
+          try:
+                self.query = 'CREATE INDEX ix1 on %s(x1)' % (bucket.name)
+                self.run_cbq_query()
+                created_indexes.append("ix1")
+                self.query = 'INSERT INTO %s VALUES ("k01",{"x1":5, "type":"doc", "x2": "abc"}), ' \
+                             '("k02",{"x1":5, "type":"d", "x2": "def"})'  % (bucket.name)
+                self.run_cbq_query()
+                self.query = 'EXPLAIN SELECT x1, x2 FROM %s o LET o = CASE WHEN o.type = "doc" THEN o ELSE MISSING END WHERE x1 = 5'  % (bucket.name)
+                try:
+                        self.run_cbq_query(self.query)
+                except CBQError as ex:
+                        self.assertTrue(str(ex).find("Duplicate variable o already in scope") != -1,
+                                        "Error is incorrect.")
+                else:
+                        self.fail("There was no errors.")
+                self.query = 'delete from %s use keys["k01","k02"]'  % (bucket.name)
+                self.run_cbq_query()
+          finally:
+                for idx in created_indexes:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                        actual_result = self.run_cbq_query()
 
     def test_optimized_let(self):
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
@@ -3774,7 +3777,6 @@ class QuerySanityTests(QueryTests):
     def test_position(self):
         for bucket in self.buckets:
             self.query = "select POSITION(VMs[1].name, 'vm') pos from %s" % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"pos" : (doc["VMs"][1]["name"].find('vm'))} for doc in self.full_list]
@@ -3788,7 +3790,7 @@ class QuerySanityTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
-            test_word = 'california'
+        test_word = 'california'
         for letter in test_word:
             actual = self.run_position_query(test_word, letter)
             expected = test_word.find(letter)
