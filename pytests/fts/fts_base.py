@@ -3406,6 +3406,7 @@ class FTSBaseTest(unittest.TestCase):
                     if bucket_doc_count == 0:
                         self.sleep(5,
                             "looks like docs haven't been loaded yet...")
+                        retry_count -= 1
                         continue
 
                     if item_count and index_doc_count > item_count:
