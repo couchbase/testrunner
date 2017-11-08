@@ -270,6 +270,55 @@ class QueryTests(BaseTestCase):
             print(k, v)
         print('\n')
 
+
+    def get_user_list(self):
+        """
+        :return:  a list of {'id': 'userid', 'name': 'some_name ,
+        'password': 'passw0rd'}
+        """
+        user_list = []
+        for user in self.inp_users:
+            user_list.append({att: user[att] for att in ('id',
+                                                         'name',
+                                                         'password')})
+        return user_list
+
+    def get_user_role_list(self):
+        """
+        :return:  a list of {'id': 'userid', 'name': 'some_name ,
+         'roles': 'admin:fts_admin[default]'}
+        """
+        user_role_list = []
+        for user in self.inp_users:
+            user_role_list.append({att: user[att] for att in ('id',
+                                                              'name',
+                                                              'roles')})
+        return user_role_list
+
+    def create_users(self, users=None):
+        """
+        :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
+                                        'password': 'passw0rd'}
+        :return: Nothing
+        """
+        if not users:
+            users = self.users
+        RbacBase().create_user_source(users,'builtin',self.master)
+        self.log.info("SUCCESS: User(s) %s created"
+                      % ','.join([user['name'] for user in users]))
+
+    def assign_role(self, rest=None, roles=None):
+        if not rest:
+            rest = RestConnection(self.master)
+        #Assign roles to users
+        if not roles:
+            roles = self.roles
+        RbacBase().add_user_role(roles, rest,'builtin')
+        for user_role in roles:
+            self.log.info("SUCCESS: Role(s) %s assigned to %s"
+                          %(user_role['roles'], user_role['id']))
+
+
 ##############################################################################################
 #
 #   Query Runner
