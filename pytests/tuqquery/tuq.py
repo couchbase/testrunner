@@ -35,6 +35,7 @@ class QueryTests(BaseTestCase):
         else:
             self.skip_buckets_handle = False
         super(QueryTests, self).setUp()
+        self.log.info("==============  QueryTests setup has started ==============")
         if self.input.param("force_clean", False):
             self.skip_buckets_handle = False
             super(QueryTests, self).setUp()
@@ -123,8 +124,11 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
+        self.log.info("==============  QueryTests setup has completed ==============")
+        self.log_config_info()
 
     def suite_setUp(self):
+        self.log.info("==============  QueryTests suite_setup has started ==============")
         try:
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
@@ -144,8 +148,12 @@ class QueryTests(BaseTestCase):
         except Exception, ex:
             self.log.error('SUITE SETUP FAILED')
             self.tearDown()
+        self.log.info("==============  QueryTests suite_setup has completed ==============")
+        self.log_config_info()
 
     def tearDown(self):
+        self.log_config_info()
+        self.log.info("==============  QueryTests tearDown has started ==============")
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
         if self.analytics == True:
@@ -161,17 +169,34 @@ class QueryTests(BaseTestCase):
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
             os.system(cmd)
             os.remove(filename)
+        self.log.info("==============  QueryTests tearDown has completed ==============")
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.log_config_info()
+        self.log.info("==============  QueryTests suite_tearDown has started ==============")
         if not self.input.param("skip_build_tuq", True):
             if hasattr(self, 'shell'):
                 self._kill_all_processes_cbq()
+        self.log.info("==============  QueryTests suite_tearDown has completed ==============")
 
 ##############################################################################################
 #
 #  Setup Helpers
 ##############################################################################################
+
+    def log_config_info(self):
+        self.log.info("==============  System Config: ==============")
+        for bucket in self.buckets:
+            self.log.info("========  Bucket: "+bucket.name+" ===================")
+        self.log.info("=============================================")
+
+    def fail_if_no_buckets(self):
+        buckets = False
+        for a_bucket in self.buckets:
+            buckets = True
+        if not buckets:
+            self.fail('FAIL: This test requires buckets')
 
     def write_file(self, filename, data):
         f = open(filename,'w')
@@ -270,12 +295,11 @@ class QueryTests(BaseTestCase):
             print(k, v)
         print('\n')
 
-
-    def get_user_list(self):
-        """
-        :return:  a list of {'id': 'userid', 'name': 'some_name ,
-        'password': 'passw0rd'}
-        """
+        def get_user_list(self):
+            """
+            :return:  a list of {'id': 'userid', 'name': 'some_name ,
+            'password': 'passw0rd'}
+            """
         user_list = []
         for user in self.inp_users:
             user_list.append({att: user[att] for att in ('id',
@@ -317,7 +341,6 @@ class QueryTests(BaseTestCase):
         for user_role in roles:
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
                           %(user_role['roles'], user_role['id']))
-
 
 ##############################################################################################
 #
@@ -627,7 +650,6 @@ class QueryTests(BaseTestCase):
                 self.sleep(delay, 'incorrect results, sleeping for %s' % delay)
         raise Exception('timeout, invalid results: %s' % res)
 
-
     def negative_common_body(self, queries_errors={}):
         if not queries_errors:
             self.fail("No queries to run!")
@@ -935,7 +957,6 @@ class QueryTests(BaseTestCase):
             finally:
                shell.disconnect()
 
-
     '''Two separate flags are used to control whether or not a primary index is created, one for tuq(skip_index)
        and one for newtuq(skip_primary_index) we should go back and merge these flags and fix the conf files'''
     def create_primary_index_for_3_0_and_greater(self):
@@ -955,16 +976,29 @@ class QueryTests(BaseTestCase):
                     self.sleep(6, 'Sleep for some time after index drop')
                 self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
                 res = self.run_cbq_query(self.query)
-                if (res['metrics']['resultCount'] == 0):
+                if res['metrics']['resultCount'] == 0:
                     self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
                     self.log.info("Creating primary index for %s ..." % bucket.name)
                     try:
                         self.run_cbq_query()
-                        self.primary_index_created= True
+                        self.primary_index_created = True
                         if self.primary_indx_type.lower() == 'gsi':
                             self._wait_for_index_online(bucket, '#primary')
                     except Exception, ex:
                         self.log.info(str(ex))
+
+    def ensure_primary_indexes_exist(self):
+        current_indexes = self.get_parsed_indexes()
+        index_list = [{'name': '#primary',
+                       'bucket': bucket.name,
+                       'fields': [],
+                       'state': 'online',
+                       'using': self.index_type.lower(),
+                       'is_primary': True} for bucket in self.buckets]
+        desired_indexes = self.parse_desired_indexes(index_list)
+        desired_index_set = self.make_hashable_index_set(desired_indexes)
+        current_index_set = self.make_hashable_index_set(current_indexes)
+        self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
 
     def _wait_for_index_online(self, bucket, index_name, timeout=12000):
         end_time = time.time() + timeout

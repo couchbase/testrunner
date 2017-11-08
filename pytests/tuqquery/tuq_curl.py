@@ -39,9 +39,13 @@ INDEX_DEFINITION = {
 class QueryCurlTests(QueryTests):
     def setUp(self):
         super(QueryCurlTests, self).setUp()
+        self.log.info("==============  QueryCurlTests setup has started ==============")
         self.shell = RemoteMachineShellConnection(self.master)
         self.info = self.shell.extract_remote_info()
-        self.curl_path = "%scurl" % self.path if self.info.type.lower() == 'windows' else "curl"
+        if self.info.type.lower() == 'windows':
+            self.curl_path = "%scurl" % self.path
+        else:
+            self.curl_path = "curl"
         self.rest = RestConnection(self.master)
         self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s" \
                                              % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
@@ -51,10 +55,15 @@ class QueryCurlTests(QueryTests):
         self.create_users = self.input.param("create_users", False)
         self.full_access = self.input.param("full_access", True)
         self.run_cbq_query('delete from system:prepareds')
-        self.shell.create_whitelist(self.n1ql_certs_path, {"all_access":True}) if self.full_access else None
+        if self.full_access:
+            self.shell.create_whitelist(self.n1ql_certs_path, {"all_access":True})
+        self.log.info("==============  QueryCurlTests setup has completed ==============")
+        self.log_config_info()
+
 
     def suite_setUp(self):
         super(QueryCurlTests, self).suite_setUp()
+        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
         if self.load_sample:
             self.rest.load_sample("beer-sample")
             index_definition = INDEX_DEFINITION
@@ -90,11 +99,19 @@ class QueryCurlTests(QueryTests):
                           {'id': 'curl_no_insert', 'name': 'curl_no_insert',
                            'roles': '%s' % curl_noinsert_permissions}]
             temp = RbacBase().add_user_role(role_list, self.rest, 'builtin')
+            self.log.info("==============  QueryCurlTests suite_setup has completed ==============")
+            self.log_config_info()
 
     def tearDown(self):
+        self.log_config_info()
+        self.log.info("==============  QueryCurlTests tearDown has started ==============")
+        self.log.info("==============  QueryCurlTests tearDown has completed ==============")
         super(QueryCurlTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.log_config_info()
+        self.log.info("==============  QueryCurlTests suite_tearDown has started ==============")
+        self.log.info("==============  QueryCurlTests suite_tearDown has completed ==============")
         super(QueryCurlTests, self).suite_tearDown()
 
     '''Basic test for using POST in curl'''

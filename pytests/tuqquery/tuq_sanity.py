@@ -15,14 +15,23 @@ class QuerySanityTests(QueryTests):
 
     def setUp(self):
         super(QuerySanityTests, self).setUp()
+        self.log.info("==============  QuerySanityTests setup has started ==============")
+        self.log.info("==============  QuerySanityTests setup has completed ==============")
+        self.log_config_info()
 
     def suite_setUp(self):
         super(QuerySanityTests, self).suite_setUp()
+        self.log.info("==============  QuerySanityTests suite_setup has started ==============")
+        self.log.info("==============  QuerySanityTests suite_setup has completed ==============")
 
     def tearDown(self):
+        self.log.info("==============  QuerySanityTests tearDown has started ==============")
+        self.log.info("==============  QuerySanityTests tearDown has completed ==============")
         super(QuerySanityTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.log.info("==============  QuerySanityTests suite_tearDown has started ==============")
+        self.log.info("==============  QuerySanityTests suite_tearDown has completed ==============")
         super(QuerySanityTests, self).suite_tearDown()
 
 ##############################################################################################
@@ -3240,10 +3249,6 @@ class QuerySanityTests(QueryTests):
              self.run_cbq_query()
              self.query = "drop index %s.idx2" %(bucket.name)
              self.run_cbq_query()
-
-
-
-
 
     def test_meta_where_greater_than(self):
         created_indexes = []

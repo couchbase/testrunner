@@ -6,14 +6,26 @@ class QueryNewTuqTests(QueryTests):
 
     def setUp(self):
         super(QueryNewTuqTests, self).setUp()
+        self.log.info("==============  QueryNewTuqTests setup has started ==============")
+        self.log.info("==============  QueryNewTuqTests setup has started ==============")
+        self.log_config_info()
 
     def suite_setUp(self):
         super(QueryNewTuqTests, self).suite_setUp()
+        self.log.info("==============  QueryNewTuqTests suite_setup has started ==============")
+        self.log.info("==============  QueryNewTuqTests suite_setup has started ==============")
+        self.log_config_info()
 
     def tearDown(self):
+        self.log_config_info()
+        self.log.info("==============  QueryNewTuqTests tearDown has started ==============")
+        self.log.info("==============  QueryNewTuqTests tearDown has started ==============")
         super(QueryNewTuqTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.log_config_info()
+        self.log.info("==============  QueryNewTuqTests suite_tearDown has started ==============")
+        self.log.info("==============  QueryNewTuqTests suite_tearDown has started ==============")
         super(QueryNewTuqTests, self).suite_tearDown()
 
 ##############################################################################################
@@ -21,6 +33,8 @@ class QueryNewTuqTests(QueryTests):
 #   SIMPLE CHECKS
 ##############################################################################################
     def test_simple_check(self):
+        self.fail_if_no_buckets()
+        self.ensure_primary_indexes_exist()
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
@@ -36,8 +50,10 @@ class QueryNewTuqTests(QueryTests):
             query_template = 'FROM %s select $str0, $str1 ORDER BY $str0,$str1 ASC' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
+
     #No usages anywhere
     def test_joins_monitoring(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             e = threading.Event()
             if self.monitoring:
@@ -60,12 +76,14 @@ class QueryNewTuqTests(QueryTests):
         self.negative_common_body(queries_errors)
 
     def test_unnest(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT emp.$int0, task FROM %s emp UNNEST emp.$nested_list_3l0 task' % bucket.name
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(sorted(actual_result['results']), sorted(expected_result))
 
     def test_subquery_select(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT $str0, $subquery(SELECT COUNT($str0) cn FROM %s d USE KEYS $5) as names FROM %s' % (bucket.name,
                                                                                                                      bucket.name)
@@ -73,12 +91,14 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_subquery_from(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT tasks.$str0 FROM $subquery(SELECT $str0, $int0 FROM %s) as tasks' % (bucket.name)
             actual_result, expected_result = self.run_query_with_subquery_from_template(self.query)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_consistent_simple_check(self):
+        self.fail_if_no_buckets()
         queries = [self.gen_results.generate_query('SELECT $str0, $int0, $int1 FROM %s ' +\
                     'WHERE $str0 IS NOT NULL AND $int0<10 ' +\
                     'OR $int1 = 6 ORDER BY $int0, $int1'),
@@ -94,6 +114,7 @@ class QueryNewTuqTests(QueryTests):
                                     actual_result1['results'][:100], actual_result2['results'][:100]))
 
     def test_simple_nulls(self):
+        self.fail_if_no_buckets()
         queries = ['SELECT id FROM %s WHERE id=NULL or id="null"']
         for bucket in self.buckets:
             if self.monitoring:
@@ -135,6 +156,7 @@ class QueryNewTuqTests(QueryTests):
         self.negative_common_body(queries_errors)
 
     def test_limit_offset(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
@@ -150,6 +172,7 @@ class QueryNewTuqTests(QueryTests):
             actual_result, expected_result = self.run_query_from_template(query_template)
 
     def test_limit_offset_zero(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 0' % (bucket.name)
             self.query = self.gen_results.generate_query(query_template)
@@ -182,6 +205,7 @@ class QueryNewTuqTests(QueryTests):
 ##############################################################################################
 
     def test_simple_alias(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
@@ -217,6 +241,7 @@ class QueryNewTuqTests(QueryTests):
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):
+        self.fail_if_no_buckets()
         queries_templates = ['SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ORDER BY points',
                    'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test WHERE test.$int0 >0'  +\
                    ' ORDER BY points',
@@ -241,6 +266,7 @@ class QueryNewTuqTests(QueryTests):
                 self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_from_clause_group(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' %(bucket.name) +\
                          'GROUP BY $obj0.$_obj0_int0 ORDER BY points'
@@ -248,6 +274,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_desc(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
@@ -262,6 +289,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_asc(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $str0 AS name_new FROM %s AS test ORDER BY name_new ASC' %(
                                                                                 bucket.name)
@@ -272,6 +300,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_aggr_fn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
@@ -288,6 +317,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_unnest(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT count(skill) FROM %s AS emp UNNEST emp.$list_str0 AS skill' %(
                                                                             bucket.name)
@@ -305,6 +335,7 @@ class QueryNewTuqTests(QueryTests):
 ##############################################################################################
 
     def test_order_by_check(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $str0, $str1, $obj0.$_obj0_int0 points FROM %s'  % (bucket.name) +\
             ' ORDER BY $str1, $str0, $obj0.$_obj0_int0'
@@ -316,6 +347,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_alias(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $str1, $obj0 AS points FROM %s'  % (bucket.name) +\
             ' AS test ORDER BY $str1 DESC, points DESC'
@@ -323,6 +355,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_alias_arrays(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $str1, $obj0, $list_str0[0] AS SKILL FROM %s'  % (
                                                                             bucket.name) +\
@@ -331,6 +364,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_alias_aggr_fn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $int0, $int1, count(*) AS emp_per_month from %s'% (
                                                                             bucket.name) +\
@@ -339,6 +373,7 @@ class QueryNewTuqTests(QueryTests):
             #self.assertTrue(len(actual_result['results'])== 0)
 
     def test_order_by_aggr_fn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $str1 AS TITLE, min($int1) day FROM %s GROUP'  % (bucket.name) +\
             ' BY $str1 ORDER BY MIN($int1), $str1'
@@ -351,8 +386,8 @@ class QueryNewTuqTests(QueryTests):
                 actual_result1 = self.run_cbq_query()
                 self._verify_results(actual_result1['results'], actual_result['results'])
 
-
     def test_order_by_precedence(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $str0, $str1 FROM %s'  % (bucket.name) +\
             ' ORDER BY $str0, $str1'
@@ -365,6 +400,7 @@ class QueryNewTuqTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_satisfy(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $str0, $list_obj0 FROM %s AS employee ' % (bucket.name) +\
                         'WHERE ANY vm IN employee.$list_obj0 SATISFIES vm.$_list_obj0_int0 > 5 AND' +\
@@ -378,12 +414,14 @@ class QueryNewTuqTests(QueryTests):
 ##############################################################################################
 
     def test_distinct(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT DISTINCT $str1 FROM %s ORDER BY $str1'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_distinct_nested(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT DISTINCT $obj0.$_obj0_int0 as VAR FROM %s '  % (bucket.name) +\
                          'ORDER BY $obj0.$_obj0_int0'
@@ -403,32 +441,37 @@ class QueryNewTuqTests(QueryTests):
 #
 #   COMPLEX PATHS
 ##############################################################################################
+
     #Not used anywhere
     def test_simple_complex_paths(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $_obj0_int0 FROM %s.$obj0'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
+
     #Not used anywhere
     def test_alias_complex_paths(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $_obj0_int0 as new_attribute FROM %s.$obj0'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
+
     #Not used anywhere
     def test_where_complex_paths(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             query_template = 'SELECT $_obj0_int0 FROM %s.$obj0 WHERE $_obj0_int0 = 1'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
 
-
     def test_new_contains_functions(self):
-            self.query = 'SELECT * FROM default WHERE ANY v IN tokens(default, {"specials":true}) SATISFIES REGEXP_LIKE(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})")END order by meta().id'
-            expected_result = self.run_cbq_query()
-            self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\\d{2}-\\d{4})|(\\b\\d{9}\\b)|(\\d{3}[ ]\\d{2}[ ]\\d{4})") order by meta().id'
-            actual_result = self.run_cbq_query()
-            self.assertEquals(actual_result['results'],expected_result['results'])
-            self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})") order by meta().id'
-            actual_result = self.run_cbq_query()
-            self.assertEquals(actual_result['results'],expected_result['results'])
+        self.query = 'SELECT * FROM default WHERE ANY v IN tokens(default, {"specials":true}) SATISFIES REGEXP_LIKE(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})")END order by meta().id'
+        expected_result = self.run_cbq_query()
+        self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\\d{2}-\\d{4})|(\\b\\d{9}\\b)|(\\d{3}[ ]\\d{2}[ ]\\d{4})") order by meta().id'
+        actual_result = self.run_cbq_query()
+        self.assertEquals(actual_result['results'],expected_result['results'])
+        self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})") order by meta().id'
+        actual_result = self.run_cbq_query()
+        self.assertEquals(actual_result['results'],expected_result['results'])

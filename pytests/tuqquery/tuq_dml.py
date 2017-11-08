@@ -776,6 +776,7 @@ class DMLQueryTests(QueryTests):
             actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
+
     def test_delete_where_satisfy_clause_json(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_sat')
         keys_to_delete = [keys[i] for i in xrange(len(keys))
