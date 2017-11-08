@@ -592,6 +592,9 @@ class RemoteMachineShellConnection:
                     self.execute_command("ntpdate pool.ntp.org")
                     self.execute_command("/etc/init.d/ntpd start")
                     do_install = True
+                elif output and "is running..." in output[0]:
+                    ntp_installed = True
+                    log.info("ntp was installed in this server %s" % self.ip)
             else:
                 log.info("will add install in other os later")
 
