@@ -739,13 +739,11 @@ class RemoteMachineShellConnection:
     def is_ntp_installed(self):
         ntp_installed = False
         do_install = False
-        os_version = ""
         log.info("Check if ntp is installed")
         self.extract_remote_info()
         if self.info.type.lower() == 'linux':
-            log.info("\nThis OS version %s" % self.info.distribution_version.lower())
+            log.info("This OS version %s" % self.info.distribution_version.lower())
             if "centos 7" in self.info.distribution_version.lower():
-                os_version = "centos 7"
                 log.info("Check ntpd service in centos 7.x server")
                 output, e = self.execute_command("systemctl status ntpd")
                 for line in output:
@@ -762,49 +760,16 @@ class RemoteMachineShellConnection:
                     self.execute_command("firewall-cmd --add-service=ntp --permanent")
                     self.execute_command("firewall-cmd --reload")
                     do_install = True
-            elif "centos release 6" in self.info.distribution_version.lower():
-                os_version = "centos 6"
-                log.info("Check ntpd service in centos 6")
-                output, e = self.execute_command("/etc/init.d/ntpd status")
-                if not output:
-                    log.info("ntp was not installed on %s server yet"\
-                             "Let install ntp on this server " % self.ip)
-                    self.execute_command("yum install -y ntp ntpdate")
-                    self.execute_command("chkconfig ntpd on")
-                    self.execute_command("ntpdate pool.ntp.org")
-                    self.execute_command("/etc/init.d/ntpd start")
-                    do_install = True
-                elif output and "ntpd is stopped" in output[0]:
-                    log.info("ntp is not running.  Let remove it and install again in %s"\
-                                                            % self.ip)
-                    self.execute_command("yum erase -y ntp")
-                    self.execute_command("yum install -y ntp ntpdate")
-                    self.execute_command("chkconfig ntpd on")
-                    self.execute_command("ntpdate pool.ntp.org")
-                    self.execute_command("/etc/init.d/ntpd start")
-                    do_install = True
-            else:
-                log.info("will add install in other os later")
-
         if do_install:
-            log.info("Check ntpd service after installed")
-            if os_version == "centos 7":
-                output, e = self.execute_command("systemctl status ntpd")
-                for line in output:
-                    if "Active: active (running)" in line:
-                        log.info("ntp is installed and running on this server %s" % self.ip)
-                        ntp_installed = True
-                        break;
-            if os_version == "centos 6":
-                output, e = self.execute_command("/etc/init.d/ntpd status")
-                if output and " is running..." in output[0]:
-                    log.info("ntp is installed and running on this server %s" % self.ip)
+            output, e = self.execute_command("systemctl status ntpd")
+            for line in output:
+                if "Active: active (running)" in line:
+                    log.info("ntp is installed in this server %s" % self.ip)
                     ntp_installed = True
-
+                    break;
         log.info("Date and time on this server %s" % self.ip)
-        output, _ = self.execute_command("date")
-        log.info("\n%s" % output)
-        if not ntp_installed and "centos" in os_version:
+        self.execute_comand("date")
+        if not ntp_installed and "centos 7" in self.info.distribution_version.lower():
             mesg = "\n===============\n"\
                    "        This server {0} \n"\
                    "        failed to install ntp service.\n"\
