@@ -98,7 +98,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
         if not doc_timer_events:
             count = 0
-            stats = self.rest.get_eventing_stats(name)
+            stats = self.rest.get_event_processing_stats(name)
             if on_delete:
                 mutation_type = "DCP_DELETION"
             else:
@@ -109,7 +109,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             while actual_dcp_mutations != expected_dcp_mutations and count < 20:
                 self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
                 count += 1
-                stats = self.rest.get_eventing_stats(name)
+                stats = self.rest.get_event_processing_stats(name)
                 actual_dcp_mutations = stats[mutation_type]
                 log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
             if count == 20:
@@ -127,6 +127,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
         self.assertEqual(expected_dcp_mutations, stats_dst["curr_items"],
                          "Bucket operations from handler code took lot of time to complete or didn't go through")
+        # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
+        out_event_execution = self.rest.get_event_execution_stats(self.function_name)
+        log.info("Event execution stats : {0}".format(out_event_execution))
+        out_event_failure = self.rest.get_event_failure_stats(self.function_name)
+        log.info("Event failure stats : {0}".format(out_event_failure))
 
     def deploy_function(self, body):
         body['settings']['deployment_status'] = True

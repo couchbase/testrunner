@@ -123,3 +123,25 @@ class EventingSanity(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
         self.undeploy_and_delete_function(body)
+
+    def test_delete_bucket_operation_from_handler_code(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        count = 0
+        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        while stats_dst["curr_items"] != 0 and count < 20:
+            self.sleep(30, message="Waiting for handler code to complete all delete doc operations...")
+            count += 1
+            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        self.assertEqual(0, stats_dst["curr_items"],
+                         "Bucket operations from handler code took lot of time to complete or didn't go through")
+
+        self.undeploy_and_delete_function(body)
