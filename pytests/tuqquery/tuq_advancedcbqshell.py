@@ -151,7 +151,6 @@ class AdvancedQueryTests(QueryTests):
                     self.run_cbq_query()
                     self.query = 'select * from default'
                     self.run_cbq_query()
-                import pdb; pdb.set_trace()
                 self.assertTrue("timeout" in o)
             finally:
                 shell.disconnect()
