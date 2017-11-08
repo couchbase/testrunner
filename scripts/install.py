@@ -61,6 +61,7 @@ Available keys:
  fts_query_limit=1000000    Set a limit for the max results to be returned by fts for any query
  change_indexer_ports=false Sets indexer ports values to non-default ports
  storage_mode=plasma        Sets indexer storage mode
+ enable_ipv6=False          Enable ipv6 mode in ns_server
 
 
 Examples:
@@ -478,6 +479,9 @@ class CouchbaseServerInstaller(Installer):
                 if params.get('use_domain_names', 0):
                     RemoteUtilHelper.use_hostname_for_server_settings(server)
 
+                if params.get('enable_ipv6', 0):
+                    RestConnection(server).rename_node(hostname=server.ip)
+
                 # Make sure that data_path and index_path are writable by couchbase user
                 for path in set(filter(None, [server.data_path, server.index_path])):
                     time.sleep(3)
@@ -653,6 +657,12 @@ class CouchbaseServerInstaller(Installer):
         else:
             fts_query_limit = None
 
+        if "enable_ipv6" in params:
+            enable_ipv6 = params["enable_ipv6"]
+            start_server = False
+        else:
+            enable_ipv6 = None
+
         if "linux_repo" in params and params["linux_repo"].lower() == "true":
             linux_repo = True
         else:
@@ -675,9 +685,11 @@ class CouchbaseServerInstaller(Installer):
                                        params["version"].replace("-rel", ""),
                                        vbuckets=vbuckets,
                                        fts_query_limit=fts_query_limit,
+                                       enable_ipv6=enable_ipv6,
                                        windows_msi=self.msi )
             else:
                 downloaded = remote_client.download_build(build)
+
                 if not downloaded:
                     sys.exit('server {1} unable to download binaries : {0}' \
                                      .format(build.url, params["server"].ip))
@@ -688,7 +700,8 @@ class CouchbaseServerInstaller(Installer):
                                          startserver=start_server,\
                                          vbuckets=vbuckets, swappiness=swappiness,\
                                         openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
-                                        fts_query_limit=fts_query_limit)
+                                        fts_query_limit=fts_query_limit,
+                                        enable_ipv6=enable_ipv6)
                     log.info('wait 5 seconds for Couchbase server to start')
                     time.sleep(5)
                     if "rest_vbuckets" in params:
@@ -1010,6 +1023,11 @@ class InstallerJob(object):
         queue = Queue.Queue()
         success = True
         for server in servers:
+            if params.get('enable_ipv6',0):
+                if re.match('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', server.ip):
+                    sys.exit("****************************** ERROR: You are "
+                             "trying to enable IPv6 on an IPv4 machine, "
+                             "run without enable_ipv6=True ******************")
             _params = copy.deepcopy(params)
             _params["server"] = server
             u_t = Thread(target=installer_factory(params).uninstall,

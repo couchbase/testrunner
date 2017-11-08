@@ -1676,7 +1676,7 @@ class RemoteMachineShellConnection:
     """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
-                       fts_query_limit=None):
+                       fts_query_limit=None, enable_ipv6=None):
 
         log.info('*****install server ***')
         server_type = None
@@ -1692,6 +1692,7 @@ class RemoteMachineShellConnection:
         else:
             raise Exception("its not a membase or couchbase?")
         self.extract_remote_info()
+
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
             log.info('***** Doing the windows install')
@@ -1849,6 +1850,13 @@ class RemoteMachineShellConnection:
                             "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},hideUI=false/'\
                             {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
                                                               nonroot_path_start))
+                success &= self.log_command_output(output, error, track_words)
+                startserver = True
+
+            if enable_ipv6:
+                output, error = \
+                    self.execute_command("sed -i '/ipv6, /c \\{ipv6, true\}'. %s"
+                        % testconstants.LINUX_STATIC_CONFIG)
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
