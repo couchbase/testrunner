@@ -718,7 +718,6 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         else:
             raise Exception("stopping standalone moxi is not supported on windows")
-
     def is_url_live(self, url):
         live_url = False
         log.info("Check if url {0} is ok".format(url))
@@ -730,55 +729,13 @@ class RemoteMachineShellConnection:
             mesg = "\n===============\n"\
                    "        This url {0} \n"\
                    "        is failed to connect.\n"\
-                   "        Check version in params to make sure it correct pattern\
-                            or build number.\n"\
+                   "        Check version in params to make sure it correct pattern or build number.\n"\
                    "===============\n".format(url)
             self.stop_current_python_running(mesg)
         return live_url
 
-    def is_ntp_installed(self):
-        ntp_installed = False
-        do_install = False
-        log.info("Check if ntp is installed")
-        self.extract_remote_info()
-        if self.info.type.lower() == 'linux':
-            log.info("This OS version %s" % self.info.distribution_version.lower())
-            if "centos 7" in self.info.distribution_version.lower():
-                log.info("Check ntpd service in centos 7.x server")
-                output, e = self.execute_command("systemctl status ntpd")
-                for line in output:
-                    if "Active: active (running)" in line:
-                        log.info("ntp was installed in this server %s" % self.ip)
-                        ntp_installed = True
-                if not ntp_installed:
-                    log.info("ntp not installed yet or not run.\n"\
-                             "Let remove any old one and install ntp")
-                    self.execute_command("yum erase -y ntp")
-                    self.execute_command("yum install -y ntp")
-                    self.execute_command("systemctl start ntpd")
-                    self.execute_command("systemctl enable ntpd")
-                    self.execute_command("firewall-cmd --add-service=ntp --permanent")
-                    self.execute_command("firewall-cmd --reload")
-                    do_install = True
-        if do_install:
-            output, e = self.execute_command("systemctl status ntpd")
-            for line in output:
-                if "Active: active (running)" in line:
-                    log.info("ntp is installed in this server %s" % self.ip)
-                    ntp_installed = True
-                    break;
-        log.info("Date and time on this server %s" % self.ip)
-        self.execute_comand("date")
-        if not ntp_installed and "centos 7" in self.info.distribution_version.lower():
-            mesg = "\n===============\n"\
-                   "        This server {0} \n"\
-                   "        failed to install ntp service.\n"\
-                   "===============\n".format(self.ip)
-            self.stop_current_python_running(mesg)
-
     def download_build(self, build):
-        return self.download_binary(build.url, build.deliverable_type,
-                                    build.name, latest_url=build.url_latest_build)
+        return self.download_binary(build.url, build.deliverable_type, build.name, latest_url=build.url_latest_build)
 
     def disable_firewall(self):
         self.extract_remote_info()
@@ -3724,7 +3681,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_cbcollect_info(self, file, options=""):
+    def execute_cbcollect_info(self, file):
         cbcollect_command = "%scbcollect_info" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbcollect_command = "/home/%s%scbcollect_info" % (self.username,
@@ -3735,7 +3692,7 @@ class RemoteMachineShellConnection:
         if self.info.distribution_type.lower() == 'mac':
             cbcollect_command = "%scbcollect_info" % (MAC_COUCHBASE_BIN_PATH)
 
-        command = "%s %s %s" % (cbcollect_command, file, options)
+        command = "%s %s" % (cbcollect_command, file)
         output, error = self.execute_command(command, use_channel=True)
         return output, error
 
