@@ -322,11 +322,22 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
+                count4 = NodeHelper.check_goxdcr_log(
+                    node,
+                    "received error response from setMeta client. Repairing connection. response status=EINVAL",
+                    goxdcr_log)
+                count5 = NodeHelper.check_goxdcr_log(
+                    node,
+                    "GOGC in new global setting is 0, which is not a valid value and can only have come from "
+                    "upgrade. Changed it to 100 instead.",
+                    goxdcr_log)
                 if count1 > 0 or count2 > 0:
                     self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
-                                        "error message found in " + str(node.ip))
+                                                "error message found in " + str(node.ip))
                     self.log.info("Failed to repair connections to target cluster "
-                                        "error message not found as expected in " + str(node.ip))
+                                  "error message not found as expected in " + str(node.ip))
+                self.assertEqual(count4, 0, "Disconnect errors found in " + str(node.ip))
+                self.assertEqual(count5, 0, "GOGC reset to 0 during upgrade in " + str(node.ip))
 
     def is_goxdcr_migration_successful(self, server):
         count = NodeHelper.check_goxdcr_log(server,
@@ -518,11 +529,22 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
+                count4 = NodeHelper.check_goxdcr_log(
+                    node,
+                    "received error response from setMeta client. Repairing connection. response status=EINVAL",
+                    goxdcr_log)
+                count5 = NodeHelper.check_goxdcr_log(
+                    node,
+                    "GOGC in new global setting is 0, which is not a valid value and can only have come from "
+                    "upgrade. Changed it to 100 instead.",
+                    goxdcr_log)
                 if count1 > 0 or count2 > 0:
                     self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
-                                        "error message found in " + str(node.ip))
+                                                "error message found in " + str(node.ip))
                     self.log.info("Failed to repair connections to target cluster "
-                                        "error message not found as expected in " + str(node.ip))
+                                  "error message not found as expected in " + str(node.ip))
+                self.assertEqual(count4, 0, "Disconnect errors found in " + str(node.ip))
+                self.assertEqual(count5, 0, "GOGC reset to 0 during upgrade in " + str(node.ip))
 
     def incremental_offline_upgrade(self):
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
@@ -618,11 +640,23 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
+                count4 = NodeHelper.check_goxdcr_log(
+                    node,
+                    "received error response from setMeta client. Repairing connection. response status=EINVAL",
+                    goxdcr_log)
+                count5 = NodeHelper.check_goxdcr_log(
+                    node,
+                    "GOGC in new global setting is 0, which is not a valid value and can only have come from "
+                    "upgrade. Changed it to 100 instead.",
+                    goxdcr_log)
                 if count1 > 0 or count2 > 0:
                     self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
-                                        "error message found in " + str(node.ip))
+                                                "error message found in " + str(node.ip))
                     self.log.info("Failed to repair connections to target cluster "
-                                        "error message not found as expected in " + str(node.ip))
+                                  "error message not found as expected in " + str(node.ip))
+                self.assertEqual(count4, 0, "Disconnect errors found in " + str(node.ip))
+                self.assertEqual(count5, 0, "GOGC reset to 0 during upgrade in " + str(node.ip))
+
     def _operations(self):
         # TODO: there are not tests with views
         if self.ddocs_num_src:
@@ -816,8 +850,19 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
+                count4 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "received error response from setMeta client. Repairing connection. response status=EINVAL",
+                            goxdcr_log)
+                count5 = NodeHelper.check_goxdcr_log(
+                            node,
+                            "GOGC in new global setting is 0, which is not a valid value and can only have come from "
+                            "upgrade. Changed it to 100 instead.",
+                            goxdcr_log)
                 if count1 > 0 or count2 > 0:
                     self.assertEqual(count3, 0, "Failed to repair connections to target cluster "
                                         "error message found in " + str(node.ip))
                     self.log.info("Failed to repair connections to target cluster "
                                         "error message not found as expected in " + str(node.ip))
+                self.assertEqual(count4, 0, "Disconnect errors found in " + str(node.ip))
+                self.assertEqual(count5, 0, "GOGC reset to 0 during upgrade in " + str(node.ip))
