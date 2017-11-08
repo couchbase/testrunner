@@ -31,7 +31,7 @@ from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_COUCHBASE_BIN_PATH,\
-                          LINUX_CB_PATH
+                          LINUX_CB_PATH, MAC_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH, WIN_CB_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH
@@ -3148,7 +3148,7 @@ class RemoteMachineShellConnection:
 
     def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
                                command_options='', cluster_ip="", cluster_port="8091", delete_backup=True):
-        backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        backup_command = "%scbbackup" % (LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
         self.extract_remote_info()
@@ -3158,7 +3158,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("taskkill /F /T /IM cbbackup.exe")
             self.log_command_output(output, error)
         if self.info.distribution_type.lower() == 'mac':
-            backup_command = "%scbbackup" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            backup_command = "%scbbackup" % (MAC_COUCHBASE_BIN_PATH)
 
         command_options_string = ""
         if command_options is not '':
@@ -3183,14 +3183,14 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def restore_backupFile(self, login_info, backup_location, buckets):
-        restore_command = "%scbrestore" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        restore_command = "%scbrestore" % (LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             restore_command = "\"%scbrestore.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
         if self.info.distribution_type.lower() == 'mac':
-            restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            restore_command = "%scbrestore" % (MAC_COUCHBASE_BIN_PATH)
         outputs = errors = []
         for bucket in buckets:
             command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_file_location, "http://",
@@ -3261,12 +3261,12 @@ class RemoteMachineShellConnection:
         return headerInfo, bucketMap
 
     def execute_cbtransfer(self, source, destination, command_options=''):
-        transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
         if self.info.distribution_type.lower() == 'mac':
-            transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            transfer_command = "%scbtransfer" % (MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
         if self.info.type.lower() == 'windows':
@@ -3277,21 +3277,21 @@ class RemoteMachineShellConnection:
         return output
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
-        cbdocloader_command = "%scbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbdocloader_command = "%scbdocloader" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
                                                                             testconstants.LINUX_CB_PATH, file)
         if self.info.distribution_type.lower() == 'mac':
-            cbdocloader_command = "%scbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbdocloader_command = "%scbdocloader" % (MAC_COUCHBASE_BIN_PATH)
             command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
                                                                             testconstants.MAC_CB_PATH, file)
 
         if self.info.type.lower() == 'windows':
-            cbdocloader_command = "%scbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbdocloader_command = "%scbdocloader.exe" % (WIN_COUCHBASE_BIN_PATH)
             WIN_COUCHBASE_SAMPLES_PATH = "C:/Program\ Files/Couchbase/Server/samples/"
             command = "%s -u %s -p %s -n %s:%s -b %s -s %s %s%s.zip" % (cbdocloader_command,
                                                                         username, password, self.ip,
@@ -3301,27 +3301,27 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_cbcollect_info(self, file):
-        cbcollect_command = "%scbcollect_info" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+    def execute_cbcollect_info(self, file, options=""):
+        cbcollect_command = "%scbcollect_info" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbcollect_command = "%scbcollect_info.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbcollect_command = "%scbcollect_info" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbcollect_command = "%scbcollect_info" % (MAC_COUCHBASE_BIN_PATH)
 
-        command = "%s %s" % (cbcollect_command, file)
+        command = "%s %s %s" % (cbcollect_command, file, options)
         output, error = self.execute_command(command, use_channel=True)
         return output, error
 
 
     # works for linux only
     def execute_couch_dbinfo(self, file):
-        couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        couch_dbinfo_command = "%scouch_dbinfo" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            couch_dbinfo_command = "%scouch_dbinfo.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            couch_dbinfo_command = "%scouch_dbinfo.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            couch_dbinfo_command = "%scouch_dbinfo" % (MAC_COUCHBASE_BIN_PATH)
 
         command =  couch_dbinfo_command +' -i /opt/couchbase/var/lib/couchbase/data/*/*[0-9] >' + file
         output, error = self.execute_command(command, use_channel=True)
@@ -3329,12 +3329,12 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbepctl(self, bucket, persistence, param_type, param, value):
-        cbepctl_command = "%scbepctl" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbepctl_command = "%scbepctl" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbepctl_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbepctl_command = "%scbepctl.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbepctl_command = "%scbepctl" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbepctl_command = "%scbepctl" % (MAC_COUCHBASE_BIN_PATH)
 
         if bucket.saslPassword == None:
             bucket.saslPassword = ''
@@ -3351,12 +3351,12 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbvdiff(self, bucket, node_str, password=None):
-        cbvdiff_command = "%scbvdiff" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbvdiff_command = "%scbvdiff" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbvdiff_command = "%scbvdiff.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbvdiff_command = "%scbvdiff.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbvdiff_command = "%scbvdiff" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbvdiff_command = "%scbvdiff" % (MAC_COUCHBASE_BIN_PATH)
 
         if not password:
             command = "%s -b %s %s " % (cbvdiff_command, bucket.name, node_str)
@@ -3367,12 +3367,12 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbstats(self, bucket, command, keyname="", vbid=0):
-        cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbstat_command = "%scbstats.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbstat_command = "%scbstats" % (MAC_COUCHBASE_BIN_PATH)
 
         if command != "key" and command != "raw":
             if bucket.saslPassword == None:
@@ -3389,12 +3389,12 @@ class RemoteMachineShellConnection:
         return output, error
 
     def couchbase_cli(self, subcommand, cluster_host, options):
-        cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
 
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [SUBCOMMAND] [OPTIONS]
@@ -3406,12 +3406,12 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='', cluster_port=None, user='Administrator', password='password'):
-        cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
 
         cluster_param = (" --cluster={0}".format(cluster_host), "")[cluster_host is None]
         if cluster_param is not None:
@@ -3428,14 +3428,14 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket, item_size, command_options):
-        cbworkloadgen_command = "%scbworkloadgen" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbworkloadgen_command = "%scbworkloadgen" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
 
         if self.info.distribution_type.lower() == 'mac':
-            cbworkloadgen_command = "%scbworkloadgen" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbworkloadgen_command = "%scbworkloadgen" % (MAC_COUCHBASE_BIN_PATH)
 
         if self.info.type.lower() == 'windows':
-            cbworkloadgen_command = "%scbworkloadgen.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbworkloadgen_command = "%scbworkloadgen.exe" % (WIN_COUCHBASE_BIN_PATH)
 
         command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command, self.ip, self.port,
                                                                           ratio, num_items, bucket, item_size,
@@ -3450,12 +3450,12 @@ class RemoteMachineShellConnection:
         if command_options is not None:
             command_options_string = ' '.join(command_options)
 
-        cbhealthchecker_command = "%scbhealthchecker" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbhealthchecker_command = "%scbhealthchecker" % (LINUX_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cbhealthchecker_command = "%scbhealthchecker" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbhealthchecker_command = "%scbhealthchecker" % (MAC_COUCHBASE_BIN_PATH)
 
         if self.info.type.lower() == 'windows':
-            cbhealthchecker_command = "%scbhealthchecker" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbhealthchecker_command = "%scbhealthchecker" % (WIN_COUCHBASE_BIN_PATH)
 
         if path_to_store:
             self.execute_command('rm -rf %s; mkdir %s;cd %s' % (path_to_store,
@@ -3476,10 +3476,10 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_vbuckettool(self, keys, prefix=None):
-        command = "%stools/vbuckettool" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        command = "%stools/vbuckettool" % (LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            command = "%stools/vbuckettool.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            command = "%stools/vbuckettool.exe" % (WIN_COUCHBASE_BIN_PATH)
         if prefix:
             command = prefix + command
         command = "%s - %s" % (command, ' '.join(keys))
