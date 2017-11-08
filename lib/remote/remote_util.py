@@ -3759,7 +3759,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_cbcollect_info(self, file):
+    def execute_cbcollect_info(self, file, options=""):
         cbcollect_command = "%scbcollect_info" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbcollect_command = "/home/%s%scbcollect_info" % (self.username,
@@ -3770,7 +3770,7 @@ class RemoteMachineShellConnection:
         if self.info.distribution_type.lower() == 'mac':
             cbcollect_command = "%scbcollect_info" % (MAC_COUCHBASE_BIN_PATH)
 
-        command = "%s %s" % (cbcollect_command, file)
+        command = "%s %s %s" % (cbcollect_command, file, options)
         output, error = self.execute_command(command, use_channel=True)
         return output, error
 
