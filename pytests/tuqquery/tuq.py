@@ -112,12 +112,12 @@ class QueryTests(BaseTestCase):
             if self.analytics == False:
                 self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
-        #self.log.info('Temp fix for MB-16888')
-        #if self.cluster_ops == False:
-        #    self.shell.execute_command("killall -9 cbq-engine")
-        #    self.shell.execute_command("killall -9 indexer")
-        #    self.sleep(20, 'wait for indexer')
-        #self.log.info('-'*100)
+        self.log.info('Temp fix for MB-16888')
+        if self.cluster_ops == False:
+           self.shell.execute_command("killall -9 cbq-engine")
+           self.shell.execute_command("killall -9 indexer")
+           self.sleep(20, 'wait for indexer')
+        self.log.info('-'*100)
         if self.analytics:
             self.setup_analytics()
             self.sleep(30, 'wait for analytics setup')
@@ -145,11 +145,11 @@ class QueryTests(BaseTestCase):
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
                 self.sleep(30,'wait for analytics setup')
+            self.log.info("==============  QueryTests suite_setup has completed ==============")
+            self.log_config_info()
         except Exception, ex:
             self.log.error('SUITE SETUP FAILED')
             self.tearDown()
-        self.log.info("==============  QueryTests suite_setup has completed ==============")
-        self.log_config_info()
 
     def tearDown(self):
         self.log_config_info()

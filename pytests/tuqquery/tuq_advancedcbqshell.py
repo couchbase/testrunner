@@ -20,7 +20,8 @@ class AdvancedQueryTests(QueryTests):
         self.cbqpath = '%scbq -quiet -u %s -p %s' % (self.path, self.username, self.password)
 
     def tearDown(self):
-        self.skip_buckets_handle = False if self._testMethodName == 'suite_tearDown' else None
+        if self._testMethodName == 'suite_tearDown':
+            self.skip_buckets_handle = False
         super(AdvancedQueryTests, self).tearDown()
 
     def test_url(self):
@@ -150,6 +151,7 @@ class AdvancedQueryTests(QueryTests):
                     self.run_cbq_query()
                     self.query = 'select * from default'
                     self.run_cbq_query()
+                import pdb; pdb.set_trace()
                 self.assertTrue("timeout" in o)
             finally:
                 shell.disconnect()
