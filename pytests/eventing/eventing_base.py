@@ -93,31 +93,35 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             raise Exception(
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
-    def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False):
-        # we can't rely on DCP_MUTATION stats when doc timers events are set.
-        # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
-        if not doc_timer_events:
-            count = 0
-            stats = self.rest.get_event_processing_stats(name)
-            if on_delete:
-                mutation_type = "DCP_DELETION"
-            else:
-                mutation_type = "DCP_MUTATION"
-            actual_dcp_mutations = stats[mutation_type]
-            # wait for eventing node to process dcp mutations
-            log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
-            while actual_dcp_mutations != expected_dcp_mutations and count < 20:
-                self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
-                count += 1
+    def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
+                                skip_stats_validation=False):
+        if not skip_stats_validation:
+            # we can't rely on DCP_MUTATION stats when doc timers events are set.
+            # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
+            if not doc_timer_events:
+                count = 0
                 stats = self.rest.get_event_processing_stats(name)
+                if on_delete:
+                    mutation_type = "DCP_DELETION"
+                else:
+                    mutation_type = "DCP_MUTATION"
                 actual_dcp_mutations = stats[mutation_type]
+                # This is required when binary data is involved where DCP_MUTATION will have process DCP_MUTATIONS
+                # but ignore it
+                # wait for eventing node to process dcp mutations
                 log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
-            if count == 20:
-                raise Exception(
-                    "Eventing has not processed all the {0}. Current : {1} Expected : {2}".format(mutation_type,
-                                                                                                  actual_dcp_mutations,
-                                                                                                  expected_dcp_mutations
-                                                                                                  ))
+                while actual_dcp_mutations != expected_dcp_mutations and count < 20:
+                    self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
+                    count += 1
+                    stats = self.rest.get_event_processing_stats(name)
+                    actual_dcp_mutations = stats[mutation_type]
+                    log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
+                if count == 20:
+                    raise Exception(
+                        "Eventing has not processed all the {0}. Current : {1} Expected : {2}".format(mutation_type,
+                                                                                                      actual_dcp_mutations,
+                                                                                                      expected_dcp_mutations
+                                                                                                      ))
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
@@ -182,4 +186,3 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # undeploy the function
         content = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Resume Application : {0}".format(content))
-

@@ -143,5 +143,4 @@ class EventingSanity(EventingBaseTest):
             stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
         self.assertEqual(0, stats_dst["curr_items"],
                          "Bucket operations from handler code took lot of time to complete or didn't go through")
-
         self.undeploy_and_delete_function(body)
