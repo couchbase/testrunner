@@ -177,9 +177,9 @@ class CBASClusterManagement(CBASBaseTest):
             self.perform_doc_ops_in_all_cb_buckets(test_docs, "create", test_docs*i, test_docs*(i+1))
 #             self.connect_to_bucket(self.cbas_bucket_name, self.cb_bucket_name)
             
-            if self.rest._rebalance_progress_status() == 'running':
-                self.assertTrue((self.get_num_items_in_cbas_dataset(self.cbas_dataset_name))[0] == docs_to_verify,
-                            "Number of items in CBAS is different from CB after adding further cbas node.")
+#             if self.rest._rebalance_progress_status() == 'running':
+#                 self.assertTrue((self.get_num_items_in_cbas_dataset(self.cbas_dataset_name))[0] == docs_to_verify,
+#                             "Number of items in CBAS is different from CB after adding further cbas node.")
             
             docs_to_verify = docs_to_verify + test_docs
             # Wait for the rebalance to be completed.
