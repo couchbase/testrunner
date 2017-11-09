@@ -1899,7 +1899,8 @@ class RemoteMachineShellConnection:
         return success
 
     def install_server_win(self, build, version, startserver=True,
-                           vbuckets=None, fts_query_limit=None,windows_msi=False):
+                           vbuckets=None, fts_query_limit=None,
+                           enable_ipv6=None, windows_msi=False):
 
 
         log.info('******start install_server_win ********')
