@@ -2735,6 +2735,11 @@ class RemoteMachineShellConnection:
                     log.info("This error is due to fix_failed_install.py script that only "
                              "happens in centos 7")
                     success = True
+                elif "Created symlink /etc/systemd/system/multi-user.target.wants/couchbase-server.service" in line:
+                    log.info(line)
+                    log.info("This message comes only in debian8 and debian9 during installation. "
+                             "This can be ignored.")
+                    success = True
                 else:
                     log.info("\nIf couchbase server is running with this error."
                               "\nGo to log_command_output to add error mesg to bypass it.")
@@ -3019,7 +3024,7 @@ class RemoteMachineShellConnection:
                             etc_issue = line
                             break
                         # strip all extra characters
-                    etc_issue = etc_issue.rstrip('\n').rstrip('\\l').rstrip('\\n')
+                    etc_issue = etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(' ')
                     if etc_issue.lower().find('ubuntu') != -1:
                         os_distro = 'Ubuntu'
                         os_version = etc_issue

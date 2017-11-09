@@ -55,7 +55,7 @@ SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1", "4.1.1", "4.1.2"]
 WATSON_VERSION = ["4.5.0", "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4"]
 CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson", "4.6":"watson",
                    "4.7":"spock", "5.0":"spock", "5.1":"vulcan"}
-SYSTEMD_SERVER = ["centos 7", "suse 12", "ubuntu 16.04"]
+SYSTEMD_SERVER = ["centos 7", "suse 12", "ubuntu 16.04", "debian gnu/linux 8", "debian gnu/linux 9"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_COUCHBASE_DATA_PATH_RAW = 'c:/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
