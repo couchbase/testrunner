@@ -93,6 +93,7 @@ class OPS:
 
 class EVICTION_POLICY:
     VALUE_ONLY = "valueOnly"
+    NO_EVICTION = "noEviction"
 
 
 class BUCKET_PRIORITY:
@@ -1108,7 +1109,7 @@ class CouchbaseCluster:
                     audit_obj.setAuditEnable('true')
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
-                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                             bucket_type=None, enable_replica_index=1, eviction_policy='valueOnly',
                              bucket_priority=None, flush_enabled=1, lww=False):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
@@ -1134,9 +1135,13 @@ class CouchbaseCluster:
         bucket_params['size'] = size
         bucket_params['port'] = port
         bucket_params['password'] = password
+        bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
         bucket_params['bucket_type'] = bucket_type
         bucket_params['enable_replica_index'] = enable_replica_index
-        bucket_params['eviction_policy'] = eviction_policy
+        if bucket_type == "ephemeral":
+            bucket_params['eviction_policy'] = EVICTION_POLICY.NO_EVICTION
+        else:
+            bucket_params['eviction_policy'] = eviction_policy
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww

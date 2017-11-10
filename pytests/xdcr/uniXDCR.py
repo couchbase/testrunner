@@ -207,6 +207,11 @@ class unidirectional(XDCRNewBaseTest):
         a full verification: wait for the disk queues to drain
         and then verify that there has been any data loss on all clusters."""
     def replication_with_ddoc_compaction(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            self.log.info("Test case does not apply to ephemeral")
+            return
+
         self.setup_xdcr_and_load()
 
         num_views = self._input.param("num_views", 5)
