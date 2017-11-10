@@ -130,6 +130,10 @@ class PauseResumeTest(XDCRNewBaseTest):
         self.verify_results()
 
     def view_query_pause_resume(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            self.log.info("Test case does not apply to ephemeral")
+            return
 
         load_tasks = self.__async_load_xdcr()
         self.pause_xdcr()

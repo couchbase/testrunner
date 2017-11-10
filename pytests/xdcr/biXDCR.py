@@ -194,7 +194,13 @@ class bidirectional(XDCRNewBaseTest):
     a full verification: wait for the disk queues to drain
     and then verify that there has been no data loss on both clusters."""
     def replication_with_ddoc_compaction(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            self.log.info("Test case does not apply to ephemeral")
+            return
+
         self.setup_xdcr()
+
         self.src_cluster.load_all_buckets(self._num_items)
         self.dest_cluster.load_all_buckets(self._num_items)
 
@@ -233,9 +239,14 @@ class bidirectional(XDCRNewBaseTest):
         self.verify_results()
 
     def replication_with_view_queries_and_ops(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            self.log.info("Test case does not apply to ephemeral")
+            return
         tasks = []
         try:
             self.setup_xdcr()
+
             self.src_cluster.load_all_buckets(self._num_items)
             self.dest_cluster.load_all_buckets(self._num_items)
 
