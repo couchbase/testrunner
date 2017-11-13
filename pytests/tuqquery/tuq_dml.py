@@ -7,7 +7,7 @@ from tuqquery.tuq import QueryTests
 class DMLQueryTests(QueryTests):
     def setUp(self):
         super(DMLQueryTests, self).setUp()
-        self.log.info("==============  DMLQueryTests suite_setup has started ==============")
+        self.log.info("==============  DMLQueryTests setup has started ==============")
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.named_prepare = self.input.param("named_prepare", None)
         # Temp process shutdown to debug MB-16888
@@ -23,23 +23,20 @@ class DMLQueryTests(QueryTests):
         self.log.info(self.shell.execute_command("ps aux | grep indexer"))
         self.log.info(self.shell.execute_command("ps aux | grep cbq"))
         self.log.info("-"*100)
-        self.log.info("==============  DMLQueryTests suite_setup has started ==============")
+        self.log.info("==============  DMLQueryTests setup has started ==============")
         self.log_config_info()
 
     def suite_setUp(self):
         super(DMLQueryTests, self).suite_setUp()
         self.log.info("==============  DMLQueryTests suite_setup has started ==============")
         self.log.info("==============  DMLQueryTests suite_setup has started ==============")
-        self.log_config_info()
 
     def tearDown(self):
-        self.log_config_info()
         self.log.info("==============  DMLQueryTests tearDown has started ==============")
         self.log.info("==============  DMLQueryTests tearDown has started ==============")
         super(DMLQueryTests, self).tearDown()
 
     def suite_tearDown(self):
-        self.log_config_info()
         self.log.info("==============  DMLQueryTests suite_tearDown has started ==============")
         self.log.info("==============  DMLQueryTests suite_tearDown has started ==============")
         super(DMLQueryTests, self).suite_tearDown()

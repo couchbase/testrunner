@@ -35,10 +35,10 @@ class QueryTests(BaseTestCase):
         else:
             self.skip_buckets_handle = False
         super(QueryTests, self).setUp()
-        self.log.info("==============  QueryTests setup has started ==============")
         if self.input.param("force_clean", False):
             self.skip_buckets_handle = False
             super(QueryTests, self).setUp()
+        self.log.info("==============  QueryTests setup has started ==============")
         self.version = self.input.param("cbq_version", "sherlock")
         self.flat_json = self.input.param("flat_json", False)
         self.directory_flat_json = self.input.param("directory_flat_json", "/tmp/")
@@ -125,7 +125,6 @@ class QueryTests(BaseTestCase):
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
         self.log.info("==============  QueryTests setup has completed ==============")
-        self.log_config_info()
 
     def suite_setUp(self):
         self.log.info("==============  QueryTests suite_setup has started ==============")
@@ -145,14 +144,12 @@ class QueryTests(BaseTestCase):
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
                 self.sleep(30,'wait for analytics setup')
-            self.log.info("==============  QueryTests suite_setup has completed ==============")
-            self.log_config_info()
         except Exception, ex:
             self.log.error('SUITE SETUP FAILED')
             self.tearDown()
+        self.log.info("==============  QueryTests suite_setup has completed ==============")
 
     def tearDown(self):
-        self.log_config_info()
         self.log.info("==============  QueryTests tearDown has started ==============")
         if self._testMethodName == 'suite_tearDown':
             self.skip_buckets_handle = False
@@ -173,7 +170,6 @@ class QueryTests(BaseTestCase):
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
-        self.log_config_info()
         self.log.info("==============  QueryTests suite_tearDown has started ==============")
         if not self.input.param("skip_build_tuq", True):
             if hasattr(self, 'shell'):
@@ -186,9 +182,31 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
 
     def log_config_info(self):
-        self.log.info("==============  System Config: ==============")
+        self.log.info("==============  System Config: ==============\n")
+        current_indexes = []
+        try:
+            query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+            current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                frozenset([key.replace('`', '').replace('(', '').replace(')', '')
+                                           for key in i['indexes']['index_key']]),
+                                i['indexes']['state'],
+                                i['indexes']['using']) for i in query_response['results']]
+        except Exception as e:
+            pass
+
         for bucket in self.buckets:
-            self.log.info("========  Bucket: "+bucket.name+" ===================")
+            docs = 0
+            bucket_indexes = []
+            for index in current_indexes:
+                if index[1] == bucket.name:
+                    bucket_indexes.append(index[0])
+                    if index[0] == '#primary':
+                        query_response = self.run_cbq_query("SELECT * FROM "+bucket.name)
+                        docs = len(query_response)
+            self.log.info("Bucket: "+bucket.name)
+            self.log.info("Indexes: "+str(bucket_indexes))
+            self.log.info("Docs: "+str(docs)+"\n")
         self.log.info("=============================================")
 
     def fail_if_no_buckets(self):

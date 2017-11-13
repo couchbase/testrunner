@@ -15,7 +15,7 @@ class QueriesIndexTests(QueryTests):
     COMPLEX_FIELDS_TO_INDEX = ['VMs', 'tasks_points', 'skills']
     def setUp(self):
         super(QueriesIndexTests, self).setUp()
-        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
+        self.log.info("==============  QueryCurlTests setup has started ==============")
         self.num_indexes = self.input.param('num_indexes', 1)
         if self.num_indexes > len(self.FIELDS_TO_INDEX):
             self.input.test_params["stop-on-failure"] = True
@@ -24,25 +24,22 @@ class QueriesIndexTests(QueryTests):
         self.rest = RestConnection(self.master)
         self.shell = RemoteMachineShellConnection(self.master)
         self.delete_sample = self.input.param("delete_sample", False)
-        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
+        self.log.info("==============  QueryCurlTests setup has completed ==============")
         self.log_config_info()
 
     def suite_setUp(self):
         super(QueriesIndexTests, self).suite_setUp()
         self.log.info("==============  QueryCurlTests suite_setup has started ==============")
-        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
-        self.log_config_info()
+        self.log.info("==============  QueryCurlTests suite_setup has completed ==============")
 
     def tearDown(self):
-        self.log_config_info()
-        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
-        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
+        self.log.info("==============  QueryCurlTests tearDown has started ==============")
+        self.log.info("==============  QueryCurlTests tearDown has completed ==============")
         super(QueriesIndexTests, self).tearDown()
 
     def suite_tearDown(self):
-        self.log_config_info()
-        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
-        self.log.info("==============  QueryCurlTests suite_setup has started ==============")
+        self.log.info("==============  QueryCurlTests suite_tearDown has started ==============")
+        self.log.info("==============  QueryCurlTests suite_tearDown has completed ==============")
         super(QueriesIndexTests, self).suite_tearDown()
 
     '''MB-22321: test that ordered intersectscan is used for pagination use cases'''
