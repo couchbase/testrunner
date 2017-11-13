@@ -431,7 +431,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         with_compression = self.get_database_file_info()
         self.validate_backup_compressed_file(no_compression, with_compression)
 
-    def test_backup_restore_with_password_env(self):
+    def test_backup_restore_with_credentials_env(self):
         """
             password will pass as in env variable
             :return: None
