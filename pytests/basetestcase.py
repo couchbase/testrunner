@@ -921,7 +921,8 @@ class BaseTestCase(unittest.TestCase):
             if verify_total_items:
                 verified = True
                 for bucket in self.buckets:
-                    verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
+                    verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket,
+                                                                              timeout_in_seconds=(timeout or 500))
                 self.assertTrue(verified, "Lost items!!! Replication was completed but "
                                           "          sum(curr_items) don't match the curr_items_total")
         else:
