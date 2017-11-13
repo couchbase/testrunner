@@ -71,7 +71,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         self.debug_logs = self.input.param("debug-logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
+        self.backupset.user_env = self.input.param("user-env", False)
         self.backupset.passwd_env = self.input.param("passwd-env", False)
+        self.backupset.overwrite_user_env = self.input.param("overwrite-user-env", False)
+        self.backupset.overwrite_passwd_env = self.input.param("overwrite-passwd-env", False)
+        self.backupset.user_env_with_prompt = \
+                        self.input.param("user-env-with-prompt", False)
         self.backupset.passwd_env_with_prompt = \
                         self.input.param("passwd-env-with-prompt", False)
         shell = RemoteMachineShellConnection(self.servers[0])
@@ -322,19 +327,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.cluster_host)
             secure_port = "1"
             url_format = "s"
+
+        user_input = "--username %s " % self.backupset.cluster_host_username
         password_input = "--password %s " % self.backupset.cluster_host_password
-        if self.backupset.passwd_env:
+        if self.backupset.user_env and not self.backupset.overwrite_user_env:
+            user_input = ""
+        elif self.backupset.user_env_with_prompt:
+            password_input = "-u "
+
+        if self.backupset.passwd_env and not self.backupset.overwrite_passwd_env:
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
         if "4.6" <= RestConnection(self.backupset.backup_host).get_nodes_version():
             self.cluster_flag = "--cluster"
 
-        args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} --username"\
-                   " {4} {5}".format(self.backupset.directory, self.backupset.name,
+        args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} "\
+                   "{4} {5}".format(self.backupset.directory, self.backupset.name,
                    self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port,
-                   self.backupset.cluster_host_username,
+                   user_input,
                    password_input,
                    self.cluster_flag, url_format,
                    secure_port)
@@ -353,16 +365,24 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --threads %s " % threads_count
         if self.backupset.backup_compressed:
             args += " --value-compression compressed"
+
+        user_env = ""
         password_env = ""
+        if self.backupset.user_env:
+            self.log.info("set user env to Administrator")
+            user_env = "export CB_USERNAME=Administrator; "
         if self.backupset.passwd_env:
             self.log.info("set password env to password")
             password_env = "export CB_PASSWORD=password; "
+        if self.backupset.user_env_with_prompt:
+            self.log.info("set username env to prompt")
+            user_env = "unset CB_USERNAME; export CB_USERNAME;"
         if self.backupset.passwd_env_with_prompt:
             self.log.info("set password env to prompt")
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
-                                                   password_env)
+        command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                   password_env, user_env)
 
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -420,22 +440,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                        self.backupset.restore_cluster_host)
             url_format = "s"
             secure_port = "1"
+
+        user_input = "--username %s " % self.backupset.restore_cluster_host_username
         password_input = "--password %s " % self.backupset.restore_cluster_host_password
-        if self.backupset.passwd_env:
+        if self.backupset.user_env and not self.backupset.overwrite_user_env:
+            user_input = ""
+        elif self.backupset.user_env_with_prompt:
+            user_input = "-u "
+        if self.backupset.passwd_env and not self.backupset.overwrite_passwd_env:
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
+
         if "4.6" <= RestConnection(self.backupset.backup_host).get_nodes_version():
             self.cluster_flag = "--cluster"
 
-        args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4}"\
-               " --username {5} {6} --start {7} --end {8}" \
+        args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} "\
+               "{5} {6} --start {7} --end {8}" \
                                .format(self.backupset.directory,
                                        self.backupset.name,
                                        self.cluster_flag,
                                        self.backupset.restore_cluster_host.ip,
                                        self.backupset.restore_cluster_host.port,
-                                       self.backupset.restore_cluster_host_username,
+                                       user_input,
                                        password_input,
                                        backup_start, backup_end, url_format, secure_port)
         if self.backupset.no_ssl_verify:
@@ -514,16 +541,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             bucket_maps = ",".join(buckets)
         if self.backupset.map_buckets:
             args += " --map-buckets %s " % bucket_maps
+        user_env = ""
         password_env = ""
+        if self.backupset.user_env:
+            self.log.info("set user env to Administrator")
+            user_env = "export CB_USERNAME=Administrator; "
         if self.backupset.passwd_env:
             self.log.info("set password env to password")
             password_env = "export CB_PASSWORD=password; "
+        if self.backupset.user_env_with_prompt:
+            self.log.info("set username env to prompt")
+            user_env = "unset CB_USERNAME; export CB_USERNAME;"
         if self.backupset.passwd_env_with_prompt:
             self.log.info("set password env to prompt")
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
-                                                   password_env)
+        command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                   password_env, user_env)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if "Error restoring cluster" in output[0]:
@@ -1089,7 +1123,11 @@ class Backupset:
         self.backup_to_compact = ''
         self.map_buckets = None
         self.backup_compressed = False
+        self.user_env = False
         self.passwd_env = False
+        self.overwrite_user_env = False
+        self.overwrite_passwd_env = False
+        self.user_env_with_prompt = False
         self.passwd_env_with_prompt = False
         self.deleted_buckets = []
         self.new_buckets = []
