@@ -69,6 +69,9 @@ class RemoteMachineProcess(object):
     def __init__(self):
         self.pid = ''
         self.name = ''
+        self.vsz = 0
+        self.rss = 0
+        self.args = ''
 
 
 class RemoteMachineHelper(object):
@@ -97,18 +100,47 @@ class RemoteMachineHelper(object):
                 # we should have an option to wait for the process
                 # to start during the timeout
                 # process might have crashed
-                log.info("{0}:process {1} is not running or it might have crashed!".format(self.remote_shell.ip, process_name))
+                log.info("{0}:process {1} is not running or it might have crashed!"
+                                       .format(self.remote_shell.ip, process_name))
                 return False
             time.sleep(1)
         #            log.info('process {0} is running'.format(process_name))
         return True
+
+    def monitor_process_memory(self, process_name,
+                               duration_in_seconds=180,
+                               end=False):
+        # monitor this process and return list of memories in 7 seconds interval
+        end_time = time.time() + float(duration_in_seconds)
+        count = 0
+        vsz = []
+        rss = []
+        while time.time() < end_time and not end:
+            # get the process list
+            process = self.is_process_running(process_name)
+            if process:
+                vsz.append(process.vsz)
+                rss.append(process.rss)
+            else:
+                log.info("{0}:process {1} is not running.  Wait for 2 seconds"
+                                   .format(self.remote_shell.ip, process_name))
+                count += 1
+                time.sleep(2)
+                if count == 5:
+                    log.error("{0}:process {1} is not running at all."
+                                   .format(self.remote_shell.ip, process_name))
+                    exit(1)
+            log.info("sleep for 7 seconds before poll new processes")
+            time.sleep(7)
+        return vsz, rss
 
     def is_process_running(self, process_name):
         if getattr(self.remote_shell, "info", None) is None:
             self.remote_shell.info = self.remote_shell.extract_remote_info()
 
         if self.remote_shell.info.type.lower() == 'windows':
-             output, error = self.remote_shell.execute_command('tasklist| grep {0}'.format(process_name), debug=False)
+             output, error = self.remote_shell.execute_command('tasklist| grep {0}'
+                                                .format(process_name), debug=False)
              if error or output == [""] or output == []:
                  return None
              words = output[0].split(" ")
@@ -122,6 +154,8 @@ class RemoteMachineHelper(object):
             processes = self.remote_shell.get_running_processes()
             for process in processes:
                 if process.name == process_name:
+                    return process
+                elif process_name in process.args:
                     return process
             return None
 
@@ -221,15 +255,25 @@ class RemoteMachineShellConnection:
         # 26989 ?        00:00:51 pdflush
         # ps -Ao pid,comm
         processes = []
-        output, error = self.execute_command('ps -Ao pid,comm', debug=False)
+        output, error = self.execute_command('ps -Ao pid,comm,vsz,rss,args', debug=False)
         if output:
             for line in output:
                 # split to words
                 words = line.strip().split(' ')
+                words = filter(None, words)
                 if len(words) >= 2:
                     process = RemoteMachineProcess()
                     process.pid = words[0]
                     process.name = words[1]
+                    if words[2].isdigit():
+                        process.vsz = int(words[2])/1024
+                    else:
+                        process.vsz = words[2]
+                    if words[3].isdigit():
+                        process.rss = int(words[3])/1024
+                    else:
+                        process.rss = words[3]
+                    process.args = " ".join(words[4:])
                     processes.append(process)
         return processes
 
