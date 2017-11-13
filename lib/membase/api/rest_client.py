@@ -4037,6 +4037,27 @@ class RestConnection(object):
         return eventing_map
 
     '''
+            Get Aggregate Eventing processing stats
+    '''
+    def get_aggregate_event_processing_stats(self, name, eventing_map=None):
+        if eventing_map is None:
+            eventing_map = {}
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "getEventProcessingStats?name=" + name
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if status:
+            json_parsed = json.loads(content)
+            for key in json_parsed.keys():
+                tokens = key.split(":")
+                val = json_parsed[key]
+                if len(tokens) == 1:
+                    field = tokens[0]
+                    eventing_map[field] = val
+        return eventing_map
+
+    '''
             Get Eventing execution stats
     '''
     def get_event_execution_stats(self, name, eventing_map=None):

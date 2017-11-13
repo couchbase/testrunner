@@ -95,12 +95,17 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
                                 skip_stats_validation=False):
+        # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
+        num_nodes = self.refresh_rest_server()
         if not skip_stats_validation:
             # we can't rely on DCP_MUTATION stats when doc timers events are set.
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
             if not doc_timer_events:
                 count = 0
-                stats = self.rest.get_event_processing_stats(name)
+                if num_nodes <= 1:
+                    stats = self.rest.get_event_processing_stats(name)
+                else:
+                    stats = self.rest.get_aggregate_event_processing_stats(name)
                 if on_delete:
                     mutation_type = "DCP_DELETION"
                 else:
@@ -113,7 +118,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 while actual_dcp_mutations != expected_dcp_mutations and count < 20:
                     self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
                     count += 1
-                    stats = self.rest.get_event_processing_stats(name)
+                    if num_nodes <= 1:
+                        stats = self.rest.get_event_processing_stats(name)
+                    else:
+                        stats = self.rest.get_aggregate_event_processing_stats(name)
                     actual_dcp_mutations = stats[mutation_type]
                     log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
                 if count == 20:
@@ -129,8 +137,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             self.sleep(30, message="Waiting for handler code to complete all bucket operations...")
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        self.assertEqual(expected_dcp_mutations, stats_dst["curr_items"],
-                         "Bucket operations from handler code took lot of time to complete or didn't go through")
+        if stats_dst["curr_items"] != expected_dcp_mutations:
+            raise Exception(
+                "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
+                "Expected : {1}".format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         out_event_execution = self.rest.get_event_execution_stats(self.function_name)
         log.info("Event execution stats : {0}".format(out_event_execution))
@@ -186,3 +196,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # undeploy the function
         content = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Resume Application : {0}".format(content))
+
+    def refresh_rest_server(self):
+        eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        self.restServer = eventing_nodes_list[0]
+        self.rest = RestConnection(self.restServer)
+        return len(eventing_nodes_list)

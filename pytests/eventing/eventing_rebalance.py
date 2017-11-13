@@ -28,11 +28,12 @@ class EventingRebalance(EventingBaseTest):
         super(EventingRebalance, self).tearDown()
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
         self.deploy_function(body)
-        # rebalance in a node
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # rebalance in a eventing node when eventing is processing mutations
         services_in = ["eventing"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in)
@@ -45,6 +46,7 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
         while stats_dst["curr_items"] != 0 and count < 20:
@@ -56,7 +58,44 @@ class EventingRebalance(EventingBaseTest):
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # rebalance out all eventing nodes
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1], [], nodes_out_list)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+
+    def test_eventing_rebalance_out_when_existing_eventing_node_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        self.deploy_function(body)
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # rebalance out a eventing node when eventing is processing mutations
+        nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # delete json documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        count = 0
+        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        while stats_dst["curr_items"] != 0 and count < 20:
+            self.sleep(30, message="Waiting for handler code to complete all delete doc operations...")
+            count += 1
+            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        self.assertEqual(0, stats_dst["curr_items"],
+                         "Bucket operations from handler code took lot of time to complete or didn't go through")
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+
