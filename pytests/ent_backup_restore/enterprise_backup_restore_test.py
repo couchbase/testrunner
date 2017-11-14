@@ -401,6 +401,25 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
         self.backup_compact_validate()
 
+    def test_backup_with_purge_interval_set_to_float(self):
+        """
+           cbbackupmgr should handle case with purge interval set to float number
+           return: None
+        """
+        purgeInterval = 1.5
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self.log.info("Set purge interval to float value '%s'" % purgeInterval)
+        rest = RestConnection(self.backupset.cluster_host)
+        status, content = rest.set_purge_interval_and_parallel_compaction(purgeInterval)
+        if status:
+            self.log.info("Done set purge interval value '%s'" % purgeInterval)
+            self._load_all_buckets(self.master, gen, "create", 0)
+            self.backup_create()
+            self.backup_cluster_validate()
+            self.backup_restore_validate()
+        else:
+            self.fail("Failed to set purgeInterval value")
+
     def test_restore_from_compacted_backup(self):
         """
         1. Creates specified bucket on the cluster and loads it with given number of items
