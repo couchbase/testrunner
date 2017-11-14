@@ -385,6 +385,48 @@ class CouchbaseCliTest(CliBaseTest):
         self.assertEqual([], output)
         remote_client.disconnect()
 
+    def test_priority_start_couchbase_saslauth(self):
+        """
+            In centos 6.x, couchbase server needs to start after saslauth start
+            so the authentication works correctly as mention in ticket MB-25922
+            This test requires saslauth preinstalled on vm.
+        """
+        if "centos 7" in self.os_version:
+            self.log.info("This test only for centos 6.x")
+            return
+        if "windows" in self.os_version:
+            self.log.info("This test is for centos 6.x only, not for windows")
+            return
+        if "centos" in self.os_version:
+            """ If saslauth did not install on vm, mark test as failed. """
+            output, error = self.shell.execute_command("/etc/init.d/saslauthd status")
+            if output and "is running" not in output[0]:
+                self.fail("Need a centos 6.x with saslauth preinstalled.")
+
+            self.shell.execute_command("reboot")
+            self.sleep(240, "sleep while rebooting")
+            shell = RemoteMachineShellConnection(self.master)
+            shell.disable_firewall()
+            output, error = shell.execute_command('find /etc/rc3.d/ '\
+                                                  '| egrep "saslauthd|couchbase"')
+            if output:
+                self.log.info("Order starting: %s " % output)
+                if "saslauthd" in output[0] and "couchbase-serve" in output[1]:
+                    self.log.info("Couchbase Server started after saslauthd")
+                elif "couchbase-server" in output[0]:
+                    self.fail("Couchbase Server started before saslauthd")
+            output, error = shell.execute_command('cat /var/log/boot.log '\
+                                                  '| egrep "saslauthd|couchbase"')
+            if output:
+                self.log.info("Order starting: %s " % output)
+                if "Starting saslauth" in output[0] and "couchbase-server" in output[-1]:
+                    self.log.info("Couchbase Server started after saslauthd")
+                elif "couchbase-server" in output[0]:
+                    self.fail("Couchbase Server started before saslauthd")
+        else:
+            self.log.info("This test only for centos 6.x")
+            return
+
     def testAddRemoveNodes(self):
         nodes_add = self.input.param("nodes_add", 1)
         nodes_rem = self.input.param("nodes_rem", 1)
