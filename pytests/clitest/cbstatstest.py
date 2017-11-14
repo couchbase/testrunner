@@ -57,7 +57,34 @@ class cbstatsTests(CliBaseTest):
                 output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key, vb_id)
                 self.verify_results(output, error)
 
-
+    def kvtimings_test(self):
+        """
+        Test to validate MB-25630: Add read-only KVStore fsTimings to timing stats
+        Automation for CBQE-4361 : Add testcases for MB-25630 (CBSE-4029)
+        :return: Nothing
+        """
+        self.command = "kvtimings"
+        self.set_get_ratio = 0.5
+        # Load some data using cb_workloadgen to perform some KV operations (both sets and gets).
+        for bucket in self.buckets:
+            self.shell.execute_cbworkloadgen(self.couchbase_usrname, self.couchbase_password,
+                                             self.num_items, self.set_get_ratio, bucket.name,
+                                             self.item_size, self.command_options)
+        # Verify that cbstats with kvtimings contains both read write and read only stats shown in the stats.
+        for bucket in self.buckets:
+            output, error  = self.shell.execute_cbstats(bucket, self.command)
+            self.verify_results(output, error)
+            read_only_stats = False
+            write_stats = False
+            for _output in output:
+                if "ro_" in _output:
+                    read_only_stats = True
+                if "rw_" in _output:
+                    write_stats = True
+            self.assertTrue(read_only_stats, "Read only stats were not included in the cbstats kvtimings output. "
+                                             "Check the output")
+            self.assertTrue(write_stats, "Write stats were not included in the cbstats kvtimings output. Check the "
+                                         "output")
 
     def verify_results(self, output, error):
         if len(error) > 0 and '\n'.join(error).find("DeprecationWarning") == -1:
