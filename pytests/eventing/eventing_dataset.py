@@ -1,8 +1,13 @@
+# Intentionally adding 1 new line
+# coding=utf-8
+
 from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator, JSONNonDocGenerator
+from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
+from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest, log
+from couchbase.bucket import Bucket
 
 
 class EventingDataset(EventingBaseTest):
@@ -23,6 +28,17 @@ class EventingDataset(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                      max_verify=self.max_verify,
+                                      buckets=self.buckets,
+                                      item_flag=self.item_flag,
+                                      n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list,
+                                      log=self.log, input=self.input,
+                                      master=self.master,
+                                      use_rest=True
+                                      )
 
     def tearDown(self):
         super(EventingDataset, self).tearDown()
@@ -101,6 +117,47 @@ class EventingDataset(EventingBaseTest):
         # delete non json documents
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
                                    "delete", exp=0, flag=0, batch_size=1000)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        count = 0
+        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        while stats_dst["curr_items"] != 0 and count < 20:
+            self.sleep(30, message="Waiting for handler code to complete all delete doc operations...")
+            count += 1
+            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        self.assertEqual(0, stats_dst["curr_items"],
+                         "Bucket delete operations from handler code took lot of time to complete or didn't go through")
+        self.undeploy_and_delete_function(body)
+
+    # See MB-26706
+    def test_eventing_where_dataset_has_different_key_types_using_sdk_and_n1ql(self):
+        keys = [
+            "1324345656778878089435468780879760894354687808797613243456567788780894354687808797613243456567788780894354687808797613243456567788780894354687808797613287808943546878087976132434565677887808943546878087976132434565677887808943546878087976132943546878",
+            # max key size
+            "1",  # Numeric key, see MB-26706
+            "a1",  # Alphanumeric
+            "1a",  # Alphanumeric
+            "1 a b",  # Alphanumeric with space
+            "~`!@  #$%^&*()-_=+{}|[]\:\";\'<>?,./",  # all special characters
+            "\xc2\xa1 \xc2\xa2 \xc2\xa4 \xc2\xa5"  # utf-8 encoded characters
+        ]
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        bucket = Bucket(url, username="cbadminbucket", password="password")
+        for key in keys:
+            bucket.upsert(key, "Test with different key values")
+        # create a doc using n1ql query
+        query = "INSERT INTO  " + self.src_bucket_name + " ( KEY, VALUE ) VALUES ('key11111','from N1QL query')"
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, len(keys) + 1, skip_stats_validation=True)
+        # delete all the documents with different key types
+        for key in keys:
+            bucket.remove(key)
+        # delete a doc using n1ql query
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        query = "DELETE FROM " + self.src_bucket_name + " where meta().id='key11111'"
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         # Wait for eventing to catch up with all the delete mutations and verify results
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)

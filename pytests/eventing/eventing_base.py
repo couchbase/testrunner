@@ -29,6 +29,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
         # self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
+        self.log_level = self.input.param('log_level', 'TRACE')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
         self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
@@ -42,7 +43,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=10000, cleanup_timers=False,
-                                  dcp_stream_boundary="everything", deployment_status=True, log_level="TRACE",
+                                  dcp_stream_boundary="everything", deployment_status=True,
                                   rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
@@ -68,7 +69,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['dcp_stream_boundary'] = dcp_stream_boundary
         body['settings']['deployment_status'] = deployment_status
         body['settings']['description'] = description
-        body['settings']['log_level'] = log_level
+        body['settings']['log_level'] = self.log_level
         body['settings']['rbacpass'] = rbacpass
         body['settings']['rbacrole'] = rbacrole
         body['settings']['rbacuser'] = rbacuser
