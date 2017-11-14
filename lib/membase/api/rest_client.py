@@ -2635,6 +2635,34 @@ class RestConnection(object):
         log.info("'%s' bucket's settings will be changed with parameters: %s" % (bucket, params))
         return self._http_request(api, "POST", params)
 
+    def disable_auto_compaction(self):
+        """
+           Cluster-wide Setting
+              Disable autocompaction on doc and view
+        """
+        api = self.baseUrl + "controller/setAutoCompaction"
+        log.info("Disable autocompaction in cluster-wide setting")
+        status, content, header = self._http_request(api, "POST",
+                                  "parallelDBAndViewCompaction=false")
+        return status
+
+    def set_purge_interval_and_parallel_compaction(self, interval=3, parallel="false"):
+        """
+           Cluster-wide setting.
+           Set purge interval
+           Set parallel db and view compaction
+           Return: status
+        """
+        api = self.baseUrl + "controller/setAutoCompaction"
+        log.info("Set purgeInterval to %s and parallel DB and view compaction to %s"\
+                                                              % (interval, parallel))
+        params = {}
+        params["purgeInterval"] = interval
+        params["parallelDBAndViewCompaction"] = parallel
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        return status, content
+
     def set_indexer_compaction(self, mode="circular", indexDayOfWeek=None, indexFromHour=0,
                                 indexFromMinute=0, abortOutside=False,
                                 indexToHour=0, indexToMinute=0, fragmentation=30):
