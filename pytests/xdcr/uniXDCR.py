@@ -89,6 +89,10 @@ class unidirectional(XDCRNewBaseTest):
         self.verify_results()
 
     def load_with_async_ops_with_warmup(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            "Test case does not apply for Ephemeral buckets"
+            return
         self.setup_xdcr_and_load()
         warmupnodes = []
         if "C1" in self._warmup:
@@ -105,6 +109,10 @@ class unidirectional(XDCRNewBaseTest):
         self.verify_results()
 
     def load_with_async_ops_with_warmup_master(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            "Test case does not apply for Ephemeral buckets"
+            return
         self.setup_xdcr_and_load()
         warmupnodes = []
         if "C1" in self._warmup:

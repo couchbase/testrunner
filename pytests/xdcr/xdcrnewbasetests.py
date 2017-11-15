@@ -312,9 +312,6 @@ class NodeHelper:
 
     @staticmethod
     def wait_warmup_completed(warmupnodes, bucket_names=["default"]):
-        bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
-        if bucket_type == "ephemeral":
-            return
         if isinstance(bucket_names, str):
             bucket_names = [bucket_names]
         start = time.time()

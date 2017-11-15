@@ -109,6 +109,10 @@ class bidirectional(XDCRNewBaseTest):
         self.verify_results()
 
     def load_with_async_ops_and_joint_sets_with_warmup(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            "Test case does not apply for Ephemeral buckets"
+            return
         self.setup_xdcr_and_load()
         warmupnodes = []
         if "C1" in self._warmup:
@@ -358,6 +362,10 @@ class bidirectional(XDCRNewBaseTest):
         self.verify_results()
 
     def replication_while_rebooting_a_non_master_src_dest_node(self):
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            self.log.info("Test case does not apply to ephemeral")
+            return
         self.setup_xdcr_and_load()
         self.async_perform_update_delete()
         self.sleep(self._wait_timeout)
