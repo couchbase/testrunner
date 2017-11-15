@@ -30,12 +30,7 @@ def main():
 
     print 'the ini file is', options.inifile
 
-    options.servers='['+options.servers+']'
     print 'the server info is', options.servers
-
-    if options.addPoolServers:
-        options.addPoolServers = '[' + options.addPoolServers + ']'
-        print 'the additional server pool info is', options.addPoolServers
 
     servers = json.loads(options.servers)
     addPoolServers = []

@@ -392,8 +392,7 @@ def main():
 
                         if options.serverType.lower() != 'docker':
                             r2 = json.loads(content)
-                            servers = json.dumps(r2).replace(' ','').replace('[','').replace(']','')
-                            url = url + '&servers=' + urllib.quote(servers)
+                            url = url + '&servers=' + urllib.quote(json.dumps(r2).replace(' ',''))
 
                             if testsToLaunch[i]['addPoolServerCount']:
                                 addPoolServers = json.loads(content2)
@@ -401,9 +400,7 @@ def main():
                                       options.addPoolId +\
                                       '&addPoolServers=' +\
                                       urllib.quote(json.dumps(addPoolServers).
-                                                   replace(' ','')
-                                                   .replace('[','')
-                                                   .replace(']',''))
+                                                   replace(' ',''))
 
 
                         print '\n', time.asctime( time.localtime(time.time()) ), 'launching ', url
