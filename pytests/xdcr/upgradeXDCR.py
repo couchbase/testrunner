@@ -162,6 +162,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
 
     def offline_cluster_upgrade(self):
+        if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
+            self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            return
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
             self.skip_this_version = True
@@ -364,6 +367,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         return True
 
     def online_cluster_upgrade(self):
+        if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
+            self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            return
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
             self.skip_this_version = True
@@ -547,6 +553,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 self.assertEqual(count5, 0, "GOGC reset to 0 during upgrade in " + str(node.ip))
 
     def incremental_offline_upgrade(self):
+        if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
+            self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            return
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
             self.skip_this_version = True
@@ -770,6 +779,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             self.sleep(self.expire_time)
 
     def test_backward_compatibility(self):
+        if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
+            self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            return
         self.c1_version = self.initial_version
         self.c2_version = self.upgrade_versions[0]
         if self.c1_version[:3] >= self.c2_version[:3]:
