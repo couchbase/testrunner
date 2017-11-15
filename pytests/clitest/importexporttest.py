@@ -640,16 +640,17 @@ class ImportExportTests(CliBaseTest):
             found = self.shell.file_exists(self.ex_path, export_file_name)
             if found:
                 self.log.info("copy export file from remote to local")
-                if os.path.exists("/tmp/export"):
-                    shutil.rmtree("/tmp/export")
-                os.makedirs("/tmp/export")
+                if os.path.exists("/tmp/export%s" % self.master.ip):
+                    shutil.rmtree("/tmp/export%s" % self.master.ip)
+                os.makedirs("/tmp/export%s" % self.master.ip)
                 self.shell.copy_file_remote_to_local(self.ex_path+export_file_name,\
-                                                    "/tmp/export/"+export_file_name)
+                                                    "/tmp/export%s/" % self.master.ip\
+                                                     + export_file_name)
                 self.log.info("compare 2 json files")
                 if self.format_type == "lines":
                     sample_file = open("resources/imex/json_%s_lines" % options["docs"])
                     samples = sample_file.readlines()
-                    export_file = open("/tmp/export/"+ export_file_name)
+                    export_file = open("/tmp/export%s/" % self.master.ip + export_file_name)
                     exports = export_file.readlines()
                     if sorted(samples) == sorted(exports):
                         self.log.info("export and sample json mathch")
@@ -662,7 +663,7 @@ class ImportExportTests(CliBaseTest):
                     samples = sample_file.read()
                     samples = ast.literal_eval(samples)
                     samples.sort(key=lambda k: k['name'])
-                    export_file = open("/tmp/export/"+ export_file_name)
+                    export_file = open("/tmp/export%s/" % self.master.ip + export_file_name)
                     exports = export_file.read()
                     exports = ast.literal_eval(exports)
                     exports.sort(key=lambda k: k['name'])
