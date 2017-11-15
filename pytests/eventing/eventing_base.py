@@ -4,6 +4,7 @@ import datetime
 import os
 from TestInput import TestInputSingleton
 from lib.membase.api.rest_client import RestConnection
+from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
@@ -203,3 +204,18 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.restServer = eventing_nodes_list[0]
         self.rest = RestConnection(self.restServer)
         return len(eventing_nodes_list)
+
+    def check_if_eventing_consumers_are_cleaned_up(self):
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        array_of_counts = []
+        command = "ps -ef | grep eventing-consumer | grep -v grep | wc -l"
+        for eventing_node in eventing_nodes:
+            shell = RemoteMachineShellConnection(eventing_node)
+            count, error = shell.execute_non_sudo_command(command)
+            log.info("Node : {0} , eventing_consumer processes running : {1}".format(eventing_node.ip, count[0]))
+            array_of_counts.append(int(count[0]))
+        count_of_all_eventing_consumers = sum(array_of_counts)
+        if count_of_all_eventing_consumers != 0:
+            return False
+        return True
+
