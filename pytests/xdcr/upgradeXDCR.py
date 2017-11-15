@@ -164,6 +164,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def offline_cluster_upgrade(self):
         if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
             self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            self.skip_this_version = True
             return
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
@@ -369,6 +370,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def online_cluster_upgrade(self):
         if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
             self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            self.skip_this_version = True
             return
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
@@ -555,6 +557,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def incremental_offline_upgrade(self):
         if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
             self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            self.skip_this_version = True
             return
         if self.initial_version[:3] >= self.upgrade_versions[0][:3]:
             self.log.info("Initial version greater than upgrade version - not supported")
@@ -781,6 +784,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def test_backward_compatibility(self):
         if self.bucket_type == "ephemeral" and  float(self.initial_version[:3]) < 5.0:
             self.log.info("Ephemeral buckets not available in version " + str(self.initial_version))
+            self.skip_this_version = True
             return
         self.c1_version = self.initial_version
         self.c2_version = self.upgrade_versions[0]
