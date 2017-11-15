@@ -35,6 +35,7 @@ class CliBaseTest(BaseTestCase):
         self.import_method = self.input.param("import_method", "file://")
         self.node_version = self.rest.get_nodes_version()
         self.force_failover = self.input.param("force_failover", False)
+        self.debug_logs = self.input.param("debug-logs", False)
         info = self.shell.extract_remote_info()
         type = info.type.lower()
         self.excluded_commands = self.input.param("excluded_commands", None)

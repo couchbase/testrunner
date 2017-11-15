@@ -115,13 +115,15 @@ class RemoteMachineHelper(object):
         count = 0
         vsz = []
         rss = []
+        process_running = False
         while time.time() < end_time and not end:
             # get the process list
             process = self.is_process_running(process_name)
             if process:
                 vsz.append(process.vsz)
                 rss.append(process.rss)
-            else:
+                process_running = True
+            elif not process_running:
                 log.info("{0}:process {1} is not running.  Wait for 2 seconds"
                                    .format(self.remote_shell.ip, process_name))
                 count += 1
