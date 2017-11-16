@@ -11,6 +11,7 @@ class QueriesViewsTests(QuerySanityTests):
 
     def setUp(self):
         super(QueriesViewsTests, self).setUp()
+        self.log.info("==============  QueriesViewsTests setup has started ==============")
         self.num_indexes = self.input.param('num_indexes', 1)
         if self.num_indexes > len(self.FIELDS_TO_INDEX):
             self.input.test_params["stop-on-failure"] = True
@@ -23,17 +24,26 @@ class QueriesViewsTests(QuerySanityTests):
         self.shell.execute_command("killall -9 indexes")
         self.sleep(60, 'wait for indexer, cbq processes to come back up ..')
         self.log.info('-'*100)
+        self.log.info("==============  QueriesViewsTests setup has completed ==============")
+        self.log_config_info()
 
     def suite_setUp(self):
         super(QueriesViewsTests, self).suite_setUp()
+        self.log.info("==============  QueriesViewsTests suite_setup has started ==============")
+        self.log.info("==============  QueriesViewsTests suite_setup has completed ==============")
 
     def tearDown(self):
+        self.log.info("==============  QueriesViewsTests tearDown has started ==============")
+        self.log.info("==============  QueriesViewsTests tearDown has completed ==============")
         super(QueriesViewsTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.log.info("==============  QueriesViewsTests suite_tearDown has started ==============")
+        self.log.info("==============  QueriesViewsTests suite_tearDown has completed ==============")
         super(QueriesViewsTests, self).suite_tearDown()
 
     def test_simple_create_delete_index(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             self.log.info('Temp fix for create index failures MB-16888')
@@ -56,7 +66,13 @@ class QueriesViewsTests(QuerySanityTests):
                     self._verify_results(actual_result['results'], [])
 
     def test_primary_create_delete_index(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
+            try:
+                self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                self.run_cbq_query()
+            except:
+                pass
             self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['results'], [])
@@ -65,6 +81,7 @@ class QueriesViewsTests(QuerySanityTests):
             self._verify_results(actual_result['results'], [])
 
     def test_create_delete_index_with_query(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -92,6 +109,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_test_case()
 
     def test_create_same_name(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             view_name = "tuq_index_%s%s" % (bucket.name, 'VMs')
             try:
@@ -221,6 +239,7 @@ class QueriesViewsTests(QuerySanityTests):
         self.run_cbq_query()
 
     def test_explain(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
@@ -235,6 +254,7 @@ class QueriesViewsTests(QuerySanityTests):
                             "Limit is not pushed to primary scan")
 
     def test_explain_query_count(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
@@ -254,6 +274,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_query_group_by(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
@@ -273,6 +294,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_query_array(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_arr"
             try:
@@ -291,6 +313,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_query_meta(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_meta"
             try:
@@ -309,80 +332,81 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_push_limit_intersect_unionscan(self):
-      created_indexes = []
-      for bucket in self.buckets:
-       try:
-        self.query = "create index ix1 on default(join_day,VMs[0].os)"
-        self.run_cbq_query()
-        created_indexes.append("ix1")
-        self.query = "create index ix2 on default(VMs[0].os)"
-        self.run_cbq_query()
-        created_indexes.append("ix2")
-        self.query = "create index ix3 on default(VMs[0].memory) where VMs[0].memory > 10"
-        self.run_cbq_query()
-        created_indexes.append("ix3")
-        self.query = "explain select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("limit" in plan['~children'][0]['~children'][0])
+        created_indexes = []
+        self.fail_if_no_buckets()
+        for bucket in self.buckets:
+            try:
+                self.query = "create index ix1 on default(join_day,VMs[0].os)"
+                self.run_cbq_query()
+                created_indexes.append("ix1")
+                self.query = "create index ix2 on default(VMs[0].os)"
+                self.run_cbq_query()
+                created_indexes.append("ix2")
+                self.query = "create index ix3 on default(VMs[0].memory) where VMs[0].memory > 10"
+                self.run_cbq_query()
+                created_indexes.append("ix3")
+                self.query = "explain select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("limit" in plan['~children'][0]['~children'][0])
 
-        self.query = "explain select * from default where join_day > 10 AND VMs[0].memory > 10"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("covers" not in str(plan))
-        self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("cover" not in str(plan))
-        self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
-        expected_result = self.run_cbq_query()
-        self.query = "create index ix4 on default(VMs[0].memory,join_day) where VMs[0].memory > 10"
-        self.run_cbq_query()
-        created_indexes.append("ix4")
-        self._wait_for_index_online(bucket, "ix4")
-        self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("cover" in str(plan))
-        self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
-        actual_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results']==expected_result['results'])
-        self.query = "select join_day from default use index(`#primary`) where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
-        expected_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results']==expected_result['results'])
-        self.query = "select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
-        res = self.run_cbq_query()
-        self.assertTrue(res['metrics']['resultCount']==10)
-        self.query = "explain select * from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("cover" not in str(plan))
-        self.query = "explain select join_day from default where join_day > 10 OR VMs[0].memory > 10"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("cover" not in str(plan))
-        self.query = "explain select join_day from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("cover" not  in str(plan))
-        self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
-        res = self.run_cbq_query()
-        self.assertTrue(res['metrics']['resultCount']==10)
-        self.query = "explain select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
-        res = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(res)
-        self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
-        self.query = "select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
-        res = self.run_cbq_query()
-        self.assertTrue(res['metrics']['resultCount']==10)
-       finally:
-        for idx in created_indexes:
-            self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
-            self.run_cbq_query()
+                self.query = "explain select * from default where join_day > 10 AND VMs[0].memory > 10"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("covers" not in str(plan))
+                self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("cover" not in str(plan))
+                self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+                expected_result = self.run_cbq_query()
+                self.query = "create index ix4 on default(VMs[0].memory,join_day) where VMs[0].memory > 10"
+                self.run_cbq_query()
+                created_indexes.append("ix4")
+                self._wait_for_index_online(bucket, "ix4")
+                self.query = "explain select join_day from default where join_day > 10 AND VMs[0].memory > 10"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("cover" in str(plan))
+                self.query = "select join_day from default where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+                actual_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = "select join_day from default use index(`#primary`) where join_day > 10 AND VMs[0].memory > 10 order by meta().id"
+                expected_result = self.run_cbq_query()
+                self.assertTrue(actual_result['results']==expected_result['results'])
+                self.query = "select * from default where join_day > 10 AND VMs[0].os = 'ubuntu' LIMIT 10"
+                res = self.run_cbq_query()
+                self.assertTrue(res['metrics']['resultCount']==10)
+                self.query = "explain select * from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("cover" not in str(plan))
+                self.query = "explain select join_day from default where join_day > 10 OR VMs[0].memory > 10"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("cover" not in str(plan))
+                self.query = "explain select join_day from default where join_day > 10 OR VMs[0].os = 'ubuntu'"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("cover" not  in str(plan))
+                self.query = "select * from default where join_day > 10 OR VMs[0].os = 'ubuntu' LIMIT 10"
+                res = self.run_cbq_query()
+                self.assertTrue(res['metrics']['resultCount']==10)
+                self.query = "explain select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.assertTrue("limit" not in plan['~children'][0]['~children'][0])
+                self.query = "select * from default where join_day > 10 and VMs[0].memory > 0 and VMs[0].os = 'ubuntu' LIMIT 10"
+                res = self.run_cbq_query()
+                self.assertTrue(res['metrics']['resultCount']==10)
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+                    self.run_cbq_query()
 
     def test_meta_no_duplicate_results(self):
-        if (self.DGM == True):
-                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
+        if self.DGM == True:
+            self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         self.query = 'insert into default values ("k01",{"name":"abc"})'
         self.run_cbq_query()
         self.query = 'select name,meta().id from default where meta().id IN ["k01",""]'
@@ -393,6 +417,7 @@ class QueriesViewsTests(QuerySanityTests):
 
     def test_unnest_when(self):
         created_indexes = []
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             try:
                 idx1 = "unnest_idx"
@@ -429,43 +454,43 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_notin_notwithin(self):
-      created_indexes = []
-      try:
-        idx = "ix"
-        self.query = 'create index {0} on default(join_day)'.format(idx)
-        self.run_cbq_query()
-        self.query = 'explain select 1 from default where NOT (join_day IN [ 1])'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
-        self.query = 'explain select 1 from default where NOT (join_day WITHIN [ 1])'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue(plan['~children'][0]['index'] ==idx)
-        self.query = 'explain select 1 from default where (join_day IN NOT [ 1])'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue(plan['~children'][0]['index']==idx)
-        self.query = 'explain select 1 from default where (join_day WITHIN NOT [ 1])'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue(plan['~children'][0]['index']==idx)
-        self.query = 'explain select 1 from default where join_day NOT WITHIN [ 1]'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue(plan['~children'][0]['index'] ==idx)
-        self.query = 'explain select 1 from default where join_day NOT IN [ 1]'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
-      finally:
-        for idx in created_indexes:
-            self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+        created_indexes = []
+        try:
+            idx = "ix"
+            self.query = 'create index {0} on default(join_day)'.format(idx)
             self.run_cbq_query()
+            self.query = 'explain select 1 from default where NOT (join_day IN [ 1])'
+            actual_result = self.run_cbq_query()
+            plan = self.ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+            self.query = 'explain select 1 from default where NOT (join_day WITHIN [ 1])'
+            actual_result = self.run_cbq_query()
+            plan = self.ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['index'] ==idx)
+            self.query = 'explain select 1 from default where (join_day IN NOT [ 1])'
+            actual_result = self.run_cbq_query()
+            plan = self.ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['index']==idx)
+            self.query = 'explain select 1 from default where (join_day WITHIN NOT [ 1])'
+            actual_result = self.run_cbq_query()
+            plan = self.ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['index']==idx)
+            self.query = 'explain select 1 from default where join_day NOT WITHIN [ 1]'
+            actual_result = self.run_cbq_query()
+            plan = self.ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['index'] ==idx)
+            self.query = 'explain select 1 from default where join_day NOT IN [ 1]'
+            actual_result = self.run_cbq_query()
+            plan = self.ExplainPlanHelper(actual_result)
+            self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+                self.run_cbq_query()
 
     def test_create_arrays_ranging_over_object(self):
-        if (self.DGM == True):
-                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
+        if self.DGM == True:
+            self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
         self.query = 'select array j for i:j in {"a":1, "b":2} end'
         res = self.run_cbq_query()
         self.assertTrue(res['results']==[{u'$1': [1, 2]}])
@@ -480,6 +505,7 @@ class QueriesViewsTests(QuerySanityTests):
         self.assertTrue(prepareds['metrics']['resultCount'] == 0)
 
     def test_explain_index_with_fn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_fn"
             try:
@@ -496,6 +522,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_index_attr(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -516,6 +543,7 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_explain_non_index_attr(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_non_index"
             try:
@@ -532,6 +560,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_index_count_gn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -554,6 +583,7 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_explain_index_aggr_gn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -576,6 +606,7 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_explain_index_join(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -598,6 +629,7 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_explain_index_unnest(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -620,6 +652,7 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_explain_index_subquery(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -642,6 +675,7 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_explain_childs_list_objects(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
@@ -661,6 +695,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_childs_objects(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_obj"
             try:
@@ -680,6 +715,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_childs_objects_element(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_obj_el"
             try:
@@ -699,6 +735,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_childs_list_element(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_list_el"
             try:
@@ -718,6 +755,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_childs_list(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_list"
             try:
@@ -737,6 +775,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.run_cbq_query()
 
     def test_explain_several_complex_objects(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -761,6 +800,7 @@ class QueriesViewsTests(QuerySanityTests):
                     self.run_cbq_query()
 
     def test_index_meta(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_meta"
             try:
@@ -776,6 +816,7 @@ class QueriesViewsTests(QuerySanityTests):
                 self.fail("Error message expected")
     
     def test_index_dates(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             index_name = "my_index_date"
             try:
@@ -790,6 +831,7 @@ class QueriesViewsTests(QuerySanityTests):
 
     def test_multiple_index_hints_explain_select(self):
         index_name_prefix = 'hint' + str(uuid.uuid4())[:4]
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -818,6 +860,7 @@ class QueriesViewsTests(QuerySanityTests):
 
     def test_multiple_index_hints_explain_aggr(self):
         index_name_prefix = 'hint' + str(uuid.uuid4())[:4]
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -847,6 +890,7 @@ class QueriesViewsTests(QuerySanityTests):
 
     def test_multiple_index_hints_explain_same_attr(self):
         index_name_prefix = 'hint' + str(uuid.uuid4())[:4]
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -878,6 +922,7 @@ class QueriesViewsTests(QuerySanityTests):
                         pass
 
     def test_multiple_indexes_query_attr(self):
+        self.fail_if_no_buckets()
         index_name_prefix = 'auto_ind'
         for bucket in self.buckets:
             created_indexes = []
@@ -913,6 +958,7 @@ class QueriesViewsTests(QuerySanityTests):
                         pass
 
     def test_multiple_indexes_query_non_ind_attr(self):
+        self.fail_if_no_buckets()
         index_name_prefix = 'auto_ind'
         for bucket in self.buckets:
             created_indexes = []
@@ -953,6 +999,7 @@ class QueriesViewsTests(QuerySanityTests):
         self.negative_common_body(queries_errors)
 
     def test_prepared_with_index_simple_where(self):
+        self.fail_if_no_buckets()
         index_name_prefix = 'auto_ind_prepared'
         for bucket in self.buckets:
             created_indexes = []
@@ -983,7 +1030,8 @@ class QueriesViewsTests(QuerySanityTests):
         index_fields = self.input.param("index_field", '').split(';')
         index_name = "test"
         if self.DGM == True:
-                    self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
+            self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             try:
                 for field in index_fields:
@@ -1030,6 +1078,7 @@ class QueriesViewsTests(QuerySanityTests):
         indexes = []
         index_name_prefix = "my_index_" + str(uuid.uuid4())[:4]
         index_fields = self.input.param("index_field", '').split(';')
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             try:
                 for field in index_fields:
@@ -1071,7 +1120,7 @@ class QueriesViewsTests(QuerySanityTests):
             self.run_intersect_scan_explain_query(indexes, query)
         finally:
             if indexes:
-                  for bucket in self.buckets:
+                for bucket in self.buckets:
                     for indx in indexes:
                         self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
                         try:
@@ -1082,10 +1131,12 @@ class QueriesViewsTests(QuerySanityTests):
     def test_intersect_scan_meta(self):
         test_to_run = self.input.param("test_to_run", '')
         indexes = []
+        self.fail_if_no_buckets()
         try:
             indexes = []
             index_name_prefix = "inter_index_" + str(uuid.uuid4())[:4]
             index_fields = self.input.param("index_field", '').split(';')
+
             for bucket in self.buckets:
                 for field in index_fields:
                     index_name = '%sid_meta' % (index_name_prefix)
@@ -1118,27 +1169,36 @@ class QueriesViewsTests(QuerySanityTests):
                                 "Indexes should be %s, but are: %s" % (indexes, actual_indexes))
         finally:
             for indx in indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
-                    try:
-                        self.run_cbq_query()
-                    except:
-                        pass
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
 
 
 class QueriesJoinViewsTests(JoinTests):
 
     def setUp(self):
         super(QueriesJoinViewsTests, self).setUp()
+        self.log.info("==============  QueriesJoinViewsTests setup has started ==============")
         self.num_indexes = self.input.param('num_indexes', 1)
         self.index_type = self.input.param('index_type', 'VIEW')
+        self.log.info("==============  QueriesJoinViewsTests setup has completed ==============")
+        self.log_config_info()
 
     def suite_setUp(self):
         super(QueriesJoinViewsTests, self).suite_setUp()
+        self.log.info("==============  QueriesJoinViewsTests suite_setup has started ==============")
+        self.log.info("==============  QueriesJoinViewsTests suite_setup has completed ==============")
 
     def tearDown(self):
+        self.log.info("==============  QueriesJoinViewsTests tearDown has started ==============")
+        self.log.info("==============  QueriesJoinViewsTests tearDown has completed ==============")
         super(QueriesJoinViewsTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.log.info("==============  QueriesJoinViewsTests suite_tearDown has started ==============")
+        self.log.info("==============  QueriesJoinViewsTests suite_tearDown has completed ==============")
         super(QueriesJoinViewsTests, self).suite_tearDown()
 
     def test_run_query(self):
@@ -1146,6 +1206,7 @@ class QueriesJoinViewsTests(JoinTests):
         index_name_prefix = "my_index_" + str(uuid.uuid4())[:4]
         method_name = self.input.param('to_run', 'test_simple_join_keys')
         index_fields = self.input.param("index_field", '').split(';')
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             try:
                 for field in index_fields:
