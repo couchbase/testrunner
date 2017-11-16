@@ -4060,7 +4060,7 @@ class RestConnection(object):
         if eventing_map is None:
             eventing_map = {}
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
-        url = "getEventProcessingStats?name=" + name
+        url = "getAggEventProcessingStats?name=" + name
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
