@@ -47,7 +47,7 @@ class EventingSettings(EventingBaseTest):
         # This sleep is intentionally added, undeploy takes some time to cleanup the eventing-consumer's
         self.sleep(60)
         # Ensure that all consumers are cleaned up
-        # This steps is added because of MB-26846
+        # This step is added because of MB-26846
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
@@ -76,6 +76,6 @@ class EventingSettings(EventingBaseTest):
         # This sleep is intentionally added, undeploy takes some time to cleanup the eventing-consumer's
         self.sleep(60)
         # Ensure that all consumers are cleaned up
-        # This steps is added because of MB-26846
+        # This step is added because of MB-26846
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
