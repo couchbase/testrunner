@@ -37,6 +37,7 @@ class EventingLifeCycle(EventingBaseTest):
             self.cluster.bucket_flush(self.master, self.dst_bucket_name)
             self.deploy_function(body)
             self.undeploy_function(body)
+        self.sleep(30)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -50,6 +51,7 @@ class EventingLifeCycle(EventingBaseTest):
             self.cluster.bucket_flush(self.master, self.dst_bucket_name)
             self.deploy_function(body)
             self.undeploy_function(body)
+        self.sleep(30)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -63,6 +65,7 @@ class EventingLifeCycle(EventingBaseTest):
             self.cluster.bucket_flush(self.master, self.dst_bucket_name)
             self.deploy_function(body)
             self.undeploy_function(body)
+        self.sleep(30)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
