@@ -36,7 +36,7 @@ def main():
 
     addPoolServers = []
 
-    if options.addPoolServers != None:
+    if options.addPoolServers != None or options.addPoolServers != "None":
         if not options.addPoolServers.startswith('['):
             options.addPoolServers = '[' + options.addPoolServers + ']'
         print 'the additional server pool info is', options.addPoolServers
