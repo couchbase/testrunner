@@ -888,6 +888,64 @@ class RemoteMachineShellConnection:
                    "===============\n".format(self.ip)
             self.stop_current_python_running(mesg)
 
+    def is_ulimit_n_set(self):
+        """
+           Set number of files openned to 102400
+           Testing by using ulimit -n
+        """
+        ulimit_set = False
+        ulimit_number = 102400
+        os_version = ""
+        hard_nofile_set = False
+        soft_nofile_set = False
+        set_hard_nofile = "* hard nofile"
+        set_soft_nofile = "* soft nofile"
+        sed_hard_cmd = "s/\* hard nofile .*/\* hard nofile %s/" % ulimit_number
+        sed_soft_cmd = "s/\* soft nofile .*/\* soft nofile %s/" % ulimit_number
+        self.extract_remote_info()
+        if self.info.type.lower() == 'linux':
+            log.info("Check if ulimit is set to %s" % ulimit_number)
+            if "centos" in self.info.distribution_version.lower():
+                os_version = "centos"
+                o, e = self.execute_command("ulimit -n")
+                log.info("ulimit -n in this server %s is: %s " % (self.ip,o))
+                if o and o[0].isdigit() and int(o[0]) < ulimit_number:
+                    log.info("Set ulimit to %s in server %s" % (ulimit_number, self.ip))
+                    output, _ = self.execute_command("grep nofile /etc/security/limits.conf")
+                    for line in output:
+                        if set_hard_nofile in line and not hard_nofile_set:
+                            self.execute_command("sed -i '%s' /etc/security/limits.conf"
+                                                                        % sed_hard_cmd)
+                            hard_nofile_set = True
+                        if set_soft_nofile in line and not soft_nofile_set:
+                            self.execute_command("sed -i '%s' /etc/security/limits.conf"
+                                                                        % sed_soft_cmd)
+                            soft_nofile_set = True
+                        if hard_nofile_set and soft_nofile_set:
+                            ulimit_set = True
+                            break
+                    if not hard_nofile_set and not soft_nofile_set:
+                        log.info("add a line * hard nofile %s to limits.conf file in %s"
+                                                             % (ulimit_number, self.ip))
+                        self.execute_command("echo '* hard nofile %s' "
+                                             ">> /etc/security/limits.conf" % ulimit_number)
+                        log.info("add a line * soft nofile %s to limits.conf file in %s"
+                                                             % (ulimit_number, self.ip))
+                        self.execute_command("echo '* soft nofile %s' "
+                                             ">> /etc/security/limits.conf" % ulimit_number)
+                        ulimit_set = True
+                elif o and (int(o[0]) > ulimit_number or o[0].startswith("unlimit")):
+                    ulimit_set = True
+
+                o, e = self.execute_command("ulimit -n")
+                log.info("ulimit -n in this server %s is: %s " % (self.ip,o))
+        if not ulimit_set:
+            mesg = "\n===============\n"\
+                   "        This server {0} \n"\
+                   "        failed to set ulimit to {1}.\n"\
+                   "===============\n".format(self.ip, ulimit_number)
+            self.stop_current_python_running(mesg)
+
     def download_build(self, build):
         return self.download_binary(build.url, build.deliverable_type, build.name, latest_url=build.url_latest_build)
 
