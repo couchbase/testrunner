@@ -559,6 +559,7 @@ class CouchbaseServerInstaller(Installer):
                 remote_client.set_cbauth_env(server)
                 remote_client.is_ntp_installed()
                 remote_client.is_killall_installed()
+                remote_client.is_ulimit_n_set()
                 remote_client.disconnect()
                 # TODO: Make it work with windows
                 if "erlang_threads" in params:
