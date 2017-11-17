@@ -839,7 +839,7 @@ class RemoteMachineShellConnection:
                     if "Active: active (running)" in line:
                         log.info("ntp is installed and running on this server %s" % self.ip)
                         ntp_installed = True
-                        break;
+                        break
             if os_version == "centos 6":
                 output, e = self.execute_command("/etc/init.d/ntpd status")
                 if output and " is running..." in output[0]:
@@ -853,6 +853,38 @@ class RemoteMachineShellConnection:
             mesg = "\n===============\n"\
                    "        This server {0} \n"\
                    "        failed to install ntp service.\n"\
+                   "===============\n".format(self.ip)
+            self.stop_current_python_running(mesg)
+
+    def is_killall_installed(self):
+        killall_installed = False
+        do_install = False
+        os_version = ""
+        log.info("Check if killall is installed")
+        self.extract_remote_info()
+        if self.info.type.lower() == 'linux':
+            if "centos" in self.info.distribution_version.lower():
+                os_version = "centos"
+                log.info("Check if killall is installed on this %s server" % self.ip)
+                o, e = self.execute_command("killall -V")
+                if e and "command not found" in e[0]:
+                    self.execute_command("yum install -y psmisc")
+                    do_install = True
+                elif e and "killall (PSmisc)" in e[0]:
+                    log.info("killall is installed on this %s server" % self.ip)
+                    killall_installed = True
+        if do_install:
+            log.info("Check killall after installed")
+            if os_version == "centos":
+                o, e = self.execute_command("killall -V")
+                if e and "killall (PSmisc)" in e[0]:
+                    log.info("killall is installed and running on this server %s" % self.ip)
+                    killall_installed = True
+
+        if not killall_installed and "centos" in os_version:
+            mesg = "\n===============\n"\
+                   "        This server {0} \n"\
+                   "        failed to install psmisc (for killall command).\n"\
                    "===============\n".format(self.ip)
             self.stop_current_python_running(mesg)
 
