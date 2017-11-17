@@ -461,7 +461,12 @@ class unidirectional(XDCRNewBaseTest):
 
         for crashed_node in crashed_nodes:
             self.__start_cb_server(crashed_node)
-        NodeHelper.wait_warmup_completed(crashed_nodes)
+
+        bucket_type = self._input.param("bucket_type", "membase")
+        if bucket_type == "ephemeral":
+            self.sleep(self._wait_timeout)
+        else:
+            NodeHelper.wait_warmup_completed(crashed_nodes)
 
         self.async_perform_update_delete()
         self.verify_results()
@@ -488,15 +493,23 @@ class unidirectional(XDCRNewBaseTest):
         for crashed_node in crashed_nodes:
             self.__start_cb_server(crashed_node)
 
+        bucket_type = self._input.param("bucket_type", "membase")
+
         if "C1" in crash:
-            NodeHelper.wait_warmup_completed(self.src_cluster.get_nodes())
+            if bucket_type == "ephemeral":
+                self.sleep(self._wait_timeout)
+            else:
+                NodeHelper.wait_warmup_completed(self.src_cluster.get_nodes())
             gen_create = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
             self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.async_perform_update_delete()
 
         if "C2" in crash:
-            NodeHelper.wait_warmup_completed(self.dest_cluster.get_nodes())
+            if bucket_type == "ephemeral":
+                self.sleep(self._wait_timeout)
+            else:
+                NodeHelper.wait_warmup_completed(self.dest_cluster.get_nodes())
 
         self.verify_results()
 
