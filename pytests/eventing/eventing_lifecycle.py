@@ -58,17 +58,18 @@ class EventingLifeCycle(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_function_deploy_undeploy_in_a_loop_for_doc_timers(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         for i in xrange(1, 5):
+            self.cluster.bucket_flush(self.master, self.src_bucket_name)
             self.cluster.bucket_flush(self.master, self.dst_bucket_name)
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
             self.deploy_function(body)
             self.undeploy_function(body)
         self.sleep(30)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_function_pause_resume_in_a_loop_for_bucket_operations(self):
@@ -139,6 +140,7 @@ class EventingLifeCycle(EventingBaseTest):
         body = json.loads(fh.read())
         # import the previously exported function
         # we don't have specific API for import, we reuse the API's
+        self.function_name = "test_import_function"
         self.rest.save_function("test_import_function", body)  # we have hardcoded function name as it's imported
         self.rest.deploy_function("test_import_function", body)  # we have hardcoded function name as it's imported
         self.wait_for_bootstrap_to_complete("test_import_function")  # we have hardcoded function name as it's imported
