@@ -3808,12 +3808,13 @@ class CBRecoveryTask(Task):
 
         try:
             self.shell = RemoteMachineShellConnection(src_server)
-            op, _ = self.shell.execute_command("ulimit -a | grep 'open files'")
-            openfiles_limit = op[0].split()[-1]
-            if int(openfiles_limit) < 7000:
-                raise Exception("Need to set ulimit to 7000 in /etc/sysctl.conf at %s "
-                                                                      % src_server.ip)
             self.info = self.shell.extract_remote_info()
+            if self.info.type.lower() == "linux":
+                op, _ = self.shell.execute_command("ulimit -a | grep 'open files'")
+                openfiles_limit = op[0].split()[-1]
+                if int(openfiles_limit) < 7000:
+                    raise Exception("Need to set 'ulimit -n' to 7000 at %s "
+                                                          % src_server.ip)
             self.rest = RestConnection(dest_server)
         except Exception, e:
             self.log.error(e)
