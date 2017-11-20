@@ -104,6 +104,8 @@ class ImportExportTests(CliBaseTest):
                                     field_separator_flag = "--field-separator %s "\
                                                               % self.field_separator
                         key_gen = "%index%"
+                        if self.cmd_ext:
+                            self.des_file = self.des_file.replace("/cygdrive/c", "c:")
                         imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                     " -b %s -d %s%s %s %s -g %s %s "\
                               % (self.cli_command_path, self.test_type, self.cmd_ext,
@@ -398,6 +400,8 @@ class ImportExportTests(CliBaseTest):
                     key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
                         -b default -d file:///tmp/export/default -f list -g %index%  """
+                    if self.cmd_ext:
+                        self.des_file = self.des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
                                   "-d %s%s -f %s -g %%index%% %s %s %s %s %s %s"\
                              % (self.cli_command_path, cmd, self.cmd_ext,
@@ -461,6 +465,8 @@ class ImportExportTests(CliBaseTest):
         self.sample_file = self.input.param("sample_file", None)
         self.imex_type = self.input.param("imex_type", None)
         sample_file_path = self.sample_files_path + self.sample_file + ".zip"
+        if self.cmd_ext:
+            sample_file_path = sample_file_path.replace("/cygdrive/c", "c:")
         server = copy.deepcopy(self.servers[0])
         if username is None:
             username = server.rest_username
@@ -613,6 +619,8 @@ class ImportExportTests(CliBaseTest):
                     key_gen = "%index%"
                     """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
                     -b default -d file:///tmp/export/default -f list -g %index%  """
+                    if self.cmd_ext:
+                        des_file = des_file.replace("/cygdrive/c", "c:")
                     imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                           server.ip, username, password, bucket.name,
