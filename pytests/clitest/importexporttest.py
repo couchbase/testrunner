@@ -120,6 +120,8 @@ class ImportExportTests(CliBaseTest):
                         self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
                         self.shell.execute_command("mkdir %sexport " % self.tmp_path)
                         export_file = self.ex_path + bucket.name
+                        if self.cmd_ext:
+                            export_file = export_file.replace("/cygdrive/c", "c:")
                         if self.imex_type == "json":
                             exp_cmd_str = "%s%s%s %s -c %s -u Administrator -p password"\
                                                             " -b %s -f %s -o %s"\
@@ -184,6 +186,8 @@ class ImportExportTests(CliBaseTest):
                 if len(self.buckets) >= 1:
                     for bucket in self.buckets:
                         export_file = self.ex_path + bucket.name
+                        if self.cmd_ext:
+                            export_file = export_file.replace("/cygdrive/c", "c:")
                         exe_cmd_str = "%s%s%s %s -c %s:%s -u Administrator "\
                                              "-p password -b %s -f %s -o %s"\
                                     % (self.cli_command_path, self.test_type,
@@ -422,6 +426,8 @@ class ImportExportTests(CliBaseTest):
                                              server.ip, self.num_items, bucket.name)
                     self.shell.execute_command(load_cmd)
                     export_file = self.ex_path + bucket.name
+                    if self.cmd_ext:
+                        export_file = export_file.replace("/cygdrive/c", "c:")
                     cmd_str = "%s%s%s %s -c %s -u Administrator -p password -b %s "\
                                     "  -f %s %s %s %s %s %s %s "\
                                      % (self.cli_command_path, cmd, self.cmd_ext,
@@ -536,6 +542,8 @@ class ImportExportTests(CliBaseTest):
             if len(self.buckets) >= 1:
                 for bucket in self.buckets:
                     export_file = self.ex_path + bucket.name
+                    if self.cmd_ext:
+                        export_file = export_file.replace("/cygdrive/c", "c:")
                     exe_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -f %s -o %s"\
                          % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                      server.ip, username, password, bucket.name,
