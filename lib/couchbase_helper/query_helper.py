@@ -986,7 +986,7 @@ class QueryHelper(object):
         #print "map is %s" %(map)
         return map
 
-    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
+    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False, ansi_joins=False):
         index_name_with_occur_fields_where = None
         index_name_with_expression = None
         index_name_fields_only = None
@@ -994,7 +994,7 @@ class QueryHelper(object):
         #import pdb;pdb.set_trace()
         sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
         #print "calling sql to n1ql"
-        n1ql = self._gen_sql_to_nql(sql)
+        n1ql = self._gen_sql_to_nql(sql,ansi_joins)
         #print n1ql
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type ="sql")
         #sql = sql.replace("FOR t_2"," ")
@@ -1686,7 +1686,7 @@ class QueryHelper(object):
         #print new_sql
         return new_sql
 
-    def _gen_sql_to_nql(self, sql):
+    def _gen_sql_to_nql(self, sql, ansi_joins=False):
         #print "in generation of sql to n1ql"
         check_keys=False
         check_first_paran = False
@@ -1696,7 +1696,7 @@ class QueryHelper(object):
         #import pdb;pdb.set_trace()
         #print "Analyzing for : %s" % sql
         for token in sql.split(" "):
-            if (not check_keys) and (token == "ON" or token == "USING"):
+            if (not check_keys) and (token == "ON" or token == "USING") and (not ansi_joins):
                 #print token
                 check_keys= True
                 if ("FOR" not in sql.split(" ")):

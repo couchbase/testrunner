@@ -31,6 +31,8 @@ class RQGTests(BaseTestCase):
                       .format(self.case_number, self._testMethodName))
         self.check_covering_index = self.input.param("check_covering_index",True)
         self.skip_setup_cleanup = True
+        self.ansi_joins = self.input.param("ansi_joins", False)
+        self.create_secondary_meta_indexes = self.input.param("create_secondary_meta_indexes", False)
         self.remove_alias = self.input.param("remove_alias",True)
         self.skip_cleanup = self.input.param("skip_cleanup",False)
         self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
@@ -66,7 +68,6 @@ class RQGTests(BaseTestCase):
         self.total_queries= self.input.param("total_queries",None)
         self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
         self.run_query_with_primary= self.input.param("run_query_with_primary",False)
-        self.create_primary_index=self.input.param("create_primary_index",True)
         self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
         self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
         self.test_file_path= self.input.param("test_file_path",None)
@@ -283,7 +284,8 @@ class RQGTests(BaseTestCase):
                     table_map = table_map,
                     n1ql_queries = list,
                     define_gsi_index = self.use_secondary_index,
-                    gen_expected_result = False)
+                    gen_expected_result = False,
+                    ansi_joins=self.ansi_joins)
             if (self.subquery==False):
                 if self.use_secondary_index:
                     self._generate_secondary_indexes_in_batches(list)
@@ -1176,7 +1178,18 @@ class RQGTests(BaseTestCase):
         if not self.generate_input_only:
             if self.create_primary_index:
                 self._build_primary_indexes(self.using_gsi)
-            if self.create_secondary_indexes:
+            if self.create_secondary_meta_indexes:
+                for table_name in self.sec_index_map.keys():
+                    query = "CREATE INDEX {0} ON {1}(primary_key_id)".format(table_name,self.database+"_"+table_name)
+                    try:
+                        self.n1ql_helper.run_cbq_query(
+                            query=query, server=self.n1ql_server, verbose=False)
+                        check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_"+table_name, table_name,
+                                                                             server=self.n1ql_server,
+                                                                             timeout=240)
+                    except Exception, ex:
+                        self.log.info(ex)
+            if self.create_secondary_indexes and (not self.create_secondary_meta_indexes):
                 thread_list = []
                 if self.build_secondary_index_in_seq:
                     for table_name in self.sec_index_map.keys():
