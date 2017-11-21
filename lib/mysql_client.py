@@ -382,8 +382,7 @@ class MySQLClient(object):
                     ansi_joins=ansi_joins)
             else:
                 map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(
-                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index,
-                    ansi_joins=ansi_joins)
+                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
             if gen_expected_result:
                 query = map["sql"]
                 try:
