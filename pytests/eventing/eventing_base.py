@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 
 
 class EventingBaseTest(QueryHelperTests, BaseTestCase):
+    panic_count = 0
+
     def setUp(self):
         if self._testMethodDoc:
             log.info("\n\nStarting Test: %s \n%s" % (self._testMethodName, self._testMethodDoc))
@@ -40,6 +42,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
 
     def tearDown(self):
+        # catch panics and print it in the test log
+        self.check_eventing_logs_for_panic()
         super(EventingBaseTest, self).tearDown()
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
@@ -157,8 +161,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # deploy the function
         log.info("Deploying the following handler code")
         log.info("\n{0}".format(body['appcode']))
-        content = self.rest.deploy_function(body['appname'], body)
-        log.info("deploy Application : {0}".format(content))
+        content1 = self.rest.deploy_function(body['appname'], body)
+        log.info("deploy Application : {0}".format(content1))
         # wait for the function to come out of bootstrap state
         self.wait_for_bootstrap_to_complete(body['appname'])
 
@@ -172,14 +176,16 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # save the function so that it disappears from UI
         content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content = self.rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Undeploy Application : {0}".format(content))
+        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        log.info("Undeploy Application : {0}".format(content1))
+        return content, content1
 
     def delete_function(self, body):
         # delete the function from the UI and backend
-        self.rest.delete_function_from_temp_store(body['appname'])
-        self.rest.delete_function(body['appname'])
+        content = self.rest.delete_function_from_temp_store(body['appname'])
+        content1 = self.rest.delete_function(body['appname'])
         log.info("Delete Application : {0}".format(body['appname']))
+        return content, content1
 
     def pause_function(self, body):
         body['settings']['deployment_status'] = True
@@ -187,8 +193,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # save the function so that it is visible in UI
         content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content = self.rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Pause Application : {0}".format(content))
+        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        log.info("Pause Application : {0}".format(content1))
 
     def resume_function(self, body):
         body['settings']['deployment_status'] = True
@@ -196,8 +202,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # save the function so that it is visible in UI
         content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content = self.rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Resume Application : {0}".format(content))
+        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        log.info("Resume Application : {0}".format(content1))
 
     def refresh_rest_server(self):
         eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -218,4 +224,30 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if count_of_all_eventing_consumers != 0:
             return False
         return True
+
+    """
+        Checks if a string 'panic' is present in eventing.log on server and returns the number of occurrences
+    """
+    def check_eventing_logs_for_panic(self):
+        self.generate_map_nodes_out_dist()
+        panic_str = "panic"
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        if not eventing_nodes:
+            return None
+        for eventing_node in eventing_nodes:
+            shell = RemoteMachineShellConnection(eventing_node)
+            _, dir_name = RestConnection(eventing_node).diag_eval(
+                'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+            eventing_log = str(dir_name) + '/eventing.log*'
+            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                               format(panic_str, eventing_log))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            shell.disconnect()
+            if count > self.panic_count:
+                log.info("===== PANIC OBSERVED IN EVENTING LOGS ON SERVER {0}=====".format(eventing_node.ip))
+                self.panic_count = count
+
 
