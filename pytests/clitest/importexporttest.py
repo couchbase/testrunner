@@ -1182,12 +1182,12 @@ class ImportExportTests(CliBaseTest):
 
             if self.imex_type == "json":
                 self.log.info("Copy bucket data from remote to local")
-                if os.path.exists("/tmp/bucket_data%s" % self.master.ip):
-                    shutil.rmtree("/tmp/bucket_data%s" % self.master.ip)
-                os.makedirs("/tmp/bucket_data%s" % self.master.ip)
+                if os.path.exists("/tmp/%s" % self.master.ip):
+                    shutil.rmtree("/tmp/%s" % self.master.ip)
+                os.makedirs("/tmp/%s" % self.master.ip)
                 self.shell.copy_file_remote_to_local(export_file,
-                                              "/tmp/bucket_data%s" % self.master.ip)
-                with open("/tmp/bucket_data%s" % self.master.ip) as f:
+                                              "/tmp/%s/bucket_data" % self.master.ip)
+                with open("/tmp/%s/bucket_data" % self.master.ip) as f:
                     bucket_data = f.read().splitlines()
                     bucket_data = [x.replace(" ", "") for x in bucket_data]
                     bucket_data = [x.rstrip(",") for x in bucket_data]
@@ -1200,6 +1200,9 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("Compare source data and bucket data")
                 if sorted(src_data) == sorted(bucket_data):
                     self.log.info("Import data match bucket data")
+                    if os.path.exists("/tmp/%s" % self.master.ip):
+                        self.log.info("Remove data in slave")
+                        shutil.rmtree("/tmp/%s" % self.master.ip)
                 else:
                     self.fail("Import data does not match bucket data")
             elif self.imex_type == "csv":
