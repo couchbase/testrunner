@@ -92,3 +92,22 @@ class EventingNegative(EventingBaseTest):
         content1 = self.rest.deploy_function(body['appname'], body)
         if "Source bucket is memcached, should be either couchbase or ephemeral" not in content1:
             self.fail("Eventing function allowed both source and metadata bucket to be memcached buckets")
+
+    def test_src_metadata_and_dst_bucket_flush_and_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # flush source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+            self.rest.flush_bucket(bucket.name)
+        # delete source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+                self.rest.delete_bucket(bucket.name)
+        self.undeploy_and_delete_function(body)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+

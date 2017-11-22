@@ -144,14 +144,15 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
         if stats_dst["curr_items"] != expected_dcp_mutations:
+            for i in xrange(5):
+                self.print_execution_and_failure_stats()
+                # This sleep is intentionally added as the the REST API is asynchronous in nature
+                self.sleep(30)
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
                 "Expected : {1}".format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
-        out_event_execution = self.rest.get_event_execution_stats(self.function_name)
-        log.info("Event execution stats : {0}".format(out_event_execution))
-        out_event_failure = self.rest.get_event_failure_stats(self.function_name)
-        log.info("Event failure stats : {0}".format(out_event_failure))
+        self.print_execution_and_failure_stats()
 
     def deploy_function(self, body):
         body['settings']['deployment_status'] = True
@@ -249,5 +250,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             if count > self.panic_count:
                 log.info("===== PANIC OBSERVED IN EVENTING LOGS ON SERVER {0}=====".format(eventing_node.ip))
                 self.panic_count = count
+
+    def print_execution_and_failure_stats(self):
+        out_event_execution = self.rest.get_event_execution_stats(self.function_name)
+        log.info("Event execution stats : {0}".format(out_event_execution))
+        out_event_failure = self.rest.get_event_failure_stats(self.function_name)
+        log.info("Event failure stats : {0}".format(out_event_failure))
 
 

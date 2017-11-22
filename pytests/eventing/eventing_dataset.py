@@ -62,15 +62,7 @@ class EventingDataset(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        count = 0
-        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        while stats_dst["curr_items"] != 0 and count < 20:
-            self.sleep(30, message="Waiting for handler code to complete all delete doc operations...")
-            count += 1
-            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        log.info("No of documents in dst bucket after OnDelete is executed : {0}".format(stats_dst['curr_items']))
-        self.assertEqual(0, stats_dst["curr_items"],
-                         "Bucket delete operations from handler code took lot of time to complete or didn't go through")
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_functions_where_documents_change_from_binary_to_json_data(self):
@@ -93,15 +85,7 @@ class EventingDataset(EventingBaseTest):
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_json, self.buckets[0].kvs[1], "delete",
                                    exp=0, flag=0, batch_size=1000)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        count = 0
-        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        while stats_dst["curr_items"] != 0 and count < 20:
-            self.sleep(30, message="Waiting for handler code to complete all delete doc operations...")
-            count += 1
-            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        log.info("No of documents in dst bucket after OnDelete is executed : {0}".format(stats_dst['curr_items']))
-        self.assertEqual(0, stats_dst["curr_items"],
-                         "Bucket delete operations from handler code took lot of time to complete or didn't go through")
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_functions_where_dataset_has_binary_and_non_json_data(self):
@@ -122,15 +106,7 @@ class EventingDataset(EventingBaseTest):
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
                                    "delete", exp=0, flag=0, batch_size=1000)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        count = 0
-        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        while stats_dst["curr_items"] != 0 and count < 20:
-            self.sleep(30, message="Waiting for handler code to complete all delete doc operations...")
-            count += 1
-            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        log.info("No of documents in dst bucket after OnDelete is executed : {0}".format(stats_dst['curr_items']))
-        self.assertEqual(0, stats_dst["curr_items"],
-                         "Bucket delete operations from handler code took lot of time to complete or didn't go through")
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     # See MB-26706
@@ -142,6 +118,7 @@ class EventingDataset(EventingBaseTest):
             "a1",  # Alphanumeric
             "1a",  # Alphanumeric
             "1 a b",  # Alphanumeric with space
+            "1.234",  # decimal
             "~`!@  #$%^&*()-_=+{}|[]\:\";\'<>?,./",  # all special characters
             "\xc2\xa1 \xc2\xa2 \xc2\xa4 \xc2\xa5"  # utf-8 encoded characters
         ]
@@ -164,13 +141,5 @@ class EventingDataset(EventingBaseTest):
         query = "DELETE FROM " + self.src_bucket_name + " where meta().id='key11111'"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        count = 0
-        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        while stats_dst["curr_items"] != 0 and count < 20:
-            self.sleep(30, message="Waiting for handler code to complete all delete doc operations...")
-            count += 1
-            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
-        log.info("No of documents in dst bucket after OnDelete is executed : {0}".format(stats_dst['curr_items']))
-        self.assertEqual(0, stats_dst["curr_items"],
-                         "Bucket delete operations from handler code took lot of time to complete or didn't go through")
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

@@ -89,3 +89,20 @@ class EventingConcurrency(EventingBaseTest):
         self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 2016, doc_timer_events=True)
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
+
+    def test_function_with_handler_code_which_has_multiple_bindings_to_same_bucket(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,
+                                              HANDLER_CODE.MULTIPLE_ALIAS_BINDINGS_FOR_SAME_BUCKET,
+                                              worker_count=3)
+        # create an another alias for the same bucket
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name})
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the create mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
