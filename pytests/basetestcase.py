@@ -2225,7 +2225,7 @@ class BaseTestCase(unittest.TestCase):
         else:
             list = []
             for server_info in self.services_map[service_type]:
-                tokens = server_info.split(":")
+                tokens = server_info.rsplit(":")
                 ip = tokens[0]
                 port = int(tokens[1])
                 for server in servers:
