@@ -4313,7 +4313,7 @@ class RestParser(object):
         node.curr_items = 0
         if 'interestingStats' in parsed and 'curr_items' in parsed['interestingStats']:
             node.curr_items = parsed['interestingStats']['curr_items']
-        node.port = parsed["hostname"][parsed["hostname"].find(":") + 1:]
+        node.port = parsed["hostname"][parsed["hostname"].rfind(":") + 1:]
         node.os = parsed['os']
 
         if "services" in parsed:
