@@ -662,13 +662,7 @@ class BaseTestCase(unittest.TestCase):
         bucket_params = copy.deepcopy(self.bucket_base_params['membase']['non_ephemeral'])
         bucket_params['size'] = bucket_size
         bucket_params['bucket_type'] = self.bucket_type
-
-        versions = RestConnection(server).get_nodes_versions()
-        pre_spock = False
-        for version in versions:
-            if "5" > version:
-                pre_spock = True
-
+        pre_spock = not RestConnection(server).check_cluster_compatibility("5.0")
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             port = STANDARD_BUCKET_PORT + i + 1
@@ -743,13 +737,7 @@ class BaseTestCase(unittest.TestCase):
 
         bucket_params = copy.deepcopy(self.bucket_base_params['memcached'])
         bucket_params['size'] = bucket_size
-
-        versions = RestConnection(server).get_nodes_versions()
-        pre_spock = False
-        for version in versions:
-            if "5" > version:
-                pre_spock = True
-
+        pre_spock = not RestConnection(server).check_cluster_compatibility("5.0")
         for i in range(num_buckets):
 
             name = 'memcached_bucket' + str(i)
@@ -2043,15 +2031,12 @@ class BaseTestCase(unittest.TestCase):
         if node is None:
             node = self.master
         rest = RestConnection(node)
-        versions = rest.get_nodes_versions()
-        if not versions:
+        pre_spock = not rest.check_cluster_compatibility("5.0")
+        if pre_spock:
+            self.log.info("Atleast one of the nodes in the cluster is "
+                          "pre 5.0 version. Hence not creating rbac user "
+                          "for the cluster. RBAC is a 5.0 feature.")
             return
-        for version in versions:
-            if "5" > version:
-                self.log.info("Atleast one of the nodes in the cluster is "
-                              "pre 5.0 version. Hence not creating rbac user "
-                              "for the cluster. RBAC is a 5.0 feature.")
-                return
         if testuser is None:
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
                                                 'password': 'password'}]

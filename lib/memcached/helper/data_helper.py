@@ -306,11 +306,7 @@ class MemcachedClientHelper(object):
         bucket_info = rest.get_bucket(bucket)
         # todo raise exception for not bucket_info
 
-        versions = rest.get_nodes_versions(logging=False)
-        pre_spock = False
-        for version in versions:
-            if "5" > version:
-                pre_spock = True
+        pre_spock = not rest.check_cluster_compatibility("5.0")
         if pre_spock:
             log.info("Atleast 1 of the server is on pre-spock "
                      "version. Using the old ssl auth to connect to "

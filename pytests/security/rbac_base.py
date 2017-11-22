@@ -60,11 +60,7 @@ class RbacBase:
             if self.source == "ldap":
                 response = rest.set_user_roles(userid,payload)
             elif self.source == 'builtin':
-                versions = rest.get_nodes_versions()
-                pre_spock = False
-                for version in versions:
-                    if "5" > version:
-                        pre_spock = True
+                pre_spock = not rest.check_cluster_compatibility("5.0")
                 if pre_spock:
                     return None
                 response = rest.add_set_builtin_user(userid,payload)
@@ -81,11 +77,7 @@ class RbacBase:
             if self.source == 'ldap':
                 response = rest.delete_user_roles(user)
             else:
-                versions = rest.get_nodes_versions()
-                pre_spock = False
-                for version in versions:
-                    if "5" > version:
-                        pre_spock = True
+                pre_spock = not rest.check_cluster_compatibility("5.0")
                 if pre_spock:
                     return None
                 response = rest.delete_builtin_user(user)

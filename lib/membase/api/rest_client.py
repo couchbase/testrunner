@@ -1951,6 +1951,24 @@ class RestConnection(object):
             log.info("Node versions in cluster {0}".format(versions))
         return versions
 
+    def check_cluster_compatibility(self, version):
+        """
+        Check if all nodes in cluster are of versions equal or above the version required.
+        :param version: Version to check the cluster compatibility for. Should be of format major_ver.minor_ver.
+                        For example: 5.0, 4.5, 5.1
+        :return:
+        """
+        nodes = self.get_nodes()
+        major_ver, minor_ver = version.split(".")
+        compatibility = int(major_ver) * 65536 + int(minor_ver)
+        is_compatible = True
+        for node in nodes:
+            clusterCompatibility = int(node.clusterCompatibility)
+            if clusterCompatibility < compatibility:
+                is_compatible = False
+        return is_compatible
+
+
     # this method returns the services of nodes in cluster - implemented for Sherlock
     def get_nodes_services(self):
         nodes = self.get_nodes()
