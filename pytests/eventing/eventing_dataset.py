@@ -74,9 +74,11 @@ class EventingDataset(EventingBaseTest):
                                    exp=0, flag=0, batch_size=1000)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
         self.deploy_function(body)
-        # change it to json data
+        # convert data from binary to json
+        # use the same doc-id's as binary to update from binary to json
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_binary, self.buckets[0].kvs[1], "delete",
-                                   exp=0, flag=0)
+                                   exp=0, flag=0, batch_size=1000)
+        self.sleep(60)
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_json, self.buckets[0].kvs[1], "create",
                                    exp=0, flag=0, batch_size=1000)
         # Wait for eventing to catch up with all the update mutations and verify results
@@ -96,15 +98,14 @@ class EventingDataset(EventingBaseTest):
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_binary, self.buckets[0].kvs[1], "create",
                                    exp=0, flag=0, batch_size=1000)
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
-                                   "create",
-                                   exp=0, flag=0, batch_size=1000)
+                                   "create", exp=0, flag=0, batch_size=1000)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete non json documents
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
-                                   "delete", exp=0, flag=0)
+                                   "delete", exp=0, flag=0, batch_size=1000)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -143,3 +144,4 @@ class EventingDataset(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
