@@ -76,7 +76,7 @@ class EventingDataset(EventingBaseTest):
         self.deploy_function(body)
         # change it to json data
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_binary, self.buckets[0].kvs[1], "delete",
-                                   exp=0, flag=0, batch_size=1000)
+                                   exp=0, flag=0)
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_json, self.buckets[0].kvs[1], "create",
                                    exp=0, flag=0, batch_size=1000)
         # Wait for eventing to catch up with all the update mutations and verify results
@@ -104,7 +104,7 @@ class EventingDataset(EventingBaseTest):
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete non json documents
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
-                                   "delete", exp=0, flag=0, batch_size=1000)
+                                   "delete", exp=0, flag=0)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
