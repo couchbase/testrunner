@@ -219,8 +219,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         for eventing_node in eventing_nodes:
             shell = RemoteMachineShellConnection(eventing_node)
             count, error = shell.execute_non_sudo_command(command)
-            log.info("Node : {0} , eventing_consumer processes running : {1}".format(eventing_node.ip, count[0]))
-            array_of_counts.append(int(count[0]))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            log.info("Node : {0} , eventing_consumer processes running : {1}".format(eventing_node.ip, count))
+            array_of_counts.append(count)
         count_of_all_eventing_consumers = sum(array_of_counts)
         if count_of_all_eventing_consumers != 0:
             return False
