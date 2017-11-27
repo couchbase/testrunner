@@ -3,6 +3,8 @@ import random
 import datetime
 import os
 from TestInput import TestInputSingleton
+from lib.couchbase_helper.documentgenerator import BlobGenerator
+from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
@@ -260,5 +262,35 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("Event execution stats : {0}".format(out_event_execution))
         out_event_failure = self.rest.get_event_failure_stats(self.function_name)
         log.info("Event failure stats : {0}".format(out_event_failure))
+
+    """
+        Push the bucket into DGM and return the number of items it took to push the bucket to DGM
+    """
+    def push_to_dgm(self, bucket, dgm_percent):
+        doc_size = 1024
+        curr_active = self.bucket_stat('vb_active_perc_mem_resident', bucket)
+        total_items = self.bucket_stat('curr_items', bucket)
+        batch_items = 20000
+        # go into dgm
+        while curr_active > dgm_percent:
+            curr_items = self.bucket_stat('curr_items', bucket)
+            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size, start=curr_items + 1, end=curr_items + 20000)
+            total_items += batch_items
+            try:
+                self.cluster.load_gen_docs(self.master, bucket, gen_create, self.buckets[0].kvs[1],
+                                           'create', exp=0, flag=0, batch_size=1000)
+            except:
+                pass
+            curr_active = self.bucket_stat('vb_active_perc_mem_resident', bucket)
+        log.info("bucket {0} in DGM, resident_ratio : {1}%".format(bucket, curr_active))
+        total_items = self.bucket_stat('curr_items', bucket)
+        return total_items
+
+    def bucket_stat(self, key, bucket):
+        stats = StatsCommon.get_stats([self.master], bucket, "", key)
+        val = stats.values()[0]
+        if val.isdigit():
+            val = int(val)
+        return val
 
 
