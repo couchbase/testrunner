@@ -2586,6 +2586,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         sub_command = self.input.param("sub-command", None)
         new_users = self.input.param("new-users", None)
         new_roles = self.input.param("new-roles", None)
+        if "star" in new_roles:
+            new_roles = new_roles.replace("star", "*")
         enabled = self.input.param("enabled", False)
         default = self.input.param("default", None)
         self.bucket_type = self.input.param("bucket-type", "couchbase")
