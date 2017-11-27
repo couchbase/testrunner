@@ -1377,7 +1377,7 @@ class ImportExportTests(CliBaseTest):
                                                        % self.test_type)
         elif self.threads_flag == "notnumber":
             error_check = False
-            if "Unable to process value for flag: -t" in output:
+            if output and "Unable to process value for flag: -t" in output[0]:
                 self.log.info("%s detected incorrect value of threads argument"
                                                                  % self.test_type)
             else:
