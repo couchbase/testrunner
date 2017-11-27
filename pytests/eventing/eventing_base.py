@@ -158,7 +158,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         self.print_execution_and_failure_stats()
 
-    def deploy_function(self, body,deployment_fail=False):
+    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
         # save the function so that it appears in UI
@@ -168,16 +168,15 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("\n{0}".format(body['appcode']))
         content1 = self.rest.deploy_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content1))
-
-        if(deployment_fail):
-            res=json.loads(content1);
-            if(not res["compile_success"]):
+        if deployment_fail:
+            res = json.loads(content1)
+            if not res["compile_success"]:
                 return
             else:
                 raise Exception("Deployment is expected to be failed but no message of failure")
-
-        # wait for the function to come out of bootstrap state
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        if wait_for_bootstrap:
+            # wait for the function to come out of bootstrap state
+            self.wait_for_bootstrap_to_complete(body['appname'])
 
     def undeploy_and_delete_function(self, body):
         self.undeploy_function(body)
@@ -302,5 +301,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if val.isdigit():
             val = int(val)
         return val
+
+    def restart_memcache(self, server):
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.kill_memcached()
+        remote_client.disconnect()
 
 

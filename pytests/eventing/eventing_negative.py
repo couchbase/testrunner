@@ -110,4 +110,16 @@ class EventingNegative(EventingBaseTest):
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
-
+    def test_undeploy_when_function_is_still_in_bootstrap_state(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+        self.deploy_function(body, wait_for_bootstrap=False)
+        # Try undeploying the function when it is still bootstrapping
+        _, output = self.undeploy_function(body)
+        if "not bootstrapped, discarding request to undeploy it" not in output:
+            self.fail("Function undeploy succeeded even when function was in bootstrapping state")
+        # Wait for eventing to catch up with all the create mutations and verify results
+        self.wait_for_bootstrap_to_complete(body['appname'])
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
