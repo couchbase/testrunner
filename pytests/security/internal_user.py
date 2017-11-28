@@ -57,7 +57,11 @@ class InternalUser(UserBase):
         if payload:
             self.payload = payload
         rest = RestConnection(self.host)
-        pre_spock = not rest.check_cluster_compatibility("5.0")
+        cluster_compatibility = rest.check_cluster_compatibility("5.0")
+        if cluster_compatibility is None:
+            pre_spock = True
+        else:
+            pre_spock = not cluster_compatibility
         if pre_spock:
             log.info("At least one of the node in the cluster is on "
                      "pre-spock version. Not creating user since RBAC is a "

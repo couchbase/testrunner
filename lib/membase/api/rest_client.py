@@ -1956,9 +1956,14 @@ class RestConnection(object):
         Check if all nodes in cluster are of versions equal or above the version required.
         :param version: Version to check the cluster compatibility for. Should be of format major_ver.minor_ver.
                         For example: 5.0, 4.5, 5.1
-        :return:
+        :return: True if cluster is compatible with the version specified, False otherwise. Return None if cluster is
+        uninitialized.
         """
         nodes = self.get_nodes()
+        if not nodes:
+            # If nodes returned is None, it means that the cluster is not initialized yet and hence cluster
+            # compatibility cannot be found. Return None
+            return None
         major_ver, minor_ver = version.split(".")
         compatibility = int(major_ver) * 65536 + int(minor_ver)
         is_compatible = True

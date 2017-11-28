@@ -662,7 +662,11 @@ class BaseTestCase(unittest.TestCase):
         bucket_params = copy.deepcopy(self.bucket_base_params['membase']['non_ephemeral'])
         bucket_params['size'] = bucket_size
         bucket_params['bucket_type'] = self.bucket_type
-        pre_spock = not RestConnection(server).check_cluster_compatibility("5.0")
+        cluster_compatibility = RestConnection(server).check_cluster_compatibility("5.0")
+        if cluster_compatibility is None:
+            pre_spock = True
+        else:
+            pre_spock = not cluster_compatibility
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             port = STANDARD_BUCKET_PORT + i + 1
@@ -737,7 +741,11 @@ class BaseTestCase(unittest.TestCase):
 
         bucket_params = copy.deepcopy(self.bucket_base_params['memcached'])
         bucket_params['size'] = bucket_size
-        pre_spock = not RestConnection(server).check_cluster_compatibility("5.0")
+        cluster_compatibility = RestConnection(server).check_cluster_compatibility("5.0")
+        if cluster_compatibility is None:
+            pre_spock = True
+        else:
+            pre_spock = not cluster_compatibility
         for i in range(num_buckets):
 
             name = 'memcached_bucket' + str(i)
@@ -2031,7 +2039,11 @@ class BaseTestCase(unittest.TestCase):
         if node is None:
             node = self.master
         rest = RestConnection(node)
-        pre_spock = not rest.check_cluster_compatibility("5.0")
+        cluster_compatibility = rest.check_cluster_compatibility("5.0")
+        if cluster_compatibility is None:
+            pre_spock = True
+        else:
+            pre_spock = not cluster_compatibility
         if pre_spock:
             self.log.info("Atleast one of the nodes in the cluster is "
                           "pre 5.0 version. Hence not creating rbac user "
