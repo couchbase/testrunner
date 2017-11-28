@@ -46,7 +46,10 @@ class SaslTest(BaseTestCase):
         client.close()
         return ret
 
-    """Make sure that list mechanisms works and the response is in order"""
+    """ Make sure that list mechanisms works and the response is in order
+        From 5.0.1, mechs will be:
+            ['SCRAM-SHA512', 'SCRAM-SHA1', 'SCRAM-SHA256', 'PLAIN']
+    """
     def test_list_mechs(self):
         nodes = RestConnection(self.master).get_nodes()
         for n in nodes:
@@ -54,9 +57,12 @@ class SaslTest(BaseTestCase):
                 node = n
         client = MemcachedClient(self.master.ip, node.memcached)
         mechs = list(client.sasl_mechanisms())
-        assert "CRAM-MD5" in mechs
+        self.log.info("Start check mech types")
+        assert "SCRAM-SHA1" in mechs
+        assert "SCRAM-SHA256" in mechs
+        assert "SCRAM-SHA512" in mechs
         assert "PLAIN" in mechs
-        assert len(list(mechs)) == 2
+        assert len(list(mechs)) == 4
 
     """Tests basic sasl authentication on buckets that exist"""
     def test_basic_valid(self):
