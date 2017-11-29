@@ -5,7 +5,7 @@ from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
 AUTH_SUCCESS = ""
-AUTH_FAILURE = "Auth failure"
+AUTH_FAILURE = "Auth error"
 
 class SaslTest(BaseTestCase):
 
@@ -25,6 +25,7 @@ class SaslTest(BaseTestCase):
             task.result(self.wait_timeout * 10)
 
     def do_auth(self, bucket, password):
+        """ default self.auth_mech is 'PLAIN' """
         self.log.info("Authenticate with {0} to {1}:{2}".format(self.auth_mech,
                                                                 bucket,
                                                                 password))
@@ -35,14 +36,12 @@ class SaslTest(BaseTestCase):
                 node = n
         client = MemcachedClient(self.master.ip, node.memcached)
         try:
-            if self.auth_mech == "CRAM-MD5":
-                ret = client.sasl_auth_cram_md5(bucket, password)[2]
-            elif self.auth_mech == "PLAIN":
+            if self.auth_mech == "PLAIN":
                 ret = client.sasl_auth_plain(bucket, password)[2]
             else:
                 self.fail("Invalid auth mechanism {0}".format(self.auth_mech))
         except MemcachedError, e:
-            ret = e.msg.split(' for vbucket')[0]
+            ret = e[0].split(' for vbucket')[0]
         client.close()
         return ret
 
@@ -66,19 +65,19 @@ class SaslTest(BaseTestCase):
 
     """Tests basic sasl authentication on buckets that exist"""
     def test_basic_valid(self):
-        buckets = { "bucket1" : "password1",
-                    "bucket2" : "password2" }
+        buckets = { "bucket1" : "password",
+                    "bucket2" : "password" }
         self.create_pwd_buckets(self.master, buckets)
 
         for bucket in buckets:
-            assert self.do_auth(bucket, buckets[bucket]) == AUTH_SUCCESS
+            assert self.do_auth("Administrator", buckets[bucket]) == AUTH_SUCCESS
 
     """Tests basic sasl authentication on non-existent buckets"""
     def test_basic_invalid(self):
         buckets = { "bucket1" : "password1",
                     "bucket2" : "password2" }
         for bucket in buckets:
-            assert self.do_auth(bucket, buckets[bucket]) == AUTH_FAILURE
+            assert AUTH_FAILURE in self.do_auth(bucket, buckets[bucket])
 
     """Tests basic sasl authentication on incomplete passwords
 
@@ -89,11 +88,11 @@ class SaslTest(BaseTestCase):
         self.create_pwd_buckets(self.master, buckets)
 
         for bucket in buckets:
-            assert self.do_auth(bucket, "") == AUTH_FAILURE
-            assert self.do_auth(bucket, "pass") == AUTH_FAILURE
-            assert self.do_auth(bucket, "password") == AUTH_FAILURE
-            assert self.do_auth(bucket, "password12") == AUTH_FAILURE
-            assert self.do_auth(bucket, "password1") == AUTH_SUCCESS
+            assert AUTH_FAILURE in self.do_auth(bucket, "")
+            assert AUTH_FAILURE in self.do_auth(bucket, "pass")
+            assert AUTH_FAILURE in self.do_auth(bucket, "password")
+            assert AUTH_FAILURE in self.do_auth(bucket, "password12")
+            assert self.do_auth("Administrator", "password") == AUTH_SUCCESS
 
     """Tests basic sasl authentication on incomplete bucket names
 
@@ -103,11 +102,11 @@ class SaslTest(BaseTestCase):
         buckets = { "bucket1" : "password1" }
         self.create_pwd_buckets(self.master, buckets)
 
-        assert self.do_auth("", "password1") == AUTH_FAILURE
-        assert self.do_auth("buck", "password1") == AUTH_FAILURE
-        assert self.do_auth("bucket", "password1") == AUTH_FAILURE
-        assert self.do_auth("bucket12", "password1") == AUTH_FAILURE
-        assert self.do_auth("bucket1", "password1") == AUTH_SUCCESS
+        assert AUTH_FAILURE in self.do_auth("", "password1")
+        assert AUTH_FAILURE in self.do_auth("buck", "password1")
+        assert AUTH_FAILURE in self.do_auth("bucket", "password1")
+        assert AUTH_FAILURE in self.do_auth("bucket12", "password1")
+        assert self.do_auth("Administrator", "password") == AUTH_SUCCESS
 
     """Test bucket names and passwords with null characters
 
@@ -117,13 +116,13 @@ class SaslTest(BaseTestCase):
         buckets = { "bucket1" : "password1" }
         self.create_pwd_buckets(self.master, buckets)
 
-        assert self.do_auth("\0bucket1", "password1") == AUTH_FAILURE
-        assert self.do_auth("\0\0\0bucket1", "password1") == AUTH_FAILURE
-        assert self.do_auth("bucket1", "\0password1") == AUTH_FAILURE
-        assert self.do_auth("bucket1", "\0\0\0password1") == AUTH_FAILURE
-        assert self.do_auth("bucket1\0", "\0password1") == AUTH_FAILURE
-        assert self.do_auth("bucket1", "\0password1") == AUTH_FAILURE
-        assert self.do_auth("bucket1", "password1") == AUTH_SUCCESS
+        assert AUTH_FAILURE in self.do_auth("\0Administrator", "password1")
+        assert AUTH_FAILURE in self.do_auth("\0\0\0Administrator", "password1")
+        assert AUTH_FAILURE in self.do_auth("Administrator", "\0password1")
+        assert AUTH_FAILURE in self.do_auth("Administrator", "\0\0\0password1")
+        assert AUTH_FAILURE in self.do_auth("Administrator\0", "\0password1")
+        assert AUTH_FAILURE in self.do_auth("Administrator", "\0password1")
+        assert self.do_auth("Administrator", "password") == AUTH_SUCCESS
 
     """Test bucket names and passwords with spaces
 
@@ -156,18 +155,20 @@ class SaslTest(BaseTestCase):
         invalid_pass = self.input.param("invalid_pass", [])
         if invalid_pass:
             invalid_pass = invalid_pass.split(";")
-        self._create_sasl_buckets(self.master, buckets_num, bucket_size=100, password=valid_password)
+        self._create_sasl_buckets(self.master, buckets_num, bucket_size=100,
+                                                    password=valid_password)
         if self.input.param("include_restart", False):
             self.restart_server(self.servers[:self.nodes_init])
         for bucket in self.buckets:
             for password in invalid_pass:
-                password = password.replace('[space]',' ').replace('[tab]', u'\t').encode('ascii')
-                self.assertEqual(self.do_auth(bucket.name, password), AUTH_FAILURE,
-                             "Bucket %s, valid pass %s, shouldn't authentificate with %s" %(
-                                        bucket, bucket.saslPassword, password))
-            self.assertEqual(self.do_auth(bucket.name, bucket.saslPassword), AUTH_SUCCESS,
-                             "Bucket %s, valid pass %s, authentification should success" %(
-                                        bucket, bucket.saslPassword))
+                password = \
+                    password.replace('[space]',' ').replace('[tab]', u'\t').encode('ascii')
+                self.assertTrue(AUTH_FAILURE in self.do_auth(bucket.name, password),
+                             "Bucket %s, valid pass %s, shouldn't authentificate with %s"\
+                              %(bucket, bucket.saslPassword, password))
+            self.assertEqual(self.do_auth("Administrator", bucket.saslPassword), AUTH_SUCCESS,
+                             "Bucket %s, valid pass %s, authentification should success"\
+                             %(bucket, bucket.saslPassword))
 
     def restart_server(self, servers):
         for server in servers:
