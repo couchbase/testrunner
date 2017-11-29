@@ -64,3 +64,28 @@ class EventingN1QL(EventingBaseTest):
         self.undeploy_and_delete_function(body)
         query = "drop primary index on " + self.src_bucket_name;
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node);
+
+
+    def test_n1ql_DML(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        body = self.create_save_function_body(self.function_name,HANDLER_CODE.N1QL_DML,dcp_stream_boundary="from_now",execution_timeout=5)
+        self.deploy_function(body)
+        query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1";
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node);
+        self.verify_eventing_results(self.function_name, 6, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_n1ql_DDL(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,HANDLER_CODE.N1QL_DDL,dcp_stream_boundary="from_now")
+        self.deploy_function(body)
+        #create a mutation via N1QL
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1";
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node);
+        #verify deployment should fail
+        self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)

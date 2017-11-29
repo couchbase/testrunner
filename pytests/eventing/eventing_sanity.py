@@ -144,3 +144,9 @@ class EventingSanity(EventingBaseTest):
         self.assertEqual(0, stats_dst["curr_items"],
                          "Bucket operations from handler code took lot of time to complete or didn't go through")
         self.undeploy_and_delete_function(body)
+
+    def test_syntax_error(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.SYNTAX_ERROR)
+        self.deploy_function(body,deployment_fail=True)

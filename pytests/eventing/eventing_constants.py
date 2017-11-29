@@ -14,6 +14,9 @@ class HANDLER_CODE:
     MULTIPLE_ALIAS_BINDINGS_FOR_SAME_BUCKET = 'handler_code/multiple_alias_bindings_for_same_bucket.js'
     N1QL_DELETE_UPDATE= 'handler_code/n1ql_delete_update.js'
     N1QL_PREPARE='handler_code/n1ql_prepare.js'
+    N1QL_DDL='handler_code/n1ql_DDL.js'
+    N1QL_DML='handler_code/n1ql_DML.js'
+    SYNTAX_ERROR='handler_code/syntax_error.js'
 
 class EXPORTED_FUNCTION:
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'exported_functions/n1ql_insert_with_cron_timer.json'

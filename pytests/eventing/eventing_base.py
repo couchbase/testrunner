@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import datetime
@@ -55,7 +56,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=1, processing_status=True,
-                                  cpp_worker_thread_count=1, multi_dst_bucket=False):
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False,execution_timeout=3):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -88,6 +89,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['worker_count'] = worker_count
         body['settings']['processing_status'] = processing_status
         body['settings']['cpp_worker_thread_count'] = cpp_worker_thread_count
+        body['settings']['execution_timeout'] = execution_timeout
         return body
 
     def wait_for_bootstrap_to_complete(self, name):
@@ -156,7 +158,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         self.print_execution_and_failure_stats()
 
-    def deploy_function(self, body):
+    def deploy_function(self, body,deployment_fail=False):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
         # save the function so that it appears in UI
@@ -166,6 +168,14 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("\n{0}".format(body['appcode']))
         content1 = self.rest.deploy_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content1))
+
+        if(deployment_fail):
+            res=json.loads(content1);
+            if(not res["compile_success"]):
+                return
+            else:
+                raise Exception("Deployment is expected to be failed but no message of failure")
+
         # wait for the function to come out of bootstrap state
         self.wait_for_bootstrap_to_complete(body['appname'])
 
