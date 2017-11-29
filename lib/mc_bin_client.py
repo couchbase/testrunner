@@ -55,6 +55,7 @@ class MemcachedClient(object):
             return self.s.connect_ex((self.host, self.port))
         except:
             # IPv6
+            self.host = self.host.replace('[', '').replace(']', '')
             self.s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
             self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             return self.s.connect_ex((self.host, self.port, 0, 0))

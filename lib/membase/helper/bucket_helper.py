@@ -280,7 +280,8 @@ class BucketOperationHelper():
         while time.time() < end_time and len(ready_vbuckets) < vbucket_count:
             for every_ip_port in server_dict:
                 #Retrieve memcached ip and port
-                ip, port = every_ip_port.split(":")
+                ip = every_ip_port.rsplit(":", 1)[0]
+                port = every_ip_port.rsplit(":", 1)[1]
                 client = MemcachedClient(ip, int(port), timeout=30)
                 client.vbucket_count = len(vbuckets)
                 bucket_info = rest.get_bucket(bucket)

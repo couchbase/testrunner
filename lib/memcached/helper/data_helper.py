@@ -776,8 +776,8 @@ class VBucketAwareMemcached(object):
         for vBucket in forward_map:
             if vBucket.id in vbucketids_set:
                 self.vBucketMap[vBucket.id] = vBucket.master
-                masterIp = vBucket.master.split(":")[0]
-                masterPort = int(vBucket.master.split(":")[1])
+                masterIp = vBucket.master.rsplit(":", 1)[0]
+                masterPort = int(vBucket.master.rsplit(":", 1)[1])
                 if self.vBucketMap[vBucket.id] not in self.memcacheds:
                     server = TestInputServer()
                     server.rest_username = rest.username
@@ -822,10 +822,9 @@ class VBucketAwareMemcached(object):
 
     def add_memcached(self, server_str, memcacheds, rest, bucket, admin_user='cbadminbucket', admin_pass='password'):
         if not server_str in memcacheds:
-            serverIp = server_str.split(":")[0]
-            serverPort = int(server_str.split(":")[1])
+            serverIp = server_str.rsplit(":", 1)[0]
+            serverPort = int(server_str.rsplit(":", 1)[1])
             nodes = rest.get_nodes()
-
             server = TestInputServer()
             server.ip = serverIp
             server.port = rest.port
