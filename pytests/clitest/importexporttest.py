@@ -885,6 +885,14 @@ class ImportExportTests(CliBaseTest):
                 imp_rest.force_eject_node()
                 self.sleep(2)
 
+                imp_rest = RestConnection(import_servers[2])
+                status = False
+                info = imp_rest.get_nodes_self()
+                if info.memoryQuota and int(info.memoryQuota) > 0:
+                    self.quota = info.memoryQuota
+                imp_rest.init_node()
+                self.cluster.rebalance(import_servers[2:], [import_servers[3]], [])
+
                 """ Add built-in user cbadminbucket to second cluster """
                 self.log.info("add built-in user cbadminbucket to second cluster.")
                 testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
@@ -895,13 +903,6 @@ class ImportExportTests(CliBaseTest):
                 RbacBase().add_user_role(role_list, RestConnection(import_servers[2]), 'builtin')
                 self.sleep(10)
 
-                imp_rest = RestConnection(import_servers[2])
-                status = False
-                info = imp_rest.get_nodes_self()
-                if info.memoryQuota and int(info.memoryQuota) > 0:
-                    self.quota = info.memoryQuota
-                imp_rest.init_node()
-                self.cluster.rebalance(import_servers[2:], [import_servers[3]], [])
                 bucket_params=self._create_bucket_params(server=import_servers[2],
                                         size=250,
                                         replicas=self.num_replicas,
