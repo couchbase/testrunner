@@ -24,7 +24,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_REPO
-from testconstants import CB_REPO
+from testconstants import CB_REPO, CB_DOWNLOAD_SERVER, CB_DOWNLOAD_SERVER_FQDN
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK
@@ -292,6 +292,9 @@ class Installer(object):
                     build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
                 else:
                     sys.exit("version is not support yet")
+            if params['enable_ipv6']:
+                build_repo = build_repo.replace(CB_DOWNLOAD_SERVER,
+                                                CB_DOWNLOAD_SERVER_FQDN)
             for name in names:
                 if version[:5] in releases_version:
                     build = BuildQuery().find_membase_release_build(

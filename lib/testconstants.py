@@ -181,6 +181,7 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
 # (for people outside the mountain view office it's nice to be able to
 # be running this locally without being on VPN (which my test machines isn't)
 CB_DOWNLOAD_SERVER = "172.23.120.24"
+CB_DOWNLOAD_SERVER_FQDN = "nas.build.couchbase.com"
 #CB_DOWNLOAD_SERVER = "10.0.0.117:8080"
 
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
