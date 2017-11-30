@@ -1166,7 +1166,12 @@ class RestConnection(object):
     def stop_replication(self, uri):
         log.info("Deleting replication {0}".format(uri))
         api = self.baseUrl[:-1] + uri
-        self._http_request(api, 'DELETE')
+        status, content, _ = self._http_request(api, 'DELETE')
+        if status:
+            log.info("Replication deleted successfully")
+        else:
+            log.error("/controller/cancelXDCR failed: status:{0}, content:{1}".format(status, content))
+            raise Exception("delete replication failed : status:{0}, content:{1}".format(status, content))
 
     def remove_all_recoveries(self):
         recoveries = []
