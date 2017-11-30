@@ -17,6 +17,9 @@ class HANDLER_CODE:
     N1QL_DDL='handler_code/n1ql_DDL.js'
     N1QL_DML='handler_code/n1ql_DML.js'
     SYNTAX_ERROR='handler_code/syntax_error.js'
+    RECURSIVE_MUTATION='handler_code/recursive_mutation.js'
+    GRANT_REVOKE='handler_code/grant_revoke.js'
+    CURL='handler_code/curl.js'
 
 class EXPORTED_FUNCTION:
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'exported_functions/n1ql_insert_with_cron_timer.json'
