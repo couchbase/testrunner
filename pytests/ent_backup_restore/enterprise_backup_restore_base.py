@@ -1302,16 +1302,21 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                            no_progress_bar=self.no_progress_bar,
                                            cli_command_location=self.cli_command_location,
                                            cb_version=self.cb_version)
-        self.sleep(10)
+        self.sleep(5)
         conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn_bk.pause_memcached()
+        conn_bk.pause_memcached(timesleep=8)
         conn_bk.unpause_memcached()
         conn_bk.disconnect()
         output = backup_result.result(timeout=200)
-        self.assertTrue("Backup successfully completed" in output[0],
+        if self.debug_logs:
+            if output:
+                print "\nOutput from backup cluster: %s " % output
+            else:
+                self.fail("No output printout.")
+        self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with memcached crash and restart within 180 seconds")
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
-        self.sleep(30)
+        self.sleep(20)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
                                                     self.backupset.name)
@@ -1329,6 +1334,16 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                          self.backup_validation_files_location, merge=True)
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            for x in output:
+                if word_check.lower() in x.lower():
+                    self.log.info("Found \"%s\" in CLI output" % word_check)
+                    found = True
+                    break
+        return found
 
     def backup_with_erlang_crash_and_restart(self):
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,

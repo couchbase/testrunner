@@ -3406,7 +3406,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
 
-    def pause_memcached(self, os="linux"):
+    def pause_memcached(self, os="linux", timesleep=30):
         log.info("*** pause memcached process ***")
         if os == "windows":
             self.check_cmd("pssuspend")
@@ -3416,8 +3416,8 @@ class RemoteMachineShellConnection:
         else:
             o, r = self.execute_command("killall -SIGSTOP memcached")
             self.log_command_output(o, r)
-        log.info("wait 30 seconds to make node down.")
-        time.sleep(30)
+        log.info("wait %s seconds to make node down." % timesleep)
+        time.sleep(timesleep)
 
     def unpause_memcached(self, os="linux"):
         log.info("*** unpause memcached process ***")
