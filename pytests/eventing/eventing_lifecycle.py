@@ -1,10 +1,12 @@
 import json
 import os
-
+import logging
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
 from pytests.eventing.eventing_base import EventingBaseTest, log
+
+log = logging.getLogger()
 
 
 class EventingLifeCycle(EventingBaseTest):

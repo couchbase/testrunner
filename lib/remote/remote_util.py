@@ -598,6 +598,16 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         return o, r
 
+    def kill_eventing_process(self, name):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            o, r = self.execute_command(command="taskkill /F /T /IM {0}*".format(name))
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command(command="killall -9 {0}".format(name))
+            self.log_command_output(o, r)
+        return o, r
+
     def change_log_level(self, new_log_level):
         log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
         # ADD NON_ROOT user config_details
@@ -3113,7 +3123,7 @@ class RemoteMachineShellConnection:
                         os_version = etc_issue
                         is_linux_distro = True
                     else:
-                        log.info("It could be other operating systyem."
+                        log.info("It could be other operating system."
                                  "  Go to check at other location")
                     file.close()
                     # now remove this file

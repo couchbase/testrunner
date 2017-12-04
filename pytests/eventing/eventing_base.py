@@ -12,7 +12,7 @@ from pytests.basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class EventingBaseTest(QueryHelperTests, BaseTestCase):
@@ -56,7 +56,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=1, processing_status=True,
-                                  cpp_worker_thread_count=1, multi_dst_bucket=False,execution_timeout=3):
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -148,15 +148,17 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
         if stats_dst["curr_items"] != expected_dcp_mutations:
-            for i in xrange(5):
+            for i in xrange(5):  # See MB-27035
                 self.print_execution_and_failure_stats()
                 # This sleep is intentionally added as the the REST API is asynchronous in nature
-                self.sleep(30)
+                self.sleep(30)  # See MB-26847
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
                 "Expected : {1}".format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
-        self.print_execution_and_failure_stats()
+        for i in xrange(3):  # See MB-27035
+            self.print_execution_and_failure_stats()
+            self.sleep(30)  # See MB-26847
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
         body['settings']['deployment_status'] = True
@@ -244,6 +246,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     """
         Checks if a string 'panic' is present in eventing.log on server and returns the number of occurrences
     """
+
     def check_eventing_logs_for_panic(self):
         self.generate_map_nodes_out_dist()
         panic_str = "panic"
@@ -275,6 +278,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     """
         Push the bucket into DGM and return the number of items it took to push the bucket to DGM
     """
+
     def push_to_dgm(self, bucket, dgm_percent):
         doc_size = 1024
         curr_active = self.bucket_stat('vb_active_perc_mem_resident', bucket)
@@ -307,4 +311,17 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         remote_client.kill_memcached()
         remote_client.disconnect()
 
+    def bucket_compaction(self):
+        for bucket in self.buckets:
+            log.info("Compacting bucket : {0}".format(bucket.name))
+            self.rest.compact_bucket(bucket=bucket.name)
 
+    def kill_consumer(self, server):
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.kill_eventing_process(name="eventing-consumer")
+        remote_client.disconnect()
+
+    def kill_producer(self, server):
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.kill_eventing_process(name="eventing-producer")
+        remote_client.disconnect()

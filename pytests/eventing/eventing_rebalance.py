@@ -1,7 +1,10 @@
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
-from pytests.eventing.eventing_base import EventingBaseTest, log
+from pytests.eventing.eventing_base import EventingBaseTest
+import logging
+
+log = logging.getLogger()
 
 
 class EventingRebalance(EventingBaseTest):

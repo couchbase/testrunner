@@ -1,16 +1,16 @@
 # Intentionally adding 1 new line
 # coding=utf-8
-import logger
 from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator, JSONNonDocGenerator
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
-from pytests.eventing.eventing_base import EventingBaseTest, log
+from pytests.eventing.eventing_base import EventingBaseTest
 from couchbase.bucket import Bucket
 import copy
+import logging
 
-log = logger.Logger.get_logger()
+log = logging.getLogger()
 
 
 class EventingDataset(EventingBaseTest):
