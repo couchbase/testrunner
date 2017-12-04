@@ -11,6 +11,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
+from pytests.security.rbacmain import rbacmain
 
 log = logging.getLogger()
 
@@ -311,10 +312,27 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         remote_client.kill_memcached()
         remote_client.disconnect()
 
+
     def bucket_compaction(self):
         for bucket in self.buckets:
             log.info("Compacting bucket : {0}".format(bucket.name))
             self.rest.compact_bucket(bucket=bucket.name)
+
+    def verify_user_noroles(self,username):
+        status, content, header=rbacmain(self.master)._retrieve_user_roles()
+        res = json.loads(content)
+        userExist=False
+        for ele in res:
+            log.debug("user {0}".format(ele["name"]))
+            log.debug(ele["name"] == username)
+            if ele["name"] == username:
+                log.debug("user roles {0}".format(ele["roles"]))
+                if not ele["roles"]:
+                    log.info("user {0} has no roles".format(username))
+                    userExist=True
+                    break
+        if not userExist:
+            raise Exception("user {0} roles are not empty".format(username))
 
     def kill_consumer(self, server):
         remote_client = RemoteMachineShellConnection(server)
