@@ -783,6 +783,7 @@ class RestConnection(object):
         if not headers:
             headers = self._create_headers()
         end_time = time.time() + timeout
+        log.debug("Executing {0} request for following api {1} with Params: {2}  and Headers: {3}".format(method,api,params,headers))
         while True:
             try:
                 response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers)
