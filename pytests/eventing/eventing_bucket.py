@@ -144,7 +144,7 @@ class EventingBucket(EventingBaseTest):
             # load documents on the source bucket
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
-            self.restart_memcache(kv_node)
+            self.kill_memcached_service(kv_node)
         except:
             pass
         # wait for bucket to come out of warm up state

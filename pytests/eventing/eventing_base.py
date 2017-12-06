@@ -160,6 +160,16 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         for i in xrange(3):  # See MB-27035
             self.print_execution_and_failure_stats()
             self.sleep(30)  # See MB-26847
+        # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
+        # print all stats from all eventing nodes
+        # These are the stats that will be used by ns_server and UI
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        for eventing_node in eventing_nodes:
+            rest_conn = RestConnection(eventing_node)
+            out = rest_conn.get_all_eventing_stats()
+            full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
+            log.info("Stats for Node {0} is {1} ".format(eventing_node.ip, out))
+            log.debug("Full Stats for Node {0} is {1} ".format(eventing_node.ip, full_out))
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
         body['settings']['deployment_status'] = True
@@ -279,7 +289,6 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     """
         Push the bucket into DGM and return the number of items it took to push the bucket to DGM
     """
-
     def push_to_dgm(self, bucket, dgm_percent):
         doc_size = 1024
         curr_active = self.bucket_stat('vb_active_perc_mem_resident', bucket)
@@ -306,12 +315,6 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if val.isdigit():
             val = int(val)
         return val
-
-    def restart_memcache(self, server):
-        remote_client = RemoteMachineShellConnection(server)
-        remote_client.kill_memcached()
-        remote_client.disconnect()
-
 
     def bucket_compaction(self):
         for bucket in self.buckets:
@@ -342,4 +345,16 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def kill_producer(self, server):
         remote_client = RemoteMachineShellConnection(server)
         remote_client.kill_eventing_process(name="eventing-producer")
+        remote_client.disconnect()
+
+    def kill_memcached_service(self, server):
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.kill_memcached()
+        remote_client.disconnect()
+
+    def kill_erlang_service(self, server):
+        remote_client = RemoteMachineShellConnection(server)
+        os_info = remote_client.extract_remote_info()
+        remote_client.kill_erlang(os_info)
+        remote_client.start_couchbase()
         remote_client.disconnect()

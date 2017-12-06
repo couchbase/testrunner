@@ -69,16 +69,19 @@ class EventingLifeCycle(EventingBaseTest):
             self.deploy_function(body)
             self.undeploy_function(body)
         self.sleep(30)
+        # doc timers wont process the same docs again if there is no update
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='update')
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_function_pause_resume_in_a_loop_for_bucket_operations(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function
@@ -89,10 +92,10 @@ class EventingLifeCycle(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_function_pause_resume_in_a_loop_for_n1ql_operations(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
         self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function
@@ -103,10 +106,10 @@ class EventingLifeCycle(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_function_pause_resume_in_a_loop_for_doc_timers(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function

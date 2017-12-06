@@ -4145,6 +4145,24 @@ class RestConnection(object):
                     eventing_map[field] = val
         return eventing_map
 
+    '''
+            Get all eventing stats
+    '''
+    def get_all_eventing_stats(self, seqs_processed=False, eventing_map=None):
+        if eventing_map is None:
+            eventing_map = {}
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        if seqs_processed:
+            url = "api/v1/stats?type=full"
+        else:
+            url = "api/v1/stats"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

@@ -563,8 +563,9 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("kill -9 $(ps aux | grep 'memcached' "
-                                                    " | awk '{print $2}')")
+            # Changed from kill -9 $(ps aux | grep 'memcached' | awk '{print $2}' as grep was also returning eventing
+            # process which was using memcached-cert
+            o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')")
             self.log_command_output(o, r)
         return o, r
 

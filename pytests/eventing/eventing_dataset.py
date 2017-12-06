@@ -123,7 +123,15 @@ class EventingDataset(EventingBaseTest):
             "1 a b",  # Alphanumeric with space
             "1.234",  # decimal
             "~`!@  #$%^&*()-_=+{}|[]\:\";\'<>?,./",  # all special characters
-            "\xc2\xa1 \xc2\xa2 \xc2\xa4 \xc2\xa5"  # utf-8 encoded characters
+            "\xc2\xa1 \xc2\xa2 \xc2\xa4 \xc2\xa5",  # utf-8 encoded characters
+            "true",  # boolean key
+            "false",  # boolean key
+            "True",  # boolean key
+            "False",  # boolean key
+            "null",  # null key
+            "undefined",  # undefined key
+            "Infinity",
+            "NaN"
         ]
         url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
