@@ -20,6 +20,12 @@ class HANDLER_CODE:
     RECURSIVE_MUTATION='handler_code/recursive_mutation.js'
     GRANT_REVOKE='handler_code/grant_revoke.js'
     CURL='handler_code/curl.js'
+    ANONYMOUS='handler_code/anonymous.js'
+    RECURSION_FUNCTION='handler_code/recursion.js'
+
+class HANDLER_CODE_ERROR:
+    N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntex.js'
+    GLOBAL_VARIABLE='handler_code/handler_code_error/globalVariable.js'
 
 class EXPORTED_FUNCTION:
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'exported_functions/n1ql_insert_with_cron_timer.json'

@@ -1,10 +1,8 @@
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_constants import HANDLER_CODE,HANDLER_CODE_ERROR
 from pytests.eventing.eventing_base import EventingBaseTest, log
 from lib.couchbase_helper.tuq_helper import N1QLHelper
-from pytests.security.rbacmain import rbacmain
-from membase.helper.cluster_helper import ClusterOperationHelper
 
 
 class EventingN1QL(EventingBaseTest):
@@ -127,6 +125,52 @@ class EventingN1QL(EventingBaseTest):
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        #verify deployment should fail
         self.verify_eventing_results(self.function_name, 1, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_n1ql_syntex_error(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,HANDLER_CODE_ERROR.N1QL_SYNTAX,dcp_stream_boundary="from_now")
+        self.deploy_function(body)
+        #create a mutation via N1QL
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        #verify that n1ql query will fail
+        self.verify_eventing_results(self.function_name, 1, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_anonymous(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,HANDLER_CODE.ANONYMOUS,dcp_stream_boundary="from_now")
+        self.deploy_function(body)
+        #create a mutation via N1QL
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        #verify that n1ql query will fail
+        self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_recursionFunction(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.RECURSION_FUNCTION,
+                                              dcp_stream_boundary="from_now",execution_timeout=5)
+        self.deploy_function(body)
+        # create a mutation via N1QL
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        query = "UPDATE " + self.src_bucket_name + " set mutated=1 where mutated=0 limit 1"
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        # verify that n1ql query will fail
+        self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_globalVariable(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.GLOBAL_VARIABLE,
+                                              dcp_stream_boundary="from_now")
+        self.deploy_function(body,deployment_fail=True)
