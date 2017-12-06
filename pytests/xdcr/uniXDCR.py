@@ -653,6 +653,9 @@ class unidirectional(XDCRNewBaseTest):
         for task in load_tasks:
             task.result()
 
+        conn.start_couchbase()
+        self.sleep(300)
+
         for node in self.src_cluster.get_nodes():
             count = NodeHelper.check_goxdcr_log(
                             node,
@@ -661,7 +664,6 @@ class unidirectional(XDCRNewBaseTest):
             self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
             self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
 
-        conn.start_couchbase()
         self.verify_results()
 
     def test_verify_mb19802_2(self):
