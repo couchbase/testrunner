@@ -1080,6 +1080,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if index_found < len(self.gsi_names):
             self.fail("Some GSI index is not created in restore cluster.")
 
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            for x in output:
+                if word_check.lower() in x.lower():
+                    self.log.info("Found \"%s\" in CLI output" % word_check)
+                    found = True
+                    break
+        return found
+
 
 class Backupset:
     def __init__(self):

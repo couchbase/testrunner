@@ -1488,7 +1488,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         while "Backup successfully completed" in output[-1]:
             output, error = self.backup_cluster()
         error_msg = "Error backing up cluster: Unable to read data because range.json is corrupt,"
-        self.assertTrue(error_msg in output[0],
+        self.assertTrue(self._check_output(error_msg, output),
                         "Expected error message not thrown by backup when disk is full")
         self.log.info("Expected error thrown by backup command")
         conn.execute_command("rm -rf /cbqe3043/file")
@@ -1541,7 +1541,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.kill_erlang()
         conn.start_couchbase()
         output = backup_result.result(timeout=200)
-        self.assertTrue("Backup successfully completed" in output[0],
+        self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
 
@@ -1567,7 +1567,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.stop_couchbase()
         conn.start_couchbase()
         output = backup_result.result(timeout=200)
-        self.assertTrue("Backup successfully completed" in output[0],
+        self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with couchbase stop and start within 180 seconds")
         self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
 
@@ -1596,7 +1596,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.pause_memcached()
         conn.unpause_memcached()
         output = backup_result.result(timeout=200)
-        self.assertTrue("Backup successfully completed" in output[0],
+        self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with memcached crash and restart within 180 seconds")
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
 
@@ -1665,8 +1665,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.stop_couchbase()
             output = backup_result.result(timeout=200)
-            self.assertTrue(
-                "Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+            self.assertTrue(self._check_output(
+                "Error backing up cluster: Not all data was backed up due to connectivity issues.", output),
                 "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
             self.log.info("Expected error message thrown by Backup 180 seconds after couchbase-server stop")
         except Exception as ex:
@@ -1703,7 +1703,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.sleep(10)
             output = backup_result.result(timeout=200)
             mesg = "Error backing up cluster: Unable to find the latest vbucket sequence numbers."
-            self.assertTrue( mesg in output[0],
+            self.assertTrue(self._check_output(mesg, output),
                 "Expected error message not thrown by Backup 180 seconds after memcached crash")
             self.log.info("Expected error thrown by Backup 180 seconds after memcached crash")
         except Exception as ex:
@@ -1745,7 +1745,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if self.os_name == "windows":
             timeout_now = 600
         output = restore_result.result(timeout=timeout_now)
-        self.assertTrue("Restore completed successfully" in output[0],
+        self.assertTrue(self._check_output("Restore completed successfully", output),
                         "Restore failed with erlang crash and restart within 180 seconds")
         self.log.info("Restore succeeded with erlang crash and restart within 180 seconds")
 
@@ -1779,7 +1779,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.sleep(10)
         conn.start_couchbase()
         output = restore_result.result(timeout=500)
-        self.assertTrue("Restore completed successfully" in output[0],
+        self.assertTrue(self._check_output("Restore completed successfully", output),
                         "Restore failed with couchbase stop and start within 180 seconds")
         self.log.info("Restore succeeded with couchbase stop and start within 180 seconds")
 
@@ -1810,7 +1810,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.pause_memcached(self.os_name)
         conn.unpause_memcached(self.os_name)
         output = restore_result.result(timeout=600)
-        self.assertTrue("Restore completed successfully" in output[0],
+        self.assertTrue(self._check_output("Restore completed successfully", output),
                         "Restore failed with memcached crash and restart within 400 seconds")
         self.log.info("Restore succeeded with memcached crash and restart within 400 seconds")
 
@@ -1843,8 +1843,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.kill_erlang(self.os_name)
             output = restore_result.result(timeout=200)
-            self.assertTrue(
-                "Error restoring cluster: Not all data was sent to Couchbase" in output[0],
+            self.assertTrue(self._check_output(
+                "Error restoring cluster: Not all data was sent to Couchbase", output),
                 "Expected error message not thrown by Restore 180 seconds after erlang crash")
             self.log.info("Expected error thrown by Restore 180 seconds after erlang crash")
         except Exception as ex:
@@ -1881,8 +1881,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.stop_couchbase()
             output = restore_result.result(timeout=200)
-            self.assertTrue(
-                "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
+            self.assertTrue(self._check_output(
+                "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues.", output),
                 "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
             self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
         except Exception as ex:
@@ -1920,8 +1920,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.pause_memcached(self.os_name)
             output = restore_result.result(timeout=200)
-            self.assertTrue(
-                "Error restoring cluster: Not all data was sent to Couchbase" in output[0],
+            self.assertTrue(self._check_output(
+                "Error restoring cluster: Not all data was sent to Couchbase", output),
                 "Expected error message not thrown by Restore 180 seconds after memcached crash")
             self.log.info("Expected error thrown by Restore 180 seconds after memcached crash")
         except Exception as ex:
@@ -1946,16 +1946,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         backup_count = 0
+        """ remove last 6 chars of offset time in backup name"""
+        if self.backups and self.backups[0][-3:] == "_00":
+            strip_backupset = [s[:-6] for s in self.backups]
+
         for line in output:
             if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
                 backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
                 if self.debug_logs:
-                    print "backup name ", backup_name + "-07_00"
-                    print "backup set  ", self.backups
-                if backup_name + "-07_00" in self.backups:
+                    print "backup name ", backup_name
+                    print "backup set  ", strip_backupset
+                if backup_name in strip_backupset:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
-        self.assertEqual(backup_count, len(self.backups), "Initial number of backups did not match")
+        self.assertEqual(backup_count, len(strip_backupset), "Initial number of backups did not match")
         self.log.info("Initial number of backups matched")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
         self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
@@ -1966,16 +1970,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         backup_count = 0
+        """ remove last 6 chars of offset time in backup name"""
+        if self.backups and self.backups[0][-3:] == "_00":
+            strip_backupset = [s[:-6] for s in self.backups]
+
         for line in output:
             if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
                 backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
                 if self.debug_logs:
-                    print "backup name ", backup_name + "-07_00"
-                    print "backup set  ", self.backups
-                if backup_name + "-07_00" in self.backups:
+                    print "backup name ", backup_name
+                    print "backup set  ", strip_backupset
+                if backup_name in strip_backupset:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
-        self.assertEqual(backup_count, len(self.backups), "Merged number of backups did not match")
+        self.assertEqual(backup_count, len(strip_backupset), "Merged number of backups did not match")
         self.log.info("Merged number of backups matched")
 
     def test_backup_merge_with_restore(self):
@@ -2108,7 +2116,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.start_couchbase()
         self.sleep(30)
         output, error = self.backup_cluster()
-        if error or "Backup successfully completed" not in output[0]:
+        if error or not self._check_output("Backup successfully completed", output):
             self.fail("Taking cluster backup failed.")
         status, output, message = self.backup_list()
         if not status:
@@ -2163,7 +2171,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.start_couchbase()
         self.sleep(30)
         output, error = self.backup_cluster()
-        if error or "Backup successfully completed" not in output[0]:
+        if error or not self._check_output("Backup successfully completed", output):
             self.fail("Taking cluster backup failed.")
         status, output, message = self.backup_list()
         if not status:
