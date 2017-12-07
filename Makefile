@@ -36,6 +36,9 @@ test-viewquery:
 test-views-pre-merge:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/view-conf/py-view-pre-merge.conf
 
+test-views-pre-merge-viewci:
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-single-node.ini conf/view-conf/py-view-pre-merge-sanscreatedeleteviews.conf
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/view-conf/py-view-pre-merge-sanscreatedeleteviews.conf
 # required before merging changes to view engine
 test-viewmerge:
 	echo "Running view merge tests with single node cluster"
@@ -43,6 +46,10 @@ test-viewmerge:
 	echo "Running view merge tests with 4 nodes cluster"
 	sleep $(SLEEP_TIME)
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/view-conf/py-viewmerge.conf
+
+test-viewmerge-viewci:
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-single-node.ini conf/view-conf/py-viewmerge-sansdevview.conf
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/view-conf/py-viewmerge-sansdevview.conf
 
 # required before merging 2i code
 test-2i-integrations-tests:
