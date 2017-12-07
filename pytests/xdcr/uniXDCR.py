@@ -880,3 +880,50 @@ class unidirectional(XDCRNewBaseTest):
                         goxdcr_log)
         self.assertGreater(count, 0, "rollback did not happen as expected")
         self.log.info("rollback happened as expected")
+
+    def test_verify_mb19181(self):
+        load_tasks = self.setup_xdcr_async_load()
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0]) \
+                     + '/goxdcr.log*'
+
+        self.dest_cluster.failover_and_rebalance_master()
+
+        for task in load_tasks:
+            task.result()
+
+        for node in self.src_cluster.get_nodes():
+            count = NodeHelper.check_goxdcr_log(
+                node,
+                "Can't move update state from",
+                goxdcr_log)
+            self.assertEqual(count, 0, "Can't move update state from - error message found in " + str(node.ip))
+            self.log.info("Can't move update state from - error message not found in " + str(node.ip))
+
+        self.verify_results()
+
+    def test_verify_mb21369(self):
+        repeat = self._input.param("repeat", 5)
+        load_tasks = self.setup_xdcr_async_load()
+
+        conn = RemoteMachineShellConnection(self.src_cluster.get_master_node())
+        output, error = conn.execute_command("netstat -an | grep " + self.src_cluster.get_master_node().ip
+                                             + ":11210 | wc -l")
+        conn.log_command_output(output, error)
+        before = output[0]
+        self.log.info("No. of memcached connections before: {0}".format(output[0]))
+
+        for i in range(0, repeat):
+            self.src_cluster.pause_all_replications()
+            self.sleep(30)
+            self.src_cluster.resume_all_replications()
+
+            output, error = conn.execute_command("netstat -an | grep " + self.src_cluster.get_master_node().ip
+                                                 + ":11210 | wc -l")
+            conn.log_command_output(output, error)
+            self.log.info("No. of memcached connections in iteration {0}:  {1}".format(i+1, output[0]))
+            self.assertLessEqual(int(output[0]), int(before), "Number of memcached connections increased")
+
+        for task in load_tasks:
+            task.result()
+
+        self.log.info("No. of memcached connections did not increase with pausing and resuming replication multiple times")
