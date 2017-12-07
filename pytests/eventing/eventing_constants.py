@@ -24,8 +24,10 @@ class HANDLER_CODE:
     RECURSION_FUNCTION='handler_code/recursion.js'
 
 class HANDLER_CODE_ERROR:
-    N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntex.js'
-    GLOBAL_VARIABLE='handler_code/handler_code_error/globalVariable.js'
+    N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
+    GLOBAL_VARIABLE='handler_code/handler_code_error/global_variable.js'
+    EMPTY='handler_code/handler_code_error/empty.js'
+    RANDOM='handler_code/handler_code_error/random_method.js'
 
 class EXPORTED_FUNCTION:
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'exported_functions/n1ql_insert_with_cron_timer.json'

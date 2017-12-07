@@ -128,7 +128,7 @@ class EventingN1QL(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 1, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-    def test_n1ql_syntex_error(self):
+    def test_n1ql_syntax_error(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name,HANDLER_CODE_ERROR.N1QL_SYNTAX,dcp_stream_boundary="from_now")
@@ -154,7 +154,7 @@ class EventingN1QL(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-    def test_recursionFunction(self):
+    def test_recursion_function(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.RECURSION_FUNCTION,
@@ -168,9 +168,26 @@ class EventingN1QL(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-    def test_globalVariable(self):
+    def test_global_variable(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.GLOBAL_VARIABLE,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body,deployment_fail=True)
+
+    def test_empty_handler(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EMPTY,
+                                              dcp_stream_boundary="from_now")
+        self.deploy_function(body,deployment_fail=True)
+        # TODO : more assertion needs to be validate after MB-27126
+
+    def test_without_update_delete(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.RANDOM,
+                                              dcp_stream_boundary="from_now")
+        self.deploy_function(body, deployment_fail=True)
+        # TODO : more assertion needs to be validate after MB-27126
+
