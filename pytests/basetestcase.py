@@ -2222,7 +2222,7 @@ class BaseTestCase(unittest.TestCase):
         else:
             list = []
             for server_info in self.services_map[service_type]:
-                tokens = server_info.rsplit(":")
+                tokens = server_info.rsplit(":", 1)
                 ip = tokens[0]
                 port = int(tokens[1])
                 for server in servers:
@@ -2237,7 +2237,7 @@ class BaseTestCase(unittest.TestCase):
                         server.ip = hostname
                         shell.disconnect()
                     if (port != 8091 and port == int(server.port)) or \
-                            (port == 8091 and server.ip == ip):
+                            (port == 8091 and server.ip.lower() == ip.lower()):
                         list.append(server)
             self.log.info("list of all nodes in cluster: {0}".format(list))
             if get_all_nodes:

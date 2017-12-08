@@ -238,11 +238,11 @@ class RemoteMachineShellConnection:
         while True:
             try:
                 if self.remote and serverInfo.ssh_key == '':
-                    self._ssh_client.connect(hostname=serverInfo.ip,
+                    self._ssh_client.connect(hostname=serverInfo.ip.replace('[', '').replace(']',''),
                                              username=serverInfo.ssh_username,
                                              password=serverInfo.ssh_password)
                 elif self.remote:
-                    self._ssh_client.connect(hostname=serverInfo.ip,
+                    self._ssh_client.connect(hostname=serverInfo.ip.replace('[', '').replace(']',''),
                                              username=serverInfo.ssh_username,
                                              key_filename=serverInfo.ssh_key)
                 break
@@ -290,7 +290,7 @@ class RemoteMachineShellConnection:
             try:
                 log.info("Connect to node: %s as user: %s" % (self.ip, user))
                 if self.remote and self.ssh_key == '':
-                    self._ssh_client.connect(hostname=self.ip,
+                    self._ssh_client.connect(hostname=self.ip.replace('[', '').replace(']',''),
                                              username=user,
                                              password=self.password)
                 break

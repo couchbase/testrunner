@@ -39,6 +39,9 @@ def getNumberOfAddpoolServers(iniFile, addPoolId):
     except:
         return 0
 
+def rreplace(str, pattern, num_replacements):
+    return str.rsplit(pattern, num_replacements)[0]
+
 def main():
 
     usage = '%prog -s suitefile -v version -o OS'
@@ -392,18 +395,18 @@ def main():
 
                         if options.serverType.lower() != 'docker':
                             r2 = json.loads(content)
-                            servers = json.dumps(r2).replace(' ','').replace('[','').replace(']','')
+                            servers = json.dumps(r2).replace(' ','').replace('[','', 1)
+                            servers = rreplace(servers, ']', 1)
                             url = url + '&servers=' + urllib.quote(servers)
 
                             if testsToLaunch[i]['addPoolServerCount']:
-                                addPoolServers = json.loads(content2)
+                                addPoolServers = content2.replace(' ','')\
+                                                   .replace('[','', 1)
+                                addPoolServers = rreplace(addPoolServers, ']', 1)
                                 url = url + '&addPoolServerId=' +\
                                       options.addPoolId +\
                                       '&addPoolServers=' +\
-                                      urllib.quote(json.dumps(addPoolServers).
-                                                   replace(' ','')
-                                                   .replace('[','')
-                                                   .replace(']',''))
+                                      urllib.quote(addPoolServers)
 
 
                         print '\n', time.asctime( time.localtime(time.time()) ), 'launching ', url
