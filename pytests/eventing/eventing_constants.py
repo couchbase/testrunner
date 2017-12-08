@@ -28,6 +28,8 @@ class HANDLER_CODE_ERROR:
     GLOBAL_VARIABLE='handler_code/handler_code_error/global_variable.js'
     EMPTY='handler_code/handler_code_error/empty.js'
     RANDOM='handler_code/handler_code_error/random_method.js'
+    ANONYMOUS_DOC_TIMER='handler_code/handler_code_error/anonymous_function_doc_timer.js'
+    ANONYMOUS_CRON_TIMER='handler_code/handler_code_error/anonymous_function_cron_timer.js'
 
 class EXPORTED_FUNCTION:
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'exported_functions/n1ql_insert_with_cron_timer.json'

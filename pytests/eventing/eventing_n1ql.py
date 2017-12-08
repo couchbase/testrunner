@@ -191,3 +191,18 @@ class EventingN1QL(EventingBaseTest):
         self.deploy_function(body, deployment_fail=True)
         # TODO : more assertion needs to be validate after MB-27126
 
+    def test_anonymous_with_cron_timer(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.ANONYMOUS_CRON_TIMER,
+                                              dcp_stream_boundary="from_now")
+        self.deploy_function(body, deployment_fail=True)
+        # TODO : more assertion needs to be validate after MB-27155
+
+    def test_anonymous_with_doc_timer(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.ANONYMOUS_DOC_TIMER,
+                                              dcp_stream_boundary="from_now")
+        self.deploy_function(body, deployment_fail=True)
+        # TODO : more assertion needs to be validate after MB-27155
