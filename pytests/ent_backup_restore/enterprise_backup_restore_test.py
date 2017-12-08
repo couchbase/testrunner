@@ -468,7 +468,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         output, error = self.backup_cluster()
-        if output and "Backup successfully completed" not in output[0]:
+        if output and not self._check_output("Backup successfully completed", output):
             self.fail("Failed to run with password env %s " % output)
         self.backup_cluster_validate(skip_backup=True)
         self.backup_list()

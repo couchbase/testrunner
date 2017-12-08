@@ -104,6 +104,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 value = ",".join(value.split(',')[4:5])
                 data[key] = value
 
+            self.log.info("Compare backup data in bucket %s " % bucket.name)
             is_equal, not_equal, extra, not_present = \
                                         self.compare_dictionary(backedup_kv, data)
             status, msg = self.compare_dictionary_result_analyser(is_equal,

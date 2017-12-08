@@ -624,9 +624,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                               compare=seqno_compare_function,
                                               get_replica=replicas, mode=mode)
 
+        """ limit the length of message printout to 3000 chars """
+        info = str(msg)[:3000] + '..' if len(str(msg)) > 3000 else msg
         if not status:
-            self.fail(msg)
-        self.log.info(msg)
+            self.fail(info)
+        self.log.info(info)
 
     def backup_list(self):
         args = "list --archive {0}".format(self.backupset.directory)
