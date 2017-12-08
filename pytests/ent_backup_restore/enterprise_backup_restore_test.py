@@ -1092,19 +1092,19 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                           % (self.cluster_new_user,
                              self.cluster_new_role))
             output, error = self.backup_cluster()
-            success_msg = ['Backup successfully completed']
+            success_msg = 'Backup successfully completed'
             fail_msg = "Error backing up cluster:"
             if self.cluster_new_role in users_can_backup_all:
-                if success_msg != output:
+                if not self._check_output(success_msg, output):
                     self.fail("User %s failed to backup data.\n"
                               "Here is the output %s " % \
                               (self.cluster_new_role, output))
             elif self.cluster_new_role in users_can_not_backup_all:
-                if fail_msg not in output[0]:
+                if not self._check_output(fail_msg, output):
                     self.fail("cbbackupmgr failed to block user to backup")
             if self.cluster_new_role == "views_admin[*]":
-                self.assertTrue("Error backing up cluster: Invalid permissions" in output[0],
-                                "Expected error message not thrown")
+                self.assertTrue(self._check_output("Error backing up cluster: Invalid permissions",
+                                output), "Expected error message not thrown")
             status, _, message = self.backup_list()
             if not status:
                 self.fail(message)
@@ -1143,7 +1143,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     raise Exception("cbbackupmgr does not block user role: %s to backup" \
                                     % self.cluster_new_role)
             if self.cluster_new_role in users_can_backup_all:
-                if success_msg[0] not in output[0]:
+                if not self._check_output(success_msg, output):
                     self.fail(e)
 
         finally:
@@ -1242,7 +1242,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if self.cluster_new_role in users_can_not_restore_all:
                 self.should_fail = True
             output, error = self.backup_restore()
-            success_msg = ['Restore completed successfully']
+            success_msg = 'Restore completed successfully'
             fail_msg = "Error restoring cluster:"
 
             failed_persisted_bucket = []
@@ -1259,7 +1259,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             actual_keys = rest.get_active_key_count("default")
             print "\nActual keys in default bucket: %s \n" % actual_keys
             if self.cluster_new_role in users_can_restore_all:
-                if success_msg != output:
+                if not self._check_output(success_msg, output):
                     self.fail("User with roles: %s failed to restore data.\n"
                               "Here is the output %s " % \
                               (self.cluster_new_role, output))
@@ -1269,7 +1269,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 roles = self.cluster_new_role.split(",")
                 if set(roles) & set(users_can_not_restore_all) and \
                                 set(roles) & set(users_can_restore_all):
-                    if success_msg != output:
+                    if not self._check_output(success_msg, output):
                         self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the output %s " % \
                                   (self.cluster_new_user, roles, output))
@@ -1282,7 +1282,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     self.fail("User: %s with role: %s should not allow to restore data" \
                               % (self.cluster_new_user,
                                  self.cluster_new_role))
-                if fail_msg not in output[0]:
+                if not self._check_output(fail_msg, output):
                     self.fail("cbbackupmgr failed to block user to restore")
         finally:
             self.log.info("Delete new create user: %s " % self.cluster_new_user)
