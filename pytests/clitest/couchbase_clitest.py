@@ -2490,25 +2490,26 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         output, error = remote_client.execute_couchbase_cli(
             cli_command=cli_command, options=options, cluster_host="localhost",
             cluster_port=8091, user="Administrator", password="password")
-        self.assertEqual(output, ['No parameters specified'])
+        self.assertTrue(self._check_output('No parameters specified', output))
 
         options = '--blabla'
         output, error = remote_client.execute_couchbase_cli(
             cli_command=cli_command, options=options, cluster_host="localhost",
             cluster_port=8091, user="Administrator", password="password")
-        self.assertEqual(output, ['ERROR: option --blabla not recognized'])
+        self.assertTrue(self._check_output("unrecognized arguments:", output))
 
         options = '--new-password aaa'
         output, error = remote_client.execute_couchbase_cli(
             cli_command=cli_command, options=options, cluster_host="127.0.0.5",
             cluster_port=8091, user="Administrator", password="password")
-        self.assertEqual(output, ['API is accessible from localhost only'])
+        self.assertTrue(self._check_output("The password must be at least 6 characters long",
+                                           output))
 
         output, error = remote_client.execute_couchbase_cli(
             cli_command=cli_command, options=options, cluster_host="127.0.0.1",
             cluster_port=8091, user="Administrator", password="password")
-        self.assertEqual(output,
-                    ['{"errors":{"_":"The password must be at least 6 characters long."}}'])
+        self.assertTrue(self._check_output("The password must be at least 6 characters long",
+                                            output))
         try:
             options = '--regenerate'
             outputs = []
@@ -2516,7 +2517,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, error = remote_client.execute_couchbase_cli(
                     cli_command=cli_command, options=options, cluster_host="127.0.0.1",
                     cluster_port=8091, user="FAKE", password="FAKE")
-                new_password = output[0]
+                new_password = ""
+                for x in output:
+                    if not x.startswith("DEPRECATED") and len(x) == 8:
+                        new_password = x
                 self.assertEqual(len(new_password), 8)
                 self.assertTrue(new_password not in outputs)
                 outputs.append(new_password)
@@ -2532,7 +2536,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, _ = remote_client.execute_couchbase_cli(
                     cli_command=cli_command, options=options, cluster_host="127.0.0.1",
                     cluster_port=8091, user="Administrator", password="password")
-                self.assertEqual(output, ['SUCCESS: Administrator password changed'])
+                self.assertTrue(self._check_output('SUCCESS: Administrator password changed',
+                                                   output))
                 server.rest_password = old_password
                 rest = RestConnection(server)
                 server.rest_password = new_password
@@ -2549,7 +2554,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, _ = remote_client.execute_couchbase_cli(
                     cli_command=cli_command, options=options, cluster_host="127.0.0.1",
                     cluster_port=8091, user="Administrator", password="password")
-                new_password = output[0]
+                new_password = ""
+                for x in output:
+                    if not x.startswith("DEPRECATED") and len(x) == 8:
+                        new_password = x
                 server.rest_password = old_password
                 rest = RestConnection(server)
 
