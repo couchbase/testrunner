@@ -61,7 +61,7 @@ class EventingBucket(EventingBaseTest):
 
     def test_eventing_where_destination_bucket_is_in_dgm(self):
         # push the destination bucket to dgm
-        total_items = self.push_to_dgm(self.dst_bucket_name, 50)
+        total_items = self.push_to_dgm(self.dst_bucket_name, 20)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)

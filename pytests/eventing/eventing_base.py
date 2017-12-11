@@ -7,6 +7,7 @@ from TestInput import TestInputSingleton
 from lib.couchbase_helper.documentgenerator import BlobGenerator
 from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.membase.api.rest_client import RestConnection
+from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.basetestcase import BaseTestCase
 from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
@@ -56,7 +57,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
-                                  timer_worker_pool_size=3, worker_count=1, processing_status=True,
+                                  timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3):
         body = {}
         body['appname'] = appname
@@ -358,3 +359,14 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         remote_client.kill_erlang(os_info)
         remote_client.start_couchbase()
         remote_client.disconnect()
+
+    def reboot_server(self, server):
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.reboot_node()
+        remote_client.disconnect()
+        # wait for restart and warmup on all node
+        self.sleep(self.wait_timeout * 5)
+        # disable firewall on these nodes
+        self.stop_firewall_on_node(server)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)

@@ -82,3 +82,31 @@ class EventingSettings(EventingBaseTest):
         # This step is added because of MB-26846
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_bindings_and_description_change_propagate_after_function_is_deployed(self):
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        # remove alias before deploying
+        del body['depcfg']['buckets']
+        # deploy a function without any alias
+        self.deploy_function(body)
+        # undeploy the function
+        self.undeploy_function(body)
+        # This is an important sleep, without this undeploy doesn't finish properly and subsequent deploy hangs
+        self.sleep(30)
+        # Add an alias and change the description
+        body['settings']['description'] = "Adding a new description"
+        body['depcfg']['buckets'] = []
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
+        # For new alias values to propagate we need to deploy the function again.
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name,  self.docs_per_day * 2016)
+        # delete json documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)

@@ -1,14 +1,16 @@
 # Intentionally adding 1 new line
 # coding=utf-8
+import copy
+import logging
+from couchbase.bucket import Bucket
 from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator, JSONNonDocGenerator
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
+from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
-from couchbase.bucket import Bucket
-import copy
-import logging
+from pytests.eventing.eventing_constants import HANDLER_CODE
+import couchbase.subdocument as SD
 
 log = logging.getLogger()
 
@@ -152,5 +154,32 @@ class EventingDataset(EventingBaseTest):
         query = "DELETE FROM " + self.src_bucket_name + " where meta().id='key11111'"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+        self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_node)
+
+    def test_eventing_processes_mutations_when_mutated_through_subdoc_api_and_set_expiry_through_sdk(self):
+        # set expiry pager interval
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        bucket = Bucket(url, username="cbadminbucket", password="password")
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            bucket.insert(docid, {'some': 'value'})
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                              dcp_stream_boundary="from_now")
+        # deploy eventing function
+        self.deploy_function(body)
+        # upserting a new sub-document
+        bucket.mutate_in('customer123', SD.upsert('fax', '775-867-5309'))
+        # inserting a sub-document
+        bucket.mutate_in('customer1234', SD.insert('purchases.complete', [42, True, None], create_parents=True))
+        # Creating and populating an array document
+        bucket.mutate_in('customer12345', SD.array_append('purchases.complete', ['Hello'], create_parents=True))
+        self.verify_eventing_results(self.function_name, 3)
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            # set expiry on all the docs created using sub doc API
+            bucket.touch(docid, ttl=5)
+        self.sleep(10, "wait for expiry of the documents")
+        # Wait for eventing to catch up with all the expiry mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

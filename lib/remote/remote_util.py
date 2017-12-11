@@ -609,6 +609,16 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         return o, r
 
+    def reboot_node(self):
+        self.extract_remote_info()
+        if self.extract_remote_info().type.lower() == 'windows':
+            o, r = self.execute_command("shutdown -r -f -t 0")
+            self.log_command_output(o, r)
+        elif self.extract_remote_info().type.lower() == 'linux':
+            o, r = self.execute_command("reboot")
+            self.log_command_output(o, r)
+        return o, r
+
     def change_log_level(self, new_log_level):
         log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
         # ADD NON_ROOT user config_details
