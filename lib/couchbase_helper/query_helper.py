@@ -445,8 +445,6 @@ class QueryHelper(object):
         return {"sql":new_sql, "n1ql":new_n1ql},outer_table_map
 
     def _gen_select_tables_info(self, sql = "", table_map = {}):
-        count = 0
-        #[u'simple_table_1', u'simple_table_2']
         table_name_list = table_map.keys()
         prev_table_list = []
         standard_tokens = ["INNER JOIN","LEFT JOIN"]
@@ -471,13 +469,27 @@ class QueryHelper(object):
                 else:
                     table_name = table_name_list[0]
                     table_name_alias = table_map[table_name]["alias_name"]+self._random_alphabet_string()
-                primary_key_field = table_map[table_name]["primary_key_field"]
                 data = token
                 data = data.replace("BUCKET_NAME",(table_name+" "+table_name_alias))
-                #print "data is %s"%data
                 if "PREVIOUS_TABLE" in token:
                     previous_table_name = random.choice(prev_table_list)
                     previous_table_name_alias = table_map[previous_table_name]["alias_name"]
+                    if "BOOL_FIELD" in token:
+                        field_name, values = self._search_field(["tinyint"], table_map)
+                        table_field = field_name.split(".")[1]
+                        data = data.replace("CURRENT_TABLE.BOOL_FIELD", (table_name_alias + "." +table_field)) + " "
+                        data = data.replace("PREVIOUS_TABLE.BOOL_FIELD", (previous_table_name_alias+"."+table_field))
+                    elif "STRING_FIELD" in token:
+                        field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
+                        table_field = field_name.split(".")[1]
+                        data = data.replace("CURRENT_TABLE.STRING_FIELD", (table_name_alias + "." +table_field)) + " "
+                        data = data.replace("PREVIOUS_TABLE.STRING_FIELD", (previous_table_name_alias+"."+table_field))
+                    elif "NUMERIC_FIELD" in token:
+                        field_name, values = self._search_field(
+                            ["int", "mediumint", "double", "float", "decimal"], table_map)
+                        table_field = field_name.split(".")[1]
+                        data = data.replace("CURRENT_TABLE.NUMERIC_FIELD", (table_name_alias + "." +table_field)) + " "
+                        data = data.replace("PREVIOUS_TABLE.NUMERIC_FIELD", (previous_table_name_alias+"."+table_field))
                     data = data.replace("PREVIOUS_TABLE.FIELD",(previous_table_name_alias+"."+table_map[previous_table_name]["primary_key_field"]))
                     data = data.replace("CURRENT_TABLE.FIELD",(table_name_alias+"."+table_map[table_name]["primary_key_field"]))
                 new_sub_query +=  data + " "
@@ -1012,8 +1024,6 @@ class QueryHelper(object):
         where_condition = sql_map["where_condition"]
         select = sql_map["where_condition"]
         from_fields = sql_map["from_fields"]
-        simple_create_index_n1ql_with_where = None
-        simple_create_index_n1ql_with_expression = None
         table_name = random.choice(table_map.keys())
         map["bucket"] = table_name
         fields = table_map[table_name]["fields"].keys()

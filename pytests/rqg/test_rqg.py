@@ -32,7 +32,7 @@ class RQGTests(BaseTestCase):
         self.check_covering_index = self.input.param("check_covering_index",True)
         self.skip_setup_cleanup = True
         self.ansi_joins = self.input.param("ansi_joins", False)
-        self.create_secondary_meta_indexes = self.input.param("create_secondary_meta_indexes", False)
+        self.create_secondary_ansi_join_indexes = self.input.param("create_secondary_ansi_join_indexes", False)
         self.remove_alias = self.input.param("remove_alias",True)
         self.skip_cleanup = self.input.param("skip_cleanup",False)
         self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
@@ -576,12 +576,7 @@ class RQGTests(BaseTestCase):
                 t.join()
 
     def _testrun_secondary_index_worker(self, table_name, table_map, list_info , start_test_case_number, result_queue, failure_record_queue = None):
-        # map = {self.database+"_"+table_name:table_map[self.database+"_"+table_name]}
-        #
-        # for info in list_info:
-        #     info.replace("simple_table",self.database)
         map = {table_name:table_map[table_name]}
-
         list_info = self.client._convert_template_query_info(
                     table_map = map,
                     n1ql_queries = list_info,
@@ -590,7 +585,6 @@ class RQGTests(BaseTestCase):
         for info in list_info:
             info["n1ql"] = info['n1ql'].replace("simple_table",self.database+"_"+"simple_table")
 
-        print list_info
         if self.use_secondary_index:
                 self._generate_secondary_indexes_in_batches(list_info)
         thread_list = []
@@ -1178,18 +1172,21 @@ class RQGTests(BaseTestCase):
         if not self.generate_input_only:
             if self.create_primary_index:
                 self._build_primary_indexes(self.using_gsi)
-            if self.create_secondary_meta_indexes:
+            if self.create_secondary_ansi_join_indexes:
                 for table_name in self.sec_index_map.keys():
-                    query = "CREATE INDEX {0} ON {1}(primary_key_id)".format(table_name,self.database+"_"+table_name)
+                    query = "CREATE INDEX {0} ON {1}(primary_key_id,bool_field1,char_field1,datetime_field1," \
+                            "decimal_field1,int_field1,varchar_field1)".format(table_name,
+                                                                               self.database+"_"+table_name)
                     try:
                         self.n1ql_helper.run_cbq_query(
                             query=query, server=self.n1ql_server, verbose=False)
-                        check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_"+table_name, table_name,
+                        check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_"+table_name,
+                                                                             table_name ,
                                                                              server=self.n1ql_server,
                                                                              timeout=240)
                     except Exception, ex:
                         self.log.info(ex)
-            if self.create_secondary_indexes and (not self.create_secondary_meta_indexes):
+            if self.create_secondary_indexes and (not self.create_secondary_ansi_join_indexes):
                 thread_list = []
                 if self.build_secondary_index_in_seq:
                     for table_name in self.sec_index_map.keys():
@@ -1555,17 +1552,14 @@ class RQGTests(BaseTestCase):
         build_index_list = []
         for info in batches:
             table_name = info["bucket"]
-            n1ql = info["n1ql"]
             batch_index_definitions.update(info["indexes"])
         for index_name in batch_index_definitions.keys():
-            fail_index_name = index_name
             query = "{0} WITH {1}".format(
                 batch_index_definitions[index_name]["definition"],
                 defer_mode)
             query = query.replace("ON simple_table","ON "+self.database+"_"+"simple_table")
             self.log.info(" Running Query {0} ".format(query))
             try:
-                print index_name
                 actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
                 build_index_list.append(index_name)
             except Exception, ex:
