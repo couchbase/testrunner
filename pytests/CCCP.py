@@ -52,16 +52,20 @@ class CCCP(BaseTestCase):
             self.verify_config(config, bucket)
 
     def test_set_config(self):
+        """ Negative test for setting bucket config.  """
         tasks = self.run_ops()
         config_expected = 'abcabc'
         for task in tasks:
             task.result()
         for bucket in self.buckets:
-            self.clients[bucket.name].set_config(config_expected)
-            _, _, config = self.clients[bucket.name].get_config()
-            self.assertEquals(config_expected, config, "Expected config: %s, actual %s" %(
-                                                      config_expected, config))
-            self.log.info("Config was set correctly. Bucket %s" % bucket.name)
+            try:
+                self.clients[bucket.name].set_config(config_expected)
+                _, _, config = self.clients[bucket.name].get_config()
+                if econfig_expected == config:
+                    self.fail("It should not allow to set this format config ")
+            except Exception as e:
+                if e and not "Got empty data" in str(e):
+                    self.fail("ns server should not allow to set this config format")
 
     def test_not_my_vbucket_config(self):
         self.gen_load = BlobGenerator('cccp', 'cccp-', self.value_size, end=self.num_items)
@@ -103,12 +107,16 @@ class CCCP(BaseTestCase):
         for node in config_json["nodes"]:
             self.assertTrue("couchApiBase" in node and "hostname" in node,
                             "No hostname name in config")
-            self.assertTrue(node["ports"]["proxy"] == 11211 and node["ports"]["direct"] == 11210,
+            self.assertTrue(node["ports"]["proxy"] == 11211 and \
+                            node["ports"]["direct"] == 11210,
                             "ports are incorrect: %s" % node)
-        self.assertTrue(config_json["ddocs"]["uri"] == ("/pools/default/buckets/%s/ddocs" % bucket.name),
-                        "Ddocs uri is incorrect: %s " % "/pools/default/buckets/default/ddocs")
+        self.assertTrue(config_json["ddocs"]["uri"] == \
+                       ("/pools/default/buckets/%s/ddocs" % bucket.name),
+                        "Ddocs uri is incorrect: %s "
+                        % "/pools/default/buckets/default/ddocs")
         self.assertTrue(config_json["vBucketServerMap"]["numReplicas"] == self.num_replicas,
-                        "Num replicas is incorrect: %s " % config_json["vBucketServerMap"]["numReplicas"])
+                        "Num replicas is incorrect: %s "
+                        % config_json["vBucketServerMap"]["numReplicas"])
         for param in ["hashAlgorithm", "serverList", "vBucketMap"]:
             self.assertTrue(param in config_json["vBucketServerMap"],
                             "%s in vBucketServerMap" % param)
