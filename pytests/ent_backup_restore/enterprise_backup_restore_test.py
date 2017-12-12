@@ -975,12 +975,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = self.backup_cluster()
         if self.backupset.secure_conn:
             if self.backupset.bk_no_cert:
-                if "Backup successfully completed" in output[0]:
+                if self._check_output("Backup successfully completed", output):
                     self.fail("Taking cluster backup failed.")
-                elif "Error" in output[0]:
+                elif self._check_output("Error", output):
                     verify_data = False
             else:
-                if "Backup successfully completed" not in output[0]:
+                if not self._check_output("Backup successfully completed", output):
                     self.fail("Taking cluster backup failed.")
 
         if verify_data:
@@ -1353,7 +1353,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         RemoteUtilHelper.enable_firewall(self.backupset.cluster_host)
         try:
             output, error = self.backup_cluster()
-            self.assertTrue("getsockopt: connection refused" in output[0],
+            self.assertTrue(self._check_output("getsockopt: connection refused", output),
                             "Expected error not thrown by backup cluster when firewall enabled")
         finally:
             self.log.info("Disabling firewall on cluster host to take backup")
@@ -1366,7 +1366,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ reset restore cluster to same services as backup cluster """
         try:
             output, error = self.backup_restore()
-            self.assertTrue("getsockopt: connection refused" in output[0],
+            self.assertTrue(self._check_output("getsockopt: connection refused", output),
                             "Expected error not thrown by backup restore when firewall enabled")
         finally:
             self.log.info("Disabling firewall on restore host to restore")
@@ -1485,7 +1485,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = conn.execute_command("dd if=/dev/zero of=/cbqe3043/file bs=18M count=1")
         conn.log_command_output(output, error)
         output, error = self.backup_cluster()
-        while "Backup successfully completed" in output[-1]:
+        while self._check_output("Backup successfully completed", output):
             output, error = self.backup_cluster()
         error_msg = "Error backing up cluster: Unable to read data because range.json is corrupt,"
         self.assertTrue(self._check_output(error_msg, output),
@@ -1632,7 +1632,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 "No connection could be made because the target machine actively refused it."]
             error_found = False
             for error in error_mesgs:
-                if error in output[0]:
+                if self._check_output(error, output):
                     error_found = True
             if not error_found:
                 raise("Expected error message not thrown by Backup 180 seconds after erlang crash")
