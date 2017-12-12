@@ -175,7 +175,7 @@ class EventingDataset(EventingBaseTest):
         bucket.mutate_in('customer1234', SD.insert('purchases.complete', [42, True, None], create_parents=True))
         # Creating and populating an array document
         bucket.mutate_in('customer12345', SD.array_append('purchases.complete', ['Hello'], create_parents=True))
-        self.verify_eventing_results(self.function_name, 3)
+        self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         for docid in ['customer123', 'customer1234', 'customer12345']:
             # set expiry on all the docs created using sub doc API
             bucket.touch(docid, ttl=5)
@@ -183,3 +183,17 @@ class EventingDataset(EventingBaseTest):
         # Wait for eventing to catch up with all the expiry mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_eventing_processes_mutation_when_xattrs_is_updated(self):
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        bucket = Bucket(url, username="cbadminbucket", password="password")
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            bucket.upsert(docid, {})
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                              dcp_stream_boundary="from_now")
+        # deploy eventing function
+        self.deploy_function(body)
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            bucket.mutate_in(docid, SD.upsert('my', {'value': 1}, xattr=True))
+        self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
+
