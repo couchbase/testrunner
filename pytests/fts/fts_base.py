@@ -1532,8 +1532,8 @@ class CouchbaseCluster:
                 # if cluster-run and ip not 127.0.0.1
                 ip = "127.0.0.1"
             else:
-                ip = node_ip.split(':')[0]
-            node = self.get_node(ip, node_ip.split(':')[1])
+                ip = node_ip.rsplit(':', 1)[0]
+            node = self.get_node(ip, node_ip.rsplit(':', 1)[1])
             if node:
                 if "fts" in services:
                     self.__fts_nodes.append(node)
