@@ -32,6 +32,7 @@ class RQGTests(BaseTestCase):
         self.check_covering_index = self.input.param("check_covering_index",True)
         self.skip_setup_cleanup = True
         self.ansi_joins = self.input.param("ansi_joins", False)
+        self.create_secondary_meta_indexes = self.input.param("create_secondary_meta_indexes", False)
         self.create_secondary_ansi_join_indexes = self.input.param("create_secondary_ansi_join_indexes", False)
         self.remove_alias = self.input.param("remove_alias",True)
         self.skip_cleanup = self.input.param("skip_cleanup",False)
@@ -1164,6 +1165,8 @@ class RQGTests(BaseTestCase):
 
     def _build_indexes(self):
         self.sec_index_map = {}
+        fields = ['primary_key_id','bool_field1','char_field1','datetime_field1','decimal_field1',
+                  'int_field1','varchar_field1']
         if self.create_secondary_indexes:
             if self.use_mysql:
                 self.sec_index_map  = self.client._gen_index_combinations_for_tables()
@@ -1172,21 +1175,32 @@ class RQGTests(BaseTestCase):
         if not self.generate_input_only:
             if self.create_primary_index:
                 self._build_primary_indexes(self.using_gsi)
-            if self.create_secondary_ansi_join_indexes:
+            if self.create_secondary_meta_indexes:
+                index_name = ""
                 for table_name in self.sec_index_map.keys():
-                    query = "CREATE INDEX {0} ON {1}(primary_key_id,bool_field1,char_field1,datetime_field1," \
+                    queries = {}
+                    index_name = table_name
+                    query = "CREATE INDEX {0} ON {1}(primary_key_id,bool_field1,char_field1," \
+                            "datetime_field1," \
                             "decimal_field1,int_field1,varchar_field1)".format(table_name,
-                                                                               self.database+"_"+table_name)
-                    try:
-                        self.n1ql_helper.run_cbq_query(
-                            query=query, server=self.n1ql_server, verbose=False)
-                        check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_"+table_name,
-                                                                             table_name ,
-                                                                             server=self.n1ql_server,
-                                                                             timeout=240)
-                    except Exception, ex:
-                        self.log.info(ex)
-            if self.create_secondary_indexes and (not self.create_secondary_ansi_join_indexes):
+                                                                               self.database + "_" + table_name)
+                    queries[index_name] = query
+                    if self.create_secondary_ansi_join_indexes:
+                        for field in fields:
+                            index_name = table_name+"_"+field
+                            query = "CREATE INDEX {0} ON {1}({2})".format(table_name+"_"+field, self.database+"_"+table_name, field)
+                            queries[index_name] = query
+                    for index_name in queries.keys():
+                        try:
+                            self.n1ql_helper.run_cbq_query(query=queries[index_name],
+                                                           server=self.n1ql_server, verbose=False)
+                            check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_"+table_name,
+                                                                                 index_name ,
+                                                                                 server=self.n1ql_server,
+                                                                                 timeout=240)
+                        except Exception, ex:
+                            self.log.info(ex)
+            if self.create_secondary_indexes and (not self.create_secondary_meta_indexes):
                 thread_list = []
                 if self.build_secondary_index_in_seq:
                     for table_name in self.sec_index_map.keys():

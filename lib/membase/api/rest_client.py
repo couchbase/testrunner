@@ -3109,7 +3109,7 @@ class RestConnection(object):
         return response, content
     '''End Monitoring/Profiling Rest Calls'''
 
-    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
+    def query_tool(self, query, port=8093, timeout=1300, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
         key = 'prepared' if is_prepared else 'statement'
         headers = None
