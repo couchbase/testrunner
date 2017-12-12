@@ -215,6 +215,10 @@ class ImportExportTests(CliBaseTest):
         """
         options = {"load_doc": True, "docs":"1000"}
         new_password = self.input.param("password", None)
+        if "hash" in new_password:
+            new_password = new_password.replace("hash", "#")
+        if "bang" in new_password:
+            new_password = new_password.replace("bang", "!")
         rest_password = self.master.rest_password
         command = "setting-cluster"
         password_changed = False
