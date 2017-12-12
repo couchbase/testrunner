@@ -447,6 +447,9 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _init_clusters(self, disabled_consistent_view=None):
         for key in self._clusters_keys_olst:
+            for node in self._clusters_dic[key]:
+                rest = RestConnection(node)
+                rest.init_node()
             self._setup_cluster(self._clusters_dic[key], disabled_consistent_view)
 
     # This method shall be overridden in case there are parameters that need to be initialized.
