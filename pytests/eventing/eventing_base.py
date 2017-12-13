@@ -359,6 +359,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         remote_client.kill_erlang(os_info)
         remote_client.start_couchbase()
         remote_client.disconnect()
+        # wait for restart and warmup on all node
+        self.sleep(self.wait_timeout * 2)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
 
     def reboot_server(self, server):
         remote_client = RemoteMachineShellConnection(server)
