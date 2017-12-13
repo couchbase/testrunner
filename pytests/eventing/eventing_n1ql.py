@@ -128,18 +128,6 @@ class EventingN1QL(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 1, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-    def test_n1ql_syntax_error(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE_ERROR.N1QL_SYNTAX,dcp_stream_boundary="from_now")
-        self.deploy_function(body)
-        #create a mutation via N1QL
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-        query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        #verify that n1ql query will fail
-        self.verify_eventing_results(self.function_name, 1, skip_stats_validation=True)
-        self.undeploy_and_delete_function(body)
 
     def test_anonymous(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -173,7 +161,13 @@ class EventingN1QL(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.GLOBAL_VARIABLE,
                                               dcp_stream_boundary="from_now")
-        self.deploy_function(body,deployment_fail=True)
+        try :
+            self.deploy_function(body,deployment_fail=True)
+        except Exception as e:
+            if "Only function declaration are allowed in global scope" not in str(e):
+                self.fail("Deployment is expected to be failed but no message of failure")
+
+
 
     def test_empty_handler(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

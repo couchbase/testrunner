@@ -142,4 +142,8 @@ class EventingSanity(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.SYNTAX_ERROR)
-        self.deploy_function(body, deployment_fail=True)
+        try :
+            self.deploy_function(body,deployment_fail=True)
+        except Exception as e:
+            if "Unexpected end of input" not in str(e):
+                self.fail("Deployment is expected to be failed but no message of failure")
