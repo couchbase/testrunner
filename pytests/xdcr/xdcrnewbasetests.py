@@ -3515,10 +3515,20 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.log.error(e)
                 if not skip_key_validation:
                     try:
-                        src_active_passed, src_replica_passed =\
-                            src_cluster.verify_items_count(timeout=self._item_count_timeout)
-                        dest_active_passed, dest_replica_passed = \
-                            dest_cluster.verify_items_count(timeout=self._item_count_timeout)
+                        if len(src_cluster.get_nodes()) > 1:
+                            src_active_passed, src_replica_passed =\
+                                src_cluster.verify_items_count(timeout=self._item_count_timeout)
+                        else:
+                            self.log.info("Skipped active replica count check as source cluster has 1 node only")
+                            src_active_passed = True
+                            src_replica_passed = True
+                        if len(dest_cluster.get_nodes()) > 1:
+                            dest_active_passed, dest_replica_passed = \
+                                dest_cluster.verify_items_count(timeout=self._item_count_timeout)
+                        else:
+                            self.log.info("Skipped active replica count check as dest cluster has 1 node only")
+                            dest_active_passed = True
+                            dest_replica_passed = True
 
                         src_cluster.verify_data(max_verify=self._max_verify, skip=skip_verify_data)
                         dest_cluster.verify_data(max_verify=self._max_verify, skip=skip_verify_data)
