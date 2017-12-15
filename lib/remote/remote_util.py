@@ -806,6 +806,10 @@ class RemoteMachineShellConnection:
                     self.execute_command("firewall-cmd --add-service=ntp --permanent")
                     self.execute_command("firewall-cmd --reload")
                     do_install = True
+                timezone, _ = self.execute_command("date")
+                if "PST" not in timezone[0]:
+                    log.info("Set time zone in centos 7 to America/Los_Angeles (PST)")
+                    self.execute_command("timedatectl set-timezone America/Los_Angeles")
             elif "centos release 6" in self.info.distribution_version.lower():
                 os_version = "centos 6"
                 log.info("Check ntpd service in centos 6")
@@ -830,6 +834,13 @@ class RemoteMachineShellConnection:
                 elif output and "is running..." in output[0]:
                     ntp_installed = True
                     log.info("ntp was installed in this server %s" % self.ip)
+                timezone, _ = self.execute_command("date")
+                if "PST" not in timezone[0]:
+                    log.info("Set time zone in centos 6 to America/Los_Angeles (PST)")
+                    self.execute_command("cp /etc/localtime /root/old.timezone")
+                    self.execute_command("rm -rf /etc/localtime")
+                    self.execute_command("ln -s /usr/share/zoneinfo/America/Los_Angeles "
+                                         "/etc/localtime")
             else:
                 log.info("will add install in other os later")
 
