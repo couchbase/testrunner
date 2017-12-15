@@ -890,3 +890,77 @@ class unidirectional(XDCRNewBaseTest):
             task.result()
 
         self.log.info("No. of memcached connections did not increase with pausing and resuming replication multiple times")
+
+    def test_verify_mb20421(self):
+        src_conn = RemoteMachineShellConnection(self.src_cluster.get_master_node())
+        options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}". \
+            format("bucket0", "couchbase", "512", "1")
+        options += " --bucket-password=password"
+        options += " --wait"
+        cli_command = "bucket-create"
+
+        output, error = src_conn.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                       cluster_host="localhost", user="Administrator",
+                                                       password="password")
+        src_conn.log_command_output(output, error)
+
+        self.src_cluster.add_bucket(ramQuotaMB=512, bucket="bucket0", authType='none',
+                                    saslPassword='', replicaNumber=2,
+                                    proxyPort=11211, bucketType='membase', evictionPolicy='valueOnly')
+
+        dest_conn = RemoteMachineShellConnection(self.dest_cluster.get_master_node())
+        options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}". \
+            format("bucket0", "couchbase", "512", "1")
+        options += " --bucket-password=password"
+        options += " --wait"
+        cli_command = "bucket-create"
+
+        output, error = dest_conn.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                       cluster_host="localhost", user="Administrator",
+                                                       password="password")
+        dest_conn.log_command_output(output, error)
+
+        self.dest_cluster.add_bucket(ramQuotaMB=512, bucket="bucket0", authType='none',
+                                    saslPassword='', replicaNumber=2,
+                                    proxyPort=11211, bucketType='membase', evictionPolicy='valueOnly')
+
+        self.setup_xdcr_and_load()
+
+        self._wait_for_replication_to_catchup()
+
+        src_conn = RemoteMachineShellConnection(self.src_cluster.get_master_node())
+        options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}". \
+            format("bucket0", "couchbase", "512", "1")
+        options += " --bucket-password=password1"
+        options += " --wait"
+        cli_command = "bucket-edit"
+
+        output, error = src_conn.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                       cluster_host="localhost", user="Administrator",
+                                                       password="password")
+        src_conn.log_command_output(output, error)
+
+        dest_conn = RemoteMachineShellConnection(self.src_cluster.get_master_node())
+        options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}". \
+            format("bucket0", "couchbase", "512", "1")
+        options += " --bucket-password=password1"
+        options += " --wait"
+        cli_command = "bucket-edit"
+
+        output, error = dest_conn.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                       cluster_host="localhost", user="Administrator",
+                                                       password="password")
+        dest_conn.log_command_output(output, error)
+
+        self.src_cluster.pause_all_replications()
+        self.sleep(timeout=self._wait_timeout)
+        self.src_cluster.resume_all_replications()
+
+        self.perform_update_delete()
+
+        self._wait_for_replication_to_catchup()
+
+        self.verify_results()
+
+        src_conn.disconnect()
+        dest_conn.disconnect()
