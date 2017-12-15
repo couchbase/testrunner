@@ -7,39 +7,38 @@ import zipfile
 import os
 from os.path import basename
 import shutil
-import json
 from mysql.connector import FieldType
 from couchbase_helper.query_helper import QueryHelper
+import itertools
+import json
+
 
 class MySQLClient(object):
     """Python MySQLClient Client Implementation for testrunner"""
-
-    def __init__(self, database = None, host = "127.0.0.1", user_id = "root", password = ""):
+    def __init__(self, database=None, host="127.0.0.1", user_id="root", password=""):
         self.database = database
         self.host = host
         self.user_id = user_id
         self.password = password
         if self.database:
-            self._set_mysql_client(self.database , self.host , self.user_id , self.password)
+            self._set_mysql_client(self.database, self.host, self.user_id, self.password)
         else:
-            self._set_mysql_client_without_database(self.host , self.user_id , self.password)
+            self._set_mysql_client_without_database(self.host, self.user_id, self.password)
 
     def _reset_client_connection(self):
         self._close_mysql_connection()
-        self._set_mysql_client(self.database , self.host , self.user_id , self.password)
+        self._set_mysql_client(self.database, self.host, self.user_id, self.password)
 
-    def _set_mysql_client(self, database = "flightstats", host = "127.0.0.1", user_id = "root", password = ""):
-        self.mysql_connector_client = mysql.connector.connect(user = user_id, password = password,
-         host = host, database = database)
+    def _set_mysql_client(self, database="flightstats", host="127.0.0.1", user_id="root", password=""):
+        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host, database=database)
 
-    def _set_mysql_client_without_database(self, host = "127.0.0.1", user_id = "root", password = ""):
-        self.mysql_connector_client = mysql.connector.connect(user = user_id, password = password,
-         host = host)
+    def _set_mysql_client_without_database(self, host="127.0.0.1", user_id="root", password=""):
+        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host)
 
     def _close_mysql_connection(self):
         self.mysql_connector_client.close()
 
-    def _insert_execute_query(self, query = ""):
+    def _insert_execute_query(self, query=""):
         cur = self.mysql_connector_client.cursor()
         try:
             cur.execute(query)
@@ -48,40 +47,39 @@ class MySQLClient(object):
             print ex
             raise
 
-    def _db_execute_query(self, query = ""):
+    def _db_execute_query(self, query=""):
         cur = self.mysql_connector_client.cursor()
         try:
-            rows = cur.execute(query, multi = True)
+            rows = cur.execute(query, multi=True)
             for row in rows:
                 print row
         except Exception, ex:
             print ex
             raise
 
-    def _execute_query(self, query = ""):
-        column_names = []
+    def _execute_query(self, query=""):
         cur = self.mysql_connector_client.cursor()
         cur.execute(query)
         rows = cur.fetchall()
         desc = cur.description
-        columns =[]
+        columns = []
         for row in desc:
-            columns.append({"column_name":row[0], "type":FieldType.get_info(row[1]).lower()})
+            columns.append({"column_name": row[0], "type": FieldType.get_info(row[1]).lower()})
         return columns, rows
 
-    def _execute_sub_query(self, query = ""):
-        row_subquery =[]
+    def _execute_sub_query(self, query=""):
+        row_subquery = []
         cur = self.mysql_connector_client.cursor()
         cur.execute(query)
         rows = cur.fetchall()
         for row in rows:
-            if len(rows)==1:
+            if len(rows) == 1:
                 return row[0]
             row_subquery.append(row[0])
         return row_subquery
 
 
-    def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key = ""):
+    def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key=""):
         primary_key_index = 0
         count = 0
         dict = {}
@@ -129,12 +127,12 @@ class MySQLClient(object):
         if "datetime" in str(type):
             return str(value)
         if ("float" in str(type)) or ("double" in str(type)):
-            if value == None:
+            if value is None:
                 return None
             else:
                 return round(value, 0)
         if "decimal" in str(type):
-            if value == None:
+            if value is None:
                 return None
             else:
                 if isinstance(value, float):
@@ -144,27 +142,27 @@ class MySQLClient(object):
 
     def _get_table_list(self):
         table_list = []
-        columns, rows = self._execute_query(query = "SHOW TABLES")
+        columns, rows = self._execute_query(query="SHOW TABLES")
         for row in rows:
             table_list.append(row[0])
         return table_list
 
     def _get_databases(self):
         table_list = []
-        columns, rows = self._execute_query(query = "SHOW DATABASES")
+        columns, rows = self._execute_query(query="SHOW DATABASES")
         for row in rows:
             if "table" in row[0]:
                 table_list.append(row[0])
         return table_list
 
-    def _get_table_info(self, table_name = ""):
-        columns, rows = self._execute_query(query = "DESCRIBE {0}".format(table_name))
+    def _get_table_info(self, table_name=""):
+        columns, rows = self._execute_query(query="DESCRIBE {0}".format(table_name))
         return self._gen_json_from_results(columns, rows)
 
-    def _get_tables_information(self, table_name = None):
-        map ={}
+    def _get_tables_information(self, table_name=None):
+        map = {}
         list = self._get_table_list()
-        if table_name != None:
+        if table_name is not None:
             for table_name_1 in list:
                 if table_name == table_name_1:
                     map[table_name_1] = self._get_table_info(table_name_1)
@@ -173,7 +171,7 @@ class MySQLClient(object):
                 map[table_name_1] = self._get_table_info(table_name_1)
         return map
 
-    def _get_field_list_map_for_tables(self, table_name = None):
+    def _get_field_list_map_for_tables(self, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
         for table_name in map.keys():
@@ -183,19 +181,19 @@ class MySQLClient(object):
             target_map[table_name] = field_list
         return target_map
 
-    def _get_field_with_types_list_map_for_tables(self, can_remove_copy_table = True, table_name = None):
+    def _get_field_with_types_list_map_for_tables(self, can_remove_copy_table=True, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
         for table_name in map.keys():
             field_list = []
             for field_info in map[table_name]:
-                field_list.append({field_info['Field']:field_info['Type']})
+                field_list.append({field_info['Field']: field_info['Type']})
             target_map[table_name] = field_list
         if can_remove_copy_table and "copy_simple_table" in target_map:
             target_map.pop("copy_simple_table")
         return target_map
 
-    def _get_primary_key_map_for_tables(self, table_name = None):
+    def _get_primary_key_map_for_tables(self, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
         for table_name in map.keys():
@@ -204,16 +202,14 @@ class MySQLClient(object):
                     target_map[table_name] = field_info['Field']
         return target_map
 
-
-    def _gen_index_combinations_for_tables(self, index_type = "GSI"):
-        import itertools
+    def _gen_index_combinations_for_tables(self, index_type="GSI"):
         index_map = {}
         map = self._get_pkey_map_for_tables_without_primary_key_column()
         for table_name in map.keys():
             index_map[table_name] = {}
-            number_field_list =[]
+            number_field_list = []
             string_field_list = []
-            datetime_field_list= []
+            datetime_field_list = []
             for key in map[table_name].keys():
                 if "int" in key or "decimal" in key:
                     number_field_list.append(key)
@@ -222,9 +218,8 @@ class MySQLClient(object):
                 if "tinyint" in key:
                     datetime_field_list.append(key)
             key_list = map[table_name].keys()
-            count = 0
             index_list_map = {}
-            prefix= table_name+"_idx_"
+            prefix = table_name+"_idx_"
             for pair in list(itertools.permutations(key_list,1)):
                 index_list_map[prefix+"_".join(pair)] = pair
             for pair in list(itertools.permutations(key_list,3)):
@@ -240,17 +235,16 @@ class MySQLClient(object):
             for table_name in index_map.keys():
                 final_map[table_name] = {}
                 for index_name in index_map[table_name].keys():
-                    #import pdb;pdb.set_trace()
-                    defintion  = "CREATE INDEX {0} ON {1}({2}) USING {3}".format(index_name,self.database+"_"+table_name, ",".join(index_map[table_name][index_name]),index_type)
+                    definition = "CREATE INDEX {0} ON {1}({2}) USING {3}".format(index_name, self.database+"_"+table_name, ",".join(index_map[table_name][index_name]), index_type)
                     final_map[table_name][index_name] =\
                         {
-                            "type":index_type,
-                            "definition":defintion,
-                            "name":index_name
+                            "type": index_type,
+                            "definition": definition,
+                            "name": index_name
                         }
         return final_map
 
-    def _get_pkey_map_for_tables_with_primary_key_column(self, can_remove_copy_table = True, table_name = None):
+    def _get_pkey_map_for_tables_with_primary_key_column(self, can_remove_copy_table=True, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
         if can_remove_copy_table and "copy_simple_table" in map.keys():
@@ -262,7 +256,7 @@ class MySQLClient(object):
             field_map = {}
             primary_key_field = "primary_key_field"
             for field_info in map[table_name]:
-                field_map[field_info['Field']] ={"type":field_info['Type']}
+                field_map[field_info['Field']] = {"type": field_info['Type']}
                 if field_info['Key'] == "PRI":
                     primary_key_field = field_info['Field']
             target_map[table_name]["fields"] = field_map
@@ -281,7 +275,7 @@ class MySQLClient(object):
             field_map = {}
             for field_info in map[table_name]:
                 if field_info['Key'] != "PRI":
-                    field_map[field_info['Field']] ={"type":field_info['Type']}
+                    field_map[field_info['Field']] = {"type": field_info['Type']}
             target_map[table_name] = field_map
         return target_map
 
@@ -292,7 +286,7 @@ class MySQLClient(object):
             target_map[table_name] ={}
             field_map = {}
             for field_info in map[table_name]:
-                field_map[field_info['Field']] ={"type":field_info['Type']}
+                field_map[field_info['Field']] = {"type": field_info['Type']}
             target_map[table_name] = field_map
         return target_map
 
@@ -304,54 +298,55 @@ class MySQLClient(object):
             list.append(row[0])
         return list
 
-    def _get_values_with_type_for_fields_in_table(self, can_remove_copy_table = True, table_name = None):
-        map = self._get_field_with_types_list_map_for_tables(can_remove_copy_table = can_remove_copy_table, table_name = table_name)
-        gen_map = self._get_pkey_map_for_tables_with_primary_key_column(can_remove_copy_table = can_remove_copy_table, table_name = table_name)
+    def _get_values_with_type_for_fields_in_table(self, can_remove_copy_table=True, table_name=None):
+        map = self._get_field_with_types_list_map_for_tables(can_remove_copy_table=can_remove_copy_table, table_name=table_name)
+        gen_map = self._get_pkey_map_for_tables_with_primary_key_column(can_remove_copy_table=can_remove_copy_table, table_name=table_name)
         for table_name in map.keys():
             for vals in map[table_name]:
                 field_name = vals.keys()[0]
                 value_list = self._get_distinct_values_for_fields(table_name, field_name)
-                gen_map[table_name]["fields"][field_name]["distinct_values"]= sorted(value_list)
+                gen_map[table_name]["fields"][field_name]["distinct_values"] = sorted(value_list)
         return gen_map
 
-    def _gen_data_simple_table(self, number_of_rows = 1000):
+    def _gen_data_simple_table(self, number_of_rows=1000):
         helper = QueryHelper()
         map = self._get_pkey_map_for_tables_wit_primary_key_column()
         for table_name in map.keys():
             for x in range(0, number_of_rows):
-                statement = helper._generate_insert_statement(table_name, map[table_name],"\""+str(x+1)+"\"")
+                statement = helper._generate_insert_statement(table_name, map[table_name], "\""+str(x+1)+"\"")
                 self._insert_execute_query(statement)
 
-    def _gen_queries_from_template(self, query_path = "./queries.txt", table_name = None):
+    def _gen_queries_from_template(self, query_path="./queries.txt", table_name=None):
         helper = QueryHelper()
         map = self._get_values_with_type_for_fields_in_table()
         table_map = map[table_name]
         with open(query_path) as f:
             content = f.readlines()
         for query in content:
-            n1ql = helper._convert_sql_template_to_value(sql = query, table_map = table_map, table_name= table_name)
+            helper._convert_sql_template_to_value(sql=query, table_map=table_map, table_name=table_name)
 
     def _query_and_convert_to_json(self, query):
-        columns, rows = self._execute_query(query = query)
+        columns, rows = self._execute_query(query=query)
         sql_result = self._gen_json_from_results(columns, rows)
         return sql_result
 
-    def _convert_template_query_info_with_gsi(self, file_path, gsi_index_file_path = None, table_map= {}, table_name = "simple_table", define_gsi_index = True, gen_expected_result = False):
+    def _convert_template_query_info_with_gsi(self, file_path, gsi_index_file_path=None, table_map={}, table_name="simple_table", define_gsi_index=True, gen_expected_result=False):
         helper = QueryHelper()
-        f = open(gsi_index_file_path,'w')
+        f = open(gsi_index_file_path, 'w')
         n1ql_queries = self._read_from_file(file_path)
         for n1ql_query in n1ql_queries:
             check = True
             if not helper._check_deeper_query_condition(n1ql_query):
                 if "SUBQUERY" in n1ql_query:
-                    map = helper._convert_sql_template_to_value_with_subqueries(
-                        n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+                    map = helper._convert_sql_template_to_value_with_subqueries(n1ql_query, table_map=table_map,
+                                                                                define_gsi_index=define_gsi_index)
                 else:
-                    map=helper._convert_sql_template_to_value_for_secondary_indexes(
-                        n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
+                    map=helper._convert_sql_template_to_value_for_secondary_indexes(n1ql_query, table_map=table_map,
+                                                                                    table_name=table_name,
+                                                                                    define_gsi_index=define_gsi_index)
             else:
-                map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(
-                    n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
+                map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(n1ql_query, table_map=table_map,
+                                                                                            table_name=table_name, define_gsi_index=define_gsi_index)
             if gen_expected_result:
                 query = map["sql"]
                 try:
@@ -364,70 +359,75 @@ class MySQLClient(object):
                 f.write(json.dumps(map)+"\n")
         f.close()
 
-    def _convert_template_query_info(self, n1ql_queries = [], table_map= {}, define_gsi_index = True, gen_expected_result = False, ansi_joins=False):
+    def _convert_template_query_info(self, n1ql_queries=[], table_map={}, define_gsi_index=True, gen_expected_result=False, ansi_joins=False, pushdown=False):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
-            check = True
+            # check if ["UNION ALL", "INTERSECT ALL", "EXCEPT ALL", "UNION", "INTERSECT", "EXCEPT"] not in query
             if not helper._check_deeper_query_condition(n1ql_query):
                 if "SUBTABLE" in n1ql_query:
-                     map = helper._convert_sql_template_to_value_with_subqueryenhancements(
-                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
-                elif "SUBQUERY" in n1ql_query :
-                    map = helper._convert_sql_template_to_value_with_subqueries(
-                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+                     sql_n1ql_index_map = helper._convert_sql_template_to_value_with_subqueryenhancements(n1ql_query,
+                                                                                                          table_map=table_map,
+                                                                                                          define_gsi_index=define_gsi_index)
+                elif "SUBQUERY" in n1ql_query:
+                    sql_n1ql_index_map = helper._convert_sql_template_to_value_with_subqueries(n1ql_query,
+                                                                                               table_map=table_map,
+                                                                                               define_gsi_index=define_gsi_index)
                 else:
-                    map=helper._convert_sql_template_to_value_for_secondary_indexes(
-                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index,
-                    ansi_joins=ansi_joins)
+                    # takes in sql and n1ql queries and create indexes for them
+                    sql_n1ql_index_map = helper._convert_sql_template_to_value_for_secondary_indexes(n1ql_query,
+                                                                                                     table_map=table_map,
+                                                                                                     define_gsi_index=define_gsi_index,
+                                                                                                     ansi_joins=ansi_joins,
+                                                                                                     pushdown=pushdown)
             else:
-                map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(
-                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+                sql_n1ql_index_map = helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(n1ql_query,
+                                                                                                             table_map=table_map,
+                                                                                                             define_gsi_index=define_gsi_index)
             if gen_expected_result:
-                query = map["sql"]
+                sql_query = sql_n1ql_index_map["sql"]
                 try:
-                    sql_result = self._query_and_convert_to_json(query)
-                    map["expected_result"] = sql_result
+                    sql_result = self._query_and_convert_to_json(sql_query)
+                    sql_n1ql_index_map["expected_result"] = sql_result
                 except Exception, ex:
                     print ex
-                    check = False
-            query_input_list.append(map)
+            query_input_list.append(sql_n1ql_index_map)
         return query_input_list
 
-    def _convert_update_template_query_info(self, n1ql_queries = [], table_map= {}):
+    def _convert_update_template_query_info(self, n1ql_queries=[], table_map={}):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
-            query_input_list.append(helper._update_sql_template_to_values(sql =n1ql_query, table_map = table_map))#,database=self.database))
+            query_input_list.append(helper._update_sql_template_to_values(sql=n1ql_query, table_map=table_map))
         return query_input_list
 
-    def _convert_update_template_query_info_with_merge(self, source_table = "copy_simple_table", target_table = "simple_table" ,n1ql_queries = [], table_map= {}):
+    def _convert_update_template_query_info_with_merge(self, source_table="copy_simple_table", target_table="simple_table" ,n1ql_queries=[], table_map={}):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
-            query_input_list.append(helper._update_sql_template_to_values_with_merge(
-                source_table=source_table,target_table=target_table,
-                sql =n1ql_query, table_map = table_map))
-                #sql =n1ql_query, table_map = table_map,database = self.database))
+            query_input_list.append(helper._update_sql_template_to_values_with_merge(source_table=source_table,
+                                                                                     target_table=target_table,
+                                                                                     sql=n1ql_query,
+                                                                                     table_map=table_map))
         return query_input_list
 
-    def _convert_delete_template_query_info_with_merge(self, source_table = "copy_simple_table", target_table = "simple_table" ,n1ql_queries = [], table_map= {}):
+    def _convert_delete_template_query_info_with_merge(self, source_table="copy_simple_table", target_table="simple_table" ,n1ql_queries=[], table_map={}):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
-            query_input_list.append(helper._delete_sql_template_to_values_with_merge(
-                source_table=source_table,target_table=target_table,
-                sql =n1ql_query, table_map = table_map))#,database = self.database)
+            query_input_list.append(helper._delete_sql_template_to_values_with_merge(source_table=source_table,
+                                                                                     target_table=target_table,
+                                                                                     sql=n1ql_query, table_map=table_map))
         return query_input_list
 
-    def _convert_delete_template_query_info(self, n1ql_queries = [], table_map= {}):
+    def _convert_delete_template_query_info(self, n1ql_queries=[], table_map={}):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
-            query_input_list.append(helper._delete_sql_template_to_values(sql =n1ql_query, table_map = table_map))#, database = self.database))
+            query_input_list.append(helper._delete_sql_template_to_values(sql=n1ql_query, table_map=table_map))
         return query_input_list
 
-    def  _read_from_file(self, file_path):
+    def _read_from_file(self, file_path):
         with open(file_path) as f:
             content = f.readlines()
         return content
@@ -441,27 +441,26 @@ class MySQLClient(object):
         for database in list_databases:
             self.drop_database(database)
 
-    def reset_database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql", populate_data = True, number_of_tables = None):
+    def reset_database_add_data(self, database="", items=1000, sql_file_definiton_path="/tmp/definition.sql", populate_data=True, number_of_tables=None):
         sqls = self._read_from_file(sql_file_definiton_path)
-        sqls = " ".join(sqls).replace("DATABASE_NAME",database).replace("\n","")
+        sqls = " ".join(sqls).replace("DATABASE_NAME", database).replace("\n", "")
         self._db_execute_query(sqls)
         self.database = database
         self._reset_client_connection()
-        if number_of_tables != None:
+        if number_of_tables is not None:
             table_list = self._get_table_list()
             for table_name in table_list[number_of_tables:]:
-                query = "DROP TABLE {0}.{1}".format(database,table_name)
+                query = "DROP TABLE {0}.{1}".format(database, table_name)
                 self._db_execute_query(query)
         if populate_data:
-            self._gen_data_simple_table(number_of_rows = items)
+            self._gen_data_simple_table(number_of_rows=items)
 
-    def database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql"):
+    def database_add_data(self, database="", items=1000, sql_file_definiton_path="/tmp/definition.sql"):
         sqls = self._read_from_file(sql_file_definiton_path)
-        sqls = " ".join(sqls).replace("DATABASE_NAME",database).replace("\n","")
+        sqls = " ".join(sqls).replace("DATABASE_NAME", database).replace("\n", "")
         self._db_execute_query(sqls)
 
-
-    def dump_database(self, data_dump_path = "/tmp"):
+    def dump_database(self, data_dump_path="/tmp"):
         zip_path= data_dump_path+"/database_dump.zip"
         data_dump_path = data_dump_path+"/"+self.database
         os.mkdir(data_dump_path)
@@ -476,53 +475,26 @@ class MySQLClient(object):
             columns, rows = self._execute_query(query = query)
             dict = self._gen_json_from_results_with_primary_key(columns, rows, table_key_map[bucket_name])
             # Take snap-shot of Data in
-            f = open(data_dump_path+"/"+bucket_name+".txt",'w')
+            f = open(data_dump_path+"/"+bucket_name+".txt", 'w')
             f.write(json.dumps(dict))
             f.close()
         zipf = zipfile.ZipFile(zip_path, 'w')
         for root, dirs, files in os.walk(data_dump_path):
             for file in files:
                 path = os.path.join(root, file)
-                filter_path = path.replace(self.database,"")
+                filter_path = path.replace(self.database, "")
                 zipf.write(path, basename(filter_path))
         shutil.rmtree(data_dump_path)
 
-    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table", gen_expected_result= True):
+    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path="./queries.txt", output_file_path="./output.txt", table_name="simple_table", gen_expected_result=True):
         map = self._get_values_with_type_for_fields_in_table()
         table_map = map
-        self._convert_template_query_info_with_gsi(query_path, gsi_index_file_path = output_file_path, table_map = table_map, table_name = table_name, gen_expected_result = gen_expected_result)
+        self._convert_template_query_info_with_gsi(query_path, gsi_index_file_path=output_file_path, table_map=table_map, table_name=table_name, gen_expected_result=gen_expected_result)
 
-    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table", gen_expected_result= True):
+    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path="./queries.txt", output_file_path="./output.txt", table_name="simple_table", gen_expected_result=True):
         map = self._get_values_with_type_for_fields_in_table()
-        self._convert_template_query_info_with_gsi(query_path, gsi_index_file_path = output_file_path, table_map = map, gen_expected_result = gen_expected_result)
+        self._convert_template_query_info_with_gsi(query_path, gsi_index_file_path=output_file_path, table_map=map, gen_expected_result=gen_expected_result)
 
-if __name__=="__main__":
-    import json
-    client = MySQLClient(host = "localhost", user_id = "root", password = "")
-    #query = "select * from simple_table LIMIT 1"
-    #print query
-    #column_info, rows = client._execute_query(query = query)
-    #dict = client._gen_json_from_results_with_primary_key(column_info, rows, "primary_key_id")
-    #print dict
-    #client.reset_database_add_data(database="multiple_table_db",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/multiple_table_db/database_definition/definition.sql")
+if __name__ == "__main__":
+    client = MySQLClient(host="localhost", user_id="root", password="")
     client.remove_databases()
-    #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    #client.dump_database()
-    #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
-    #with open("./output.txt") as f:
-    #    content = f.readlines()
-    #for data in content:
-    #    json_data= json.loads(data)
-    #    print "<<<<<<<<<<< BEGIN >>>>>>>>>>"
-    #    print json_data["sql"]
-    #    print json_data["n1ql"]
-    #    print json_data["gsi_indexes"]
-    #    print "<<<<<<<<<<< END >>>>>>>>>>"
-    #with open("./queries.txt") as f:
-    #    content = f.readlines()
-    #for sql in content:
-    #    print " <<<<<< START >>>>>"
-    #    print sql
-    #    new_sql = helper._convert_sql_template_to_value(sql = sql, table_map = table_map, table_name= "airports")
-    #    print new_sql
-    #    print " <<<<< END >>>> "

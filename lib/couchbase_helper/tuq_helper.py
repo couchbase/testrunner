@@ -15,8 +15,8 @@ from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 
 class N1QLHelper():
-    def __init__(self, version = None, master = None, shell = None,  max_verify = 0, buckets = [],
-        item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None,database = None,use_rest = None):
+    def __init__(self, version=None, master=None, shell=None,  max_verify=0, buckets=[], item_flag=0,
+                 n1ql_port=8093, full_docs_list=[], log=None, input=None, database=None, use_rest=None):
         self.version = version
         self.shell = shell
         self.max_verify = max_verify
@@ -32,7 +32,6 @@ class N1QLHelper():
         if self.full_docs_list and len(self.full_docs_list) > 0:
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
 
-
     def killall_tuq_process(self):
         self.shell.execute_command("killall cbq-engine")
         self.shell.execute_command("killall tuqtng")
@@ -44,19 +43,20 @@ class N1QLHelper():
         actual_result = self.run_cbq_query()
         return actual_result, expected_result
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params = {}, is_prepared=False, scan_consistency = None, scan_vector = None, verbose= True):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
+                      scan_consistency=None, scan_vector=None, verbose=True):
         if query is None:
             query = self.query
         if server is None:
-           server = self.master
-           if server.ip == "127.0.0.1":
-            self.n1ql_port = server.n1ql_port
+            server = self.master
+            if server.ip == "127.0.0.1":
+                self.n1ql_port = server.n1ql_port
         else:
             if server.ip == "127.0.0.1":
                 self.n1ql_port = server.n1ql_port
             if self.input.tuq_client and "client" in self.input.tuq_client:
                 server = self.tuq_client
-        if self.n1ql_port == None or self.n1ql_port == '':
+        if self.n1ql_port is None or self.n1ql_port == '':
             self.n1ql_port = self.input.param("n1ql_port", 8093)
             if not self.n1ql_port:
                 self.log.info(" n1ql_port is not defined, processing will not proceed further")
@@ -69,42 +69,28 @@ class N1QLHelper():
         if self.use_rest:
             query_params = {}
             if scan_consistency:
-                query_params['scan_consistency']=  scan_consistency
+                query_params['scan_consistency']= scan_consistency
             if scan_vector:
-                query_params['scan_vector']=  str(scan_vector).replace("'", '"')
+                query_params['scan_vector']= str(scan_vector).replace("'", '"')
             if verbose:
                 self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared, verbose = verbose)
         else:
-            # if self.version == "git_repo":
-            #     output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
-            #                                                 "tuq_client/tuq_client " +\
-            #                                                 "-engine=http://%s:8093/" % server.ip,
-            #                                            subcommands=[query,],
-            #                                            min_output_size=20,
-            #                                            end_msg='tuq_client>')
-            # else:
-            #os = self.shell.extract_remote_info().type.lower()
-            #query = query.replace('"', '\\"')
-            #query = query.replace('`', '\\`')
-            #if os == "linux":
             shell = RemoteMachineShellConnection(server)
-            #cbqpath = '%scbq' % "/opt/couchbase/bin/"
             url = "'http://%s:8093/query/service'" % server.ip
-            cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
-            query = query.replace('"','\\"')
+            cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH, server.ip)
+            query = query.replace('"', '\\"')
             if "#primary" in query:
-                query = query.replace("'#primary'",'\\"#primary\\"')
-            query = "select curl('POST', "+ url +", {'data' : 'statement=%s'})" % query
+                query = query.replace("'#primary'", '\\"#primary\\"')
+            query = "select curl('POST', " + url + ", {'data' : 'statement=%s'})" % query
             print query
-            output = shell.execute_commands_inside(cmd,query,"","","","","")
-            print "--------------------------------------------------------------------------------------------------------------------------------"
+            output = shell.execute_commands_inside(cmd, query, "", "", "", "", "")
+            print "-"*128
             print output
             new_curl = json.dumps(output[47:])
             string_curl = json.loads(new_curl)
             result = json.loads(string_curl)
             print result
-            #result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
             length_display = len(error_result)
@@ -120,59 +106,69 @@ class N1QLHelper():
         self.log.info(" Analyzing Expected Result")
         expected_result = self._gen_dict(expected_result)
         if len(actual_result) != len(expected_result):
-            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
-                                            len(actual_result), len(expected_result)))
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result)))
         msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
             raise Exception(msg)
 
-    def _verify_results_rqg(self, subquery,aggregate=False,n1ql_result = [], sql_result = [], hints = ["a1"]):
+    def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"]):
         new_n1ql_result = []
+
         for result in n1ql_result:
             if result != {}:
                 new_n1ql_result.append(result)
+
         n1ql_result = new_n1ql_result
+
         if self._is_function_in_result(hints):
             return self._verify_results_rqg_for_function(n1ql_result, sql_result)
+
         check = self._check_sample(n1ql_result, hints)
         actual_result = n1ql_result
+
         if actual_result == [{}]:
             actual_result = []
         if check:
             actual_result = self._gen_dict(n1ql_result)
+
         actual_result = sorted(actual_result)
         expected_result = sorted(sql_result)
+
         if len(actual_result) != len(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
-            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
-                                            len(actual_result), len(expected_result), extra_msg))
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (len(actual_result), len(expected_result), extra_msg))
+
         msg = "The number of rows match but the results mismatch, please check"
         if subquery:
-            for x,y in zip(actual_result,expected_result):
-              if aggregate:
-                productId = x['ABC'][0]['$1']
-              else:
-                productId =   x['ABC'][0]['productId']
-              if(productId != y['ABC']) or x['datetime_field1']!=y['datetime_field1'] \
-                        or x['primary_key_id']!=y['primary_key_id'] or x['varchar_field1']!=y['varchar_field1'] \
-                        or x['decimal_field1']!=y['decimal_field1'] or x['char_field1']!=y['char_field1'] \
-                        or x['int_field1']!=y['int_field1'] or x['bool_field1']!=y['bool_field1']:
-                            print "actual_result is %s" %actual_result
-                            print "expected result is %s" %expected_result
-                            extra_msg = self._get_failure_message(expected_result, actual_result)
-                            raise Exception(msg+"\n "+extra_msg)
+            for x, y in zip(actual_result, expected_result):
+                if aggregate:
+                    productId = x['ABC'][0]['$1']
+                else:
+                    productId = x['ABC'][0]['productId']
+                if(productId != y['ABC']) or \
+                                x['datetime_field1'] != y['datetime_field1'] or \
+                                x['primary_key_id'] != y['primary_key_id'] or \
+                                x['varchar_field1'] != y['varchar_field1'] or \
+                                x['decimal_field1'] != y['decimal_field1'] or \
+                                x['char_field1'] != y['char_field1'] or \
+                                x['int_field1'] != y['int_field1'] or \
+                                x['bool_field1'] != y['bool_field1']:
+                    print "actual_result is %s" % actual_result
+                    print "expected result is %s" % expected_result
+                    extra_msg = self._get_failure_message(expected_result, actual_result)
+                    raise Exception(msg+"\n "+extra_msg)
         else:
-         if self._sort_data(actual_result) != self._sort_data(expected_result):
-            extra_msg = self._get_failure_message(expected_result, actual_result)
-            raise Exception(msg+"\n "+extra_msg)
+            if self._sort_data(actual_result) != self._sort_data(expected_result):
+                extra_msg = self._get_failure_message(expected_result, actual_result)
+                raise Exception(msg+"\n "+extra_msg)
 
     def _sort_data(self, result):
-        new_data =[]
+        new_data = []
         for data in result:
             new_data.append(sorted(data))
         return new_data
 
-    def _verify_results_crud_rqg(self, n1ql_result = [], sql_result = [], hints = ["primary_key_id"]):
+    def _verify_results_crud_rqg(self, n1ql_result=[], sql_result=[], hints=["primary_key_id"]):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -190,28 +186,27 @@ class N1QLHelper():
         expected_result = sorted(sql_result)
         if len(actual_result) != len(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
-            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
-                                            len(actual_result), len(expected_result), extra_msg))
-        if not self._result_comparison_analysis(actual_result,expected_result) :
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (len(actual_result), len(expected_result), extra_msg))
+        if not self._result_comparison_analysis(actual_result, expected_result):
             msg = "The number of rows match but the results mismatch, please check"
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception(msg+"\n "+extra_msg)
 
     def _get_failure_message(self, expected_result, actual_result):
-        if expected_result == None:
+        if expected_result is None:
             expected_result = []
-        if actual_result == None:
+        if actual_result is None:
             actual_result = []
         len_expected_result = len(expected_result)
         len_actual_result = len(actual_result)
-        len_expected_result = min(5,len_expected_result)
-        len_actual_result = min(5,len_actual_result)
+        len_expected_result = min(5, len_expected_result)
+        len_actual_result = min(5, len_actual_result)
         extra_msg = "mismatch in results :: expected :: {0}, actual :: {1} ".format(expected_result[0:len_expected_result], actual_result[0:len_actual_result])
         return extra_msg
 
     def _result_comparison_analysis(self, expected_result, actual_result):
-        expected_map ={}
-        actual_map ={}
+        expected_map = {}
+        actual_map = {}
         for data in expected_result:
             primary=None
             for key in data.keys():
@@ -220,7 +215,7 @@ class N1QLHelper():
                     primary = keys
             expected_map[data[primary]] = data
         for data in actual_result:
-            primary=None
+            primary = None
             for key in data.keys():
                 keys = key
                 if keys.encode('ascii') == "primary_key_id":
@@ -233,17 +228,17 @@ class N1QLHelper():
         return check
 
     def _analyze_for_special_case_using_func(self, expected_result, actual_result):
-        if expected_result == None:
+        if expected_result is None:
             expected_result = []
-        if actual_result == None:
+        if actual_result is None:
             actual_result = []
         if len(expected_result) == 1:
             value = expected_result[0].values()[0]
-            if value == None or value == 0:
+            if value is None or value == 0:
                 expected_result = []
         if len(actual_result) == 1:
             value = actual_result[0].values()[0]
-            if value == None or value == 0:
+            if value is None or value == 0:
                 actual_result = []
         return expected_result, actual_result
 
@@ -252,9 +247,7 @@ class N1QLHelper():
             return True
         return False
 
-    def _verify_results_rqg_for_function(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
-        actual_count = -1
-        expected_count = -1
+    def _verify_results_rqg_for_function(self, n1ql_result=[], sql_result=[], hints=["a1"]):
         actual_result = n1ql_result
         sql_result, actual_result= self._analyze_for_special_case_using_func(sql_result, actual_result)
         if len(sql_result) != len(actual_result):
@@ -265,7 +258,7 @@ class N1QLHelper():
         n1ql_result = sorted(n1ql_result)
         sql_result = self._gen_dict_n1ql_func_result(sql_result)
         sql_result = sorted(sql_result)
-        if  len(sql_result) == 0 and len(actual_result) == 0:
+        if len(sql_result) == 0 and len(actual_result) == 0:
             return
         if sql_result != n1ql_result:
             max = 2
@@ -288,16 +281,15 @@ class N1QLHelper():
             return value
 
     def analyze_failure(self, actual, expected):
-        missing_keys =[]
+        missing_keys = []
         different_values = []
         for key in expected.keys():
             if key not in actual.keys():
                 missing_keys.append(key)
             if expected[key] != actual[key]:
-                different_values.append("for key {0}, expected {1} \n actual {2}".
-                    format(key, expected[key], actual[key]))
+                different_values.append("for key {0}, expected {1} \n actual {2}".format(key, expected[key], actual[key]))
         self.log.info(missing_keys)
-        if(len(different_values) > 0):
+        if len(different_values) > 0:
             self.log.info(" number of such cases {0}".format(len(different_values)))
             self.log.info(" example key {0}".format(different_values[0]))
 
@@ -306,7 +298,7 @@ class N1QLHelper():
         extra = []
         for item in actual:
             if not (item in expected):
-                 extra.append(item)
+                extra.append(item)
         for item in expected:
             if not (item in actual):
                 missing.append(item)
@@ -317,8 +309,7 @@ class N1QLHelper():
         type = info.distribution_type.lower()
         if type in ["ubuntu", "centos", "red hat"]:
             url = "https://s3.amazonaws.com/packages.couchbase.com/releases/couchbase-query/dp1/"
-            url += "couchbase-query_%s_%s_linux.tar.gz" %(
-                                version, info.architecture_type)
+            url += "couchbase-query_%s_%s_linux.tar.gz" % (version, info.architecture_type)
         #TODO for windows
         return url
 
@@ -340,12 +331,10 @@ class N1QLHelper():
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
                 cmd = "cd %s/src/github.com/couchbase/query/server/main; " % (gopath) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" % (server.ip, server.port)
             else:
                 cmd = "cd %s/src/github.com/couchbase/query//server/main; " % (gopath) +\
-                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" % (server.ip, server.port)
             self.shell.execute_command(cmd)
         elif self.version == "sherlock":
             os = self.shell.extract_remote_info().type.lower()
@@ -358,29 +347,25 @@ class N1QLHelper():
                 print "PATH TO SHERLOCK: %s" % couchbase_path
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" % (server.ip, server.port)
             else:
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" % (server.ip, server.port)
                 n1ql_port = self.input.param("n1ql_port", None)
                 if server.ip == "127.0.0.1" and server.n1ql_port:
                     n1ql_port = server.n1ql_port
                 if n1ql_port:
                     cmd = "cd %s; " % (couchbase_path) +\
-                './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
-                                                                server.ip, server.port, n1ql_port)
+                './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' % (server.ip, server.port, n1ql_port)
             self.shell.execute_command(cmd)
         else:
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
-                cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" % (server.ip, server.port)
             else:
-                cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" % (server.ip, server.port)
             self.shell.execute_command(cmd)
+
     def _parse_query_output(self, output):
         if output.find("cbq>") == 0:
             output = output[output.find("cbq>") + 4:].strip()
@@ -407,12 +392,12 @@ class N1QLHelper():
     def configure_gomaxprocs(self):
         max_proc = self.input.param("gomaxprocs", None)
         cmd = "export GOMAXPROCS=%s" % max_proc
-        for server in self.servers:
+        for _ in self.servers:
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
 
     def drop_primary_index(self, using_gsi = True, server = None):
-        if server == None:
+        if server is None:
             server = self.master
         self.log.info("CHECK FOR PRIMARY INDEXES")
         for bucket in self.buckets:
@@ -425,36 +410,34 @@ class N1QLHelper():
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if check:
-                    self.run_cbq_query(server = server)
+                    self.run_cbq_query(server=server)
             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
-    def create_primary_index(self,using_gsi = True, server = None):
-        if server == None:
+    def create_primary_index(self, using_gsi=True, server=None):
+        if server is None:
             server = self.master
         for bucket in self.buckets:
-            self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
+            self.query = "CREATE PRIMARY INDEX ON %s " % bucket.name
             if using_gsi:
                 self.query += " USING GSI"
-                # if gsi_type == "memdb":
-                #     self.query += " WITH {'index_type': 'memdb'}"
             if not using_gsi:
                 self.query += " USING VIEW "
             if self.use_rest:
-             try:
-                check = self._is_index_in_list(bucket.name, "#primary", server = server)
-                if not check:
-                    self.run_cbq_query(server = server,query_params={'timeout' : '900s'})
-                    check = self.is_index_online_and_in_list(bucket.name, "#primary", server = server)
+                try:
+                    check = self._is_index_in_list(bucket.name, "#primary", server = server)
                     if not check:
-                        raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
-                else:
-                    raise Exception(" Primary Index Already present, This looks like a bug !!!")
-             except Exception, ex:
-                self.log.error('ERROR during index creation %s' % str(ex))
-                raise ex
+                        self.run_cbq_query(server = server,query_params={'timeout' : '900s'})
+                        check = self.is_index_online_and_in_list(bucket.name, "#primary", server = server)
+                        if not check:
+                            raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
+                    else:
+                        raise Exception(" Primary Index Already present, This looks like a bug !!!")
+                except Exception, ex:
+                    self.log.error('ERROR during index creation %s' % str(ex))
+                    raise ex
 
-    def verify_index_with_explain(self, actual_result, index_name, check_covering_index= False):
+    def verify_index_with_explain(self, actual_result, index_name, check_covering_index=False):
         check = True
         if check_covering_index:
             if "covering" in str(actual_result):
@@ -465,46 +448,44 @@ class N1QLHelper():
             return True and check
         return False
 
-    def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 1,
-     expected_result = None, scan_consistency = None, scan_vector = None, verify_results = True):
+    def run_query_and_verify_result(self, server=None, query=None, timeout=120.0, max_try=1, expected_result=None,
+                                    scan_consistency=None, scan_vector=None, verify_results=True):
         check = False
         init_time = time.time()
         try_count = 0
         while not check:
             next_time = time.time()
             try:
-                actual_result = self.run_cbq_query(query = query, server = server,
-                 scan_consistency = scan_consistency, scan_vector = scan_vector)
+                actual_result = self.run_cbq_query(query=query, server=server, scan_consistency=scan_consistency,
+                                                   scan_vector=scan_vector)
                 if verify_results:
                     self._verify_results(sorted(actual_result['results']), sorted(expected_result))
                 else:
-                    return "ran query with success and validated results" , True
+                    return "ran query with success and validated results", True
                 check = True
             except Exception, ex:
-                if (next_time - init_time > timeout or try_count >= max_try):
+                if next_time - init_time > timeout or try_count >= max_try:
                     return ex, False
             finally:
                 try_count += 1
-        return "ran query with success and validated results" , check
+        return "ran query with success and validated results", check
 
     def get_index_names(self, server=None):
         query = "select distinct(name) from system:indexes where `using`='gsi'"
         index_names = []
-        if server == None:
+        if server is None:
             server = self.master
-
         res = self.run_cbq_query(query=query, server=server)
         for item in res['results']:
             index_names.append(item['name'])
-
         return index_names
 
     def is_index_online_and_in_list(self, bucket, index_name, server=None, timeout=600.0):
-        check = self._is_index_in_list(bucket, index_name, server = server)
+        check = self._is_index_in_list(bucket, index_name, server=server)
         init_time = time.time()
         while not check:
             time.sleep(1)
-            check = self._is_index_in_list(bucket, index_name, server = server)
+            check = self._is_index_in_list(bucket, index_name, server=server)
             next_time = time.time()
             if check or (next_time - init_time > timeout):
                 return check
@@ -512,7 +493,7 @@ class N1QLHelper():
 
     def is_index_ready_and_in_list(self, bucket, index_name, server=None, timeout=600.0):
         query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
-        if server == None:
+        if server is None:
             server = self.master
         init_time = time.time()
         check = False
@@ -530,20 +511,20 @@ class N1QLHelper():
             check = check or (next_time - init_time > timeout)
         return check
 
-    def is_index_online_and_in_list_bulk(self, bucket, index_names = [], server = None, index_state = "online", timeout = 600.0):
-        check, index_names = self._is_index_in_list_bulk(bucket, index_names, server = server, index_state = index_state)
+    def is_index_online_and_in_list_bulk(self, bucket, index_names=[], server=None, index_state="online", timeout=600.0):
+        check, index_names = self._is_index_in_list_bulk(bucket, index_names, server=server, index_state=index_state)
         init_time = time.time()
         while not check:
-            check, index_names = self._is_index_in_list_bulk(bucket, index_names, server = server, index_state = index_state)
+            check, index_names = self._is_index_in_list_bulk(bucket, index_names, server=server, index_state=index_state)
             next_time = time.time()
             if check or (next_time - init_time > timeout):
                 return check
         return check
 
-    def gen_build_index_query(self, bucket = "default", index_list = []):
-        return "BUILD INDEX on {0}({1}) USING GSI".format(bucket,",".join(index_list))
+    def gen_build_index_query(self, bucket="default", index_list=[]):
+        return "BUILD INDEX on {0}({1}) USING GSI".format(bucket, ",".join(index_list))
 
-    def gen_query_parameter(self, scan_vector = None, scan_consistency = None):
+    def gen_query_parameter(self, scan_vector=None, scan_consistency=None):
         query_params = {}
         if scan_vector:
             query_params.update("scan_vector", scan_vector)
@@ -551,11 +532,11 @@ class N1QLHelper():
             query_params.update("scan_consistency", scan_consistency)
         return query_params
 
-    def _is_index_in_list(self, bucket, index_name, server = None, index_state = ["pending", "building", "deferred"]):
+    def _is_index_in_list(self, bucket, index_name, server=None, index_state=["pending", "building", "deferred"]):
         query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
-        if server == None:
+        if server is None:
             server = self.master
-        res = self.run_cbq_query(query = query, server = server)
+        res = self.run_cbq_query(query=query, server=server)
         for item in res['results']:
             if 'keyspace_id' not in item['indexes']:
                 return False
@@ -563,12 +544,11 @@ class N1QLHelper():
                 return True
         return False
 
-    def _is_index_in_list_bulk(self, bucket, index_names = [], server = None, index_state = ["pending","building"]):
+    def _is_index_in_list_bulk(self, bucket, index_names=[], server=None, index_state=["pending","building"]):
         query = "SELECT * FROM system:indexes"
-        if server == None:
+        if server is None:
             server = self.master
-        res = self.run_cbq_query(query = query, server = server)
-        index_count=0
+        res = self.run_cbq_query(query=query, server=server)
         found_index_list = []
         for item in res['results']:
             if 'keyspace_id' not in item['indexes']:
@@ -580,14 +560,14 @@ class N1QLHelper():
             return True, []
         return False, list(set(index_names) - set(found_index_list))
 
-    def gen_index_map(self, server = None):
+    def gen_index_map(self, server=None):
         query = "SELECT * FROM system:indexes"
-        if server == None:
+        if server is None:
             server = self.master
-        res = self.run_cbq_query(query = query, server = server)
+        res = self.run_cbq_query(query=query, server=server)
         index_map = {}
         for item in res['results']:
-            bucket_name = item['indexes']['keyspace_id'].encode('ascii','ignore')
+            bucket_name = item['indexes']['keyspace_id'].encode('ascii', 'ignore')
             if bucket_name not in index_map.keys():
                 index_map[bucket_name] = {}
             index_name = str(item['indexes']['name'])
@@ -595,17 +575,17 @@ class N1QLHelper():
             index_map[bucket_name][index_name]['state'] = item['indexes']['state']
         return index_map
 
-    def get_index_count_using_primary_index(self, buckets, server = None):
+    def get_index_count_using_primary_index(self, buckets, server=None):
         query = "SELECT COUNT(*) FROM {0}"
         map= {}
-        if server == None:
+        if server is None:
             server = self.master
         for bucket in buckets:
-            res = self.run_cbq_query(query = query.format(bucket.name), server = server)
+            res = self.run_cbq_query(query=query.format(bucket.name), server=server)
             map[bucket.name] = int(res["results"][0]["$1"])
         return map
 
-    def get_index_count_using_index(self, bucket, index_name,server=None):
+    def get_index_count_using_index(self, bucket, index_name, server=None):
         query = 'SELECT COUNT(*) FROM {0} USE INDEX ({1})'.format(bucket.name, index_name)
         if not server:
             server = self.master
@@ -614,10 +594,10 @@ class N1QLHelper():
 
     def _gen_dict(self, result):
         result_set = []
-        if result != None and len(result) > 0:
-                for val in result:
-                    for key in val.keys():
-                        result_set.append(val[key])
+        if result is not None and len(result) > 0:
+            for val in result:
+                for key in val.keys():
+                    result_set.append(val[key])
         return result_set
 
     def _gen_dict_n1ql_func_result(self, result):
@@ -633,13 +613,13 @@ class N1QLHelper():
             new_result_set = result_set
         return new_result_set
 
-    def _check_sample(self, result, expected_in_key = None):
+    def _check_sample(self, result, expected_in_key=None):
         if expected_in_key == "FUN":
             return False
-        if expected_in_key == None or len(expected_in_key) == 0:
+        if expected_in_key is None or len(expected_in_key) == 0:
             return False
-        if result != None and len(result) > 0:
-            sample=result[0]
+        if result is not None and len(result) > 0:
+            sample = result[0]
             for key in sample.keys():
                 for sample in expected_in_key:
                     if key in sample:
@@ -651,7 +631,7 @@ class N1QLHelper():
         map = {}
         duplicate_keys = []
         try:
-            if result != None and len(result) > 0:
+            if result is not None and len(result) > 0:
                 for val in result:
                     for key in val.keys():
                         result_set.append(val[key])
@@ -669,11 +649,11 @@ class N1QLHelper():
         return map
 
     def _set_env_variable(self, server):
-        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip, server.port))
         self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
-        self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip, server.port))
+        self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username, server.rest_password, server.ip, server.port))
 
     def verify_indexes_redistributed(self, map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
                                      stats_map_after_rebalance, nodes_in, nodes_out, swap_rebalance=False):
@@ -782,7 +762,6 @@ class N1QLHelper():
         for k, v in index_distribution_map_after_rebalance.iteritems():
             print k, v
 
-
     def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None):
         # 1. Validate count of no_of_indexes
         # 2. Validate index names
@@ -790,7 +769,6 @@ class N1QLHelper():
         # 4. Validate index replicas are on different hosts
 
         nodes = []
-
         for index_name in index_names:
             index_host_name, index_id = self.get_index_details_using_index_name(index_name, index_map)
             nodes.append(index_host_name)
@@ -806,7 +784,7 @@ class N1QLHelper():
                     raise Exception(str(ex))
 
                 self.log.info("Hostnames : %s , %s" % (index_host_name, index_replica_hostname))
-                self.log.info("Index IDs : %s, %s" %( index_id, index_replica_id))
+                self.log.info("Index IDs : %s, %s" % (index_id, index_replica_id))
 
                 nodes.append(index_replica_hostname)
 
@@ -821,9 +799,8 @@ class N1QLHelper():
         if expected_nodes:
             expected_nodes = expected_nodes.sort()
             nodes = nodes.sort()
-
             if not expected_nodes == nodes:
-                self.fail ("Replicas not created on expected hosts")
+                self.fail("Replicas not created on expected hosts")
 
     def verify_replica_indexes_build_status(self, index_map, num_replicas, defer_build=False):
 
@@ -832,36 +809,31 @@ class N1QLHelper():
         for index_name in index_names:
             index_status, index_build_progress = self.get_index_status_using_index_name(index_name, index_map)
             if not defer_build and index_status != "Ready":
-                self.log.info("Expected %s status to be Ready, but it is %s" % (
-                    index_name, index_status))
+                self.log.info("Expected %s status to be Ready, but it is %s" % (index_name, index_status))
                 raise Exception("Index status incorrect")
             elif defer_build and index_status != "Created":
                 self.log.info(
-                    "Expected %s status to be Created, but it is %s" % (
-                        index_name, index_status))
+                    "Expected %s status to be Created, but it is %s" % (index_name, index_status))
                 raise Exception("Index status incorrect")
             else:
                 self.log.info("index_name = %s, defer_build = %s, index_status = %s" % (index_name, defer_build, index_status))
 
             for i in range(1, num_replicas+1):
-                index_replica_name = index_name + " (replica {0})".format(
-                    str(i))
-
+                index_replica_name = index_name + " (replica {0})".format(str(i))
                 try:
                     index_replica_status, index_replica_progress = self.get_index_status_using_index_name(index_replica_name, index_map)
                 except Exception, ex:
                     self.log.info(str(ex))
-                    raise Exception (str(ex))
+                    raise Exception(str(ex))
 
                 if not defer_build and index_replica_status != "Ready":
                     self.log.info("Expected %s status to be Ready, but it is %s" % (index_replica_name, index_replica_status))
-                    raise Exception ("Index status incorrect")
+                    raise Exception("Index status incorrect")
                 elif defer_build and index_replica_status != "Created":
                     self.log.info("Expected %s status to be Created, but it is %s" % (index_replica_name, index_replica_status))
                     raise Exception("Index status incorrect")
                 else:
-                    self.log.info("index_name = %s, defer_build = %s, index_replica_status = %s" % (
-                        index_replica_name, defer_build, index_status))
+                    self.log.info("index_name = %s, defer_build = %s, index_replica_status = %s" % (index_replica_name, defer_build, index_status))
 
     def get_index_details_using_index_name(self, index_name, index_map):
         for key in index_map.iterkeys():
