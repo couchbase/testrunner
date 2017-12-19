@@ -195,5 +195,6 @@ class EventingDataset(EventingBaseTest):
         self.deploy_function(body)
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.mutate_in(docid, SD.upsert('my', {'value': 1}, xattr=True))
+            bucket.mutate_in(docid, SD.upsert('fax', '775-867-5309'))
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
 

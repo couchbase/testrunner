@@ -232,6 +232,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("Resume Application : {0}".format(content1))
 
     def refresh_rest_server(self):
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        self.master = kv_node
         eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         self.restServer = eventing_nodes_list[0]
         self.rest = RestConnection(self.restServer)

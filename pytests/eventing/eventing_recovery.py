@@ -157,3 +157,28 @@ class EventingRecovery(EventingBaseTest):
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_network_partitioning_eventing_node_when_its_processing_mutations(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        self.deploy_function(body)
+        try:
+            # partition the eventing node when its processing mutations
+            for i in xrange(5):
+                self.start_firewall_on_node(eventing_node)
+            # load some data
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            self.sleep(180)
+            self.stop_firewall_on_node(eventing_node)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        except Exception:
+            self.stop_firewall_on_node(eventing_node)
+        finally:
+            self.stop_firewall_on_node(eventing_node)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
