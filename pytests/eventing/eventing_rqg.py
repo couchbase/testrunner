@@ -57,22 +57,21 @@ class EventingRQG(EventingBaseTest):
             s = len(query_list)
         s = self.number_of_queries
         try:
-            try:
-                for j in range(0, s, k):
-                    threads = []
-                    for i in range(j, j + k):
-                        if i >= s:
-                            break
-                        threads.append(Thread(target=self.create_function_and_deploy, args={query_list[i]}))
-                    for thread in threads:
-                        thread.start()
-                    for thread in threads:
-                        thread.join()
-                    key = datetime.datetime.now().time()
-                    query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
-                    self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-            except Exception as e:
-                log.info(e)
+            for j in range(0, s, k):
+                threads = []
+                for i in range(j, j + k):
+                    if i >= s:
+                        break
+                    threads.append(Thread(target=self.create_function_and_deploy, args={query_list[i]}))
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join()
+                key = datetime.datetime.now().time()
+                query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
+                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        except Exception as e:
+            log.info(e)
         finally:
             self.sleep(30)
             self.eventing_stats()
@@ -80,56 +79,62 @@ class EventingRQG(EventingBaseTest):
             self.delete_temp_handler_code()
         self.verify_n1ql_stats(self.number_of_queries)
 
-    def create_function_and_deploy(self, query):
-        file_path = self.generate_eventing_file(self._convert_template_n1ql(query))
-        self.sleep(10)
-        ts = datetime.datetime.now().strftime('%m%d%y%H%M%S%f')
-        body = self.create_save_function_body(self.function_name + str(ts), file_path,
-                                              dcp_stream_boundary="from_now", worker_count=1, execution_timeout=60)
-        self.deploy_function(body)
 
-    def _convert_template_n1ql(self, query):
-        n1ql = str(query).replace("BUCKET_NAME", self.src_bucket_name);
-        return n1ql
+def create_function_and_deploy(self, query):
+    file_path = self.generate_eventing_file(self._convert_template_n1ql(query))
+    self.sleep(10)
+    ts = datetime.datetime.now().strftime('%m%d%y%H%M%S%f')
+    body = self.create_save_function_body(self.function_name + str(ts), file_path,
+                                          dcp_stream_boundary="from_now", worker_count=1, execution_timeout=60)
+    self.deploy_function(body)
 
-    def generate_eventing_file(self, query):
-        script_dir = os.path.dirname(__file__)
-        abs_file_path = os.path.join(script_dir, HANDLER_CODE.N1QL_TEMP)
-        fh = open(abs_file_path, "r")
-        code = Template(fh.read()).substitute(n1ql=query)
-        fh.close()
-        ts = datetime.datetime.now().strftime('%m%d%y%H%M%S%f')
-        temp_file_path = HANDLER_CODE.N1QL_TEMP_PATH + "f_" + ts + ".js"
-        abs_file_path = os.path.join(script_dir, temp_file_path)
-        fw = open(abs_file_path, "w+")
-        fw.write(code)
-        fw.close()
-        return temp_file_path
 
-    def unzip_template(self, template_path):
-        if "zip" not in template_path:
-            return template_path
-        tokens = template_path.split("/")
-        file_name = tokens[len(tokens) - 1]
-        output_path = template_path.replace(file_name, "")
-        with zipfile.ZipFile(template_path, "r") as z:
-            z.extractall(output_path)
-        template_path = template_path.replace(".zip", "")
+def _convert_template_n1ql(self, query):
+    n1ql = str(query).replace("BUCKET_NAME", self.src_bucket_name);
+    return n1ql
+
+
+def generate_eventing_file(self, query):
+    script_dir = os.path.dirname(__file__)
+    abs_file_path = os.path.join(script_dir, HANDLER_CODE.N1QL_TEMP)
+    fh = open(abs_file_path, "r")
+    code = Template(fh.read()).substitute(n1ql=query)
+    fh.close()
+    ts = datetime.datetime.now().strftime('%m%d%y%H%M%S%f')
+    temp_file_path = HANDLER_CODE.N1QL_TEMP_PATH + "f_" + ts + ".js"
+    abs_file_path = os.path.join(script_dir, temp_file_path)
+    fw = open(abs_file_path, "w+")
+    fw.write(code)
+    fw.close()
+    return temp_file_path
+
+
+def unzip_template(self, template_path):
+    if "zip" not in template_path:
         return template_path
+    tokens = template_path.split("/")
+    file_name = tokens[len(tokens) - 1]
+    output_path = template_path.replace(file_name, "")
+    with zipfile.ZipFile(template_path, "r") as z:
+        z.extractall(output_path)
+    template_path = template_path.replace(".zip", "")
+    return template_path
 
-    def delete_temp_handler_code(self, path=HANDLER_CODE.N1QL_TEMP_PATH):
-        script_dir = os.path.dirname(__file__)
-        dirPath = os.path.join(script_dir, path)
-        fileList = os.listdir(dirPath)
-        for fileName in fileList:
-            os.remove(dirPath + "/" + fileName)
 
-    def verify_n1ql_stats(self, total_query):
-        n1ql_query = "select failed_query.query from dst_bucket where failed_query is not null"
-        failed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
-        n1ql_query = "select passed_query.query from dst_bucket where passed_query is not null"
-        passed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
-        log.debug("passed: {0}".format(passed))
-        log.debug("failed: {0}".format(failed))
-        assert len(passed["results"]) + len(failed["results"]) == total_query
-        assert len(failed["results"]) == 0, "failed queries are {0}".format(failed["results"])
+def delete_temp_handler_code(self, path=HANDLER_CODE.N1QL_TEMP_PATH):
+    script_dir = os.path.dirname(__file__)
+    dirPath = os.path.join(script_dir, path)
+    fileList = os.listdir(dirPath)
+    for fileName in fileList:
+        os.remove(dirPath + "/" + fileName)
+
+
+def verify_n1ql_stats(self, total_query):
+    n1ql_query = "select failed_query.query from dst_bucket where failed_query is not null"
+    failed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
+    n1ql_query = "select passed_query.query from dst_bucket where passed_query is not null"
+    passed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
+    log.debug("passed: {0}".format(passed))
+    log.debug("failed: {0}".format(failed))
+    assert len(passed["results"]) + len(failed["results"]) == total_query
+    assert len(failed["results"]) == 0, "failed queries are {0}".format(failed["results"])
