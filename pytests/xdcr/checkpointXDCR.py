@@ -4,6 +4,8 @@ from lib.membase.api.rest_client import RestConnection
 from membase.api.exception import XDCRCheckpointException
 from mc_bin_client import MemcachedClient, MemcachedError
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from xdcrnewbasetests import NodeHelper
+from couchbase_helper.documentgenerator import BlobGenerator
 import time
 
 
@@ -566,3 +568,59 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         if missing_keys:
             self.fail("Some keys are missing at destination")
 
+    def test_checkpointing_with_full_rollback(self):
+        bucket = self.src_cluster.get_buckets()[0]
+        nodes = self.src_cluster.get_nodes()
+
+        # Stop Persistence on Node A & Node B
+        for node in nodes:
+            mem_client = MemcachedClientHelper.direct_client(node, bucket)
+            mem_client.stop_persistence()
+
+        self.src_cluster.pause_all_replications()
+
+        gen = BlobGenerator("C1-", "C1-", self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        self.src_cluster.resume_all_replications()
+
+        self.sleep(self._checkpoint_interval * 2)
+
+        self.get_and_validate_latest_checkpoint()
+
+        # Perform mutations on the bucket
+        self.async_perform_update_delete()
+
+        self.sleep(self._wait_timeout)
+
+        # Kill memcached on Node A so that Node B becomes master
+        shell = RemoteMachineShellConnection(self.src_cluster.get_master_node())
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        mem_client = MemcachedClientHelper.direct_client(nodes[1], bucket)
+        mem_client.start_persistence()
+
+        # Failover Node B
+        failover_task = self.src_cluster.async_failover()
+        failover_task.result()
+
+        # Wait for Failover & rollback to complete
+        self.sleep(self._wait_timeout * 5)
+
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0]) \
+                     + '/goxdcr.log*'
+        count1 = NodeHelper.check_goxdcr_log(
+            nodes[0],
+            "Received rollback from DCP stream",
+            goxdcr_log)
+        self.assertGreater(count1, 0, "full rollback not received from DCP as expected")
+        self.log.info("full rollback received from DCP as expected")
+        count2 = NodeHelper.check_goxdcr_log(
+            nodes[0],
+            "Rolled back startSeqno to 0",
+            goxdcr_log)
+        self.assertGreater(count2, 0, "startSeqno not rolled back to 0 as expected")
+        self.log.info("startSeqno rolled back to 0 as expected")
+
+        shell.disconnect()
