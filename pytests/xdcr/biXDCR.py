@@ -415,6 +415,16 @@ class bidirectional(XDCRNewBaseTest):
             self.log.info(e)
 
     def test_rollback(self):
+        bucket = self.src_cluster.get_buckets()[0]
+        src_nodes = self.src_cluster.get_nodes()
+        dest_nodes = self.dest_cluster.get_nodes()
+        nodes = src_nodes + dest_nodes
+
+        # Stop Persistence on Node A & Node B
+        for node in nodes:
+            mem_client = MemcachedClientHelper.direct_client(node, bucket)
+            mem_client.stop_persistence()
+
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
         self.setup_xdcr()
@@ -429,16 +439,6 @@ class bidirectional(XDCRNewBaseTest):
 
         self.src_cluster.resume_all_replications()
         self.dest_cluster.resume_all_replications()
-
-        bucket = self.src_cluster.get_buckets()[0]
-        src_nodes = self.src_cluster.get_nodes()
-        dest_nodes = self.dest_cluster.get_nodes()
-        nodes = src_nodes + dest_nodes
-
-        # Stop Persistence on Node A & Node B
-        for node in nodes:
-            mem_client = MemcachedClientHelper.direct_client(node, bucket)
-            mem_client.stop_persistence()
 
         # Perform mutations on the bucket
         self.async_perform_update_delete()
