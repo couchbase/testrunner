@@ -22,6 +22,9 @@ class HANDLER_CODE:
     CURL='handler_code/curl.js'
     ANONYMOUS='handler_code/anonymous.js'
     RECURSION_FUNCTION='handler_code/recursion.js'
+    N1QL_TEMP='handler_code/n1ql_temp.js'
+    N1QL='rqg_handler_code/n1ql.js'
+    N1QL_TEMP_PATH='handler_code/rqg_handler_code/'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'

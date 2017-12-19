@@ -3987,6 +3987,19 @@ class RestConnection(object):
         return content
 
     '''
+            GET all the Functions
+    '''
+    def get_all_functions(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "api/v1/functions"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
             Undeploy the Function
     '''
     def set_settings_for_function(self, name, body):
@@ -3999,6 +4012,35 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return content
+
+    '''
+        undeploy the Function 
+    '''
+    def undeploy_function(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "api/v1/functions/" + name +"/settings"
+        body= {"deployment_status":False,"processing_status":False}
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+        Delete all the functions 
+    '''
+    def delete_all_function(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "api/v1/functions"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
 
     '''
             Delete the Function from UI

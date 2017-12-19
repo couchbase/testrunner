@@ -151,7 +151,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
         if stats_dst["curr_items"] != expected_dcp_mutations:
             for i in xrange(5):  # See MB-27035
-                self.print_execution_and_failure_stats()
+                self.print_execution_and_failure_stats(name)
                 # This sleep is intentionally added as the the REST API is asynchronous in nature
                 self.sleep(30)  # See MB-26847
             raise Exception(
@@ -159,7 +159,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 "Expected : {1}".format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         for i in xrange(3):  # See MB-27035
-            self.print_execution_and_failure_stats()
+            self.print_execution_and_failure_stats(name)
             self.sleep(30)  # See MB-26847
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         # print all stats from all eventing nodes
@@ -171,6 +171,16 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
             log.info("Stats for Node {0} is {1} ".format(eventing_node.ip, out))
             log.debug("Full Stats for Node {0} is {1} ".format(eventing_node.ip, full_out))
+
+    def eventing_stats(self):
+        self.sleep(30)
+        content=self.rest.get_all_eventing_stats()
+        js=json.loads(content)
+        log.info("execution stats: {0}".format(js))
+        # for j in js:
+        #     print j["function_name"]
+        #     print j["execution_stats"]["on_update_success"]
+        #     print j["failure_stats"]["n1ql_op_exception_count"]
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
         body['settings']['deployment_status'] = True
@@ -283,10 +293,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 log.info("===== PANIC OBSERVED IN EVENTING LOGS ON SERVER {0}=====".format(eventing_node.ip))
                 self.panic_count = count
 
-    def print_execution_and_failure_stats(self):
-        out_event_execution = self.rest.get_event_execution_stats(self.function_name)
+    def print_execution_and_failure_stats(self,name):
+        out_event_execution = self.rest.get_event_execution_stats(name)
         log.info("Event execution stats : {0}".format(out_event_execution))
-        out_event_failure = self.rest.get_event_failure_stats(self.function_name)
+        out_event_failure = self.rest.get_event_failure_stats(name)
         log.info("Event failure stats : {0}".format(out_event_failure))
 
     """
@@ -376,3 +386,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.stop_firewall_on_node(server)
         # wait till node is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
+
+    def undeploy_delete_all_functions(self):
+        content=self.rest.get_all_functions()
+        res = json.loads(content)
+        for a in res:
+            self.rest.undeploy_function(a["appname"])
+        self.sleep(30)
+        self.rest.delete_all_function()

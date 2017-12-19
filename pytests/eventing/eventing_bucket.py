@@ -151,7 +151,7 @@ class EventingBucket(EventingBaseTest):
         self.sleep(60)
         # print the stats couple of times to get the latest data
         for i in xrange(0, 5):
-            self.print_execution_and_failure_stats()
+            self.print_execution_and_failure_stats(self.function_name)
             self.sleep(30)
         # delete the function
         self.undeploy_and_delete_function(body)
