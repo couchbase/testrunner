@@ -47,7 +47,7 @@ class EventingRQG(EventingBaseTest):
 
     def test_random_n1ql(self):
         test_file_path = self.unzip_template(
-            "b/resources/rqg/simple_table_db/query_tests_using_templates/query_10000_fields.txt.zip");
+            "b/resources/rqg/simple_table_db/query_tests_using_templates/query_10000_fields.txt.zip")
         with open(test_file_path) as f:
             query_list = f.readlines()
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
@@ -56,8 +56,8 @@ class EventingRQG(EventingBaseTest):
         if self.number_of_queries is None:
             s = len(query_list)
         s = self.number_of_queries
-        try:
-            for j in range(0, s, k):
+        for j in range(0, s, k):
+            try:
                 threads = []
                 for i in range(j, j + k):
                     if i >= s:
@@ -70,13 +70,13 @@ class EventingRQG(EventingBaseTest):
                 key = datetime.datetime.now().time()
                 query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
                 self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        except Exception as e:
-            log.info(e)
-        finally:
-            self.sleep(30)
-            self.eventing_stats()
-            self.undeploy_delete_all_functions()
-            self.delete_temp_handler_code()
+            except Exception as e:
+                log.error(e)
+            finally:
+                self.sleep(30)
+                self.eventing_stats()
+                self.undeploy_delete_all_functions()
+                self.delete_temp_handler_code()
         self.verify_n1ql_stats(self.number_of_queries)
 
 
