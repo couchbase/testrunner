@@ -28,6 +28,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.input = TestInputSingleton.input
         self.input.test_params.update({"default_bucket": False})
         super(EventingBaseTest, self).setUp()
+        self.master = self.servers[0]
         self.server = self.master
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
@@ -242,8 +243,6 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("Resume Application : {0}".format(content1))
 
     def refresh_rest_server(self):
-        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
-        self.master = kv_node
         eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         self.restServer = eventing_nodes_list[0]
         self.rest = RestConnection(self.restServer)
