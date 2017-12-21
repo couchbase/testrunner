@@ -102,8 +102,8 @@ class EventingRQG(EventingBaseTest):
         if "GROUP BY" in n1ql:
             for k, v in self.having_map.items():
                 n1ql=str(n1ql).replace(k,v)
-        group_fields = re.search(r'GROUP BY(.*?)HAVING', n1ql).group(1)
-        n1ql = n1ql.replace("GROUPBY_FIELDS", group_fields)
+            group_fields = re.search(r'GROUP BY(.*?)HAVING', n1ql).group(1)
+            n1ql = n1ql.replace("GROUPBY_FIELDS", group_fields)
         return n1ql
 
     def generate_eventing_file(self, query):
