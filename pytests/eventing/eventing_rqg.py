@@ -1,4 +1,4 @@
-import os
+import os,re
 import zipfile
 import datetime
 from threading import Thread
@@ -41,13 +41,17 @@ class EventingRQG(EventingBaseTest):
                                       )
         self.number_of_handler = self.input.param('number_of_handler', 5)
         self.number_of_queries = self.input.param('number_of_queries', 100)
+        self.template_file=self.input.param('template_file','b/resources/rqg/simple_table_db/query_tests_using_templates/query_10000_fields.txt.zip')
 
+    having_map = {"STRING_FIELD ": "email ", "NUMERIC_FIELD ": "age ", "UPPER_BOUND_VALUE": "8",
+                  "LOWER_BOUND_VALUE": "0", "NUMERIC_FIELD_LIST": "age", "STRING_FIELD_LIST": "email",
+                  "( LIST )": "[1,2,3]"}
     def tearDown(self):
         super(EventingRQG, self).tearDown()
 
     def test_random_n1ql(self):
         test_file_path = self.unzip_template(
-            "b/resources/rqg/simple_table_db/query_tests_using_templates/query_10000_fields.txt.zip")
+            self.template_file)
         with open(test_file_path) as f:
             query_list = f.readlines()
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
@@ -68,6 +72,7 @@ class EventingRQG(EventingBaseTest):
                 for thread in threads:
                     thread.join()
                 key = datetime.datetime.now().time()
+                self.sleep(10)
                 query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
                 self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
             except Exception as e:
@@ -91,8 +96,15 @@ class EventingRQG(EventingBaseTest):
 
     def _convert_template_n1ql(self, query):
         n1ql = str(query).replace("BUCKET_NAME", self.src_bucket_name);
+        n1ql = str(n1ql).replace("PREVIOUS_TABLE", self.src_bucket_name);
+        n1ql = str(n1ql).replace("CURRENT_TABLE", self.src_bucket_name);
+        n1ql = str(n1ql).replace("TRUNCATE", "TRUNC");
+        if "GROUP BY" in n1ql:
+            for k, v in self.having_map.items():
+                n1ql=str(n1ql).replace(k,v)
+        group_fields = re.search(r'GROUP BY(.*?)HAVING', n1ql).group(1)
+        n1ql = n1ql.replace("GROUPBY_FIELDS", group_fields)
         return n1ql
-
 
     def generate_eventing_file(self, query):
         script_dir = os.path.dirname(__file__)
