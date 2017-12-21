@@ -1,4 +1,6 @@
 import copy
+import json
+
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
@@ -182,3 +184,55 @@ class EventingRecovery(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_reboot_n1ql_node_when_eventing_node_is_querying(self):
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
+        self.deploy_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
+        # reboot eventing node when it is processing mutations
+        self.reboot_server(n1ql_node)
+        task.result()
+        stats = self.rest.get_all_eventing_stats()
+        stats = json.loads(stats)
+        on_update_failure = stats[0]["execution_stats"]["on_update_failure"]
+        n1ql_op_exception_count = stats[0]["failure_stats"]["n1ql_op_exception_count"]
+        self.undeploy_and_delete_function(body)
+        log.info("stats : {0}".format(stats))
+        if on_update_failure != n1ql_op_exception_count or on_update_failure == 0 or n1ql_op_exception_count == 0:
+            self.fail("No n1ql exceptions were found when n1ql node was rebooted while it was"
+                      "processing queries from handler code or stats returned incorrect value")
+        # intentionally added , as it requires some time for eventing-consumers to shutdown
+        self.sleep(30)
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_killing_erlang_on_n1ql_node_when_eventing_node_is_querying(self):
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
+        self.deploy_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
+        # reboot eventing node when it is processing mutations
+        self.kill_erlang_service(n1ql_node)
+        task.result()
+        stats = self.rest.get_all_eventing_stats()
+        stats = json.loads(stats)
+        on_update_failure = stats[0]["execution_stats"]["on_update_failure"]
+        n1ql_op_exception_count = stats[0]["failure_stats"]["n1ql_op_exception_count"]
+        self.undeploy_and_delete_function(body)
+        log.info("stats : {0}".format(stats))
+        if on_update_failure != n1ql_op_exception_count or on_update_failure == 0 or n1ql_op_exception_count == 0:
+            self.fail("No n1ql exceptions were found when erlang process was killed on n1ql node while it was"
+                      "processing queries from handler code or stats returned incorrect value")
+        # intentionally added , as it requires some time for eventing-consumers to shutdown
+        self.sleep(30)
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+
+
+
