@@ -52,7 +52,8 @@ INDEX_DEFINITION = {
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
-        self.users_check_restore = self.input.param("users-check-restore", '').replace("ALL", "*").split(";")
+        self.users_check_restore = \
+              self.input.param("users-check-restore", '').replace("ALL", "*").split(";")
         if '' in self.users_check_restore:
             self.users_check_restore.remove('')
         for server in [self.backupset.backup_host, self.backupset.restore_cluster_host]:
@@ -2969,6 +2970,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Restores data ans validates
         6. Ensures that same view is created in restore cluster
         """
+        if "ephemeral" in self.input.param("bucket_type", 'membase'):
+            self.log.info("\n****** view does not support on ephemeral bucket ******")
+            return
         rest_src = RestConnection(self.backupset.cluster_host)
         rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
                           self.servers[1].ip, services=['index', 'kv'])
@@ -3014,17 +3018,40 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         6. Ensures that same gsi index is created in restore cluster
         """
         rest_src = RestConnection(self.backupset.cluster_host)
+        self.cluster_storage_mode = \
+                     rest_src.get_index_settings()["indexer.settings.storage_mode"]
+        self.log.info("index storage mode: {0}".format(self.cluster_storage_mode))
+        #node_services = self.get_nodes_services()
+        self.master_services = self.get_services([self.backupset.cluster_host],
+                                            self.services_init, start_node=0)
         rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
                           self.servers[1].ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
+        self.test_storage_mode = self.cluster_storage_mode
+        if "ephemeral" in self.bucket_type:
+            self.log.info("ephemeral bucket needs to set backup cluster to memopt for gsi.")
+            self.test_storage_mode = "memory_optimized"
+            self._reset_storage_mode(rest_src, self.test_storage_mode)
+            #rest_src = RestConnection(self.backupset.cluster_host)
+            rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                          self.servers[1].ip, services=['kv', 'index'])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
+            rebalance.result()
+            rest_src.create_bucket(bucket='default', ramQuotaMB=int(self.quota) - 1,
+                                   bucketType=self.bucket_type,
+                                   evictionPolicy="noEviction")
+            self.add_built_in_server_user(node=self.backupset.cluster_host)
+
         gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100),
                                 start=0, end=self.num_items)
+        self.buckets = rest_src.get_buckets()
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
 
-        cmd = "cbindex -type create -bucket default -using plasma -index age -fields=age " \
-              " -auth %s:%s" % (self.master.rest_username,
+        cmd = "cbindex -type create -bucket default -using %s -index age -fields=age " \
+              " -auth %s:%s" % (self.test_storage_mode,
+                                self.master.rest_username,
                                 self.master.rest_password)
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
@@ -3034,6 +3061,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if error or "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         self.backup_cluster_validate()
+
         rest_target = RestConnection(self.backupset.restore_cluster_host)
         rest_target.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
@@ -3050,12 +3078,19 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         shell.log_command_output(output, error)
         shell.disconnect()
 
-        if len(output) > 1:
-            self.assertTrue("Index:default/age" in output[1],
-                            "GSI index not created in restore cluster as expected")
-            self.log.info("GSI index created in restore cluster as expected")
-        else:
-            self.fail("GSI index not created in restore cluster as expected")
+        try:
+            if len(output) > 1:
+                self.assertTrue("Index:default/age" in output[1],
+                                "GSI index not created in restore cluster as expected")
+                self.log.info("GSI index created in restore cluster as expected")
+            else:
+                self.fail("GSI index not created in restore cluster as expected")
+        finally:
+            if "ephemeral" in self.bucket_type:
+                self.log.info("reset storage mode back to original")
+                self._reset_storage_mode(rest_src, self.cluster_storage_mode)
+                self._reset_storage_mode(rest_target, self.cluster_storage_mode)
+
 
     def test_backup_merge_restore_with_gsi(self):
         """
