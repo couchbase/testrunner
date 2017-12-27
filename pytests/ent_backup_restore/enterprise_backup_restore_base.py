@@ -19,6 +19,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT
+from testconstants import INDEX_QUOTA
 from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
@@ -507,8 +508,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             rest_helper = RestHelper(rest_conn)
-            ram_size = rest_conn.get_nodes_self().memoryQuota
+            total_mem = rest_conn.get_nodes_self().mcdMemoryReserved
+            ram_size = rest_conn.get_nodes_self().mcdMemoryReserved * 2 / 3
+            has_index_node = False
+            if "index" in self.master_services[0]:
+                has_index_node = True
+                ram_size = int(ram_size) - INDEX_QUOTA
             bucket_size = self._get_bucket_size(ram_size, self.total_buckets)
+
             count = 0
             buckets = []
             for bucket in self.buckets:
@@ -524,18 +531,22 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         bucket_name = bucket.name + "_" + str(count)
                     if self.bucket_type == "ephemeral":
                         self.eviction_policy = "noEviction"
+                        self.log.info("ephemeral bucket needs to set restore cluster"
+                                      "to memopt for gsi.")
+                        self._reset_storage_mode(rest_conn, self.test_storage_mode)
                     rest_conn.create_bucket(bucket=bucket_name,
-                                    ramQuotaMB=bucket_size,
+                                    ramQuotaMB=int(bucket_size) - 1,
                                     authType=bucket.authType if bucket.authType else 'none',
                                     bucketType=self.bucket_type,
                                     proxyPort=bucket.port,
-                                    saslPassword=bucket.saslPassword,
                                     evictionPolicy=self.eviction_policy,
                                     lww=self.lww_new)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket %s not created after 120 seconds."
                                                               % bucket_name)
+                    if has_index_node:
+                        self.sleep(5, "wait for index service ready")
                 buckets.append("%s=%s" % (bucket.name, bucket_name))
                 count +=1
             bucket_maps = ",".join(buckets)
@@ -576,6 +587,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             remote_client.log_command_output(output, error)
         if 'Required Flags:' in res:
             self.fail("Command line failed. Please check test params.")
+        remote_client.disconnect()
         return output, error
 
     def backup_restore_validate(self, compare_uuid=False,
@@ -1091,6 +1103,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     found = True
                     break
         return found
+
+    def _reset_storage_mode(self, rest, storageMode):
+        nodes_in_cluster = rest.get_nodes()
+        for node in nodes_in_cluster:
+            RestConnection(node).force_eject_node()
+        rest.set_indexer_storage_mode(username='Administrator',
+                                          password='password',
+                                          storageMode=storageMode)
+        rest.init_node()
 
 
 class Backupset:

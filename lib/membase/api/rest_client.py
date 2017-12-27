@@ -820,6 +820,7 @@ class RestConnection(object):
             time.sleep(1)
             kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
         info = self.get_nodes_self()
+        kv_quota = int(info.mcdMemoryReserved * 2 / 3)
 
         cb_version = info.version[:5]
         if cb_version in COUCHBASE_FROM_VERSION_4:
@@ -911,6 +912,7 @@ class RestConnection(object):
                                  password='password',
                                  storageMode='plasma'):
         """
+           StorageMode could be plasma or memopt
            From spock, we replace forestdb with plasma
         """
         api = self.baseUrl + 'settings/indexes'
