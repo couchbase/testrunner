@@ -387,9 +387,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
 
     def undeploy_delete_all_functions(self):
-        content=self.rest.get_all_functions()
-        res = json.loads(content)
+        content=self.rest.get_deployed_eventing_apps()
+        res = content.keys()
+        log.info("all keys {}".format(res))
         for a in res:
-            self.rest.undeploy_function(a["appname"])
+            self.rest.undeploy_function(a)
         self.sleep(30)
         self.rest.delete_all_function()
