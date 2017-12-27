@@ -3021,9 +3021,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.cluster_storage_mode = \
                      rest_src.get_index_settings()["indexer.settings.storage_mode"]
         self.log.info("index storage mode: {0}".format(self.cluster_storage_mode))
-        #node_services = self.get_nodes_services()
-        self.master_services = self.get_services([self.backupset.cluster_host],
-                                            self.services_init, start_node=0)
         rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
                           self.servers[1].ip, services=['kv', 'index'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
@@ -3033,7 +3030,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("ephemeral bucket needs to set backup cluster to memopt for gsi.")
             self.test_storage_mode = "memory_optimized"
             self._reset_storage_mode(rest_src, self.test_storage_mode)
-            #rest_src = RestConnection(self.backupset.cluster_host)
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
                           self.servers[1].ip, services=['kv', 'index'])
             rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
