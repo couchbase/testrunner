@@ -213,6 +213,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.skip_consistency = self.input.param("skip_consistency", False)
         self.master_services = self.get_services([self.backupset.cluster_host],
                                             self.services_init, start_node=0)
+        if not self.master_services:
+            self.master_services = ["kv"]
         self.per_node = self.input.param("per_node", True)
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
