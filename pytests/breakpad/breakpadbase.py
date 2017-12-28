@@ -92,7 +92,7 @@ class BreakpadBase(BaseTestCase):
     def mc_pid(self, index):
         pid = None
         node = "n_"+str(index)
-        p = subprocess.Popen(["pgrep", "memcached"],
+        p = subprocess.Popen(["pgrep", "-a", "memcached"],
                                     stdout=subprocess.PIPE)
         rv, err = p.communicate()
         if err is None:
