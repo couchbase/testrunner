@@ -81,8 +81,8 @@ class QueryTests(BaseTestCase):
         self.cluster_ops = self.input.param("cluster_ops",False)
         self.server = self.master
         self.rest = RestConnection(self.server)
-        self.username= self.rest.username
-        self.password= self.rest.password
+        self.username = self.rest.username
+        self.password = self.rest.password
         self.cover = self.input.param("cover", False)
         self.curl_path = "curl"
         self.n1ql_certs_path = "/opt/couchbase/var/lib/couchbase/n1qlcerts"
@@ -203,7 +203,7 @@ class QueryTests(BaseTestCase):
                     bucket_indexes.append(index[0])
                     if index[0] == '#primary':
                         query_response = self.run_cbq_query("SELECT * FROM "+bucket.name)
-                        docs = len(query_response)
+                        docs = len(query_response['results'])
             self.log.info("Bucket: "+bucket.name)
             self.log.info("Indexes: "+str(bucket_indexes))
             self.log.info("Docs: "+str(docs)+"\n")

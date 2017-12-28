@@ -666,8 +666,8 @@ class QueriesIndexTests(QueryTests):
             if os == "windows":
                 number_of_doc = 1680
             else:
-                number_of_doc = 10079
-            self.assertTrue(actual_result['metrics']['resultCount'] == number_of_doc)
+                number_of_doc = 10080
+            self.assertEqual(actual_result['metrics']['resultCount'], number_of_doc)
 
     def test_in_spans(self):
         self.fail_if_no_buckets()
@@ -1217,7 +1217,7 @@ class QueriesIndexTests(QueryTests):
                 if os == "windows":
                     number_of_doc = 1680
                 else:
-                    number_of_doc = 10079
+                    number_of_doc = 10080
                 self.assertEqual(actual_result['metrics']['resultCount'], number_of_doc)
                 self.query = "UPDATE {0} SET s.newField = 'newValue' FOR s IN ARRAY_FLATTEN (ARRAY i.Marketing FOR i IN tasks END, 1) END;".format(bucket.name)
                 actual_result = self.run_cbq_query()
@@ -4035,11 +4035,11 @@ class QueriesIndexTests(QueryTests):
                 result = plan['~children'][0]['scan']['index']
                 self.assertTrue(plan['~children'][0]['#operator'] == 'DistinctScan', "DistinctScan is not being used in and query for 2 array indexes")
                 self.assertTrue(result == idx )
-                self.query = 'delete from %s where any v in join_yr satisfies v=2012 end LIMIT 1'  % (bucket.name)
+                self.query = 'delete from %s where any v in join_yr satisfies v=2012 end LIMIT 1' % (bucket.name)
                 actual_result = self.run_cbq_query()
                 self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-
             finally:
+                self.sleep(5, 'sleep for 5 seconds')
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
