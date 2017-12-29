@@ -22,10 +22,10 @@ class SDKClient(object):
 
     def __init__(self, bucket, hosts = ["localhost"] , scheme = "couchbase",
                  ssl_path = None, uhm_options = None, password=None,
-                 quiet=True, certpath = None, transcoder = None, ipv6="allow"):
+                 quiet=True, certpath = None, transcoder = None, ipv6=False):
         self.connection_string = \
             self._createString(scheme = scheme, bucket = bucket, hosts = hosts,
-                               certpath = certpath, uhm_options = uhm_options, ipv6="ipv6")
+                               certpath = certpath, uhm_options = uhm_options, ipv6=ipv6)
         self.bucket = bucket
         self.password = password
         self.quiet = quiet
@@ -35,14 +35,17 @@ class SDKClient(object):
         couchbase.set_json_converters(json.dumps, json.loads)
 
     def _createString(self, scheme ="couchbase", bucket = None, hosts = ["localhost"], certpath = None,
-                      uhm_options = "", ipv6="allow"):
+                      uhm_options = "", ipv6=False):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ",""))
         # if bucket != None:
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
         if uhm_options != None:
             connection_string = "{0}?{1}".format(connection_string, uhm_options)
-        if ipv6 != None:
-            connection_string = "{0}&ipv6={1}".format(connection_string, ipv6)
+        if ipv6 == True:
+            if "?" in connection_string:
+                connection_string = "{0},ipv6=allow".format(connection_string)
+            else:
+                connection_string = "{0}?ipv6=allow".format(connection_string)
         if scheme == "couchbases":
             if "?" in connection_string:
                 connection_string = "{0},certpath={1}".format(connection_string, certpath)
