@@ -203,7 +203,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -227,7 +227,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -258,7 +258,7 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
         task.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
