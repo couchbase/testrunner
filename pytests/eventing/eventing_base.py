@@ -110,6 +110,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                 skip_stats_validation=False):
         # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
         num_nodes = self.refresh_rest_server()
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         if not skip_stats_validation:
             # we can't rely on DCP_MUTATION stats when doc timers events are set.
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
@@ -151,21 +152,19 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
         if stats_dst["curr_items"] != expected_dcp_mutations:
-            for i in xrange(5):  # See MB-27035
-                self.print_execution_and_failure_stats(name)
-                # This sleep is intentionally added as the the REST API is asynchronous in nature
-                self.sleep(30)  # See MB-26847
+            # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
+            for eventing_node in eventing_nodes:
+                rest_conn = RestConnection(eventing_node)
+                out = rest_conn.get_all_eventing_stats()
+                full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
+                log.info("Stats for Node {0} is {1} ".format(eventing_node.ip, out))
+                log.debug("Full Stats for Node {0} is {1} ".format(eventing_node.ip, full_out))
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
                 "Expected : {1}".format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
-        for i in xrange(3):  # See MB-27035
-            self.print_execution_and_failure_stats(name)
-            self.sleep(30)  # See MB-26847
-        # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         # print all stats from all eventing nodes
         # These are the stats that will be used by ns_server and UI
-        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         for eventing_node in eventing_nodes:
             rest_conn = RestConnection(eventing_node)
             out = rest_conn.get_all_eventing_stats()
@@ -287,10 +286,13 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 count = int(count[0])
             else:
                 count = int(count)
-            shell.disconnect()
             if count > self.panic_count:
                 log.info("===== PANIC OBSERVED IN EVENTING LOGS ON SERVER {0}=====".format(eventing_node.ip))
+                panic_trace, _ = shell.execute_command("zgrep \"{0}\" {1}".
+                                                       format(panic_str, eventing_log))
+                log.info("\n {0}".format(panic_trace))
                 self.panic_count = count
+            shell.disconnect()
 
     def print_execution_and_failure_stats(self,name):
         out_event_execution = self.rest.get_event_execution_stats(name)

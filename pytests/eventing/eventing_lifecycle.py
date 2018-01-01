@@ -80,13 +80,16 @@ class EventingLifeCycle(EventingBaseTest):
     def test_function_pause_resume_in_a_loop_for_bucket_operations(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function
             self.sleep(5, "sleep for some seconds after pausing the function")
             self.resume_function(body)
+        task.result()
+        self.sleep(30)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
@@ -94,13 +97,16 @@ class EventingLifeCycle(EventingBaseTest):
     def test_function_pause_resume_in_a_loop_for_n1ql_operations(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
         self.deploy_function(body)
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function
             self.sleep(5, "sleep for some seconds after pausing the function")
             self.resume_function(body)
+        task.result()
+        self.sleep(30)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
@@ -108,13 +114,16 @@ class EventingLifeCycle(EventingBaseTest):
     def test_function_pause_resume_in_a_loop_for_doc_timers(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function
             self.sleep(5, "sleep for some seconds after pausing the function")
             self.resume_function(body)
+        task.result()
+        self.sleep(30)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
