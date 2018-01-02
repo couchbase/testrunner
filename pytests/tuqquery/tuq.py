@@ -116,7 +116,7 @@ class QueryTests(BaseTestCase):
         if self.cluster_ops == False:
            self.shell.execute_command("killall -9 cbq-engine")
            self.shell.execute_command("killall -9 indexer")
-           self.sleep(20, 'wait for indexer')
+           self.sleep(30, 'wait for indexer')
         self.log.info('-'*100)
         if self.analytics:
             self.setup_analytics()
@@ -202,8 +202,8 @@ class QueryTests(BaseTestCase):
                 if index[1] == bucket.name:
                     bucket_indexes.append(index[0])
                     if index[0] == '#primary':
-                        query_response = self.run_cbq_query("SELECT * FROM "+bucket.name)
-                        docs = len(query_response['results'])
+                        query_response = self.run_cbq_query("SELECT COUNT(*) FROM "+bucket.name)
+                        docs = query_response['results'][0]['$1']
             self.log.info("Bucket: "+bucket.name)
             self.log.info("Indexes: "+str(bucket_indexes))
             self.log.info("Docs: "+str(docs)+"\n")
