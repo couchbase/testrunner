@@ -1,19 +1,30 @@
 from tuq import QueryTests
+from membase.api.exception import CBQError
+
 
 class QuerySubqueryTests(QueryTests):
 
     def setUp(self):
         super(QuerySubqueryTests, self).setUp()
-        self.array_indexing=True
+        self.log.info("==============  QuerySubqueryTests setup has started ==============")
+        self.array_indexing = True
+        self.log.info("==============  QuerySubqueryTests setup has completed ==============")
+        self.log_config_info()
 
     def suite_setUp(self):
         super(QuerySubqueryTests, self).suite_setUp()
+        self.log.info("==============  QuerySubqueryTests suite_setup has started ==============")
+        self.log.info("==============  QuerySubqueryTests suite_setup has completed ==============")
 
     def tearDown(self):
         super(QuerySubqueryTests, self).tearDown()
+        self.log.info("==============  QuerySubqueryTests teardown has started ==============")
+        self.log.info("==============  QuerySubqueryTests teardown has completed ==============")
 
     def suite_tearDown(self):
         super(QuerySubqueryTests, self).suite_tearDown()
+        self.log.info("==============  QuerySubqueryTests suite_teardown has started ==============")
+        self.log.info("==============  QuerySubqueryTests suite_teardown has completed ==============")
 
     def test_constant_expressions(self):
         self.query = 'select a from [] as a'
@@ -100,9 +111,14 @@ class QuerySubqueryTests(QueryTests):
         self.assertTrue(actual_result1['results']== [{u'total': 40, u'id': u'query-testemployee10153.1877827-0'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-1'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-2'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-3'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-4'}])
 
     def test_subquery_letting(self):
-        self.query = 'select meta().id,total from {0} GROUP BY meta().id LETTING total = (SELECT RAW SUM(VMs.memory) FROM default.VMs AS VMs)[0] order by meta().id limit 10'.format('default')
+        self.query = 'select meta().id,total from {0} GROUP BY meta().id LETTING total = COUNT(META().id) order by meta().id limit 3'.format('default')
         actual_result = self.run_cbq_query()
-        self.assertTrue(actual_result['results']==[{u'total': 40, u'id': u'query-testemployee10153.1877827-0'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-1'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-2'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-3'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-4'}, {u'total': 40, u'id': u'query-testemployee10153.1877827-5'}, {u'total': 44, u'id': u'query-testemployee10194.855617-0'}, {u'total': 44, u'id': u'query-testemployee10194.855617-1'}, {u'total': 44, u'id': u'query-testemployee10194.855617-2'}, {u'total': 44, u'id': u'query-testemployee10194.855617-3'}])
+        self.assertEqual(actual_result['results'], [{"id": "query-testemployee10153.1877827-0", "total": 1}, {"id": "query-testemployee10153.1877827-1", "total": 1}, {"id": "query-testemployee10153.1877827-10", "total": 1}])
+        self.query = 'select meta().id,total from {0} GROUP BY meta().id LETTING total = (SELECT RAW SUM(VMs.memory) FROM default.VMs AS VMs)[0] order by meta().id limit 10'.format('default')
+        try:
+            self.run_cbq_query()
+        except CBQError as e:
+            self.assertTrue('Expression must be a group key or aggregate: ((select raw sum((`VMs`.`memory`)) from (`default`.`VMs`) as `VMs`)[0])' in str(e))
 
     def test_update_unset(self):
         self.query = 'UPDATE default a unset name  where "windows" in ( SELECT RAW VMs.os FROM a.VMs) limit 2 returning a.*,meta().id '
