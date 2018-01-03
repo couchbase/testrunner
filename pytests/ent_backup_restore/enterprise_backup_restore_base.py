@@ -537,6 +537,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.eviction_policy = "noEviction"
                         self.log.info("ephemeral bucket needs to set restore cluster"
                                       "to memopt for gsi.")
+                        self.test_storage_mode = rest_conn.get_index_settings()["indexer.settings.storage_mode"]
                         self._reset_storage_mode(rest_conn, self.test_storage_mode)
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=int(bucket_size) - 1,
