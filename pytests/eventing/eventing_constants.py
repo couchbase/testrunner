@@ -27,6 +27,7 @@ class HANDLER_CODE:
     N1QL_TEMP = 'handler_code/n1ql_temp.js'
     N1QL = 'rqg_handler_code/n1ql.js'
     N1QL_TEMP_PATH = 'handler_code/rqg_handler_code/'
+    N1QL_UPDATE_DELETE= 'handler_code/n1ql_update_delete.js'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
