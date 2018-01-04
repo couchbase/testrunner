@@ -215,7 +215,7 @@ class EventingRebalance(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-    def test_kv_swap_rebalance_out_when_existing_eventing_node_is_processing_mutations(self):
+    def test_kv_swap_rebalance_when_existing_eventing_node_is_processing_mutations(self):
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
@@ -503,6 +503,7 @@ class EventingRebalance(EventingBaseTest):
 
     def test_eventing_rebalance_with_multiple_eventing_nodes(self):
         gen_load_del = copy.deepcopy(self.gens_load)
+        gen_load_create = copy.deepcopy(self.gens_load)
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
@@ -545,7 +546,7 @@ class EventingRebalance(EventingBaseTest):
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port,
                                services=["eventing"])
         # load data
-        task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+        task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_create,
                                                  self.buckets[0].kvs[1], 'create')
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_eventing_nodes)
         reached = RestHelper(self.rest).rebalance_reached()
