@@ -308,8 +308,7 @@ class EventingRebalance(EventingBaseTest):
         self.rest.add_node(self.master.rest_username, self.master.rest_password,
                            self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
                            services=[self.services_in])
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
-                                                 [nodes_out_list])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -500,4 +499,59 @@ class EventingRebalance(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_rebalance_with_multiple_eventing_nodes(self):
+        gen_load_del = copy.deepcopy(self.gens_load)
+        sock_batch_size = self.input.param('sock_batch_size', 1)
+        worker_count = self.input.param('worker_count', 3)
+        cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
+        body = self.create_save_function_body(self.function_name, self.handler_code,
+                                              sock_batch_size=sock_batch_size, worker_count=worker_count,
+                                              cpp_worker_thread_count=cpp_worker_thread_count)
+        self.deploy_function(body)
+        # load data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
+        # rebalance in a eventing node when eventing is processing mutations
+        services_in = ["eventing", "eventing"]
+        to_add_nodes = self.servers[self.nodes_init:self.nodes_init + 2]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        task.result()
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # delete json documents
+        task1 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                 self.buckets[0].kvs[1], 'delete')
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        to_remove_nodes = nodes_out_list[0:2]
+        # rebalance out all eventing nodes
+        rebalance1 = self.cluster.async_rebalance(self.servers[:self.nodes_init + 2], [], to_remove_nodes)
+        reached1 = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached1, "rebalance failed, stuck or did not complete")
+        rebalance1.result()
+        task1.result()
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # do a swap rebalance
+        all_eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # add the previously removed nodes as part of swap rebalance
+        for node in to_remove_nodes:
+            self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port,
+                               services=["eventing"])
+        # load data
+        task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                 self.buckets[0].kvs[1], 'create')
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_eventing_nodes)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        task2.result()
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
