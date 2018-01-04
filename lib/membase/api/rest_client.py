@@ -3729,7 +3729,7 @@ class RestConnection(object):
     def create_index_with_rest(self, create_info, username="Administrator", password="password"):
         log.info("CREATE INDEX USING REST WITH PARAMETERS: " + str(create_info))
         authorization = base64.encodestring('%s:%s' % (username, password))
-        api = self.index_baseUrl + 'api/indexes?create=true'
+        api = self.index_baseUrl + 'internal/indexes?create=true'
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(create_info).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
         status, content, header = self._http_request(api, 'POST', headers=headers,
@@ -3740,7 +3740,7 @@ class RestConnection(object):
 
     def build_index_with_rest(self, id, username="Administrator", password="password"):
         authorization = base64.encodestring('%s:%s' % (username, password))
-        api = self.index_baseUrl + 'api/indexes?build=true'
+        api = self.index_baseUrl + 'internal/indexes?build=true'
         build_info = {'ids': [id]}
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'PUT', headers=headers,
@@ -3751,7 +3751,7 @@ class RestConnection(object):
 
     def drop_index_with_rest(self, id, username="Administrator", password="password"):
         authorization = base64.encodestring('%s:%s' % (username, password))
-        url = 'api/index/{0}'.format(id)
+        url = 'internal/index/{0}'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
@@ -3760,7 +3760,7 @@ class RestConnection(object):
 
     def get_all_indexes_with_rest(self, username="Administrator", password="password"):
         authorization = base64.encodestring('%s:%s' % (username, password))
-        url = 'api/indexes'
+        url = 'internal/indexes'
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
@@ -3770,7 +3770,7 @@ class RestConnection(object):
 
     def lookup_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
         authorization = base64.encodestring('%s:%s' % (username, password))
-        url = 'api/index/{0}?lookup=true'.format(id)
+        url = 'internal/index/{0}?lookup=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
@@ -3784,7 +3784,7 @@ class RestConnection(object):
         if "limit" not in body.keys():
             body["limit"] = 900000
         authorization = base64.encodestring('%s:%s' % (username, password))
-        url = 'api/index/{0}?scanall=true'.format(id)
+        url = 'internal/index/{0}?scanall=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
@@ -3801,7 +3801,7 @@ class RestConnection(object):
         if "limit" not in body.keys():
             body["limit"] = 300000
         authorization = base64.encodestring('%s:%s' % (username, password))
-        url = 'api/index/{0}?range=true'.format(id)
+        url = 'internal/index/{0}?range=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Content-type': 'application/json',
                    'Authorization': 'Basic %s' % authorization}
@@ -3820,7 +3820,7 @@ class RestConnection(object):
 
     def multiscan_for_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
         authorization = base64.encodestring('%s:%s' % (username, password))
-        url = 'api/index/{0}?multiscan=true'.format(id)
+        url = 'internal/index/{0}?multiscan=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(body).replace('\'', '"').replace(
@@ -3843,7 +3843,7 @@ class RestConnection(object):
 
     def multiscan_count_for_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
         authorization = base64.encodestring('%s:%s' % (username, password))
-        url = 'api/index/{0}?multiscancount=true'.format(id)
+        url = 'internal/index/{0}?multiscancount=true'.format(id)
         api = self.index_baseUrl + url
         headers = {'Accept': 'application/json','Authorization': 'Basic %s' % authorization}
         count_cmd_body = body.replace('\'', '"').replace('True', 'true').replace('False', 'false')
