@@ -556,3 +556,43 @@ class EventingRebalance(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_eventing_rebalance_with_multiple_functions_deployed(self):
+        nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        # Create one extra bucket for second function
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=500)
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
+                                            bucket_params=bucket_params)
+        # deploy the first function
+        body = self.create_save_function_body(self.function_name,
+                                              HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # deploy the second function
+        body1 = self.create_save_function_body(self.function_name + "_1",
+                                               HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER_WITH_SECOND_BUCKET,
+                                               worker_count=3)
+        # this is required to deploy multiple functions at the same time
+        del body1['depcfg']['buckets'][0]
+        body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        self.deploy_function(body1)
+        # do a swap rebalance
+        self.rest.add_node(self.master.rest_username, self.master.rest_password,
+                           self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
+                           services=["eventing"])
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        task.result()
+        # Wait for eventing to catch up with all the create mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.dst_bucket_name = self.dst_bucket_name1
+        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 2016, doc_timer_events=True)
+        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body1)

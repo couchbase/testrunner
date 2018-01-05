@@ -73,7 +73,7 @@ class EventingConcurrency(EventingBaseTest):
     def test_multiple_functions_at_the_same_time(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        # deploy the firs function
+        # deploy the first function
         body = self.create_save_function_body(self.function_name,
                                               HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
                                               worker_count=3)
