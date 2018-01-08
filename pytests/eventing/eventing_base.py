@@ -396,3 +396,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             self.rest.undeploy_function(a)
         self.sleep(30)
         self.rest.delete_all_function()
+
+    def change_time_zone(self,server,timezone="UTC"):
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.execute_command("timedatectl set-timezone "+timezone)
+        remote_client.disconnect()

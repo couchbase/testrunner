@@ -286,3 +286,41 @@ class EventingRecovery(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_eventing_n1ql_in_different_time_zone(self):
+        try:
+            eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+            self.change_time_zone(eventing_node, timezone="Asia/Kolkata")
+            kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+            self.change_time_zone(kv_node, timezone="America/Los_Angeles")
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the update mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)
+        finally:
+            self.change_time_zone(eventing_node, timezone="UTC")
+            self.change_time_zone(kv_node,timezone="UTC")
+
+
+    def test_time_drift_between_kv_eventing(self):
+        try:
+            kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+            self.change_time_zone(kv_node, timezone="America/Los_Angeles")
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the update mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)
+        finally:
+            self.change_time_zone(kv_node,timezone="UTC")
