@@ -1,3 +1,5 @@
+import copy
+
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
@@ -77,7 +79,7 @@ class EventingBucket(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name,
-                                     total_items,   # Since it will only delete the items created by eventing
+                                     total_items,  # Since it will only delete the items created by eventing
                                      skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
@@ -164,6 +166,7 @@ class EventingBucket(EventingBaseTest):
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
     def test_bucket_compaction_when_eventing_is_processing_mutations(self):
+        gen_load_copy = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
         self.deploy_function(body)
         # load some data
@@ -171,8 +174,13 @@ class EventingBucket(EventingBaseTest):
                   batch_size=self.batch_size)
         # start compacting source, metadata and destination buckets
         self.bucket_compaction()
+        # load some data on metadata bucket while eventing is processing mutations
+        # metadata bucket can be used for other purposes as well
+        task = self.cluster.async_load_gen_docs(self.master, self.metadata_bucket_name, gen_load_copy,
+                                                self.buckets[0].kvs[1], "create")
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        task.result()
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -181,5 +189,3 @@ class EventingBucket(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
-
-

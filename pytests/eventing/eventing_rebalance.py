@@ -474,12 +474,12 @@ class EventingRebalance(EventingBaseTest):
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create')
         # rebalance out a eventing node when eventing is processing mutations
-        nodes_out_ev = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        nodes_out_ev = self.servers[1]
         if enable_failover:
             self.cluster.failover([self.master], failover_nodes=[nodes_out_ev])
         for i in xrange(5):
             # start eventing node rebalance
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+            self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(30))
             if not RestHelper(self.rest).is_cluster_rebalanced():
