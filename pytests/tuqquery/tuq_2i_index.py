@@ -2026,18 +2026,27 @@ class QueriesIndexTests(QueryTests):
 
     #Test for MB-25590-Unnest Scan considers wrong array index
     def test_unnest_singlefield_array_index(self):
-        self.query = "create index ix300 on default (VMs)"
-        self.run_cbq_query()
-        self.query = 'explain SELECT v.os FROM default USE index (ix300) UNNEST default.VMs AS v WHERE  v.os = "centos"'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue("ix300" in str(plan))
-        self.assertTrue("covers" in str(plan))
-        self.query = 'SELECT v.os FROM default USE index (ix300) UNNEST default.VMs AS v WHERE  v.os = "centos"'
-        actual_result = self.run_cbq_query()
-        self.query = 'SELECT v.os FROM default USE index (`#primary`) UNNEST default.VMs AS v WHERE  v.os = "centos"'
-        expected_result = self.run_cbq_query()
-        self.assertEqual(sorted(actual_result['results']),sorted(expected_result['results']))
+        self.fail_if_no_buckets()
+        created_indexes = []
+        try:
+            self.query = "create index ix300 on default (VMs)"
+            self.run_cbq_query()
+            created_indexes.append("ix300")
+            self.query = 'explain SELECT v.os FROM default USE index (ix300) UNNEST default.VMs AS v WHERE  v.os = "centos"'
+            actual_result = self.run_cbq_query()
+            plan = self.ExplainPlanHelper(actual_result)
+            self.assertTrue("ix300" in str(plan))
+            self.assertTrue("covers" in str(plan))
+            self.query = 'SELECT v.os FROM default USE index (ix300) UNNEST default.VMs AS v WHERE  v.os = "centos"'
+            actual_result = self.run_cbq_query()
+            self.query = 'SELECT v.os FROM default USE index (`#primary`) UNNEST default.VMs AS v WHERE  v.os = "centos"'
+            expected_result = self.run_cbq_query()
+            self.assertEqual(sorted(actual_result['results']),sorted(expected_result['results']))
+        finally:
+            for idx in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
+                actual_result = self.run_cbq_query()
+                self._verify_results(actual_result['results'], [])
 
     def test_simple_unnest_index_covering(self):
         self.fail_if_no_buckets()

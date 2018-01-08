@@ -1431,7 +1431,7 @@ class QuerySanityTests(QueryTests):
 
         self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi" limit 2'
         res =self.run_cbq_query()
-        self.assertTrue(res['results'] == [{u'name1': u'employeefi'}, {u'name1': u'employeefi'}])
+        self.assertEqual(res['results'], [{u'name1': u'employeefi'}, {u'name1': u'employeefi'}])
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4"'
         res =self.run_cbq_query()
         plan = self.ExplainPlanHelper(res)
