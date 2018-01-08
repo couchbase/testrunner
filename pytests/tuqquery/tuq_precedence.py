@@ -1,20 +1,31 @@
 import math
 from tuqquery.tuq import QueryTests
 
+
 class PrecedenceTests(QueryTests):
     def setUp(self):
         super(PrecedenceTests, self).setUp()
+        self.log.info("==============  PrecedenceTests setup has started ==============")
+        self.log.info("==============  PrecedenceTests setup has completed ==============")
+        self.log_config_info()
 
     def suite_setUp(self):
         super(PrecedenceTests, self).suite_setUp()
+        self.log.info("==============  PrecedenceTests suite_setup has started ==============")
+        self.log.info("==============  PrecedenceTests suite_setup has completed ==============")
 
     def tearDown(self):
+        self.log.info("==============  PrecedenceTests teardown has started ==============")
+        self.log.info("==============  PrecedenceTests teardown has completed ==============")
         super(PrecedenceTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.log.info("==============  PrecedenceTests suite_teardown has started ==============")
+        self.log.info("==============  PrecedenceTests suite_teardown has completed ==============")
         super(PrecedenceTests, self).suite_tearDown()
 
     def test_case_and_like(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" +\
             " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN" % (bucket.name) +\
