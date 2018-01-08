@@ -530,6 +530,7 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self.index_type = index_type
+        self.index_storage_type = TestInputSingleton.input.param("index_type", None)
         self.num_pindexes = 0
         self.index_definition = {
             "type": "fulltext-index",
@@ -584,6 +585,9 @@ class FTSIndex:
             "kvStoreName": "mossStore",
             "mossStoreOptions": {}
         }
+
+        if self.index_storage_type :
+            self.index_definition['params']['store']['indexType'] =  self.index_storage_type
 
         if TestInputSingleton.input.param("level_compaction", None):
             self.index_definition['params']['store']['mossStoreOptions']= {
