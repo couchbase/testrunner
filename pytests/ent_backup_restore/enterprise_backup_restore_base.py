@@ -19,7 +19,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT
-from testconstants import INDEX_QUOTA
+from testconstants import INDEX_QUOTA, FTS_QUOTA
 from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
@@ -518,6 +518,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if "index" in self.master_services[0]:
                 has_index_node = True
                 ram_size = int(ram_size) - INDEX_QUOTA
+            if "fts" in self.master_services[0]:
+                ram_size = int(ram_size) - FTS_QUOTA
             bucket_size = self._get_bucket_size(ram_size, self.total_buckets)
 
             count = 0
@@ -537,8 +539,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.eviction_policy = "noEviction"
                         self.log.info("ephemeral bucket needs to set restore cluster "
                                       "to memopt for gsi.")
-                        self.test_storage_mode = rest_conn.get_index_settings()["indexer.settings.storage_mode"]
+                        self.test_storage_mode = "memory_optimized"
                         self._reset_storage_mode(rest_conn, self.test_storage_mode)
+
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=int(bucket_size) - 1,
                                     authType=bucket.authType if bucket.authType else 'none',
