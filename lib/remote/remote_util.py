@@ -1981,9 +1981,14 @@ class RemoteMachineShellConnection:
 
         log.info('******start install_server_win ********')
         if windows_msi:
-            output, error = self.execute_command("cd /cygdrive/c/tmp;"
-                                                 "msiexec /i {0}.msi /qn "\
-                                                .format(version))
+            if enable_ipv6:
+                output, error = self.execute_command("cd /cygdrive/c/tmp;"
+                                                 "msiexec /i {0}.msi USE_IPV6=true /qn "\
+                                                    .format(version))
+            else:
+                output, error = self.execute_command("cd /cygdrive/c/tmp;"
+                                                     "msiexec /i {0}.msi /qn " \
+                                                     .format(version))
             self.log_command_output(output, error)
             if fts_query_limit:
                 self.set_fts_query_limit_win(
