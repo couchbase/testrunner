@@ -317,6 +317,69 @@ class QueryTests(BaseTestCase):
         results = self.run_cbq_query()
         return results['results'][0]['$1']
 
+    def log_config_info(self):
+        self.log.info("==============  System Config: ==============\n")
+        current_indexes = []
+        try:
+            query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+            current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                frozenset([key.replace('`', '').replace('(', '').replace(')', '')
+                                           for key in i['indexes']['index_key']]),
+                                i['indexes']['state'],
+                                i['indexes']['using']) for i in query_response['results']]
+        except Exception as e:
+            pass
+
+        for bucket in self.buckets:
+            docs = 0
+            bucket_indexes = []
+            for index in current_indexes:
+                if index[1] == bucket.name:
+                    bucket_indexes.append(index[0])
+                    if index[0] == '#primary':
+                        query_response = self.run_cbq_query("SELECT COUNT(*) FROM "+bucket.name)
+                        docs = query_response['results'][0]['$1']
+            self.log.info("Bucket: "+bucket.name)
+            self.log.info("Indexes: "+str(bucket_indexes))
+            self.log.info("Docs: "+str(docs)+"\n")
+        self.log.info("=============================================")
+
+    def fail_if_no_buckets(self):
+        buckets = False
+        for a_bucket in self.buckets:
+            buckets = True
+        if not buckets:
+            self.fail('FAIL: This test requires buckets')
+
+    def ExplainPlanHelper(self, res):
+        try:
+            rv = res["results"][0]["plan"]
+        except:
+            rv = res["results"][0]
+        return rv
+
+    def check_explain_covering_index(self,index):
+        for bucket in self.buckets:
+            res = self.run_cbq_query()
+            s = pprint.pformat( res, indent=4 )
+            if index in s:
+                self.log.info("correct index used in json result ")
+            else:
+                self.log.error("correct index not used in json result ")
+                self.fail("correct index not used in json result ")
+            if 'covers' in s:
+                self.log.info("covers key present in json result ")
+            else:
+                self.log.error("covers key missing from json result ")
+                self.fail("covers key missing from json result ")
+            if 'cover' in s:
+                self.log.info("cover keyword present in json children ")
+            else:
+                self.log.error("cover keyword missing from json children ")
+                self.fail("cover keyword missing from json children ")
+            if 'IntersectScan' in s:
+                self.log.error("This is a covered query, Intersect scan should not be used")
 
 ##############################################################################################
 #
@@ -1661,8 +1724,8 @@ class QueryTests(BaseTestCase):
             self.assertTrue( "u'x1': {u'name': 1}" in str(actual_result['results']))
 
     def test_let_missing(self):
-      created_indexes = []
-      try:
+        created_indexes = []
+        try:
             self.query = 'CREATE INDEX ix1 on default(x1)'
             self.run_cbq_query()
             created_indexes.append("ix1")
@@ -1679,11 +1742,10 @@ class QueryTests(BaseTestCase):
                     self.fail("There was no errors.")
             self.query = 'delete from default use keys["k01","k02"]'
             self.run_cbq_query()
-      finally:
+        finally:
             for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
                     actual_result = self.run_cbq_query()
-
 
     def test_optimized_let(self):
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
