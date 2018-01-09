@@ -3357,12 +3357,14 @@ class XDCRNewBaseTest(unittest.TestCase):
                     finally:
                         rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications(), skip=skip_verify_revid)
                         # we're done with the test, now report specific errors
+                        # following errors are important only if there is a rev id mismatch
+                        # if revids matched then these errors can be ignored
                         if (not(src_active_passed and dest_active_passed)) and \
-                            (not(src_dcp_queue_drained and dest_dcp_queue_drained)):
+                            (not(src_dcp_queue_drained and dest_dcp_queue_drained)) and rev_err_count:
                             self.fail("Incomplete replication: Keys stuck in dcp queue")
-                        if not (src_active_passed and dest_active_passed):
+                        if not (src_active_passed and dest_active_passed) and rev_err_count:
                             self.fail("Incomplete replication: Active key count is incorrect")
-                        if not (src_replica_passed and dest_replica_passed):
+                        if not (src_replica_passed and dest_replica_passed) and rev_err_count:
                             self.fail("Incomplete intra-cluster replication: "
                                       "replica count did not match active count")
                         if rev_err_count > 0:
