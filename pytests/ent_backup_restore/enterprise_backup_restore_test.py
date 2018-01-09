@@ -1153,7 +1153,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             curl_path = ""
             if self.os_name == "windows":
                 curl_path = self.cli_command_location
-            cmd = "%scurl%s -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s" \
+            cmd = "%scurl%s -g -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s" \
                   % (curl_path,
                      self.cmd_ext,
                      "DELETE",
@@ -1291,7 +1291,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             curl_path = ""
             if self.os_name == "windows":
                 curl_path = self.cli_command_location
-            cmd = "%scurl%s -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s" \
+            cmd = "%scurl%s -g -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s" \
                   % (curl_path,
                      self.cmd_ext,
                      "DELETE",
