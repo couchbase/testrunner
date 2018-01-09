@@ -118,7 +118,8 @@ class EventingRebalance(EventingBaseTest):
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
-        # rebalance out all eventing nodes
+        # Fail over all eventing nodes and rebalance them out
+        self.cluster.failover([self.master], failover_nodes=nodes_out_list, graceful=False)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -179,7 +180,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -206,7 +207,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -235,7 +236,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -591,8 +592,72 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
         task.result()
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.dst_bucket_name = self.dst_bucket_name1
-        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
+
+    def test_memcache_crash_on_kv_and_eventing_node_during_eventing_rebalance(self):
+        gen_load_del = copy.deepcopy(self.gens_load)
+        kv_node = self.servers[1]
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create')
+            # rebalance in a eventing node when eventing is processing mutations
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # kill memcached on kv and eventing when eventing is processing mutations
+            for node in [kv_node, eventing_node]:
+                self.kill_memcached_service(node)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("rebalance failed as expected after memcached got killed: {0}".format(str(ex)))
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_erl_crash_on_kv_and_eventing_node_during_eventing_rebalance(self):
+        gen_load_del = copy.deepcopy(self.gens_load)
+        kv_node = self.servers[1]
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create')
+            # rebalance in a eventing node when eventing is processing mutations
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # kill memcached on kv and eventing when eventing is processing mutations
+            for node in [kv_node, eventing_node]:
+                self.kill_erlang_service(node)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("rebalance failed as expected after erlang got killed: {0}".format(str(ex)))
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
