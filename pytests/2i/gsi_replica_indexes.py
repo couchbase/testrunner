@@ -45,6 +45,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.rand = random.randint(1, 1000000000)
         self.expected_nodes = self.input.param("expected_nodes", None)
         self.failure_in_node = self.input.param("failure_in_node", None)
+        self.alter_index = self.input.param("alter_index",None)
 
     def tearDown(self):
         super(GSIReplicaIndexesTests, self).tearDown()
@@ -1947,27 +1948,28 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
                                                     len(nodes) - 1, nodes)
-
         dest_nodes = self._get_node_list(self.dest_node)
         self.log.info(dest_nodes)
         expect_failure = False
         if self.expected_err_msg:
             expect_failure = True
+
+
         output, error = self._cbindex_move(src_node=self.servers[0],
-                                           node_list=dest_nodes,
-                                           index_list=index_name_prefix,
-                                           expect_failure=expect_failure)
+                                       node_list=dest_nodes,
+                                       index_list=index_name_prefix,
+                                       expect_failure=expect_failure,
+                                           alter_index=self.alter_index)
         self.sleep(30)
         if self.expected_err_msg:
-            if self.expected_err_msg not in error[0]:
-                self.fail("Move index failed with unexpected error")
+          if self.expected_err_msg not in error[0]:
+            self.fail("Move index failed with unexpected error")
         else:
-            # self.wait_for_cbindex_move_cmd_to_complete(self.servers[self.dest_node], 1)
-            index_map = self.get_index_map()
-            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
-                                                    index_map,
-                                                    len(dest_nodes) - 1,
-                                                    dest_nodes)
+          index_map = self.get_index_map()
+          self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                index_map,
+                                                len(dest_nodes) - 1,
+                                                dest_nodes)
 
     def test_move_index_failed_node(self):
         node_out = self.servers[self.node_out]
@@ -2008,18 +2010,18 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         expect_failure = False
         if self.expected_err_msg:
             expect_failure = True
+
         output, error = self._cbindex_move(src_node=self.servers[0],
                                            node_list=dest_nodes,
                                            index_list=index_name_prefix,
-                                           expect_failure=expect_failure)
+                                           expect_failure=expect_failure, alter_index=self.alter_index)
         self.sleep(30)
         if self.expected_err_msg:
             if self.expected_err_msg not in error[0]:
-                self.fail("Move index failed with unexpected error")
-        else:
-            # self.wait_for_cbindex_move_cmd_to_complete(self.servers[self.dest_node], 1)
-            index_map = self.get_index_map()
-            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+               self.fail("Move index failed with unexpected error")
+            else:
+               index_map = self.get_index_map()
+               self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
                                                     len(dest_nodes) - 1,
                                                     dest_nodes)
@@ -2060,7 +2062,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             expect_failure = True
 
         threads = []
-        threads.append(
+        if self.alter_index:
+            alter_index_query = 'ALTER INDEX default.' + index_name_prefix + ' WITH {{"action":"move","nodes": ["{0}","{1}"]}}'.format(
+            dest_nodes[0],dest_nodes[1])
+            threads.append(
+            Thread(target=self.n1ql_helper.run_cbq_query(query=alter_index_query,server=self.n1ql_node), name="alter_index",
+                   args=(self.servers[0], dest_nodes, index_name_prefix,
+                         expect_failure)))
+        else:
+            threads.append(
             Thread(target=self._cbindex_move, name="move_index",
                    args=(self.servers[0], dest_nodes, index_name_prefix,
                          expect_failure)))
@@ -3146,24 +3156,40 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
     def _cbindex_move(self, src_node, node_list, index_list,
                       expect_failure=False, bucket="default",
-                      username="Administrator", password="password"):
+                      username="Administrator", password="password",
+                      alter_index=False):
         node_list = str(node_list).replace("\'", "\"")
         src_node_ip = src_node.ip + ":" + src_node.port
-        cmd = """cbindex -type move -server '{0}' -auth '{4}:{5}' -index '{1}' -bucket {2} -with '{{"nodes":{3}}}'""".format(
-            src_node_ip,
-            index_list,
-            bucket,
-            str(node_list),
-            username,
-            password)
-        self.log.info(cmd)
-        remote_client = RemoteMachineShellConnection(src_node)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        output = None
+        error = []
+
+        if alter_index:
+            alter_index_query = 'ALTER INDEX default.' + index_list + ' WITH {{"action":"move","nodes": {0}}}'.format(
+                node_list)
+            try:
+                self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
+            except Exception, ex:
+                output=""
+                error.append(str(ex))
+        else:
+            cmd = """cbindex -type move -server '{0}' -auth '{4}:{5}' -index '{1}' -bucket {2} -with '{{"nodes":{3}}}'""".format(
+                src_node_ip,
+                index_list,
+                bucket,
+                str(node_list),
+                username,
+                password)
+            self.log.info(cmd)
+            remote_client = RemoteMachineShellConnection(src_node)
+            command = "{0}/{1}".format(self.cli_command_location, cmd)
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+
         if error:
             if expect_failure:
                 self.log.info("cbindex move failed as expected")
+                self.log.info("Output : %s", output)
+                self.log.info("Error : %s", error)
             else:
                 self.log.info("Output : %s", output)
                 self.log.info("Error : %s", error)
