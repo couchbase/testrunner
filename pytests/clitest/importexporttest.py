@@ -772,6 +772,11 @@ class ImportExportTests(CliBaseTest):
     def _common_imex_test(self, cmd, options):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
+        if password:
+            if "hash" in password:
+                password = password.replace("hash", "#")
+            if "bang" in password:
+                password = password.replace("bang", "!")
         path = self.input.param("path", None)
         self.pre_imex_ops_keys = 0
         self.short_flag = self.input.param("short_flag", True)

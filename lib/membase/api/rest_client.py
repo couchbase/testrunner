@@ -280,6 +280,7 @@ class RestConnection(object):
             self.query_port = 8093
             self.eventing_port = 8096
             self.services = "kv"
+            self.debug_logs = False
             if hasattr(serverInfo, "services"):
                 self.services = serverInfo.services
             if hasattr(serverInfo, 'index_port'):
@@ -302,6 +303,7 @@ class RestConnection(object):
             """ from watson, services param order and format:
                 new_services=fts-kv-index-n1ql """
             self.services_node_init = self.input.param("new_services", None)
+            self.debug_logs = self.input.param("debug-logs", False)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
@@ -372,8 +374,9 @@ class RestConnection(object):
             log.warn('Exception while streaming: %s' % str(ex))
 
     def open_sasl_streaming_connection(self, bucket, timeout=1000):
-        log.info("Opening sasl streaming connection for bucket %s" %
-                 (bucket, bucket.name)[isinstance(bucket, Bucket)])
+        if self.debug_logs:
+            log.info("Opening sasl streaming connection for bucket {0}"\
+                 .format((bucket, bucket.name)[isinstance(bucket, Bucket)]))
         t = Thread(target=self.sasl_streaming_rq,
                           name="streaming_" + str(uuid.uuid4())[:4],
                           args=(bucket, timeout))
