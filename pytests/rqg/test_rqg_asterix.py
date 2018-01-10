@@ -102,7 +102,7 @@ class RQGASTERIXTests(BaseTestCase):
         f.write(data)
         f.close()
         url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
-        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url
+        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
         os.remove(filename)
 
@@ -230,7 +230,7 @@ class RQGASTERIXTests(BaseTestCase):
         for bucket in self.buckets:
             bucket_username = "cbadminbucket"
             bucket_password = "password"
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(
+            data += 'create bucket {0} with {{"bucket":"{0}"}} ;'.format(
                 bucket.name, self.master.ip)
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,
                                                                 bucket.name + "_shadow")
@@ -241,7 +241,7 @@ class RQGASTERIXTests(BaseTestCase):
         f.write(data)
         f.close()
         url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
-        cmd = 'curl -s --data pretty=true --data format=CLEAN_JSON --data-urlencode "statement@file.txt" ' + url
+        cmd = 'curl -s --data pretty=true --data format=CLEAN_JSON --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
         os.remove(filename)
 
