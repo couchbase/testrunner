@@ -245,6 +245,46 @@ class RbacN1QL(QueryTests):
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Drop Query executed successfully")
 
+    def test_create_alter_index(self):
+        self.create_users()
+        self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI WITH {\"nodes\":\"%s\"}'" % \
+              (self.curl_path, self.master.rest_username, self.master.rest_password,
+               self.master.ip, self.buckets[0].name,self.master.ip+":"+self.master.port)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        if "views_admin" in self.roles[0]['roles']:
+            self.assertTrue(any("success" not in line for line in output),
+                            "Able to create index on {0} as user {1}".
+                            format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Create Query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output),
+                            "Unable to create index on {0} as user {1}".
+                            format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Create Query executed successfully")
+        cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=ALTER INDEX %s.`age-index` WITH {\"action\":\"move\", \"nodes\":\"%s\"}'" % \
+              (self.curl_path, self.users[0]['id'], self.users[0]['password'],
+               self.master.ip, self.buckets[0].name,self.servers[1].ip+":"+self.servers[1].port)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        valid_roles = ["admin","bucket_admin","views_admin","query_manage_index"]
+        role_list = self.roles[0]['roles']
+        if any((True for x in valid_roles if x in role_list)):
+            self.assertTrue(any("success" not in line for line in output),
+                            "Able to alter index on {0} as user {1}".
+                            format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Alter Query failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output),
+                            "Unable to alter index on {0} as user {1}".
+                            format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Alter Query executed successfully")
+
 
     def test_grant_role(self):
         self.create_users()
