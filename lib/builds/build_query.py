@@ -337,7 +337,10 @@ class BuildQuery(object):
                             else:
                                 os_name = "centos6"
                         elif "suse" in os_version.lower():
-                            os_name = "suse11"
+                            if "11" in os_version.lower():
+                                os_name = "suse11"
+                            elif "12" in os_version.lower():
+                                os_name = "suse12"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
                         else:
@@ -389,7 +392,10 @@ class BuildQuery(object):
                             else:
                                 os_name = "centos6"
                         elif "suse" in os_version.lower():
-                            os_name = "suse11"
+                            if "11" in os_version.lower():
+                                os_name = "suse11"
+                            elif "12" in os_version.lower():
+                                os_name = "suse12"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
                         else:
