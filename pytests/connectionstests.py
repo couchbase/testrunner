@@ -64,6 +64,7 @@ class ConnectionTests(BaseTestCase):
             servs_in = self.servers[1:servers_in + 1]
             rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         try:
+            self.log.info("**** Start opening sasl streaming connection ***")
             for i in xrange(num_connections):
                 rest = RestConnection(self.master)
                 t = rest.open_sasl_streaming_connection(self.buckets[0])
