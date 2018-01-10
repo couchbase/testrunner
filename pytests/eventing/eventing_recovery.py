@@ -233,7 +233,6 @@ class EventingRecovery(EventingBaseTest):
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
-
     def test_killing_memcached_on_n1ql_when_eventing_is_processing_mutations(self):
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
@@ -260,7 +259,6 @@ class EventingRecovery(EventingBaseTest):
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
-
 
     def test_network_partitioning_eventing_node_with_n1ql_when_its_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
@@ -295,7 +293,8 @@ class EventingRecovery(EventingBaseTest):
             self.change_time_zone(kv_node, timezone="America/Los_Angeles")
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
-            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                                  worker_count=3)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -305,8 +304,7 @@ class EventingRecovery(EventingBaseTest):
             self.undeploy_and_delete_function(body)
         finally:
             self.change_time_zone(eventing_node, timezone="UTC")
-            self.change_time_zone(kv_node,timezone="UTC")
-
+            self.change_time_zone(kv_node, timezone="UTC")
 
     def test_time_drift_between_kv_eventing(self):
         try:
@@ -314,7 +312,8 @@ class EventingRecovery(EventingBaseTest):
             self.change_time_zone(kv_node, timezone="America/Los_Angeles")
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
-            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                                  worker_count=3)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -323,4 +322,4 @@ class EventingRecovery(EventingBaseTest):
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
         finally:
-            self.change_time_zone(kv_node,timezone="UTC")
+            self.change_time_zone(kv_node, timezone="UTC")
