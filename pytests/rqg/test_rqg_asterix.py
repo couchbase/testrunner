@@ -92,6 +92,8 @@ class RQGASTERIXTests(BaseTestCase):
 
     def tearDown(self):
         super(RQGASTERIXTests, self).tearDown()
+        bucket_username = "cbadminbucket"
+        bucket_password = "password"
         data = 'use Default ;' + "\n"
         for bucket in self.buckets:
                 data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
