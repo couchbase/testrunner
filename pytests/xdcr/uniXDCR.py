@@ -659,10 +659,10 @@ class unidirectional(XDCRNewBaseTest):
         for node in self.src_cluster.get_nodes():
             count = NodeHelper.check_goxdcr_log(
                             node,
-                            "batchGetMeta timed out",
+                            "batchGetMeta received fatal error and had to abort",
                             goxdcr_log)
-            self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
-            self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
+            self.assertEqual(count, 0, "batchGetMeta error message found in " + str(node.ip))
+            self.log.info("batchGetMeta error message not found in " + str(node.ip))
 
         self.verify_results()
 
@@ -679,10 +679,10 @@ class unidirectional(XDCRNewBaseTest):
         for node in self.src_cluster.get_nodes():
             count = NodeHelper.check_goxdcr_log(
                             node,
-                            "batchGetMeta timed out",
+                            "batchGetMeta received fatal error and had to abort",
                             goxdcr_log)
-            self.assertEqual(count, 0, "batchGetMeta timed out error message found in " + str(node.ip))
-            self.log.info("batchGetMeta timed out error message not found in " + str(node.ip))
+            self.assertEqual(count, 0, "batchGetMeta error message found in " + str(node.ip))
+            self.log.info("batchGetMeta error message not found in " + str(node.ip))
 
         self.verify_results()
 
@@ -879,6 +879,8 @@ class unidirectional(XDCRNewBaseTest):
             self.src_cluster.pause_all_replications()
             self.sleep(30)
             self.src_cluster.resume_all_replications()
+
+            self.sleep(self._wait_timeout)
 
             output, error = conn.execute_command("netstat -an | grep " + self.src_cluster.get_master_node().ip
                                                  + ":11210 | wc -l")
