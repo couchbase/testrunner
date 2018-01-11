@@ -107,10 +107,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
-                                skip_stats_validation=False):
+                                skip_stats_validation=False, bucket=None):
         # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
         num_nodes = self.refresh_rest_server()
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        if bucket is None:
+            bucket=self.dst_bucket_name
         if not skip_stats_validation:
             # we can't rely on DCP_MUTATION stats when doc timers events are set.
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
@@ -146,11 +148,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                                                                                       ))
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
-        stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+        stats_dst = self.rest.get_bucket_stats(bucket)
         while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
             self.sleep(30, message="Waiting for handler code to complete all bucket operations...")
             count += 1
-            stats_dst = self.rest.get_bucket_stats(bucket=self.dst_bucket_name)
+            stats_dst = self.rest.get_bucket_stats(bucket)
         if stats_dst["curr_items"] != expected_dcp_mutations:
             # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
             for eventing_node in eventing_nodes:

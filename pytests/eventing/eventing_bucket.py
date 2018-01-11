@@ -2,6 +2,7 @@ import copy
 
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
+from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
@@ -189,3 +190,36 @@ class EventingBucket(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_source_and_destination_bucket_interchanged(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        values = ['1', '10']
+        gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=2016 * self.docs_per_day)
+        gen_load_non_json_del = copy.deepcopy(gen_load_non_json)
+        self.cluster.load_gen_docs(self.master, "dst_bucket", gen_load_non_json, self.buckets[0].kvs[1],
+                                   'create')
+        # deploy the first function
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
+        self.deploy_function(body)
+        # deploy the second function
+        body1 = self.create_save_function_body(self.function_name + "_1",
+                                               HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE_INTERCHAGE,
+                                               worker_count=3)
+        # this is required to deploy multiple functions at the same time
+        del body1['depcfg']['source_bucket']
+        body1['depcfg']['source_bucket'] = self.dst_bucket_name
+        del body1['depcfg']['buckets'][0]
+        body1['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.deploy_function(body1)
+        # Wait for eventing to catch up with all the create mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 4032, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 4032, skip_stats_validation=True,bucket=self.src_bucket_name)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
+                                   'delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name + "_1", 0, skip_stats_validation=True,bucket=self.src_bucket_name)
+        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body1)
