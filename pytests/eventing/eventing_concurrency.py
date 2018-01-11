@@ -41,7 +41,7 @@ class EventingConcurrency(EventingBaseTest):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.dst_bucket_name = self.dst_bucket_name1
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, bucket=self.dst_bucket_name1)
         self.undeploy_and_delete_function(body)
 
     def test_function_with_handler_code_with_multiple_timer_operations_with_bucket_operations_to_multiple_buckets(self):
@@ -54,7 +54,8 @@ class EventingConcurrency(EventingBaseTest):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
         self.dst_bucket_name = self.dst_bucket_name1
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True,
+                                     bucket=self.dst_bucket_name1)
         self.undeploy_and_delete_function(body)
 
     def test_function_with_handler_code_with_multiple_timer_operations_of_the_same_type(self):
@@ -67,7 +68,8 @@ class EventingConcurrency(EventingBaseTest):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
         self.dst_bucket_name = self.dst_bucket_name1
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True,
+                                     bucket=self.dst_bucket_name1)
         self.undeploy_and_delete_function(body)
 
     def test_multiple_functions_at_the_same_time(self):
@@ -89,7 +91,8 @@ class EventingConcurrency(EventingBaseTest):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
         self.dst_bucket_name = self.dst_bucket_name1
-        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 2016, doc_timer_events=True,
+                                     bucket=self.dst_bucket_name1)
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
 
