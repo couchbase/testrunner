@@ -535,6 +535,41 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail("Failed to backup as the fix in MB-25727")
 
 
+    def test_cbrestoremgr_should_not_change_replica_count_in_restore_bucket(self):
+        """
+            This test is for MB-25809
+            Set default_bucket=False
+            Create bucket with 1 replica
+            Load 10K items to bucket
+            Backup data from bucket
+            Create other bucket with 2 replicas in other cluster
+            Restore data to bucket with 2 replicas
+            Verify data and bucket setting.  It must retain 2 replicas
+            :return: None
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=10000)
+        if not self.new_replicas:
+            self.fail("This test needs to pass param 'new-replicas' to run")
+        rest = RestConnection(self.backupset.cluster_host)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.log.info("Start backup cluster")
+        self.backup_cluster_validate()
+        self.backup_restore_validate()
+
+        self.log.info("replicas from backup bucket: {0}".format(self.num_replicas))
+        self.log.info("replica in restore bucket should be {0} after restore"\
+                                                   .format(self.new_replicas))
+        rest_r = RestConnection(self.backupset.restore_cluster_host)
+        for bucket in self.buckets:
+            bucket_stats = rest_r.get_bucket_json(bucket.name)
+            if self.new_replicas != bucket_stats["replicaNumber"]:
+                self.fail("replia number in bucket {0} did change after restore"\
+                                                             .format(bucket.name))
+            self.log.info("Verified replica in bucket {0}: {1}"\
+                                           .format(bucket.name,
+                                            bucket_stats["replicaNumber"]))
+
     def test_restore_with_invalid_bucket_config_json(self):
         """
             When bucket-config.json in latest backup corrupted,

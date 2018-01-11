@@ -127,6 +127,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.create_fts_index = self.input.param("create-fts-index", False)
         self.cluster_new_user = self.input.param("new_user", None)
         self.cluster_new_role = self.input.param("new_role", None)
+        self.new_replicas = self.input.param("new-replicas", None)
         self.restore_only = self.input.param("restore-only", False)
         self.force_version_upgrade = self.input.param("force-version-upgrade", None)
         if self.non_master_host:
@@ -542,8 +543,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.test_storage_mode = "memory_optimized"
                         self._reset_storage_mode(rest_conn, self.test_storage_mode)
 
+                    replicas = self.num_replicas
+                    if self.new_replicas:
+                        replicas = self.new_replicas
+                    self.log.info("replica in bucket {0} is {1}".format(bucket.name,
+                                                                        self.num_replicas))
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=int(bucket_size) - 1,
+                                    replicaNumber=replicas,
                                     authType=bucket.authType if bucket.authType else 'none',
                                     bucketType=self.bucket_type,
                                     proxyPort=bucket.port,
