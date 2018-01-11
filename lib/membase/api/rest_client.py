@@ -1603,6 +1603,14 @@ class RestConnection(object):
             raise Exception(content)
         log.info("{0} set".format(setting_json))
 
+    def set_index_settings_internal(self, setting_json, timeout=120):
+        api = self.index_baseUrl + 'internal/settings'
+        status, content, header = self._http_request(api, 'POST',
+                                                     json.dumps(setting_json))
+        if not status:
+            raise Exception(content)
+        log.info("{0} set".format(setting_json))
+
     def get_index_settings(self, timeout=120):
         node = None
         api = self.index_baseUrl + 'settings'
