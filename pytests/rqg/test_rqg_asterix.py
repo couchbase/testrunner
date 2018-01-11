@@ -623,7 +623,7 @@ class RQGASTERIXTests(BaseTestCase):
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
-        self.dump_failure_data(failure_record_queue)
+#         self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
     def _testrun_worker_new(self, input_queue , result_queue, failure_record_queue = None):
