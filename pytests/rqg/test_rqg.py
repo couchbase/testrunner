@@ -85,6 +85,7 @@ class RQGTests(BaseTestCase):
         self.dynamic_indexing = self.input.param("dynamic_indexing", False)
         self.pushdown = self.input.param("pushdown", False)
         self.subquery = self.input.param("subquery", False)
+        self.drop_secondary_indexes = self.input.param("drop_secondary_indexes", True)
         if self.input_rqg_path is not None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -561,7 +562,7 @@ class RQGTests(BaseTestCase):
         sql_n1ql_index_map_list = self.client._convert_template_query_info(table_map=table_name_description_map,
                                                                            n1ql_queries=query_template_list,
                                                                            define_gsi_index=self.use_secondary_index,
-                                                                           pushdown=self.aggregate_pushdown)
+                                                                           aggregate_pushdown=self.aggregate_pushdown)
 
         for sql_n1ql_index_map in sql_n1ql_index_map_list:
             sql_n1ql_index_map["n1ql"] = sql_n1ql_index_map['n1ql'].replace("simple_table", self.database+"_"+"simple_table")
@@ -581,7 +582,7 @@ class RQGTests(BaseTestCase):
             for t in thread_list:
                 t.join()
 
-        if self.use_secondary_index:
+        if self.use_secondary_index and self.drop_secondary_indexes:
             self._drop_secondary_indexes_in_batches(sql_n1ql_index_map_list)
 
     def _testrun_crud_worker(self, list_info, table_name, table_map, result_queue=None, failure_record_queue=None):
@@ -648,6 +649,29 @@ class RQGTests(BaseTestCase):
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
 
+        # run the query
+        query_index_run = self._run_queries_and_verify(aggregate, self.subquery, n1ql_query=n1ql_query, sql_query=sql_query, expected_result=expected_result)
+        result_run["run_query_without_index_hint"] = query_index_run
+
+        if self.aggregate_pushdown:
+            message = "Pass"
+            explain_check = False
+            explain_n1ql = "EXPLAIN " + n1ql_query
+            try:
+                actual_result = self.n1ql_helper.run_cbq_query(query=explain_n1ql, server=self.n1ql_server)
+                self.log.info(actual_result)
+                if "index_group_aggs" in str(actual_result):
+                    explain_check = True
+                if not explain_check:
+                    message = "aggregate query {0} with index {1} failed explain result, index_group_aggs not found".format(n1ql_query, indexes)
+                    self.log.info(message)
+            except Exception, ex:
+                self.log.info(ex)
+                message = ex
+                explain_check = False
+            finally:
+                result_run["aggregate_explain_check"] = {"success": explain_check, "result": message}
+
         if self.set_limit > 0 and n1ql_query.find("DISTINCT") > 0:
             result_limit = self.query_helper._add_limit_to_query(n1ql_query, self.set_limit)
             query_index_run = self._run_queries_and_verify(aggregate, self.subquery, n1ql_query=result_limit, sql_query=sql_query, expected_result=expected_result)
@@ -656,10 +680,6 @@ class RQGTests(BaseTestCase):
         if expected_result is None:
             expected_result = self._gen_expected_result(sql_query, test_case_number)
             data["expected_result"] = expected_result
-
-        # run the query
-        query_index_run = self._run_queries_and_verify(aggregate, self.subquery, n1ql_query=n1ql_query, sql_query=sql_query, expected_result=expected_result)
-        result_run["run_query_without_index_hint"] = query_index_run
 
         # add primary index hint and run query
         if self.run_query_with_primary:
@@ -680,6 +700,7 @@ class RQGTests(BaseTestCase):
         if self.run_explain_with_hints:
             result = self._run_queries_with_explain(n1ql_query, indexes)
             result_run.update(result)
+
         result_queue.put(result_run)
         self._check_and_push_failure_record_queue(result_run, data, failure_record_queue)
         self.query_count += 1
@@ -764,7 +785,7 @@ class RQGTests(BaseTestCase):
                         keyword_map[keyword] = 1
                     else:
                         keyword_map[keyword] += 1
-                failure_map[test_case_number] = {"sql_query" :sql_query, "n1ql_query": n1ql_query,
+                failure_map[test_case_number] = {"sql_query": sql_query, "n1ql_query": n1ql_query,
                                                  "run_result": message, "keyword_list": keyword_list}
         summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Percentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total))
         if len(keyword_map) > 0:
@@ -1036,7 +1057,7 @@ class RQGTests(BaseTestCase):
         run_result = {}
         # Run n1ql query
         for index_name in indexes:
-            hint = "USE INDEX({0} USING {1})".format(index_name,indexes[index_name]["type"])
+            hint = "USE INDEX({0} USING {1})".format(index_name, indexes[index_name]["type"])
             n1ql = self.query_helper._add_explain_with_hints(n1ql_query, hint)
             self.log.info(n1ql)
             message = "Pass"
@@ -1051,7 +1072,7 @@ class RQGTests(BaseTestCase):
 
             if "NOT" in n1ql or "not" in n1ql or fieldsnotcovered and self.check_covering_index:
                 key = "Explain for index {0}".format(index_name)
-                run_result[key] = {"success":check, "result":message}
+                run_result[key] = {"success": check, "result": message}
             else:
                 try:
                     actual_result = self.n1ql_helper.run_cbq_query(query=n1ql, server=self.n1ql_server)

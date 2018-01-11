@@ -749,7 +749,7 @@ class QueryHelper(object):
         return randint(0, 1)
 
     def _random_int(self):
-        return randint(0, 10000)
+        return randint(0, 100000000)
 
     def _random_float(self):
         return round(10000*random.random(), 0)
@@ -871,6 +871,7 @@ class QueryHelper(object):
         numeric_field_names = self._search_fields_of_given_type(["int", "mediumint", "double", "float", "decimal"], table_map)
         datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
         bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
+        all_field_names = string_field_names + numeric_field_names + datetime_field_names + bool_field_names
         new_sql = sql
         if "BOOL_FIELD_LIST" in sql:
             new_list = self._generate_random_range(bool_field_names)
@@ -944,12 +945,100 @@ class QueryHelper(object):
                     }
         return map
 
-    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template="", table_map={}, table_name="simple_table", define_gsi_index=False, ansi_joins=False, pushdown=False):
+    def find_all(self, a_str, sub):
+        start = 0
+        while True:
+            start = a_str.find(sub, start)
+            if start == -1:
+                return
+            yield start
+            start += len(sub)
+
+    def find_char_field(self, a_str):
+        char_occurences = list(self.find_all(a_str, "char"))
+        rchar_occurences = list(self.find_all(a_str, "rchar"))
+        for i in range(len(char_occurences)):
+            if i + 1 > len(rchar_occurences) or char_occurences[i] != rchar_occurences[i] + 1:
+                return char_occurences[i]
+        return -1
+
+    def create_secondary_index_aggregate_pushdown(self, table_name, table_fields, sql_map, aggregate_pushdown):
+        where_condition = sql_map["where_condition"]
+        select_from = sql_map["select_from"]
+        #from_fields = sql_map["from_fields"]
+        order_by = sql_map["order_by"]
+        group_by = sql_map["group_by"]
+        select_from_fields = []
+        where_condition_fields = []
+        groupby_fields = []
+        aggregate_pushdown_fields_in_order = []
+
+        for field in table_fields:
+            if field.find('char') == 0:
+                idx = self.find_char_field(select_from)
+                if idx > -1:
+                    select_from_fields.append((idx, field))
+                idx = self.find_char_field(where_condition)
+                if idx > -1:
+                    where_condition_fields.append((idx, field))
+                idx = self.find_char_field(group_by)
+                if idx > -1:
+                    groupby_fields.append((idx, field))
+            else:
+                idx = select_from.find(field)
+                if idx > -1:
+                    select_from_fields.append((idx, field))
+                idx = where_condition.find(field)
+                if idx > -1:
+                    where_condition_fields.append((idx, field))
+                idx = group_by.find(field)
+                if idx > -1:
+                    groupby_fields.append((idx, field))
+
+        select_from_fields.sort(key=lambda tup: tup[0])
+        where_condition_fields.sort(key=lambda tup: tup[0])
+        groupby_fields.sort(key=lambda tup: tup[0])
+
+        for item in where_condition_fields:
+            if item[1] not in aggregate_pushdown_fields_in_order:
+                aggregate_pushdown_fields_in_order.append(item[1])
+        for item in select_from_fields:
+            if item[1] not in aggregate_pushdown_fields_in_order:
+                aggregate_pushdown_fields_in_order.append(item[1])
+        for item in groupby_fields:
+            if item[1] not in aggregate_pushdown_fields_in_order:
+                aggregate_pushdown_fields_in_order.append(item[1])
+
+        if aggregate_pushdown_fields_in_order:
+            aggregate_pushdown_index_name = "{0}_aggregate_pushdown_index_{1}".format(table_name, self._random_int())
+            create_aggregate_pushdown_index = \
+                "CREATE INDEX {0} ON {1}({2}) USING GSI".format(aggregate_pushdown_index_name, table_name, self._convert_list(aggregate_pushdown_fields_in_order, "numeric"))
+            return aggregate_pushdown_index_name, create_aggregate_pushdown_index
+        else:
+            return None, None
+
+    def create_functional_index_aggregate_pushdown(self, table_name, table_fields, sql_map, aggregate_pushdown):
+        return None, None
+
+    def create_partial_index_aggregate_pushdown(self, table_name, table_fields, sql_map, aggregate_pushdown):
+        return None, None
+
+    def create_aggregate_pushdown_index(self, table_name, table_fields, sql_map, aggregate_pushdown):
+        if aggregate_pushdown == "secondary":
+            return self.create_secondary_index_aggregate_pushdown(table_name, table_fields, sql_map, aggregate_pushdown)
+        elif aggregate_pushdown == "functional":
+            return self.create_functional_index_aggregate_pushdown(table_name, table_fields, sql_map, aggregate_pushdown)
+        elif aggregate_pushdown == "partial":
+            return self.create_partial_index_aggregate_pushdown(table_name, table_fields, sql_map, aggregate_pushdown)
+        else:
+            return None, None
+
+    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template="", table_map={}, table_name="simple_table", define_gsi_index=False, ansi_joins=False, aggregate_pushdown=False):
         index_name_with_occur_fields_where = None
         index_name_with_expression = None
         index_name_fields_only = None
-        index_name_select_from_fields_only = None
-        sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name)
+        aggregate_pushdown_index_name = None
+        sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name, aggregate_pushdown=aggregate_pushdown)
         n1ql = self._gen_sql_to_nql(sql, ansi_joins)
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type="sql")
         n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type="n1ql")
@@ -969,24 +1058,11 @@ class QueryHelper(object):
         table_name = random.choice(table_map.keys())
         map["bucket"] = table_name
         table_fields = table_map[table_name]["fields"].keys()
+
         field_that_occur = []
-        select_from_fields = []
-        select_from_fields_in_order = []
 
-        if pushdown:
-            for field in table_fields:
-                idx = select_from.find(field)
-                if idx > -1:
-                    select_from_fields.append((idx, field))
-            select_from_fields.sort(key=lambda tup: tup[0])
-            for item in select_from_fields:
-                select_from_fields_in_order.append(item[1])
-
-            if select_from_fields_in_order:
-                index_name_select_from_fields_only = "{0}_index_name_select_from_fields_only_{1}".format(table_name, "_".join(select_from_fields_in_order), self._random_int())
-                create_index_name_select_from_fields_only = \
-                    "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_select_from_fields_only,
-                                                                    table_name, self._convert_list(select_from_fields_in_order, "numeric"))
+        if aggregate_pushdown:
+            aggregate_pushdown_index_name, create_aggregate_pushdown_index_statement = self.create_aggregate_pushdown_index(table_name, table_fields, sql_map, aggregate_pushdown)
         else:
             if where_condition and ("OR" not in where_condition):
                 for field in table_fields:
@@ -1012,12 +1088,12 @@ class QueryHelper(object):
                                                                                                     table_name,
                                                                                                     where_condition)
 
-        if index_name_select_from_fields_only:
-            map["indexes"][index_name_select_from_fields_only] = \
+        if aggregate_pushdown_index_name:
+            map["indexes"][aggregate_pushdown_index_name] = \
                 {
-                    "name": index_name_select_from_fields_only,
+                    "name": aggregate_pushdown_index_name,
                     "type": "GSI",
-                    "definition": create_index_name_select_from_fields_only
+                    "definition": create_aggregate_pushdown_index_statement
                 }
 
         if index_name_with_occur_fields_where:
@@ -1152,7 +1228,7 @@ class QueryHelper(object):
         new_sql += " WHERE "+self._convert_condition_template_to_value(tokens[1], table_map)
         return {"sql_query": new_sql, "n1ql_query": self._gen_sql_to_nql(new_sql)}
 
-    def _convert_sql_template_to_value(self, sql="", table_map={}, table_name="simple_table"):
+    def _convert_sql_template_to_value(self, sql="", table_map={}, table_name="simple_table", aggregate_pushdown=False):
         aggregate_function_list = []
         sql_map = self._divide_sql(sql)
         select_from = sql_map["select_from"]
@@ -1162,6 +1238,7 @@ class QueryHelper(object):
         group_by = sql_map["group_by"]
         having = sql_map["having"]
         from_fields, table_map = self._gen_select_tables_info(from_fields, table_map)
+        aggregate_groupby_orderby_fields = None
         new_sql = "SELECT "
         if "(SELECT" in sql or "( SELECT" in sql:
             new_sql = "(SELECT "
@@ -1180,8 +1257,11 @@ class QueryHelper(object):
         if where_condition:
             new_sql += " WHERE "+self._convert_condition_template_to_value(where_condition, table_map)+ " "
         if group_by:
-            if group_by and having:
+            if group_by and having and not aggregate_pushdown:
                 new_sql += " GROUP BY "+(",".join(groupby_fields))+" "
+            elif group_by and order_by and aggregate_pushdown:
+                aggregate_groupby_orderby_fields = self._covert_fields_template_to_value(group_by, table_map)
+                new_sql += " GROUP BY "+aggregate_groupby_orderby_fields+" "
             else:
                 new_sql += " GROUP BY "+self._covert_fields_template_to_value(group_by, table_map)+" "
         if having:
@@ -1191,7 +1271,10 @@ class QueryHelper(object):
             else:
                 new_sql += " HAVING "+self._convert_condition_template_to_value_with_aggregate_method(having, groupby_table_map, aggregate_function_list)
         if order_by:
-            new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
+            if aggregate_pushdown:
+                new_sql += " ORDER BY "+aggregate_groupby_orderby_fields+" "
+            else:
+                new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
         return new_sql, table_map
 
     def _gen_aggregate_method_subsitution(self, sql, fields):

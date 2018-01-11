@@ -359,7 +359,7 @@ class MySQLClient(object):
                 f.write(json.dumps(map)+"\n")
         f.close()
 
-    def _convert_template_query_info(self, n1ql_queries=[], table_map={}, define_gsi_index=True, gen_expected_result=False, ansi_joins=False, pushdown=False):
+    def _convert_template_query_info(self, n1ql_queries=[], table_map={}, define_gsi_index=True, gen_expected_result=False, ansi_joins=False, aggregate_pushdown=False):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
@@ -379,7 +379,7 @@ class MySQLClient(object):
                                                                                                      table_map=table_map,
                                                                                                      define_gsi_index=define_gsi_index,
                                                                                                      ansi_joins=ansi_joins,
-                                                                                                     pushdown=pushdown)
+                                                                                                     aggregate_pushdown=aggregate_pushdown)
             else:
                 sql_n1ql_index_map = helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(n1ql_query,
                                                                                                              table_map=table_map,
