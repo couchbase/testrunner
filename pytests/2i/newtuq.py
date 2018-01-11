@@ -28,7 +28,7 @@ class QueryTests(BaseTestCase):
         # Set indexer storage mode
         indexer_rest = RestConnection(indexer_node[0])
         doc = {"indexer.settings.storage_mode": self.gsi_type}
-        indexer_rest.set_index_settings(doc)
+        indexer_rest.set_index_settings_internal(doc)
         self.indexer_scanTimeout = self.input.param("indexer_scanTimeout", None)
         if self.indexer_scanTimeout is not None:
             for server in indexer_node:
