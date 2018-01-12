@@ -24,7 +24,7 @@ class QueryHelper(object):
                 hints.append(data_point.split(".*").replace(" ",""))
         return hints
 
-    def _divide_sql(self, sql):
+    def _divide_sql(self, sql, ansi_joins=False):
         sql = sql.replace(";", "")
         sql = sql.replace("\n", "")
         group_by_text = None
@@ -37,35 +37,84 @@ class QueryHelper(object):
         order_by = self._find_string_type(sql, ["ORDER BY", "order by"])
         group_by = self._find_string_type(sql, ["GROUP BY", "group by"])
         having = self._find_string_type(sql, ["HAVING", "having"])
-        if where_text:
-            from_field_text = sql.split(from_text)[1].split(where_text)[0]
-        else:
-            if "SUBTABLE" in sql:
-                from_field_text = sql.split(from_text)[2]
+        if ansi_joins:
+            if "(SELECT" in sql:
+                select_from_text = []
+                from_field_text = []
+                where_condition_text = []
+                queries = sql.split("ALIAS")
+                for select in queries[0].split(select_text):
+                    select_from_text.append(select.split(from_text)[0])
+
+                from_field_text.append("ALIAS" + sql.split(from_text)[2].split(where_text)[1].split("ALIAS")[1])
+                from_field_text.append(sql.split(from_text)[2].split(where_text)[0])
+
+                # where_condition_text[0] should be appended behind from_field_text [0]
+                where_condition_text.append(sql.split(from_text)[2].split(where_text)[1].split("ALIAS")[0])
+
+                # where_condition_text[1] should be appended behind from_field_text [1]
+                where_condition_text.append(sql.split(from_text)[2].split(where_text)[2])
             else:
-                from_field_text = sql.split(from_text)[1]
-        if "SUBTABLE" in sql:
-            select_from_text = sql.split(' ')[1]+' ' + sql.split(' ')[2]
+                if where_text:
+                    from_field_text = sql.split(from_text)[1].split(where_text)[0]
+                else:
+                    if "SUBTABLE" in sql:
+                        from_field_text = sql.split(from_text)[2]
+                    else:
+                        from_field_text = sql.split(from_text)[1]
+                if "SUBTABLE" in sql:
+                    select_from_text = sql.split(' ')[1] + ' ' + sql.split(' ')[2]
+                else:
+                    select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
+                if where_text:
+                    if "SUBTABLE" in sql:
+                        where_condition_text = sql.split(from_text)[1].split(where_text)[1].split(order_by)[0]
+                    else:
+                        where_condition_text = sql.split(where_text)[1]
+                if group_by:
+                    group_by_text = sql.split(group_by)[1]
+                    where_condition_text = where_condition_text.split(group_by)[0]
+                    if having:
+                        having_text = group_by_text.split(having)[1]
+                        group_by_text = group_by_text.split(having)[0]
+                if order_by:
+                    order_by_text = sql.split(order_by)[1]
+                    if group_by_text and not having:
+                        group_by_text = group_by_text.split(order_by)[0]
+                    if having:
+                        having_text = having_text.split(order_by)[0]
+                    where_condition_text = where_condition_text.split(order_by)[0]
+
         else:
-            select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
-        if where_text:
-            if "SUBTABLE" in sql:
-                where_condition_text = sql.split(from_text)[1].split(where_text)[1].split(order_by)[0]
+            if where_text:
+                from_field_text = sql.split(from_text)[1].split(where_text)[0]
             else:
-                where_condition_text = sql.split(where_text)[1]
-        if group_by:
-            group_by_text = sql.split(group_by)[1]
-            where_condition_text = where_condition_text.split(group_by)[0]
-            if having:
-                having_text = group_by_text.split(having)[1]
-                group_by_text = group_by_text.split(having)[0]
-        if order_by:
-            order_by_text = sql.split(order_by)[1]
-            if group_by_text and not having:
-                group_by_text = group_by_text.split(order_by)[0]
-            if having:
-                having_text = having_text.split(order_by)[0]
-            where_condition_text = where_condition_text.split(order_by)[0]
+                if "SUBTABLE" in sql:
+                    from_field_text = sql.split(from_text)[2]
+                else:
+                    from_field_text = sql.split(from_text)[1]
+            if "SUBTABLE" in sql:
+                select_from_text = sql.split(' ')[1]+' ' + sql.split(' ')[2]
+            else:
+                select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
+            if where_text:
+                if "SUBTABLE" in sql:
+                    where_condition_text = sql.split(from_text)[1].split(where_text)[1].split(order_by)[0]
+                else:
+                    where_condition_text = sql.split(where_text)[1]
+            if group_by:
+                group_by_text = sql.split(group_by)[1]
+                where_condition_text = where_condition_text.split(group_by)[0]
+                if having:
+                    having_text = group_by_text.split(having)[1]
+                    group_by_text = group_by_text.split(having)[0]
+            if order_by:
+                order_by_text = sql.split(order_by)[1]
+                if group_by_text and not having:
+                    group_by_text = group_by_text.split(order_by)[0]
+                if having:
+                    having_text = having_text.split(order_by)[0]
+                where_condition_text = where_condition_text.split(order_by)[0]
 
         map = {
                 "from_fields": from_field_text,
@@ -403,6 +452,7 @@ class QueryHelper(object):
         prev_table_list = []
         standard_tokens = ["INNER JOIN", "LEFT JOIN"]
         new_sub_query = ""
+        rewrite_table_name_alias = False
         sql_token_list = self._gen_select_after_analysis(sql, standard_tokens=standard_tokens)
         if len(sql_token_list) == 1:
             table_name = random.choice(table_name_list)
@@ -425,27 +475,55 @@ class QueryHelper(object):
                     table_name_alias = table_map[table_name]["alias_name"]+self._random_alphabet_string()
                 data = token
                 data = data.replace("BUCKET_NAME", (table_name+" "+table_name_alias))
+                if "ALIAS" in token:
+                    data = data.replace("ALIAS", "query")
+                    rewrite_table_name_alias = True
                 if "PREVIOUS_TABLE" in token:
                     previous_table_name = random.choice(prev_table_list)
                     previous_table_name_alias = table_map[previous_table_name]["alias_name"]
                     if "BOOL_FIELD" in token:
                         field_name, values = self._search_field(["tinyint"], table_map)
                         table_field = field_name.split(".")[1]
+                        if rewrite_table_name_alias:
+                            data = data.replace("PREVIOUS_TABLE.BOOL_FIELD",
+                                                ("query" + "." + table_field)) + " "
                         data = data.replace("CURRENT_TABLE.BOOL_FIELD", (table_name_alias + "." + table_field)) + " "
                         data = data.replace("PREVIOUS_TABLE.BOOL_FIELD", (previous_table_name_alias+"."+table_field))
-                    elif "STRING_FIELD" in token:
+                    if "STRING_FIELD" in token:
                         field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
                         table_field = field_name.split(".")[1]
+                        if rewrite_table_name_alias:
+                            data = data.replace("PREVIOUS_TABLE.STRING_FIELD",
+                                                ("query" + "." + table_field)) + " "
                         data = data.replace("CURRENT_TABLE.STRING_FIELD", (table_name_alias + "." + table_field)) + " "
                         data = data.replace("PREVIOUS_TABLE.STRING_FIELD", (previous_table_name_alias+"."+ table_field))
-                    elif "NUMERIC_FIELD" in token:
+                    if "NUMERIC_FIELD" in token:
                         field_name, values = self._search_field(
                             ["int", "mediumint", "double", "float", "decimal"], table_map)
                         table_field = field_name.split(".")[1]
+                        if rewrite_table_name_alias:
+                            data = data.replace("PREVIOUS_TABLE.NUMERIC_FIELD",
+                                                ("query" + "." + table_field)) + " "
                         data = data.replace("CURRENT_TABLE.NUMERIC_FIELD", (table_name_alias + "." + table_field)) + " "
                         data = data.replace("PREVIOUS_TABLE.NUMERIC_FIELD", (previous_table_name_alias+"." + table_field))
                     data = data.replace("PREVIOUS_TABLE.FIELD", (previous_table_name_alias+"."+table_map[previous_table_name]["primary_key_field"]))
                     data = data.replace("CURRENT_TABLE.FIELD", (table_name_alias+"."+table_map[table_name]["primary_key_field"]))
+                    rewrite_table_name_alias = False
+
+                if "CURRENT_TABLE" in token:
+                    if "BOOL_FIELD" in token:
+                        field_name, values = self._search_field(["tinyint"], table_map)
+                        table_field = field_name.split(".")[1]
+                        data = data.replace("CURRENT_TABLE.BOOL_FIELD", (table_name_alias + "." + table_field)) + " "
+                    if "STRING_FIELD" in token:
+                        field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
+                        table_field = field_name.split(".")[1]
+                        data = data.replace("CURRENT_TABLE.STRING_FIELD", (table_name_alias + "." + table_field)) + " "
+                    if "NUMERIC_FIELD" in token:
+                        field_name, values = self._search_field(
+                            ["int", "mediumint", "double", "float", "decimal"], table_map)
+                        table_field = field_name.split(".")[1]
+                        data = data.replace("CURRENT_TABLE.NUMERIC_FIELD", (table_name_alias + "." + table_field)) + " "
                 new_sub_query += data + " "
                 prev_table_list.append(table_name)
             else:
@@ -1038,7 +1116,7 @@ class QueryHelper(object):
         index_name_with_expression = None
         index_name_fields_only = None
         aggregate_pushdown_index_name = None
-        sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name, aggregate_pushdown=aggregate_pushdown)
+        sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name, aggregate_pushdown=aggregate_pushdown,ansi_joins=ansi_joins)
         n1ql = self._gen_sql_to_nql(sql, ansi_joins)
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type="sql")
         n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type="n1ql")
@@ -1228,53 +1306,85 @@ class QueryHelper(object):
         new_sql += " WHERE "+self._convert_condition_template_to_value(tokens[1], table_map)
         return {"sql_query": new_sql, "n1ql_query": self._gen_sql_to_nql(new_sql)}
 
-    def _convert_sql_template_to_value(self, sql="", table_map={}, table_name="simple_table", aggregate_pushdown=False):
+
+    def _convert_sql_template_to_value(self, sql="", table_map={}, table_name="simple_table",aggregate_pushdown=False, ansi_joins=False):
         aggregate_function_list = []
-        sql_map = self._divide_sql(sql)
+        sql_map = self._divide_sql(sql, ansi_joins)
         select_from = sql_map["select_from"]
         from_fields = sql_map["from_fields"]
         where_condition = sql_map["where_condition"]
         order_by = sql_map["order_by"]
         group_by = sql_map["group_by"]
         having = sql_map["having"]
-        from_fields, table_map = self._gen_select_tables_info(from_fields, table_map)
-        aggregate_groupby_orderby_fields = None
-        new_sql = "SELECT "
-        if "(SELECT" in sql or "( SELECT" in sql:
-            new_sql = "(SELECT "
-        if select_from:
-            if group_by and having:
-                groupby_fields = self._covert_fields_template_to_value(group_by, table_map).split(",")
-                if "AGGREGATE_FIELD" not in select_from:
-                    new_sql += ",".join(groupby_fields) + " FROM "
+
+        if isinstance(select_from, (list)):
+            i = 0
+            for fields in select_from:
+                select_from[i] = self._covert_fields_template_to_value(fields, table_map)
+                i += 1
+            i = 0
+            for fields in from_fields:
+                from_fields[i], table_map = self._gen_select_tables_info(fields, table_map)
+                i += 1
+            i = 0
+            for fields in where_condition:
+                where_condition[i] = self._convert_condition_template_to_value(fields, table_map)
+                i += 1
+
+            # Make sure that the inner select uses the table that the rest of the subquery uses (the conversion above does not enforce the correct alias name)
+            correct_alias = from_fields[1].split(" ")[3]
+            outer_select_alias = select_from[1].split(".")[0].strip()
+
+            if correct_alias not in select_from[2]:
+                select_clause = select_from[2].split(",")
+                old_alias = select_clause[0].split(".")[0].strip()
+                select_from[2] = select_from[2].replace(old_alias, correct_alias)
+
+            # Make sure that outer select uses a table that is contained inside the query
+            if outer_select_alias not in from_fields[0]:
+                select_from[1] = select_from[1].replace(outer_select_alias, table_map[table_map.keys()[0]]['alias_name'])
+
+            new_sql = "SELECT " + select_from[1] + "FROM (SELECT" + select_from[2] + "FROM " + from_fields[1] + "WHERE " \
+                      + where_condition[0] + from_fields[0] + "WHERE " + where_condition[1]
+        else:
+            from_fields, table_map = self._gen_select_tables_info(from_fields, table_map)
+            aggregate_groupby_orderby_fields = None
+            new_sql = "SELECT "
+            if "(SELECT" in sql or "( SELECT" in sql:
+                new_sql = "(SELECT "
+            if select_from:
+                if group_by and having:
+                    groupby_fields = self._covert_fields_template_to_value(group_by, table_map).split(",")
+                    if "AGGREGATE_FIELD" not in select_from:
+                        new_sql += ",".join(groupby_fields) + " FROM "
+                    else:
+                        select_sql, aggregate_function_list = self._gen_aggregate_method_subsitution(select_from, groupby_fields)
+                        new_sql += select_sql + " FROM "
                 else:
-                    select_sql, aggregate_function_list = self._gen_aggregate_method_subsitution(select_from, groupby_fields)
-                    new_sql += select_sql + " FROM "
-            else:
-                new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
-        if from_fields:
-            new_sql += from_fields+ " "
-        if where_condition:
-            new_sql += " WHERE "+self._convert_condition_template_to_value(where_condition, table_map)+ " "
-        if group_by:
-            if group_by and having and not aggregate_pushdown:
-                new_sql += " GROUP BY "+(",".join(groupby_fields))+" "
-            elif group_by and order_by and aggregate_pushdown:
-                aggregate_groupby_orderby_fields = self._covert_fields_template_to_value(group_by, table_map)
-                new_sql += " GROUP BY "+aggregate_groupby_orderby_fields+" "
-            else:
-                new_sql += " GROUP BY "+self._covert_fields_template_to_value(group_by, table_map)+" "
-        if having:
-            groupby_table_map = self._filter_table_map_based_on_fields(groupby_fields, table_map)
-            if "AGGREGATE_FIELD" not in sql:
-                new_sql += " HAVING "+self._convert_condition_template_to_value(having, groupby_table_map)+" "
-            else:
-                new_sql += " HAVING "+self._convert_condition_template_to_value_with_aggregate_method(having, groupby_table_map, aggregate_function_list)
-        if order_by:
-            if aggregate_pushdown:
-                new_sql += " ORDER BY "+aggregate_groupby_orderby_fields+" "
-            else:
-                new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
+                    new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
+            if from_fields:
+                new_sql += from_fields+ " "
+            if where_condition:
+                new_sql += " WHERE "+self._convert_condition_template_to_value(where_condition, table_map)+ " "
+            if group_by:
+                if group_by and having and not aggregate_pushdown:
+                    new_sql += " GROUP BY "+(",".join(groupby_fields))+" "
+                elif group_by and order_by and aggregate_pushdown:
+                    aggregate_groupby_orderby_fields = self._covert_fields_template_to_value(group_by, table_map)
+                    new_sql += " GROUP BY "+aggregate_groupby_orderby_fields+" "
+                else:
+                    new_sql += " GROUP BY "+self._covert_fields_template_to_value(group_by, table_map)+" "
+            if having:
+                groupby_table_map = self._filter_table_map_based_on_fields(groupby_fields, table_map)
+                if "AGGREGATE_FIELD" not in sql:
+                    new_sql += " HAVING "+self._convert_condition_template_to_value(having, groupby_table_map)+" "
+                else:
+                    new_sql += " HAVING "+self._convert_condition_template_to_value_with_aggregate_method(having, groupby_table_map, aggregate_function_list)
+            if order_by:
+                if aggregate_pushdown:
+                    new_sql += " ORDER BY "+aggregate_groupby_orderby_fields+" "
+                else:
+                    new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
         return new_sql, table_map
 
     def _gen_aggregate_method_subsitution(self, sql, fields):

@@ -2,13 +2,8 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME joins WHERE complex_condition ORDER BY field_list |
-	SELECT select_from FROM BUCKET_NAME joins WHERE complex_condition ;
-
-create_index:
-	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
-	CREATE INDEX INDEX_NAME ON BUCKET_NAME(complex_condition) |
-	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
+	SELECT select_from FROM from_bucket joins WHERE complex_condition ORDER BY field_list |
+	SELECT select_from FROM from_bucket joins WHERE complex_condition;
 
 direction:
 	ASC | DESC;
@@ -16,14 +11,262 @@ direction:
 select_from:
 	OUTER_BUCKET_NAME.* ;
 
+from_bucket:
+	(SELECT from_select FROM BUCKET_NAME WHERE complex_condition ORDER BY field LIMIT 30) ALIAS |
+	(SELECT from_select FROM BUCKET_NAME WHERE complex_condition LIMIT 30) ALIAS |
+	BUCKET_NAME | BUCKET_NAME | BUCKET_NAME | BUCKET_NAME |
+	BUCKET_NAME | BUCKET_NAME ;
+
+from_select:-
+	*  | field_list ;
+
+#JOIN RULES
+
 joins:
-	join_type BUCKET_NAME ON ( field_comparison ) | joins join_type BUCKET_NAME ON ( field_comparison ) |  join_type BUCKET_NAME ON ( field_comparison ) joins ;
+	join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) | joins join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) |  join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) joins ;
 
 join_type:
 	LEFT JOIN | INNER JOIN;
 
+ansi_joins_complex_condition:
+	NOT (join_condition) | join_condition | join_condition | join_condition | join_condition | join_condition;
+
+join_condition:
+	join_numeric_condition | join_string_condition | (join_string_condition AND join_numeric_condition) |
+	(join_numeric_condition OR join_string_condition) | (join_string_condition AND join_numeric_condition) |  (join_string_condition OR join_numeric_condition) |
+	 (join_string_condition AND join_numeric_condition) | (join_numeric_condition OR join_string_condition) |
+	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_numeric_condition) |
+	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_numeric_condition) |
+	 (join_string_condition AND join_numeric_condition) | (join_string_condition AND join_numeric_condition) |
+	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_string_condition) |
+	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_string_condition) |
+	 (join_string_condition AND join_numeric_condition) | (join_string_condition AND join_numeric_condition) | (join_string_condition AND join_string_condition) |
+	 (join_numeric_condition AND join_numeric_condition);
+
+#JOIN NUMERIC RULES
+
+join_numeric_condition:
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+    previous_numeric_field = current_numeric_field |
+	previous_numeric_field < current_numeric_field |
+	previous_numeric_field = current_numeric_field |
+	previous_numeric_field > current_numeric_field |
+	previous_numeric_field  >= current_numeric_field |
+	previous_numeric_field  <= current_numeric_field |
+	(join_numeric_condition) AND (join_numeric_condition)|
+	(join_numeric_condition) OR (join_numeric_condition)|
+	NOT (join_numeric_condition) |
+	join_numeric_is_not_null |
+	join_numeric_not_equals_condition |
+	join_numeric_is_null ;
+
+join_numeric_not_equals_condition:
+	previous_numeric_field != current_numeric_field ;
+
+join_numeric_is_not_null:
+	CURRENT_TABLE.NUMERIC_FIELD IS NOT NULL;
+
+join_numeric_is_null:
+	CURRENT_TABLE.NUMERIC_FIELD IS NULL;
+
+previous_numeric_field:
+	PREVIOUS_TABLE.NUMERIC_FIELD;
+
+current_numeric_field:
+	CURRENT_TABLE.NUMERIC_FIELD;
+
+#JOIN STRING RULES
+
+join_string_condition:
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+    previous_string_field = current_string_field |
+	previous_string_field < current_string_field |
+	previous_string_field > current_string_field |
+	previous_string_field  >= current_string_field |
+	previous_string_field  <= current_string_field |
+	(join_string_condition) AND (join_string_condition) |
+	(join_string_condition) OR (join_string_condition) |
+	NOT (join_string_condition) |
+	join_string_is_not_null |
+	join_string_is_null |
+	join_string_not_equals_condition;
+
+join_string_not_equals_condition:
+	previous_string_field != current_string_field | previous_string_field <> current_string_field ;
+
+join_string_is_not_null:
+	current_string_field IS NOT NULL;
+
+join_string_is_null:
+	current_string_field IS NULL;
+
+previous_string_field:
+	PREVIOUS_TABLE.STRING_FIELD;
+
+current_string_field:
+	CURRENT_TABLE.STRING_FIELD;
+
+#JOIN BOOL RULES
+
+join_bool_condition:
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_equals_condition |
+	join_bool_not_equals_condition ;
+
+join_bool_equals_condition:
+	previous_bool_field = current_bool_field;
+
+join_bool_not_equals_condition:
+	previous_bool_field != current_bool_field ;
+
+previous_bool_field:
+	PREVIOUS_TABLE.BOOL_FIELD;
+
+current_bool_field:
+	CURRENT_TABLE.BOOL_FIELD;
+
 complex_condition:
-	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | (condition) AND (condition) OR (condition) AND (condition) | condition | (complex_condition) AND (complex_condition) | (complex_condition) OR (complex_condition) | NOT (complex_condition);
+	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | (condition) AND (condition) OR (condition) AND (condition) | condition | condition | condition | condition | condition | condition |
+	condition | condition | condition | condition | condition | condition  | condition | condition | condition ;
 
 condition:
 	numeric_condition | string_condition | bool_condition | (string_condition AND numeric_condition) |
@@ -36,9 +279,6 @@ field:
 
 non_string_field:
 	NUMERIC_FIELD;
-
-field_comparison:
-    PREVIOUS_TABLE.NUMERIC_FIELD = CURRENT_TABLE.NUMERIC_FIELD |  PREVIOUS_TABLE.STRING_FIELD = CURRENT_TABLE.STRING_FIELD ;
 
 # NUMERIC RULES
 
