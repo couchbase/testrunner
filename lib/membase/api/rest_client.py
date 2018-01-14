@@ -1608,7 +1608,11 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST',
                                                      json.dumps(setting_json))
         if not status:
-            raise Exception(content)
+	    if header['status']=='404':
+                log.info("This endpoint is introduced only in 5.5.0, hence not found. Redirecting the request to the old endpoint")
+                self.set_index_settings(setting_json,timeout)
+            else:
+                raise Exception(content)
         log.info("{0} set".format(setting_json))
 
     def get_index_settings(self, timeout=120):
