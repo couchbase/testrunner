@@ -79,10 +79,10 @@ class AnalyticsHelper():
             if "USE INDEX" in query:
                 query = query.replace("USE INDEX(`#primary` USING GSI)"," ")
             for bucket in self.buckets:
-                query = query.replace(bucket.name,bucket.name+"_shadow")
+                query = query.replace(bucket.name+" ",bucket.name+"_shadow ")
 
 
-            print query
+            self.log.info(" CBAS QUERY :: {0}".format(n1ql_query))
             result = RestConnection(server).analytics_tool(query, self.analytics_port, query_params=query_params, verbose = verbose)
 
         if isinstance(result, str) or 'errors' in result:

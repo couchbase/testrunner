@@ -433,7 +433,6 @@ class RQGASTERIXTests(BaseTestCase):
 
     def _run_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
-        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         result_run = {}
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
