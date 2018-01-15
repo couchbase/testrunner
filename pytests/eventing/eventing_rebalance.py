@@ -445,6 +445,9 @@ class EventingRebalance(EventingBaseTest):
         for i in xrange(5):
             # start eventing node rebalance
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+            # This sleep is intentional, if this is not present, rebalance_reached reports 100% (rebalance completed)
+            # before rebalance could even start
+            self.sleep(30)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(30))
             if not RestHelper(self.rest).is_cluster_rebalanced():
@@ -455,7 +458,8 @@ class EventingRebalance(EventingBaseTest):
                 # rebalance.result()
             else:
                 log.info("Rebalance completed when tried to stop rebalance on {0}%".format(str(30)))
-            self.sleep(30)
+            if rebalance.state != "FINISHED":
+                rebalance.result()
         task.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -481,7 +485,10 @@ class EventingRebalance(EventingBaseTest):
             self.cluster.failover([self.master], failover_nodes=[nodes_out_ev])
         for i in xrange(5):
             # start eventing node rebalance
-            self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+            # This sleep is intentional, if this is not present, rebalance_reached reports 100% (rebalance completed)
+            # before rebalance could even start
+            self.sleep(30)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(30))
             if not RestHelper(self.rest).is_cluster_rebalanced():
@@ -492,7 +499,8 @@ class EventingRebalance(EventingBaseTest):
                 # rebalance.result()
             else:
                 log.info("Rebalance was completed when tried to stop rebalance on {0}%".format(str(30)))
-            self.sleep(30)
+            if rebalance.state != "FINISHED":
+                rebalance.result()
         task.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)

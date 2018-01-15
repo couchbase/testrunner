@@ -3,7 +3,8 @@ from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE,HANDLER_CODE_ERROR
 from pytests.eventing.eventing_base import EventingBaseTest, log
 from lib.couchbase_helper.tuq_helper import N1QLHelper
-
+from pytests.security.rbacmain import rbacmain
+import json
 
 class EventingN1QL(EventingBaseTest):
     def setUp(self):
@@ -211,3 +212,21 @@ class EventingN1QL(EventingBaseTest):
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    # This was moved from base class to here because http://ci-eventing.northscale.in/ was failing as it could not find
+    # from pytests.security.rbacmain import rbacmain
+    def verify_user_noroles(self,username):
+        status, content, header=rbacmain(self.master)._retrieve_user_roles()
+        res = json.loads(content)
+        userExist=False
+        for ele in res:
+            log.debug("user {0}".format(ele["name"]))
+            log.debug(ele["name"] == username)
+            if ele["name"] == username:
+                log.debug("user roles {0}".format(ele["roles"]))
+                if not ele["roles"]:
+                    log.info("user {0} has no roles".format(username))
+                    userExist=True
+                    break
+        if not userExist:
+            raise Exception("user {0} roles are not empty".format(username))
