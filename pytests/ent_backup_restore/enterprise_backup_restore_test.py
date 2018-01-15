@@ -550,7 +550,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=10000)
         if not self.new_replicas:
             self.fail("This test needs to pass param 'new-replicas' to run")
-        rest = RestConnection(self.backupset.cluster_host)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.log.info("Start backup cluster")
