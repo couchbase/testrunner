@@ -199,12 +199,7 @@ class QuerySanityTests(QueryTests):
 
     def test_any(self):
         for bucket in self.buckets:
-            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
-                                                                      bucket.name) +\
-                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 END)"  % (
-                                                                bucket.name) +\
-                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+            self.query = "SELECT name, email FROM %s WHERE (ANY skill IN %s.skills SATISFIES skill = 'skill2010' END) AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 END) AND  NOT (job_title = 'Sales') ORDER BY name" % (bucket.name, bucket.name, bucket.name)
 
             actual_result = self.run_cbq_query()
             expected_result = [{"name" : doc['name'], "email" : doc["email"]}

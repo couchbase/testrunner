@@ -438,14 +438,11 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-    
+
     def test_pairs(self):
         self.query = "select pairs(self) from default order by meta().id limit 1"
         actual_result = self.run_cbq_query()
-        print actual_result['metrics']['resultSize']
-        print actual_result['metrics']['sortCount']
-        #self.assertTrue( actual_result['metrics']['resultSize'] == 3608)
-        #self.assertTrue( actual_result['metrics']['sortCount'] == 10080)
+        self.assertTrue(actual_result['metrics']['resultSize'] == 3608)
 
     def test_index_missing_null(self):
         self.fail_if_no_buckets()
@@ -1985,7 +1982,7 @@ class QueriesIndexTests(QueryTests):
                              " AND  NOT (department = 'Manager') limit 10"
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']==idx3)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx3)
                 self.assertTrue("cover" in str(plan))
                 self.query = "select meta().id from %s WHERE  tasks[1]='Sales'" % (
                 bucket.name) + \
@@ -2004,7 +2001,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['scan']['index']==idx4)
+                self.assertTrue(plan['~children'][0]['~children'][0]['index']==idx4)
                 self.assertTrue("cover" in str(plan))
 
                 #str = [{"region2": "International","region1": "South"},{"region2": "South"}]
@@ -4425,7 +4422,7 @@ class QueriesIndexTests(QueryTests):
                     self.query = "explain select  name,skills[0] as skills  from %s where skills[0]='skill2010' and join_yr=2010 and ( VMs[0].os IN ['ubuntu','windows','linux'] OR VMs[0].os IN ['ubuntu','windows','linux'] ) order by _id asc LIMIT 10 OFFSET 0;" % (bucket.name)
                     actual_result=self.run_cbq_query()
                     plan = self.ExplainPlanHelper(actual_result)
-                    self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "IndexScan2")
+                    self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "IndexScan3")
                     self.assertTrue(plan["~children"][0]["~children"][0]["index"] == index_name)
                     self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux','linux'] order by name LIMIT 15 OFFSET 0;" % (bucket.name)
                     actual_result = self.run_cbq_query()
@@ -5893,48 +5890,57 @@ class QueriesIndexTests(QueryTests):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
                 created_indexes = []
-                idx = "idx"
-                self.query = "CREATE INDEX %s ON %s(tokens(%s)) " %(idx,bucket.name,'_id')+\
-                             " USING %s" % (self.index_type)
+                try:
+                    idx = "idx"
+                    self.query = "CREATE INDEX %s ON %s(tokens(%s)) " %(idx,bucket.name,'_id')+\
+                                 " USING %s" % (self.index_type)
 
-                actual_result = self.run_cbq_query()
-                self._wait_for_index_online(bucket, idx)
-                self._verify_results(actual_result['results'], [])
-                created_indexes.append(idx)
+                    actual_result = self.run_cbq_query()
+                    self._wait_for_index_online(bucket, idx)
+                    self._verify_results(actual_result['results'], [])
+                    created_indexes.append(idx)
 
-                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                    self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
 
-                self.query = "EXPLAIN select count(1) from %s WHERE tokens(_id) like '%s' " %(bucket.name,'query-test%')
+                    self.query = "EXPLAIN select count(1) from %s WHERE tokens(_id) like '%s' " %(bucket.name,'query-test%')
 
-                actual_result = self.run_cbq_query()
-                plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue("covers" in str(plan))
-                result1 = plan['~children'][0]['index']
-                self.assertTrue(result1 == idx)
-                self.query = "select count(1) from %s WHERE tokens(_id) like '%s' " %(bucket.name,'query-test%')
-                actual_result = self.run_cbq_query()
-                self.assertTrue(
-                    plan['~children'][0]['#operator'] == 'IndexCountScan2',
-                    "IndexCountScan is not being used")
-                self.query = "explain select a.cnt from (select count(1) from default where tokens(_id) is not null) as a"
-                actual_result2 = self.run_cbq_query()
-                plan = self.ExplainPlanHelper(actual_result2)
-                self.assertTrue(
-                    plan['~children'][0]['#operator'] != 'IndexCountScan2',
-                    "IndexCountScan should not be used in subquery")
-                self.query = "select a.cnt from (select count(1) from default where tokens(_id) is not null) as a"
-                actual_result2 = self.run_cbq_query()
+                    actual_result = self.run_cbq_query()
+                    plan = self.ExplainPlanHelper(actual_result)
+                    self.assertTrue("covers" in str(plan))
+                    result1 = plan['~children'][0]['index']
+                    self.assertTrue(result1 == idx)
+                    self.query = "select count(1) from %s WHERE tokens(_id) like '%s' " %(bucket.name,'query-test%')
+                    actual_result = self.run_cbq_query()
+                    self.assertTrue(
+                        plan['~children'][0]['#operator'] == 'IndexScan3',
+                        "IndexCountScan is not being used")
+                    self.query = "explain select a.cnt from (select count(1) from default where tokens(_id) is not null) as a"
+                    actual_result2 = self.run_cbq_query()
+                    plan = self.ExplainPlanHelper(actual_result2)
+                    self.assertTrue(
+                        plan['~children'][0]['#operator'] != 'IndexScan3',
+                        "IndexCountScan should not be used in subquery")
+                    self.query = "select a.cnt from (select count(1) from default where tokens(_id) is not null) as a"
+                    actual_result2 = self.run_cbq_query()
 
-                for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
-                    self.run_cbq_query()
-                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-                    self.query = "select count(1) from %s use index(`#primary`) WHERE tokens(_id) like '%s'  " %(bucket.name,'query-test%')
-                    result = self.run_cbq_query()
-                    self.assertEqual(sorted(actual_result['results']),sorted(result['results']))
-                    self.query = "select a.cnt from (select count(1) from %s where _id is not null) as a " %(bucket.name)
-                    result = self.run_cbq_query()
-                    self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
+                    for idx in created_indexes:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                        self.run_cbq_query()
+                        self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+                        created_indexes.remove(idx)
+                        self.query = "select count(1) from %s use index(`#primary`) WHERE tokens(_id) like '%s'  " %(bucket.name,'query-test%')
+                        result = self.run_cbq_query()
+
+                        self.assertEqual(sorted(actual_result['results']), sorted(result['results']))
+                        self.query = "select a.cnt from (select count(1) from %s where _id is not null) as a " %(bucket.name)
+                        result = self.run_cbq_query()
+                        self.assertEqual(sorted(actual_result2['results']),sorted(result['results']))
+                finally:
+                    for idx in created_indexes:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                        actual_result = self.run_cbq_query()
+                        self._verify_results(actual_result['results'], [])
+                        self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_join_unnest_tokens_covering(self):
         self.fail_if_no_buckets()
