@@ -794,13 +794,30 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
         reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         self.n1ql_helper.verify_indexes_redistributed(
             map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
             stats_map_after_rebalance, [], [nodes_out_list])
+
+        # Add back the node that was removed, and use alter index to move an index to that node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [nodes_out_list], [])
+        reached = RestHelper(self.rest).rebalance_reached()
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
+
+        indexname = map_after_rebalance[self.buckets[0]][0]
+
+        alter_index_query = "ALTER INDEX {0} with {{'action':'move','nodes':'{1}:{2}'}}".format(indexname , nodes_out_list.ip, nodes_out_list.port)
+        result = self.n1ql_helper.run_cbq_query(query=alter_index_query,
+                                                server=self.n1ql_node)
+        self.assertEqual(result['status'], 'success',
+                         'Query was not run successfully')
 
     def _return_maps(self):
         index_map = self.get_index_map()

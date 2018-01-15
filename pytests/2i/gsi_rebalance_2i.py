@@ -2364,7 +2364,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         for task in tasks:
             task.result()
         # Ensure indexer reaches to paused state
-        self._push_indexer_off_the_cliff(server=index_server)
+        self._push_indexer_off_the_cliff()
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [self.servers[self.nodes_init]])
             RestHelper(self.rest).rebalance_reached()
@@ -2374,6 +2374,284 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
             self.fail("rebalance did not fail when indexer is in paused state")
+
+    def test_alter_index_when_src_indexer_is_in_paused_state(
+            self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv",
+                                                     get_all_nodes=False)
+        to_add_nodes = [self.servers[self.nodes_init]]
+        index_server = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=False)
+        self.run_operation(phase="before")
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[
+                                                      self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(
+            map_before_rebalance)
+
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                          memoryQuota=256)
+
+        # Ensure indexer reaches to paused state
+        self._push_indexer_off_the_cliff(index_server)
+
+        output, error = self._cbindex_move(index_server,
+                                           self.servers[self.nodes_init],
+                                           indexes, self.alter_index,
+                                           remote_host=kv_server)
+
+        if not self.alter_index:
+            self.wait_for_cbindex_move_to_complete(
+                self.servers[self.nodes_init], no_of_indexes)
+        else:
+            # Allow index movement via alter index to be completed.
+            self.sleep(120)
+
+        if error:
+            self.log.info("ERROR : %s" % error)
+            self.fail("Alter index resulted in error")
+
+    def test_alter_index_when_dest_indexer_is_in_paused_state(
+            self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv",
+                                                     get_all_nodes=False)
+
+        to_add_nodes = [self.servers[self.nodes_init]]
+        index_server = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=False)
+        self.run_operation(phase="before")
+
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[
+                                                      self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+
+        query = "CREATE PRIMARY INDEX p1 on default USING GSI with {{'nodes':\"{0}:{1}\"}}".format(
+            self.servers[self.nodes_init].ip,
+            self.servers[self.nodes_init].port)
+        self.n1ql_helper.run_cbq_query(query=query,
+                                       server=self.n1ql_node)
+
+        self.sleep(60)
+
+        index_map, stats_map = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(
+            index_map)
+
+        index_hostname_before = self.n1ql_helper.get_index_details_using_index_name(
+            "p1", index_map)
+
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                          memoryQuota=256)
+
+        # Ensure indexer reaches to paused state
+        self._push_indexer_off_the_cliff(index_server)
+
+        output, error = self._cbindex_move(self.servers[self.nodes_init],
+                                           index_server,
+                                           "p1",
+                                           self.alter_index,
+                                           remote_host=kv_server)
+
+        if not self.alter_index:
+            self.wait_for_cbindex_move_to_complete(
+                self.servers[self.nodes_init], no_of_indexes)
+        else:
+            # Allow index movement via alter index to be completed.
+            self.sleep(120)
+
+        if error:
+            self.log.info("ERROR : %s" % error)
+            self.fail("Alter index resulted in error")
+        else:
+            # Alter index query will succeed, but it should later error out since the dest node is in OOM.
+            # Validate that the index is not moved.
+            index_map, stats_map = self._return_maps()
+            index_hostname_after = self.n1ql_helper.get_index_details_using_index_name(
+                "p1", index_map)
+            self.assertEqual(index_hostname_before, index_hostname_after,
+                             "Alter index moved the index to an indexer in paused state")
+
+    def test_alter_index_without_action(self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv",
+                                                     get_all_nodes=False)
+
+        index_server = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=False)
+
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[
+                                                      self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+
+        query = "CREATE PRIMARY INDEX p1 on default USING GSI with {{'nodes':\"{0}:{1}\"}}".format(
+            self.servers[self.nodes_init].ip,
+            self.servers[self.nodes_init].port)
+        self.n1ql_helper.run_cbq_query(query=query,
+                                       server=self.n1ql_node)
+
+        alter_idx_query = "ALTER INDEX default.p1 with {{'action':'','nodes':\"{0}:{1}\"}}".format(
+            index_server.ip, index_server.port)
+        try:
+            result = self.n1ql_helper.run_cbq_query(query=alter_idx_query,
+                                                    server=self.n1ql_node)
+            self.log.info(result)
+        except Exception, ex:
+            if not "Unsupported action value" in str(ex):
+                self.log.info(str(ex))
+                self.fail(
+                    "Alter index did not fail with expected error message")
+
+    def test_alter_index_when_src_indexer_is_in_dgm(
+            self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv",
+                                                     get_all_nodes=False)
+
+        to_add_nodes = [self.servers[self.nodes_init]]
+        index_server = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=False)
+        self.run_operation(phase="before")
+
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[
+                                                      self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(
+            map_before_rebalance)
+
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                          memoryQuota=256)
+
+        # Ensure indexer reaches to DGM
+        self.get_dgm_for_plasma(index_server)
+
+        output, error = self._cbindex_move(index_server,
+                                           self.servers[self.nodes_init],
+                                           indexes, self.alter_index,
+                                           remote_host=kv_server)
+
+        if not self.alter_index:
+            self.wait_for_cbindex_move_to_complete(
+                self.servers[self.nodes_init], no_of_indexes)
+        else:
+            # Allow index movement via alter index to be completed.
+            self.sleep(120)
+
+        if error:
+            self.log.info("ERROR : %s" % error)
+            self.fail("Alter index resulted in error")
+
+    def test_alter_index_when_dest_indexer_is_in_dgm(
+            self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv",
+                                                     get_all_nodes=False)
+
+        to_add_nodes = [self.servers[self.nodes_init]]
+        index_server = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=False)
+        self.run_operation(phase="before")
+
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[
+                                                      self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+
+        query = "CREATE PRIMARY INDEX p1 on default USING GSI with {{'nodes':\"{0}:{1}\"}}".format(
+            self.servers[self.nodes_init].ip,
+            self.servers[self.nodes_init].port)
+        self.n1ql_helper.run_cbq_query(query=query,
+                                       server=self.n1ql_node)
+
+        self.sleep(60)
+
+        index_map, stats_map = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(
+            index_map)
+
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                          memoryQuota=256)
+
+        # Ensure indexer reaches to DGM
+        self.get_dgm_for_plasma(index_server)
+
+        output, error = self._cbindex_move(self.servers[self.nodes_init],
+                                           index_server,
+                                           "p1",
+                                           self.alter_index,
+                                           remote_host=kv_server)
+
+        if not self.alter_index:
+            self.wait_for_cbindex_move_to_complete(
+                self.servers[self.nodes_init], no_of_indexes)
+        else:
+            # Allow index movement via alter index to be completed.
+            self.sleep(120)
+
+        if error:
+            self.log.info("ERROR : %s" % error)
+            self.fail("Alter index resulted in error")
+
+    def test_explain_query_while_alter_index_is_running(self):
+        kv_server = self.get_nodes_from_services_map(service_type="kv",
+                                                     get_all_nodes=False)
+
+        to_add_nodes = [self.servers[self.nodes_init]]
+        index_server = self.get_nodes_from_services_map(service_type="index",
+                                                        get_all_nodes=False)
+        self.run_operation(phase="before")
+
+        self.sleep(30)
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[
+                                                      self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        indexes, no_of_indexes = self._get_indexes_in_move_index_format(
+            map_before_rebalance)
+
+        output, error = self._cbindex_move(index_server,
+                                           self.servers[self.nodes_init],
+                                           indexes,
+                                           self.alter_index,
+                                           remote_host=kv_server)
+
+        explain_query = "EXPLAIN SELECT DISTINCT(age) from `default` where age > 18 LIMIT 10"
+        try:
+            result = self.n1ql_helper.run_cbq_query(query=explain_query,
+                                                    server=self.n1ql_node)
+            self.log.info(result)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Alter index did not fail with expected error message")
+
 
     def test_cbindex_move_from_any_node_apart_from_src_dest(self):
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
@@ -2557,11 +2835,11 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         for task in compact_tasks:
             task.result()
 
-    def _push_indexer_off_the_cliff(self):
+    def _push_indexer_off_the_cliff(self, index_server=None):
         cnt = 0
         docs = 3000
         while cnt < 20:
-            if self._validate_indexer_status_oom():
+            if self._validate_indexer_status_oom(index_server):
                 log.info("OOM on index server is achieved")
                 return True
             for task in self.kv_mutations(docs):
@@ -2571,8 +2849,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             docs += 3000
         return False
 
-    def _validate_indexer_status_oom(self):
-        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+    def _validate_indexer_status_oom(self, index_server=None):
+        if not index_server:
+            index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(index_server)
         index_stats = rest.get_indexer_stats()
         if index_stats["indexer_state"].lower() == "paused":

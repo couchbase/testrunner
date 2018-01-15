@@ -3080,6 +3080,76 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not load_balanced:
             self.fail("Load balancing not proper after failover")
 
+    def test_alter_index_with_prepared_statements(self):
+        nodes = self._get_node_list()
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+
+        # Create prepare statement on index
+        prepared_statement = "PREPARE prep_stmt AS SELECT count(age) from default USE INDEX ({0} USING GSI) where age > " \
+                             "10".format(index_name_prefix)
+        self.n1ql_helper.run_cbq_query(query=prepared_statement,
+                                       server=self.n1ql_node)
+        self.sleep(30)
+
+        result_before = \
+        self.n1ql_helper.run_cbq_query(query="prep_stmt", is_prepared=True,
+                                       server=self.n1ql_server)['results']
+
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(nodes) - 1, nodes)
+        dest_nodes = self._get_node_list(self.dest_node)
+        self.log.info(dest_nodes)
+        expect_failure = False
+        if self.expected_err_msg:
+            expect_failure = True
+
+        output, error = self._cbindex_move(src_node=self.servers[0],
+                                           node_list=dest_nodes,
+                                           index_list=index_name_prefix,
+                                           expect_failure=expect_failure,
+                                           alter_index=self.alter_index)
+        self.sleep(30)
+        if self.expected_err_msg:
+            if self.expected_err_msg not in error[0]:
+                self.fail("Move index failed with unexpected error")
+        else:
+            index_map = self.get_index_map()
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    len(dest_nodes) - 1,
+                                                    dest_nodes)
+
+        result_after = self.n1ql_helper.run_cbq_query(query="prep_stmt",
+                                                      is_prepared=True,
+                                                      server=self.n1ql_server)[
+            'results']
+
+        msg = "Query result with prepare and without doesn't match.\nBefore move index: %s ... %s\nAfter move index: %s ... %s"
+        self.assertTrue(
+            sorted(result_before) == sorted(result_after),
+            msg % (result_before[:100], result_before[-100:],
+                   result_after[:100], result_after[-100:]))
+
+
     def _get_node_list(self, node_list=None):
         # 1. Parse node string
         if node_list:
