@@ -82,7 +82,7 @@ class AnalyticsHelper():
                 query = query.replace(bucket.name+" ",bucket.name+"_shadow ")
 
 
-            self.log.info(" CBAS QUERY :: {0}".format(n1ql_query))
+            self.log.info(" CBAS QUERY :: {0}".format(query))
             result = RestConnection(server).analytics_tool(query, self.analytics_port, query_params=query_params, verbose = verbose)
 
         if isinstance(result, str) or 'errors' in result:
