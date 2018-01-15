@@ -229,9 +229,9 @@ class RQGASTERIXTests(BaseTestCase):
                     self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
         data = 'use Default;' + "\n"
+        bucket_username = "cbadminbucket"
+        bucket_password = "password"
         for bucket in self.buckets:
-            bucket_username = "cbadminbucket"
-            bucket_password = "password"
             data += 'create bucket {0} with {{"bucket":"{0}"}} ;'.format(
                 bucket.name, self.master.ip)
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,
