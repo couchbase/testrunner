@@ -546,8 +546,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     replicas = self.num_replicas
                     if self.new_replicas:
                         replicas = self.new_replicas
-                    self.log.info("replica in bucket {0} is {1}".format(bucket.name,
-                                                                        self.num_replicas))
+                    self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=int(bucket_size) - 1,
                                     replicaNumber=replicas,
