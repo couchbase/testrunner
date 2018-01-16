@@ -232,7 +232,7 @@ class RQGASTERIXTests(BaseTestCase):
         bucket_username = "cbadminbucket"
         bucket_password = "password"
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}"}} ;'.format(
+            data += 'create bucket {0} with {{"name":"{0}"}} ;'.format(
                 bucket.name, self.master.ip)
             data += 'create shadow dataset {1} on {0}; '.format(bucket.name,
                                                                 bucket.name + "_shadow")
@@ -450,7 +450,7 @@ class RQGASTERIXTests(BaseTestCase):
                 columns, rows = self.client._execute_query(query = sql_query)
                 sql_result = self.client._gen_json_from_results(columns, rows)
             #self.log.info(sql_result)
-            self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
+            self.log.info(" result from CBAS query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
             if(len(n1ql_result)!=len(sql_result)):

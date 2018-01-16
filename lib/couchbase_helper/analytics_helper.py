@@ -45,7 +45,7 @@ class AnalyticsHelper():
         actual_result = self.run_analytics_query()
         return actual_result, expected_result
 
-    def run_analytics_query(self, query=None, min_output_size=10, server=None, query_params = {}, is_prepared=False, scan_consistency = None, scan_vector = None, verbose= True):
+    def run_analytics_query(self, query=None, min_output_size=10, server=None, query_params = {}, is_prepared=False, scan_consistency = None, scan_vector = None, verbose= False):
         if query is None:
             query = self.query
         if server is None:
