@@ -768,3 +768,34 @@ class EventingRebalance(EventingBaseTest):
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_rebalance_out_all_eventing_nodes_and_rebalance_in_eventing_node_and_functions_should_be_restored(self):
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        # deploy a function
+        self.deploy_function(body)
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        # rebalance in a single eventing node
+        services_in = ["eventing"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # delete json documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
