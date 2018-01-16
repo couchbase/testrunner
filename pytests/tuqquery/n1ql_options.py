@@ -241,28 +241,28 @@ class OptionsRestTests(QueryTests):
             self.assertTrue(output['results'][0]['plan']['~children'][0]['index'] == '#primary')
 
             # prepare statement
-            statement = "PREPARE p1 FROM SELECT * FROM %s where job_title=$type and name=$name"% (bucket.name)
+            statement_id = "p1%s" % (bucket.name)
+            statement = "PREPARE %s FROM SELECT * FROM %s where job_title=$type and name=$name" % (statement_id, bucket.name)
             output = self.curl_helper(statement)
-            statement = "p1"
-            output = self.prepare_helper(statement)
+            output = self.prepare_helper(statement_id)
+            self.assertEqual(output['metrics']['resultCount'], 144)
+
+            statement_id = "p2%s" % (bucket.name)
+            statement = "PREPARE %s FROM SELECT * FROM %s where job_title=$1 and name=$2" % (statement_id, bucket.name)
+            output = self.curl_helper(statement)
+            output = self.prepare_helper2(statement_id)
             self.assertTrue(output['metrics']['resultCount'] == 144)
 
-            statement = "PREPARE p2 FROM SELECT * FROM %s where job_title=$1 and name=$2"% (bucket.name)
+            statement_id = "p3%s" % (bucket.name)
+            statement = "PREPARE %s FROM SELECT * FROM %s where job_title=$type and name=$name" % (statement_id, bucket.name)
             output = self.curl_helper(statement)
-            statement = 'p2'
-            output = self.prepare_helper2(statement)
+            output = self.prepare_helper(statement_id)
             self.assertTrue(output['metrics']['resultCount'] == 144)
 
-            statement = "PREPARE p3 FROM SELECT * FROM %s where job_title=$type and name=$name"% (bucket.name)
+            statement_id = "p4%s" % (bucket.name)
+            statement = 'PREPARE %s FROM SELECT * FROM %s where job_title=$type and name=$name&$type="Engineer"&$name="id@mail.com"'% (statement_id, bucket.name)
             output = self.curl_helper(statement)
-            statement = 'p3'
-            output = self.prepare_helper(statement)
-            self.assertTrue(output['metrics']['resultCount'] == 144)
-
-            statement = 'PREPARE p4 FROM SELECT * FROM %s where job_title=$type and name=$name&$type="Engineer"&$name="id@mail.com"'% (bucket.name)
-            output = self.curl_helper(statement)
-            statement = 'p3'
-            output = self.prepare_helper(statement)
+            output = self.prepare_helper(statement_id)
             self.assertTrue(output['metrics']['resultCount'] == 144)
 
             #update
