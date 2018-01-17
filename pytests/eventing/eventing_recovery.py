@@ -2,7 +2,9 @@ import copy
 import json
 
 from lib.membase.api.rest_client import RestConnection
+from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
+from lib.memcached.helper.data_helper import MemcachedClientHelper
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
@@ -323,3 +325,35 @@ class EventingRecovery(EventingBaseTest):
             self.undeploy_and_delete_function(body)
         finally:
             self.change_time_zone(kv_node, timezone="UTC")
+
+
+    def test_partial_rollback(self):
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        log.info("kv nodes:{0}".format(kv_node))
+        for node in kv_node:
+            mem_client = MemcachedClientHelper.direct_client(node, self.src_bucket_name)
+            mem_client.stop_persistence()
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                              worker_count=3)
+        try:
+            task=self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load, self.buckets[0].kvs[1],
+                                         'create')
+        except Exception as e:
+            log.info("error while loading data")
+        self.deploy_function(body,wait_for_bootstrap=False)
+        # Kill memcached on Node A
+        self.log.info("Killing memcached on {0}".format(kv_node[1]))
+        shell = RemoteMachineShellConnection(kv_node[1])
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        self.log.info("Starting persistence on {0}".
+                      format(kv_node[0]))
+        mem_client = MemcachedClientHelper.direct_client(kv_node[0],
+                                                         self.src_bucket_name)
+        mem_client.start_persistence()
+        # Wait for bootstrap to complete
+        self.wait_for_bootstrap_to_complete(body['appname'])
+        stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
+        log.info(stats_src)
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
