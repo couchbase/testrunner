@@ -2605,6 +2605,18 @@ class RestConnection(object):
 
     """ Start of FTS rest apis"""
 
+    def set_fts_ram_quota(self, value):
+        """set fts ram quota"""
+        api = self.baseUrl + "pools/default"
+        params = urllib.urlencode({"ftsMemoryQuota": value})
+        status, content, _ = self._http_request(api, "POST", params)
+        if status:
+            log.info("SUCCESS: FTS RAM quota set to {0}mb".format(value))
+        else:
+            raise Exception("Error setting fts ram quota: {0}".format(content))
+        return status
+
+
     def create_fts_index(self, index_name, params):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)

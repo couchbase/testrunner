@@ -1507,10 +1507,16 @@ class CouchbaseCluster:
         # to avoid querying certain nodes that undergo crash/reboot scenarios
         self.__bypass_fts_nodes = []
         self.__separate_nodes_on_services()
+        self.__set_fts_ram_quota()
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
             self.__name, self.__master_node.ip)
+
+    def __set_fts_ram_quota(self):
+        fts_quota = TestInputSingleton.input.param("fts_quota", None)
+        if fts_quota:
+            RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
 
     def get_node(self, ip, port):
         for node in self.__nodes:
