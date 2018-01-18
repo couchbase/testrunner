@@ -4220,6 +4220,19 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if not status:
             raise Exception(content)
+        return json.loads(content)
+
+    '''
+            Cleanup eventing 
+    '''
+    def cleanup_eventing(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "cleanupEventing"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
         return content
 
 

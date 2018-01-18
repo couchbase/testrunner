@@ -162,7 +162,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 log.debug("Full Stats for Node {0} is {1} ".format(eventing_node.ip, full_out))
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
-                "Expected : {1}".format(stats_dst["curr_items"], expected_dcp_mutations))
+                "Expected : {1}  dcp_backlog : {2}".format(stats_dst["curr_items"], expected_dcp_mutations,
+                                                          out[0]["events_remaining"]["dcp_backlog"]))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         # print all stats from all eventing nodes
         # These are the stats that will be used by ns_server and UI
@@ -386,3 +387,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         remote_client = RemoteMachineShellConnection(server)
         remote_client.execute_command("timedatectl set-timezone "+timezone)
         remote_client.disconnect()
+
+    def cleanup_eventing(self):
+        ev_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        ev_rest = RestConnection(ev_node)
+        log.info("Running eventing cleanup api...")
+        ev_rest.cleanup_eventing()

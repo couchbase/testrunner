@@ -53,6 +53,11 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
     def tearDown(self):
+        try:
+            self.cleanup_eventing()
+        except:
+            # This is just a cleanup API. Ignore the exceptions.
+            pass
         super(EventingRebalance, self).tearDown()
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
@@ -620,7 +625,8 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create')
             # rebalance in a eventing node when eventing is processing mutations
             services_in = ["eventing"]
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
                                                      services=services_in)
             self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
@@ -660,7 +666,8 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create')
             # rebalance in a eventing node when eventing is processing mutations
             services_in = ["eventing"]
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
                                                      services=services_in)
             self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
@@ -700,7 +707,8 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create')
             # rebalance in a eventing node when eventing rebalance is going on
             services_in = ["eventing"]
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
                                                      services=services_in)
             self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
@@ -739,7 +747,8 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create')
             # rebalance in a eventing node when eventing is processing mutations
             services_in = ["eventing"]
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
                                                      services=services_in)
             self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)

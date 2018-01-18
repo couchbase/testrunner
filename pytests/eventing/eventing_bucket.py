@@ -1,8 +1,9 @@
 import copy
 
+from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator
+from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator, BlobGenerator
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
@@ -47,15 +48,23 @@ class EventingBucket(EventingBaseTest):
                                                                    bucket_params=bucket_params))
         for task in tasks:
             task.result()
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        try:
+            # load data
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        except:
+            pass
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
         self.deploy_function(body)
+        stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
-        # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+        try:
+            # delete all documents
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+        except:
+            pass
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -200,7 +209,8 @@ class EventingBucket(EventingBaseTest):
         self.cluster.load_gen_docs(self.master, "dst_bucket", gen_load_non_json, self.buckets[0].kvs[1],
                                    'create')
         # deploy the first function
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                              worker_count=3)
         self.deploy_function(body)
         # deploy the second function
         body1 = self.create_save_function_body(self.function_name + "_1",
@@ -214,12 +224,51 @@ class EventingBucket(EventingBaseTest):
         self.deploy_function(body1)
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 4032, skip_stats_validation=True)
-        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 4032, skip_stats_validation=True,bucket=self.src_bucket_name)
+        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 4032, skip_stats_validation=True,
+                                     bucket=self.src_bucket_name)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
                                    'delete')
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
-        self.verify_eventing_results(self.function_name + "_1", 0, skip_stats_validation=True,bucket=self.src_bucket_name)
+        self.verify_eventing_results(self.function_name + "_1", 0, skip_stats_validation=True,
+                                     bucket=self.src_bucket_name)
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
+
+    def test_eventing_with_ephemeral_buckets_with_eviction_enabled(self):
+        # delete src_bucket which will be created as part of setup
+        self.rest.delete_bucket(self.src_bucket_name)
+        # create source bucket as ephemeral bucket with the same name
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas, bucket_type='ephemeral',
+                                                   eviction_policy='nruEviction')
+        self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                            bucket_params=bucket_params)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        # deploy function
+        self.deploy_function(body)
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        try:
+            # delete all documents
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+        except:
+            # since some of the docs are already ejected by eventing, load method will fails, hence ignoring failure
+            pass
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+        vb_active_auto_delete_count = StatsCommon.get_stats([self.master], self.src_bucket_name, '',
+                                                            'vb_active_auto_delete_count')[self.master]
+        if vb_active_auto_delete_count == 0:
+            self.fail("No items were ejected from ephemeral bucket")
+        else:
+            log.info("Number of items auto deleted from ephemeral bucket is {0}".format(vb_active_auto_delete_count))
+        # sleep intentionally added , as it requires some time for eventing-consumers to shutdown
+        self.sleep(30)
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
