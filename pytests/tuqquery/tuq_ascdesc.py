@@ -103,6 +103,7 @@ class AscDescTests(QueryTests):
 
     # This test test various combination of fields in an array index.
     def test_asc_desc_array_index(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -160,68 +161,70 @@ class AscDescTests(QueryTests):
 
     #This test checks if the results with descending index and order by are in reverse of ascending one.
     def test_desc_isReverse_ascOrder(self):
-            for bucket in self.buckets:
-                created_indexes = []
-                try:
-                    idx = "idx"
-                    self.query = "create index %s on %s(VMs[0].memory desc)"% (idx, bucket.name)
-                    actual_result = self.run_cbq_query()
-                    self._wait_for_index_online(bucket, idx)
-                    self._verify_results(actual_result['results'], [])
-                    created_indexes.append(idx)
-                    self.query = "Explain select meta().id from %s where VMs[0].memory > 0 order by VMs[0].memory" %(bucket.name)
-                    actual_result = self.run_cbq_query()
-                    plan = self.ExplainPlanHelper(actual_result)
-                    self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
-                    self.assertTrue("sort_terms" in str(actual_result['results']))
-                    self.assertTrue("covers" in str(plan))
-                    self.query = "Explain select meta().id from %s where VMs[0].memory > 0 order by  VMs[0].memory desc" %(bucket.name)
-                    actual_result = self.run_cbq_query()
-                    plan = self.ExplainPlanHelper(actual_result)
-                    self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
-                    self.assertTrue("sort_terms" not in actual_result)
-                    self.assertTrue("covers" in str(plan))
-                    self.query = "select meta().id from %s where VMs[0].memory > 0 order by meta().id,VMs[0].memory limit 10" %(bucket.name)
-                    static_expected_results_list =['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
-                                                   'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                   'query-testemployee10153.1877827-4']
-                    self.compare("test_desc_isReverse_ascOrder",self.query,static_expected_results_list)
+        self.fail_if_no_buckets()
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                idx = "idx"
+                self.query = "create index %s on %s(VMs[0].memory desc)"% (idx, bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.query = "Explain select meta().id from %s where VMs[0].memory > 0 order by VMs[0].memory" %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(actual_result)
+                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
+                self.assertTrue("sort_terms" in str(actual_result['results']))
+                self.assertTrue("covers" in str(plan))
+                self.query = "Explain select meta().id from %s where VMs[0].memory > 0 order by  VMs[0].memory desc" %(bucket.name)
+                actual_result = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(actual_result)
+                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
+                self.assertTrue("sort_terms" not in actual_result)
+                self.assertTrue("covers" in str(plan))
+                self.query = "select meta().id from %s where VMs[0].memory > 0 order by meta().id,VMs[0].memory limit 10" %(bucket.name)
+                static_expected_results_list =['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
+                                               'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
+                                               'query-testemployee10153.1877827-4']
+                self.compare("test_desc_isReverse_ascOrder",self.query,static_expected_results_list)
 
-                    self.query = "select meta().id from %s where VMs[0].memory > 0 order by meta().id, VMs[0].memory desc limit 10" %(bucket.name)
-                    static_expected_results_list =['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
-                                                   'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
-                                                   'query-testemployee10153.1877827-4']
+                self.query = "select meta().id from %s where VMs[0].memory > 0 order by meta().id, VMs[0].memory desc limit 10" %(bucket.name)
+                static_expected_results_list =['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
+                                               'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
+                                               'query-testemployee10153.1877827-4']
 
-                    self.compare("test_desc_isReverse_ascOrder",self.query,static_expected_results_list)
-                    idx2 = "idx2"
-                    self.query = "create index %s on %s(email,_id)"% (idx2, bucket.name)
-                    actual_result = self.run_cbq_query()
-                    self._wait_for_index_online(bucket, idx2)
-                    self._verify_results(actual_result['results'], [])
-                    created_indexes.append(idx2)
-                    idx3 = "idx3"
-                    self.query = "create index %s on %s(email,_id desc)"% (idx3, bucket.name)
-                    actual_result = self.run_cbq_query()
-                    self._wait_for_index_online(bucket, idx3)
-                    self._verify_results(actual_result['results'], [])
-                    created_indexes.append(idx3)
-                    self.query = 'select _id from %s where email like "%s" order by _id limit 2' %(bucket.name,'24-mail%')
-                    actual_result_asc = self.run_cbq_query()
-                    static_expected_results_list = ["query-testemployee12264.589461-0","query-testemployee12264.589461-1"]
-                    actual_result_asc = [actual_result_asc['results'][0]['_id'],actual_result_asc['results'][1]['_id']]
-                    self.assertEqual(static_expected_results_list, actual_result_asc)
+                self.compare("test_desc_isReverse_ascOrder",self.query,static_expected_results_list)
+                idx2 = "idx2"
+                self.query = "create index %s on %s(email,_id)"% (idx2, bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx2)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx2)
+                idx3 = "idx3"
+                self.query = "create index %s on %s(email,_id desc)"% (idx3, bucket.name)
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx3)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx3)
+                self.query = 'select _id from %s where email like "%s" order by _id limit 2' %(bucket.name,'24-mail%')
+                actual_result_asc = self.run_cbq_query()
+                static_expected_results_list = ["query-testemployee12264.589461-0","query-testemployee12264.589461-1"]
+                actual_result_asc = [actual_result_asc['results'][0]['_id'],actual_result_asc['results'][1]['_id']]
+                self.assertEqual(static_expected_results_list, actual_result_asc)
 
-                    self.query = 'select _id from %s where email like "%s" order by _id desc limit 2' %(bucket.name,'24-mail%')
-                    actual_result_desc = self.run_cbq_query()
-                    static_expected_results_list =["query-testemployee9987.55838821-5","query-testemployee9987.55838821-4"]
-                    actual_result_desc = [actual_result_desc['results'][0]['_id'],actual_result_desc['results'][1]['_id']]
-                    self.assertEqual(static_expected_results_list, actual_result_desc)
-                finally:
-                  for idx in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
-                    self.run_cbq_query()
+                self.query = 'select _id from %s where email like "%s" order by _id desc limit 2' %(bucket.name,'24-mail%')
+                actual_result_desc = self.run_cbq_query()
+                static_expected_results_list =["query-testemployee9987.55838821-5","query-testemployee9987.55838821-4"]
+                actual_result_desc = [actual_result_desc['results'][0]['_id'],actual_result_desc['results'][1]['_id']]
+                self.assertEqual(static_expected_results_list, actual_result_desc)
+            finally:
+              for idx in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                self.run_cbq_query()
 
     def test_prepared_statements(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -266,6 +269,7 @@ class AscDescTests(QueryTests):
 
     #This test creates asc,desc index on meta and use it in predicate and order by
     def test_meta(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -331,6 +335,7 @@ class AscDescTests(QueryTests):
 
 
     def test_max_min(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -341,10 +346,6 @@ class AscDescTests(QueryTests):
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx2)
-                self.query = 'explain select max(_id) from default where _id is not missing'
-                res = self.run_cbq_query()
-                plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['limit'], '1')
                 self.query ='select max(join_yr[0]) from default where _id is not missing and join_yr[0] is not null'
                 res = self.run_cbq_query()
                 self.assertEqual(res['results'], [{u'$1': 2016}])
@@ -358,17 +359,6 @@ class AscDescTests(QueryTests):
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx)
-                self.query = 'explain select min(_id) from default where _id is not missing'
-                res = self.run_cbq_query()
-                plan = self.ExplainPlanHelper(res)
-                if 'limit' in plan['~children'][0] and 'limit' not in plan['~children'][1]:
-                    self.assertEqual(plan['~children'][0]['limit'], '1')
-                elif 'limit' not in plan['~children'][0] and 'limit' in plan['~children'][1]:
-                    self.assertEqual(plan['~children'][1]['limit'], '1')
-                elif 'limit' in plan['~children'][0] and 'limit' in plan['~children'][1]:
-                    self.assertTrue(plan['~children'][0]['limit']=='1' or plan['~children'][1]['limit']=='1')
-                else:
-                    assert False
                 self.query = 'select min(_id) from default where _id is not missing'
                 res = self.run_cbq_query()
                 self.assertEqual(res['results'], [{u'$1': u'query-testemployee10153.1877827-0'}])
@@ -378,6 +368,7 @@ class AscDescTests(QueryTests):
                     self.run_cbq_query()
 
     def test_datetime_boolean_long_mapvalues(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -506,6 +497,7 @@ class AscDescTests(QueryTests):
 
     #Test for bug MB-23941
     def test_asc_desc_unnest(self):
+         self.fail_if_no_buckets()
          for bucket in self.buckets:
             created_indexes = []
             try:
@@ -672,7 +664,7 @@ class AscDescTests(QueryTests):
                 self.query = 'EXPLAIN SELECT MIN(a.y) FROM default d UNNEST d.arr As a WHERE a.y > 10'
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['scan']['index'], 'ix3')
+                self.assertEqual(plan['~children'][0]['index'], 'ix3')
                 self.query = 'EXPLAIN SELECT MAX(a.y) FROM default d UNNEST d.arr As a WHERE a.y > 10'
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
@@ -681,7 +673,8 @@ class AscDescTests(QueryTests):
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT a.y) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertTrue("IndexCountDistinctScan2" in str(plan))
+                self.assertTrue('index_group_aggs' in str(plan))
+                self.assertTrue(plan['~children'][0]['index_group_aggs']['aggregates'][0]['distinct'])
                 self.assertTrue("covers" in str(plan))
                 self.assertEqual(plan['~children'][0]['index'], 'ix3')
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT 1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
@@ -723,6 +716,7 @@ class AscDescTests(QueryTests):
 
     #Test for bug MB-23941
     def test_pushdown_ascdesc_unnest(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             created_indexes = []
             try:
@@ -744,15 +738,16 @@ class AscDescTests(QueryTests):
                 self.query = 'explain select min(a.y) from default d UNNEST d.arr As a where a.y > 10'
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['limit'], '1')
+                self.assertTrue('index_group_aggs' in str(plan))
                 self.query = 'EXPLAIN SELECT COUNT(DISTINCT 1) FROM default d UNNEST d.arr As a WHERE a.y = 10'
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['limit'], '1')
+                self.assertTrue('index_group_aggs' in str(plan))
                 self.query = 'explain select count(a.y) from default d UNNEST d.arr As a where a.y = 10'
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertTrue('IndexCountScan2' in str(plan))
+                self.assertTrue('index_group_aggs' in str(plan))
+                self.assertEqual( plan['~children'][0]['index_group_aggs']['aggregates'][0]['aggregate'], 'COUNT')
                 self.query ='select min(a.y) from default d UNNEST d.arr As a where a.y > 10'
                 actual_result = self.run_cbq_query()
                 self.query ='select min(a.y) from default d use index(`#primary`) UNNEST d.arr As a where a.y > 10'
@@ -767,7 +762,7 @@ class AscDescTests(QueryTests):
                 self.query = 'explain select max(a.y) from default d UNNEST d.arr As a where a.y > 10'
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['limit'], '1')
+                self.assertTrue('index_group_aggs' in str(plan))
                 self.query = 'create index ix3 on default(ALL DISTINCT ARRAY a.y FOR a IN arr END DESC )'
                 self.run_cbq_query()
                 created_indexes.append("ix3")

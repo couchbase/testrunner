@@ -462,7 +462,7 @@ class QueriesViewsTests(QuerySanityTests):
             self.query = 'explain select 1 from default where NOT (join_day IN [ 1])'
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+            self.assertTrue(plan['~children'][0]['index'] ==idx)
             self.query = 'explain select 1 from default where NOT (join_day WITHIN [ 1])'
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
@@ -482,7 +482,7 @@ class QueriesViewsTests(QuerySanityTests):
             self.query = 'explain select 1 from default where join_day NOT IN [ 1]'
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['scan']['index'] ==idx)
+            self.assertTrue(plan['~children'][0]['index'] ==idx)
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % ("default", idx, self.index_type)
