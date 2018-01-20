@@ -911,37 +911,70 @@ class MovingTopFTS(FTSBaseTest):
         """
          Perform indexing + rebalance + index delete in parallel
         """
+        import copy
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        indexes = copy.copy(self._cb_cluster.get_indexes())
+        for index in indexes:
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._num_items/2)
+        reb_thread = Thread(target=self._cb_cluster.rebalance_out,
+                                   name="rebalance",
+                                   args=())
+        reb_thread.start()
+        # the first part of the rebalance is kv, wait for fts rebalance
+        self.sleep(50)
+
+        for index in indexes:
+            index.delete()
+
+        self.sleep(5)
+
+        for index in indexes:
+            try:
+                _, defn = index.get_index_defn()
+                self.log.info(defn['indexDef'])
+            except KeyError as e:
+                self.log.info("Expected exception: {0}".format(e))
+                deleted = self._cb_cluster.are_index_files_deleted_from_disk(index.name)
+                if deleted:
+                    self.log.info("Confirmed: index files deleted from disk")
+                else:
+                    self.fail("ERROR: Index files still present on disk")
+            else:
+                self.fail("ERROR: Index definition still exists after deletion! "
+                          "%s" %defn['indexDef'])
+
+
+    def delete_buckets_during_rebalance(self):
+        """
+            Perform indexing + rebalance + bucket delete in parallel
+        """
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         # wait till indexing is midway...
-        self.wait_for_indexing_complete(self._num_items/2)
+        self.wait_for_indexing_complete(self._num_items / 2)
         reb_thread = Thread(target=self._cb_cluster.rebalance_out_master,
-                                   name="rebalance",
-                                   args=())
+                            name="rebalance",
+                            args=())
         reb_thread.start()
-        self.sleep(15)
-        index = self._cb_cluster.get_fts_index_by_name('default_index_1')
-        new_plan_param = {"maxPartitionsPerPIndex": 128}
-        index.index_definition['planParams'] = \
-            index.build_custom_plan_params(new_plan_param)
-        index.index_definition['uuid'] = index.get_uuid()
-        del_index_thread = Thread(target=index.delete(),
-                                   name="delete_index",
-                                   args=())
-        del_index_thread.start()
-        self.sleep(5)
         try:
-            _, defn = index.get_index_defn()
-            self.log.info(defn)
-            self.fail("ERROR: Index definition still exists after deletion! "
-                      "%s" %defn['indexDef'])
+            for bucket in self._cb_cluster.get_buckets():
+                self._cb_cluster.delete_bucket(bucket.name)
         except Exception as e:
-            self.log.info("Expected exception caught: %s" % e)
+            # deleting buckets during rebalance is not allowed
+            self.log.info("Expected exception: {0}".format(e))
+        else:
+            self.fail("Able to delete buckets during rebalance!")
 
     def update_index_during_failover(self):
         """

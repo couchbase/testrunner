@@ -1625,7 +1625,7 @@ class CouchbaseCluster:
             retry = 0
             while count != 0:
                 count, err = shell.execute_command(
-                    "ls {0}/@fts |grep {1}*.pindex | wc -l".
+                    "ls {0}/@fts |grep ^{1} | wc -l".
                         format(data_dir, index_name))
                 if isinstance(count, list):
                     count = int(count[0])
@@ -1635,7 +1635,7 @@ class CouchbaseCluster:
                 retry += 1
                 if retry > 5:
                     files, err = shell.execute_command(
-                        "ls {0}/@fts |grep {1}*.pindex".
+                        "ls {0}/@fts |grep ^{1}".
                             format(data_dir, index_name))
                     self.__log.info(files)
                     return False
