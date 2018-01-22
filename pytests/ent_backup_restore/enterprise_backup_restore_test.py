@@ -3455,3 +3455,19 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = self.backup_restore()
         self.assertTrue("Backup Repository `backup` not found" in output[-1], "Expected error message not thrown")
         self.log.info("Expected error message thrown")
+
+    """ cbbackup restore enhancement only from vulcan """
+    def test_cbbackupmgr_collect_logs(self):
+        """
+           cbbackupmgr collect-logs will collect logs to archive or
+           output to any path supplied with flag -o
+           CB_ARCHIVE_PATH
+           ex: cbbackupmgr collect-logs -a /tmp/backup
+               cbbackupmgr collect-logs -a /tmp/backup -o /tmp/logs
+        """
+        if "5.5" > self.cb_version[:3]:
+            self.fail("This test is only for cb version 5.5 and later. ")
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._collect_logs()

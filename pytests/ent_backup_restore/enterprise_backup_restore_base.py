@@ -74,6 +74,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.user_env = self.input.param("user-env", False)
         self.backupset.passwd_env = self.input.param("passwd-env", False)
+        self.backupset.log_archive_env = self.input.param("log-archive-env", False)
+        self.backupset.no_log_output_flag = self.input.param("no-log-output-flag", False)
+        self.backupset.ex_logs_path = self.input.param("ex-logs-path", None)
         self.backupset.overwrite_user_env = self.input.param("overwrite-user-env", False)
         self.backupset.overwrite_passwd_env = self.input.param("overwrite-passwd-env", False)
         self.backupset.user_env_with_prompt = \
@@ -1127,6 +1130,103 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                           storageMode=storageMode)
         rest.init_node()
 
+    def _collect_logs(self):
+        """
+           CB_ARCHIVE_PATH env: param log-archive-env=False
+           syntax: cbbackupmgr collect-logs -a /tmp/backup -o /tmp/logs
+        """
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        info = shell.extract_remote_info().type.lower()
+
+        args = " collect-logs -a {0}".format(self.backupset.directory)
+        if self.backupset.ex_logs_path:
+            if info == 'windows':
+                if "tmp" in self.backupset.ex_logs_path:
+                    self.fail("It must use other name for ex logs dir in windows")
+                self.backupset.ex_logs_path = "/cygdrive/c/" + \
+                                              self.backupset.ex_logs_path
+                if "relativepath" in self.backupset.ex_logs_path:
+                    self.backupset.ex_logs_path = \
+                        self.backupset.ex_logs_path.replace("/cygdrive/c/", "~/")
+            else:
+                self.backupset.ex_logs_path = "/tmp/" + self.backupset.ex_logs_path
+                if "relativepath" in self.backupset.ex_logs_path:
+                    self.backupset.ex_logs_path = \
+                        self.backupset.ex_logs_path.replace("/tmp/", "~/")
+            self.log.info("remove any old ex logs directory in {0}"
+                                            .format(self.backupset.ex_logs_path))
+            shell.execute_command("rm -rf {0}".format(self.backupset.ex_logs_path))
+            if self.backupset.ex_logs_path == "non-exist-dir":
+                self.log.info("test on non exist directory.")
+            else:
+                self.log.info("Create logs dir at {0}".format(self.backupset.ex_logs_path))
+                shell.execute_command("mkdir {0}".format(self.backupset.ex_logs_path))
+            ex_logs_path = self.backupset.ex_logs_path
+            if info == 'windows':
+                ex_logs_path = ex_logs_path.replace("/cygdrive/c", "c:")
+            args += " -o {0}".format(ex_logs_path)
+        log_archive_env = ""
+        if self.backupset.log_archive_env:
+            if not self.backupset.ex_logs_path:
+                self.log.info("set log arvhive env to /tmp/envlogs")
+                log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH=/tmp/logs; "
+            elif self.backupset.ex_logs_path:
+                args += " -o {0}".format(self.backupset.log_env_overwrite)
+        if "-o" in args and self.backupset.no_log_output_flag:
+            args = args.replace("-o", " ")
+        command = "{0} {1}/cbbackupmgr {2}"\
+                                            .format(log_archive_env,
+                                                    self.cli_command_location,
+                                                    args)
+        output, error = shell.execute_command(command)
+        shell.disconnect()
+        if self._check_output("Collecting logs succeeded", output):
+            self._verify_cbbackupmgr_logs()
+        elif self.backupset.no_log_output_flag and self._check_output("error", output):
+            self.log.info("This is negative test")
+        elif "non-exist_dir" in self.backupset.ex_logs_path:
+            self.log.info("This is negative test on non exist output logs dir")
+        else:
+            self.fail("Failed to collect logs")
+
+    def _verify_cbbackupmgr_logs(self):
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.log.info("\n**** start to verify cbbackupmgr logs ****")
+
+        if not self.backupset.ex_logs_path:
+            logs_path = self.backupset.directory + "/logs"
+        elif self.backupset.ex_logs_path:
+            logs_path = self.backupset.ex_logs_path
+        if self.backupset.log_archive_env:
+            logs_path = self.backupset.log_archive_env
+            if self.backupset.ex_logs_path:
+                logs_path = self.backupset.ex_logs_path
+        output, _ = shell.execute_command("ls {0}".format(logs_path))
+        if self.debug_logs:
+            print "\nlog path: ", logs_path
+            print "output : ", output
+        if output:
+            for x in output:
+                if "collectinfo" in x:
+                    shell.execute_command("cd {0}; unzip {1}"
+                                             .format(logs_path, x))
+        else:
+            if self.backupset.log_archive_env:
+                self.fail("Failed to pass CB_ARCHIVE_PATH")
+            if self.backupset.ex_logs_path:
+                self.fail("Failed to ")
+        output, _ = shell.execute_command("ls {0}".format(logs_path))
+        dir_list =  ["archive_list.txt", "backup", "logs"]
+        for ele in dir_list:
+            if ele not in output:
+                self.fail("Missing dir/file {0} in cbbackupmgr logs".format(ele))
+
+        output, _ = shell.execute_command("ls {0}".format(logs_path + "/backup"))
+        if output and "backup-meta.json" not in output[0]:
+            self.fail("Missing file 'backup-meta.json' in backup dir")
+        output, _ = shell.execute_command("ls {0}".format(logs_path + "/logs"))
+        if output and "backup.log" not in output[0]:
+            self.fail("Missing file 'backup.log' in backup logs dir")
 
 class Backupset:
     def __init__(self):
@@ -1171,6 +1271,9 @@ class Backupset:
         self.map_buckets = None
         self.backup_compressed = False
         self.user_env = False
+        self.log_archive_env = False
+        self.no_log_output_flag = False
+        self.ex_logs_path = None
         self.passwd_env = False
         self.overwrite_user_env = False
         self.overwrite_passwd_env = False
