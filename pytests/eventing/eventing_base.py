@@ -37,7 +37,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
         # self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
-        self.log_level = self.input.param('log_level', 'TRACE')
+        self.eventing_log_level = self.input.param('eventing_log_level', 'TRACE')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
         self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
@@ -79,7 +79,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['dcp_stream_boundary'] = dcp_stream_boundary
         body['settings']['deployment_status'] = deployment_status
         body['settings']['description'] = description
-        body['settings']['log_level'] = self.log_level
+        body['settings']['log_level'] = self.eventing_log_level
         body['settings']['rbacpass'] = rbacpass
         body['settings']['rbacrole'] = rbacrole
         body['settings']['rbacuser'] = rbacuser
@@ -153,17 +153,24 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket)
         if stats_dst["curr_items"] != expected_dcp_mutations:
+            total_dcp_backlog = 0
+            timers_in_past = 0
             # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
             for eventing_node in eventing_nodes:
                 rest_conn = RestConnection(eventing_node)
                 out = rest_conn.get_all_eventing_stats()
+                total_dcp_backlog += out[0]["events_remaining"]["dcp_backlog"]
+                if "TIMERS_IN_PAST" in out[0]["event_processing_stats"]:
+                    timers_in_past += out[0]["event_processing_stats"]["TIMERS_IN_PAST"]
                 full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
                 log.info("Stats for Node {0} is {1} ".format(eventing_node.ip, out))
                 log.debug("Full Stats for Node {0} is {1} ".format(eventing_node.ip, full_out))
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
-                "Expected : {1}  dcp_backlog : {2}".format(stats_dst["curr_items"], expected_dcp_mutations,
-                                                          out[0]["events_remaining"]["dcp_backlog"]))
+                "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3}".format(stats_dst["curr_items"],
+                                                                                 expected_dcp_mutations,
+                                                                                 total_dcp_backlog,
+                                                                                 timers_in_past))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         # print all stats from all eventing nodes
         # These are the stats that will be used by ns_server and UI

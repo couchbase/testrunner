@@ -53,6 +53,7 @@ class EventingRecovery(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+        # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
@@ -198,7 +199,6 @@ class EventingRecovery(EventingBaseTest):
         self.reboot_server(n1ql_node)
         task.result()
         stats = self.rest.get_all_eventing_stats()
-        stats = json.loads(stats)
         on_update_failure = stats[0]["execution_stats"]["on_update_failure"]
         n1ql_op_exception_count = stats[0]["failure_stats"]["n1ql_op_exception_count"]
         self.undeploy_and_delete_function(body)
@@ -222,7 +222,6 @@ class EventingRecovery(EventingBaseTest):
         self.kill_erlang_service(n1ql_node)
         task.result()
         stats = self.rest.get_all_eventing_stats()
-        stats = json.loads(stats)
         on_update_failure = stats[0]["execution_stats"]["on_update_failure"]
         n1ql_op_exception_count = stats[0]["failure_stats"]["n1ql_op_exception_count"]
         self.undeploy_and_delete_function(body)
