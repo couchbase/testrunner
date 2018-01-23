@@ -193,8 +193,48 @@ class EventingDataset(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
+        # update multiple xattrs and update the documents
         for docid in ['customer123', 'customer1234', 'customer12345']:
-            bucket.mutate_in(docid, SD.upsert('my', {'value': 1}, xattr=True))
+            bucket.mutate_in(docid, SD.upsert('my1', {'value': 1}, xattr=True))
+            bucket.mutate_in(docid, SD.upsert('my2', {'value': 2}, xattr=True))
             bucket.mutate_in(docid, SD.upsert('fax', '775-867-5309'))
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
+        # add new multiple xattrs , delete old xattrs and delete the documents
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            bucket.mutate_in(docid, SD.upsert('my3', {'value': 3}, xattr=True))
+            bucket.mutate_in(docid, SD.upsert('my4', {'value': 4}, xattr=True))
+            bucket.mutate_in(docid, SD.remove('my3', xattr=True))
+            bucket.mutate_in(docid, SD.remove('my4', xattr=True))
+            bucket.remove(docid)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    # See MB-27679
+    def test_eventing_with_large_doc_size(self):
+        # generate docs with size >=  1MB , See MB-27679
+        gens_load = self.generate_docs_bigdata(self.docs_per_day)
+        self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_with_unicode_character_in_handler_code(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_UNICODE_CHAR)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
 

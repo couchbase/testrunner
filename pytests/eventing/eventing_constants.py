@@ -8,6 +8,8 @@ class HANDLER_CODE:
     BUCKET_OPS_WITH_CRON_TIMER = 'handler_code/bucket_op_with_cron_timer.js'
     BUCKET_OPS_WITH_CRON_TIMER_WITH_SECOND_BUCKET = 'handler_code/bucket_op_on_second_bucket_with_cron_timer.js'
     DELETE_BUCKET_OP_ON_DELETE = 'handler_code/delete_doc_bucket_op.js'
+    DELETE_BUCKET_OP_ON_DELETE1 = 'handler_code/delete_doc_bucket_op1.js'
+    BUCKET_OPS_WITH_UNICODE_CHAR = 'handler_code/bucket_op_with_unicode_characters.js'
     DELETE_BUCKET_OP_ON_DELETE_INTERCHAGE = 'handler_code/delete_doc_bucket_op_interchange.js'
     MULTIPLE_BUCKET_OPS_ON_UPDATE = 'handler_code/multiple_bucket_op_on_update.js'
     MULTIPLE_TIMER_OPS_OF_DIFFERENT_TYPE_ON_UPDATE = 'handler_code/multiple_timer_operations_on_update.js'

@@ -6,6 +6,7 @@ import os
 from TestInput import TestInputSingleton
 from lib.couchbase_helper.documentgenerator import BlobGenerator
 from lib.couchbase_helper.stats_tools import StatsCommon
+from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -400,3 +401,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         ev_rest = RestConnection(ev_node)
         log.info("Running eventing cleanup api...")
         ev_rest.cleanup_eventing()
+
+    def generate_docs_bigdata(self, docs_per_day, start=0):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_bigdata(end=(2016 * docs_per_day), start=start, value_size=2048000)
