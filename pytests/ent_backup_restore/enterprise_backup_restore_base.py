@@ -1405,7 +1405,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         conn.kill_erlang()
         conn.start_couchbase()
         output = backup_result.result(timeout=200)
-        self.assertTrue("Backup successfully completed" in output[0],
+        self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
         self.sleep(30)
@@ -1437,7 +1437,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         conn.stop_couchbase()
         conn.start_couchbase()
         output = backup_result.result(timeout=200)
-        self.assertTrue("Backup successfully completed" in output[0],
+        self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with couchbase stop and start within 180 seconds")
         self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
         self.sleep(30)
@@ -1488,7 +1488,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         conn.pause_memcached()
         conn.unpause_memcached()
         output = merge_result.result(timeout=200)
-        self.assertTrue("Merge completed successfully" in output[0],
+        self.assertTrue(self._check_output("Merge completed successfully", output),
                         "Merge failed with memcached crash and restart within 180 seconds")
         self.log.info("Merge succeeded with memcached crash and restart within 180 seconds")
         self.sleep(30)
@@ -1524,7 +1524,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         conn.kill_erlang()
         conn.start_couchbase()
         output = merge_result.result(timeout=200)
-        self.assertTrue("Merge completed successfully" in output[0],
+        self.assertTrue(self._check_output("Merge completed successfully", output),
                         "Merge failed with erlang crash and restart within 180 seconds")
         self.log.info("Merge succeeded with erlang crash and restart within 180 seconds")
         self.sleep(30)
@@ -1560,7 +1560,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         conn.stop_couchbase()
         conn.start_couchbase()
         output = merge_result.result(timeout=200)
-        self.assertTrue("Merge completed successfully" in output[0],
+        self.assertTrue(self._check_output("Merge completed successfully", output),
                         "Merge failed with couchbase stop and start within 180 seconds")
         self.log.info("Merge succeeded with couchbase stop and start within 180 seconds")
         self.sleep(30)
