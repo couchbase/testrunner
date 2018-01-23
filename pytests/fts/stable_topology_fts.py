@@ -1700,3 +1700,33 @@ class StableTopFTS(FTSBaseTest):
                 self.fail("Query over ssl failed!")
         else:
             self.fail("Index could not be created over ssl")
+
+
+    def test_json_types(self):
+        import couchbase
+        self.load_data()
+        self.create_simple_default_index()
+        master = self._cb_cluster.get_master_node()
+        dic ={}
+        dic['null'] = None
+        dic['number'] = 12345
+        dic['date'] = "2018-01-21T18:25:43-05:00"
+        dic['bool'] = True
+        dic['string'] = "sample string json"
+        dic['array'] = ['element1', 1234, True]
+        try:
+            from couchbase.cluster import Cluster
+            from couchbase.cluster import PasswordAuthenticator
+            cluster = Cluster('couchbase://{0}'.format(master.ip))
+            authenticator = PasswordAuthenticator('Administrator', 'password')
+            cluster.authenticate(authenticator)
+            cb = cluster.open_bucket('default')
+            for key, value in dic.iteritems():
+                cb.upsert(key, value)
+        except Exception as e:
+            self.fail(e)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        for index in self._cb_cluster.get_indexes():
+            self.generate_random_queries(index, 5, self.query_types)
+            self.run_query_and_compare(index)
