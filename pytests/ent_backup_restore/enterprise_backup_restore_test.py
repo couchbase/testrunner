@@ -3280,7 +3280,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.sleep(30)
         self.backup_cluster_validate()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
-        NodeHelper.wait_warmup_completed([self.backupset.cluster_host])
+        """" only membase bucket has warmup state """"
+        if self.bucket_type == "membase":
+            NodeHelper.wait_warmup_completed([self.backupset.cluster_host])
 
     def stat(self, key):
         stats = StatsCommon.get_stats([self.master], 'default', "", key)
