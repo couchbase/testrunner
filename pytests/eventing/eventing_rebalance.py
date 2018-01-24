@@ -390,6 +390,8 @@ class EventingRebalance(EventingBaseTest):
             result = self.rest.monitorRebalance()
             msg = "successfully rebalanced cluster {0}"
             self.log.info(msg.format(result))
+        # This is intenionally added
+        self.sleep(60)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
@@ -423,6 +425,8 @@ class EventingRebalance(EventingBaseTest):
             result = self.rest.monitorRebalance()
             msg = "successfully rebalanced cluster {0}"
             self.log.info(msg.format(result))
+        # This is intenionally added
+        self.sleep(60)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)

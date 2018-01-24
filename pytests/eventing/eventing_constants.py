@@ -32,6 +32,7 @@ class HANDLER_CODE:
     N1QL_TEMP_PATH = 'handler_code/rqg_handler_code/'
     N1QL_UPDATE_DELETE= 'handler_code/n1ql_update_delete.js'
     N1QL_ITERATOR= 'handler_code/n1ql_iterator.js'
+    SRC_AND_DST_BUCKET_ARE_SAME='handler_code/src_and_dst_bucket_are_same.js'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
@@ -40,6 +41,8 @@ class HANDLER_CODE_ERROR:
     RANDOM='handler_code/handler_code_error/random_method.js'
     ANONYMOUS_DOC_TIMER='handler_code/handler_code_error/anonymous_function_doc_timer.js'
     ANONYMOUS_CRON_TIMER='handler_code/handler_code_error/anonymous_function_cron_timer.js'
+    EXECUTION_TIME_MORE_THAN_TIMEOUT = 'handler_code/handler_code_error/code_execution_more_than_execution_timeout.js'
+
 
 class EXPORTED_FUNCTION:
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'exported_functions/n1ql_insert_with_cron_timer.json'

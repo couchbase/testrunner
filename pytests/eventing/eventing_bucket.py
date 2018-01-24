@@ -274,3 +274,26 @@ class EventingBucket(EventingBaseTest):
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_eventing_where_source_and_destination_bucket_are_same(self):
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.SRC_AND_DST_BUCKET_ARE_SAME,
+                                              worker_count=3)
+        # create an alias so that src bucket is also destination bucket
+        del body['depcfg']['buckets'][0]
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.src_bucket_name})
+        # deploy the function
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the create mutations and verify results
+        # No of docs source should be twice the number we populated
+        # Since recursive mutations is disabled there should be no kv storm for the docs created by eventing
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
+                                     bucket=self.src_bucket_name)
+        # delete the data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, bucket=self.src_bucket_name)
+        self.undeploy_and_delete_function(body)

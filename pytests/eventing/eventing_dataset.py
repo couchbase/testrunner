@@ -132,8 +132,28 @@ class EventingDataset(EventingBaseTest):
             "False",  # boolean key
             "null",  # null key
             "undefined",  # undefined key
+            # Check here for javascript builtin objects : https://mzl.la/1zDsM8O
+            "NaN",
+            "Symbol()",
+            "Symbol(42)"
+            "Symbol(\'foo\')",
+            "isNaN",
+            "Error",
+            "Function",
             "Infinity",
-            "NaN"
+            "Atomics",
+            "Boolean",
+            "ArrayBuffer",
+            "DataView",
+            "Date",
+            "Generator {}",
+            "InternalError",
+            "Intl",
+            "Number",
+            "Math",
+            "Map",
+            "Promise",
+            "Proxy"
         ]
         url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
         bucket = Bucket(url, username="cbadminbucket", password="password")
@@ -214,13 +234,13 @@ class EventingDataset(EventingBaseTest):
         # generate docs with size >=  1MB , See MB-27679
         gens_load = self.generate_docs_bigdata(self.docs_per_day)
         self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+                  batch_size=10)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+                  batch_size=10, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

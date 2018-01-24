@@ -164,8 +164,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 if "TIMERS_IN_PAST" in out[0]["event_processing_stats"]:
                     timers_in_past += out[0]["event_processing_stats"]["TIMERS_IN_PAST"]
                 full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
-                log.info("Stats for Node {0} is {1} ".format(eventing_node.ip, out))
-                log.debug("Full Stats for Node {0} is {1} ".format(eventing_node.ip, full_out))
+                log.info("Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(out, sort_keys=True,
+                                                                                          indent=4)))
+                log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out,
+                                                                                                sort_keys=True,
+                                                                                                indent=4)))
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
                 "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3}".format(stats_dst["curr_items"],
@@ -179,8 +182,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             rest_conn = RestConnection(eventing_node)
             out = rest_conn.get_all_eventing_stats()
             full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
-            log.info("Stats for Node {0} is {1} ".format(eventing_node.ip, out))
-            log.debug("Full Stats for Node {0} is {1} ".format(eventing_node.ip, full_out))
+            log.info("Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(out, sort_keys=True,
+                                                                                      indent=4)))
+            log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out, sort_keys=True,
+                                                                                            indent=4)))
 
     def eventing_stats(self):
         self.sleep(30)
