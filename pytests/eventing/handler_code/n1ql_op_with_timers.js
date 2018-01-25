@@ -7,10 +7,10 @@ function OnDelete(meta) {
     cronTimer(NDtimerCallback, meta.id, expiry);
 }
 function NDtimerCallback(docid, expiry) {
-    var query = DELETE FROM dst_bucket where meta().id = $docid;
+    var query = DELETE FROM dst_bucket where meta().id = :docid;
     query.execQuery();
 }
 function timerCallback(docid, expiry) {
-    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( $docid ,'timerCallback');
+    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( :docid ,'timerCallback');
     query.execQuery();
 }
