@@ -685,7 +685,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'explain select join_day from %s where join_day in ["5", $1] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan1 = self.ExplainPlanHelper(actual_result)
-                self.assertEqual(len(plan1['~children'][0]['spans']), 2)
+                self.assertEqual(len(plan1['~children'][0]['scan']['spans']), 2)
                 self.query = 'explain select join_day from %s where join_day in [$1] '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan2 = self.ExplainPlanHelper(actual_result)
@@ -721,13 +721,13 @@ class QueriesIndexTests(QueryTests):
                              % (bucket.name)
                 actual_result = self.run_cbq_query()
                 plan5 = self.ExplainPlanHelper(actual_result)
-                self.assertEqual(len(plan5['~children'][0]['spans']), 3)
+                self.assertEqual(len(plan5['~children'][0]['scan']['spans']), 3)
 
                 self.query = 'explain select join_day from %s where join_day in  [$1,$2,$3] limit 5 '  %(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan6 = self.ExplainPlanHelper(actual_result)
-                self.assertEqual(len(plan6['~children'][0]['~children'][0]['spans']), 3)
-                self.assertEqual( plan6["~children"][1]['expr'] == "5" and plan6["~children"][1]['#operator'], 'Limit')
+                self.assertEqual(len(plan6['~children'][0]['~children'][0]['scan']['spans']), 3)
+                self.assertEqual(plan6["~children"][1]['expr'] == "5" and plan6["~children"][1]['#operator'], 'Limit')
 
             finally:
                 for idx in created_indexes:
