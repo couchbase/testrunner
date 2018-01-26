@@ -94,6 +94,39 @@ class AdvancedQueryTests(QueryTests):
                 finally:
                     shell.disconnect()
 
+    def test_ipv6(self):
+        prefixes = ['http://', 'https://', 'couchbase://', 'couchbases://']
+        ips = ['[::1]']
+        ports = [':8091', ':8093', ':18091', ':18093']
+
+        pass_urls = []
+
+        # creates url, port tuples that should be valid.
+        # port will be used to verify it connected to the proper endpoint
+        for prefix in prefixes:
+            for ip in ips:
+                pass_urls.append((ip, '8091'))
+                if prefix == 'couchbase://':
+                    pass_urls.append((prefix+ip, '8091'))
+                if prefix == 'couchbases://':
+                    pass_urls.append((prefix+ip, '18091'))
+                for port in ports:
+                    if prefix == 'http://' and port in ['8091', '8093']:
+                        pass_urls.append((prefix+ip+port, port))
+                    if prefix == 'https://' and port in ['18091', '18093']:
+                        pass_urls.append((prefix+ip+port, port))
+
+        # run through all servers and try to connect cbq to the given url
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            try:
+                for url in pass_urls:
+                    cmd = self.path+'cbq  -u=Administrator -p=password -e='+url[0]+' -no-ssl-verify=true'
+                    o = shell.execute_commands_inside(cmd, '', ['select * from system:nodes;', '\quit;'], '', '', '', '')
+                    self.assertTrue(url[1] in o)
+            finally:
+                shell.disconnect()
+
     def test_engine_postive(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
