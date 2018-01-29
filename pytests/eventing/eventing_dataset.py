@@ -231,11 +231,15 @@ class EventingDataset(EventingBaseTest):
 
     # See MB-27679
     def test_eventing_with_large_doc_size(self):
+        document_size = self.input.param('document_size')
+        data_chan_size = self.input.param('data_chan_size', 10)
+        worker_queue_cap = self.input.param('worker_queue_cap', 10)
         # generate docs with size >=  1MB , See MB-27679
-        gens_load = self.generate_docs_bigdata(self.docs_per_day)
+        gens_load = self.generate_docs_bigdata(self.docs_per_day, document_size=document_size)
         self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=10)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1,
+                                              data_chan_size=data_chan_size, worker_queue_cap=worker_queue_cap)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)

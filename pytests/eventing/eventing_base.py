@@ -59,7 +59,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
-                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3):
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
+                                  data_chan_size=10000, worker_queue_cap=100000):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -93,6 +94,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['processing_status'] = processing_status
         body['settings']['cpp_worker_thread_count'] = cpp_worker_thread_count
         body['settings']['execution_timeout'] = execution_timeout
+        body['settings']['data_chan_size'] = data_chan_size
+        body['settings']['worker_queue_cap'] = worker_queue_cap
         return body
 
     def wait_for_bootstrap_to_complete(self, name):
@@ -107,7 +110,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
-                                skip_stats_validation=False, bucket=None):
+                                skip_stats_validation=False, bucket=None, timeout=600):
         # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
         num_nodes = self.refresh_rest_server()
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -132,7 +135,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 # wait for eventing node to process dcp mutations
                 log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
                 while actual_dcp_mutations != expected_dcp_mutations and count < 20:
-                    self.sleep(30, message="Waiting for eventing to process all dcp mutations...")
+                    self.sleep(timeout/20, message="Waiting for eventing to process all dcp mutations...")
                     count += 1
                     if num_nodes <= 1:
                         stats = self.rest.get_event_processing_stats(name)
@@ -150,7 +153,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket)
         while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
-            self.sleep(30, message="Waiting for handler code to complete all bucket operations...")
+            self.sleep(timeout/20, message="Waiting for handler code to complete all bucket operations...")
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket)
         if stats_dst["curr_items"] != expected_dcp_mutations:
@@ -407,6 +410,6 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("Running eventing cleanup api...")
         ev_rest.cleanup_eventing()
 
-    def generate_docs_bigdata(self, docs_per_day, start=0):
+    def generate_docs_bigdata(self, docs_per_day, start=0, document_size=1024000):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_bigdata(end=(2016 * docs_per_day), start=start, value_size=2048000)
+        return json_generator.generate_docs_bigdata(end=(2016 * docs_per_day), start=start, value_size=document_size)
