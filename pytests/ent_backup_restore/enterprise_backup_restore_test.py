@@ -2589,8 +2589,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
         rest = RestConnection(self.backupset.cluster_host)
         rest.delete_bucket()
-        rest.create_bucket(bucket="default", ramQuotaMB=512)
-        self.log.info("Deleted default bucket and recreated it - restoring it now..")
+        bucket_name = "default"
+        rest_helper = RestHelper(rest)
+        rest.create_bucket(bucket=bucket_name, ramQuotaMB=512)
+        bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
+        if not bucket_ready:
+            self.fail("Bucket {0} is not created after 120 seconds.".format(bucket_name))
+        self.log.info("Deleted {0} bucket and recreated it - restoring it now.."\
+                                                                .format(bucket_name))
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
     def test_backup_create_negative_args(self):
