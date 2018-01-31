@@ -310,6 +310,14 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                                        format(panic_str, eventing_log))
                 log.info("\n {0}".format(panic_trace))
                 self.panic_count = count
+            dir_name_crash = str(dir_name) + '/../crash/'
+            core_dump_count, err = shell.execute_command("ls {0}| wc -l".format(dir_name_crash))
+            if isinstance(core_dump_count, list):
+                core_dump_count = int(core_dump_count[0])
+            else:
+                core_dump_count = int(core_dump_count)
+            if core_dump_count > 0:
+                log.info("===== CORE DUMPS SEEN ON EVENTING NODES, SERVER {0}=====".format(eventing_node.ip))
             shell.disconnect()
 
     def print_execution_and_failure_stats(self,name):
