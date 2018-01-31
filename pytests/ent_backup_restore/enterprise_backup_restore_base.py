@@ -1167,11 +1167,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " -o {0}".format(ex_logs_path)
         log_archive_env = ""
         if self.backupset.log_archive_env:
-            if not self.backupset.ex_logs_path:
-                self.log.info("set log arvhive env to /tmp/envlogs")
-                log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH=/tmp/logs; "
-            elif self.backupset.ex_logs_path:
-                args += " -o {0}".format(self.backupset.log_env_overwrite)
+            self.log.info("set log arvhive env to /tmp/envlogs")
+            log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH=/tmp/logs; "
+            if self.backupset.ex_logs_path:
+                self.log.info("overwrite env log path with flag -o")
         if "-o" in args and self.backupset.no_log_output_flag:
             args = args.replace("-o", " ")
         command = "{0} {1}/cbbackupmgr {2}"\
