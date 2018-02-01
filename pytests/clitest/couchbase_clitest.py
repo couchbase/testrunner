@@ -359,6 +359,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             command = ''.join([self.cli_command_path, cli, option])
             self.log.info("test -h of command {0}".format(cli))
             output, error = shell.execute_command(command, use_channel=True)
+
             """ check if the first line is not empty """
             if not output[0]:
                 self.log.error("this help command {0} may not work!".format(cli))
@@ -380,10 +381,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if "127.0.0.1" in server_info["otpNode"]:
             server_info["otpNode"] = "ns_1@{0}".format(remote_client.ip)
             server_info["hostname"] = "{0}:8091".format(remote_client.ip)
+        otpNode = remote_client.ip
+        """ need to remove [ ] brackets in ipv6 raw ip address """
+        if "[" in otpNode:
+            otpNode = otpNode.replace("[", "").replace("]", "")
         result = server_info["otpNode"] + " " + server_info["hostname"] + " " \
                + server_info["status"] + " " + server_info["clusterMembership"]
-        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active" \
-                                           .format(remote_client.ip))
+        self.assertEqual(result.lower(), "ns_1@{0} {1}:8091 healthy active" \
+                                           .format(otpNode.lower(),
+                                                   remote_client.ip.lower()))
 
         cli_command = "bucket-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
