@@ -147,3 +147,12 @@ class EventingSanity(EventingBaseTest):
         except Exception as e:
             if "Unexpected end of input" not in str(e):
                 self.fail("Deployment is expected to be failed but no message of failure")
+
+    def test_n1ql_iterators_with_break_and_continue(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATORS)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)

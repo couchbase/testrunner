@@ -30,8 +30,9 @@ class HANDLER_CODE:
     N1QL_TEMP = 'handler_code/n1ql_temp.js'
     N1QL = 'rqg_handler_code/n1ql.js'
     N1QL_TEMP_PATH = 'handler_code/rqg_handler_code/'
-    N1QL_UPDATE_DELETE= 'handler_code/n1ql_update_delete.js'
-    N1QL_ITERATOR= 'handler_code/n1ql_iterator.js'
+    N1QL_UPDATE_DELETE = 'handler_code/n1ql_update_delete.js'
+    N1QL_ITERATOR = 'handler_code/n1ql_iterator.js'
+    N1QL_ITERATORS = 'handler_code/n1ql_iterators.js'
     SRC_AND_DST_BUCKET_ARE_SAME='handler_code/src_and_dst_bucket_are_same.js'
 
 class HANDLER_CODE_ERROR:
