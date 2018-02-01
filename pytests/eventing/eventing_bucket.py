@@ -284,16 +284,9 @@ class EventingBucket(EventingBaseTest):
         # create an alias so that src bucket is also destination bucket
         del body['depcfg']['buckets'][0]
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.src_bucket_name})
-        # deploy the function
-        self.deploy_function(body)
-        # Wait for eventing to catch up with all the create mutations and verify results
-        # No of docs source should be twice the number we populated
-        # Since recursive mutations is disabled there should be no kv storm for the docs created by eventing
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
-                                     bucket=self.src_bucket_name)
-        # delete the data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
-        # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, bucket=self.src_bucket_name)
-        self.undeploy_and_delete_function(body)
+        try:
+            # deploy the function
+            self.deploy_function(body)
+        except Exception as ex:
+            if "Bucket binding for source bucket disallowed" not in str(ex):
+                self.fail("Eventing deployment succeeded even when source and destination buckets are same")

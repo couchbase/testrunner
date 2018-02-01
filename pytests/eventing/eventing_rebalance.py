@@ -812,3 +812,43 @@ class EventingRebalance(EventingBaseTest):
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_kv_eventing_failover_and_kv_eventing_rebalance_simultaneously(self):
+        self.server_failed_over = self.input.param("server_failed_over")
+        self.server_out = self.input.param("server_out")
+        self.services_in = self.input.param("services_in")
+        gen_load_del = copy.deepcopy(self.gens_load)
+        server_failed_over = self.servers[self.server_failed_over]
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create')
+            # failover a node
+            fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[server_failed_over], graceful=False)
+            fail_over_task.result()
+            self.sleep(120)
+            # do a swap rebalance
+            server_out = self.servers[self.server_out]
+            self.rest.add_node(self.master.rest_username, self.master.rest_password,
+                               self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
+                               services=[self.services_in])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [server_out])
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except:
+            # data load might fail because of hard failover
+            pass
+        stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
