@@ -3477,3 +3477,24 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self._collect_logs()
+
+    def test_cbbackupmgr_restore_with_ttl(self):
+        """
+           cbbackupmgr restore --replace-ttl will replace ttl
+           value with flag --replace-ttl-with
+           ex: cbbackupmgr restore --replace-ttl all --replace-ttl-with 0
+        """
+        if "5.5" > self.cb_version[:3]:
+            self.fail("This test is only for cb version 5.5 and later. ")
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        compare_function = "=="
+        if self.replace_ttl_with:
+            compare_function = "<="
+        if self.should_fail:
+            self.backup_restore()
+        else:
+            self.backup_restore_validate(compare_uuid=False,
+                                         seqno_compare_function=compare_function)

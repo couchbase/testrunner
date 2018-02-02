@@ -132,6 +132,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cluster_new_role = self.input.param("new_role", None)
         self.new_replicas = self.input.param("new-replicas", None)
         self.restore_only = self.input.param("restore-only", False)
+        self.replace_ttl = self.input.param("replace-ttl", None)
+        self.replace_ttl_with = self.input.param("replace-ttl-with", None)
+        self.verify_before_expired = self.input.param("verify-before-expired", False)
         self.force_version_upgrade = self.input.param("force-version-upgrade", None)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
@@ -583,12 +586,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.passwd_env_with_prompt:
             self.log.info("set password env to prompt")
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
+        if self.replace_ttl:
+            if self.replace_ttl != "none":
+                if self.replace_ttl == "all" or self.replace_ttl == "expired":
+                    if self.replace_ttl_with is None:
+                        self.fail("Need to include param 'replace-ttl-with' value")
+                    args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                                     .format(self.replace_ttl, self.replace_ttl_with)
+                elif self.replace_ttl == "add-none":
+                    args += " --replace-ttl none"
+                elif self.replace_ttl == "empty-flag":
+                    args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
+                else:
+                    args += " --replace-ttl {0}".format(self.replace_ttl)
+            elif self.replace_ttl == "none":
+                args += " --replace-ttl"
+
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                    password_env, user_env)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if "Error restoring cluster" in output[0]:
+        errors_check = ["Unable to process value for", "Error restoring cluster"]
+        if "Error restoring cluster" in output[0] or "Unable to process value" in output[0]:
             if not self.should_fail:
                 self.fail("Failed to restore cluster")
             else:
@@ -603,7 +623,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
         if 'Required Flags:' in res:
-            self.fail("Command line failed. Please check test params.")
+            if not self.should_fail:
+                self.fail("Command line failed. Please check test params.")
         remote_client.disconnect()
         return output, error
 
@@ -647,6 +668,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets,
                                                  self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
+        if self.replace_ttl_with:
+            if self.verify_before_expired:
+                if int(self.replace_tll_with) < 180:
+                    self.fail("Need more than 3 minutes to run with verify before expired")
+                else:
+                    sleep_time = int(self.replace_ttl_with)/3
+                    self.sleep(int(sleep_time), " wait to check items before it expired")
+            else:
+                sleep_time = int(self.replace_ttl_with) + 10
+                self.sleep(int(sleep_time), " wait for items to be expired")
         status, msg = self.validation_helper.validate_restore(self.backupset.end,
                                               self.vbucket_seqno, current_vseqno,
                                               compare_uuid=compare_uuid,
@@ -1226,6 +1257,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, _ = shell.execute_command("ls {0}".format(logs_path + "/logs"))
         if output and "backup.log" not in output[0]:
             self.fail("Missing file 'backup.log' in backup logs dir")
+
 
 class Backupset:
     def __init__(self):
