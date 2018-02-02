@@ -549,8 +549,9 @@ class EventingRebalance(EventingBaseTest):
                                                  self.buckets[0].kvs[1], 'delete')
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # Remove 2 eventing nodes
         to_remove_nodes = nodes_out_list[0:2]
-        # rebalance out all eventing nodes
+        # rebalance out 2 eventing nodes
         rebalance1 = self.cluster.async_rebalance(self.servers[:self.nodes_init + 2], [], to_remove_nodes)
         reached1 = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached1, "rebalance failed, stuck or did not complete")

@@ -208,7 +208,7 @@ class EventingBucket(EventingBaseTest):
         values = ['1', '10']
         gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=2016 * self.docs_per_day)
         gen_load_non_json_del = copy.deepcopy(gen_load_non_json)
-        self.cluster.load_gen_docs(self.master, "dst_bucket", gen_load_non_json, self.buckets[0].kvs[1],
+        self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
                                    'create')
         # deploy the first function
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,

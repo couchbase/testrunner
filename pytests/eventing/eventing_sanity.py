@@ -1,3 +1,5 @@
+from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator
+from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
@@ -149,10 +151,31 @@ class EventingSanity(EventingBaseTest):
                 self.fail("Deployment is expected to be failed but no message of failure")
 
     def test_n1ql_iterators_with_break_and_continue(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATORS)
+        values = ['1', '10']
+        # create 100 non json docs
+        # number of docs is intentionally reduced as handler code runs 1 n1ql queries/mutation
+        gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=100)
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                      max_verify=self.max_verify,
+                                      buckets=self.buckets,
+                                      item_flag=self.item_flag,
+                                      n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list,
+                                      log=self.log, input=self.input,
+                                      master=self.master,
+                                      use_rest=True
+                                      )
+        # primary index is required as we run some queries from handler code
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        # load the data
+        self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
+                                   'create')
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATORS, execution_timeout=30)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, 100)
         self.undeploy_and_delete_function(body)
+        # delete all the primary indexes
+        self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_node)
+

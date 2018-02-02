@@ -184,6 +184,9 @@ class EventingRecovery(EventingBaseTest):
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        # This is intentionally added, it is sometimes seen that the stats are not populated for some time after
+        # firewall stop/start
+        self.sleep(60)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

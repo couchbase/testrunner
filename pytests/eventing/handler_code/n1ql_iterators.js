@@ -1,9 +1,10 @@
 function OnUpdate(doc, meta) {
-    log('document', doc);
-    res1 = test_continue();
-    res2 = test_break();
-    res3 = test_labelled_continue();
-    res4 = test_labelled_break();
+    log('document : ', meta.id);
+    var query_result = SELECT * FROM src_bucket LIMIT 10;
+    res1 = test_continue(query_result);
+    res2 = test_break(query_result);
+    res3 = test_labelled_continue(query_result);
+    res4 = test_labelled_break(query_result);
     if (res1 && res2 && res3 && res4){
         dst_bucket[meta.id] = doc;
     }
@@ -11,7 +12,7 @@ function OnUpdate(doc, meta) {
 function OnDelete(meta) {
 }
 
-function test_continue(){
+function test_continue(query_result){
     var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9 , 10];
     var count = 0;
     for(var row of nums) {
@@ -23,10 +24,9 @@ function test_continue(){
         ++count;
       }
     }
-    var res1 = SELECT * FROM src_bucket LIMIT 10;
     var count1 = 0;
-    for(var row of res1) {
-      for(var row of res1) {
+    for(var row of query_result) {
+      for(var row of query_result) {
         count1++;
         if(count1 == 5 || count1 == 7){
           continue;
@@ -34,8 +34,8 @@ function test_continue(){
         ++count1;
       }
     }
-    log("count : ",count);
-    log("count1 : ",count1);
+    log("test_continue :: count : ",count);
+    log("test_continue :: count1 : ",count1);
     if (count === count1){
         return true;
     } else {
@@ -43,7 +43,7 @@ function test_continue(){
     }
 }
 
-function test_break(){
+function test_break(query_result){
     var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9 , 10];
     var count = 0;
     for(var row of nums) {
@@ -55,10 +55,9 @@ function test_break(){
             ++count;
         }
     }
-    var res1 = SELECT * FROM src_bucket LIMIT 10;
     var count1 = 0;
-    for(var row of res1) {
-        for(var row of res1) {
+    for(var row of query_result) {
+        for(var row of query_result) {
             count1++;
             if(count1 == 5 || count1 == 7){
                 break;
@@ -66,6 +65,8 @@ function test_break(){
             ++count1;
         }
     }
+    log("test_break :: count : ",count);
+    log("test_break :: count1 : ",count1);
     if (count === count1){
         return true;
     } else {
@@ -73,7 +74,7 @@ function test_break(){
     }
 }
 
-function test_labelled_continue(){
+function test_labelled_continue(query_result){
     var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9 , 10];
     var count = 0;
     list: for(var row of nums) {
@@ -85,10 +86,9 @@ function test_labelled_continue(){
         ++count;
       }
     }
-    var res1 = SELECT * FROM src_bucket LIMIT 10;
     var count1 = 0;
-    list: for(var row of res1) {
-      for(var row of res1) {
+    list: for(var row of query_result) {
+      for(var row of query_result) {
         count1++;
         if(count1 == 5 || count1 == 7){
           continue list;
@@ -96,8 +96,8 @@ function test_labelled_continue(){
         ++count1;
       }
     }
-    log("count : ",count);
-    log("count1 : ",count1);
+    log("test_labelled_continue :: count : ",count);
+    log("test_labelled_continue :: count1 : ",count1);
     if (count === count1){
         return true;
     } else {
@@ -105,7 +105,7 @@ function test_labelled_continue(){
     }
 }
 
-function test_labelled_break(){
+function test_labelled_break(query_result){
     var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9 , 10];
     var count = 0;
     list: for(var row of nums) {
@@ -117,10 +117,9 @@ function test_labelled_break(){
             ++count;
         }
     }
-    var res1 = SELECT * FROM src_bucket LIMIT 10;
     var count1 = 0;
-    list: for(var row of res1) {
-        for(var row of res1) {
+    list: for(var row of query_result) {
+        for(var row of query_result) {
             count1++;
             if(count1 == 5 || count1 == 7){
                 break list;
@@ -128,6 +127,8 @@ function test_labelled_break(){
             ++count1;
         }
     }
+    log("test_labelled_break :: count : ",count);
+    log("test_labelled_break :: count1 : ",count1);
     if (count === count1){
         return true;
     } else {
