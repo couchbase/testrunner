@@ -1,3 +1,6 @@
+import json
+
+from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from couchbase.bucket import Bucket
@@ -163,3 +166,34 @@ class EventingNegative(EventingBaseTest):
             self.fail("Not all event executions timed out : Expected : {0} Actual : {1}".format(len(keys),
                                                                                                 exec_timeout_count))
         self.undeploy_and_delete_function(body)
+
+    def test_syntax_error(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.SYNTAX_ERROR)
+        try:
+            self.deploy_function(body, deployment_fail=True)
+        except Exception as e:
+            if "Unexpected end of input" not in str(e):
+                self.fail("Deployment is expected to be failed but no message of failure")
+
+    def test_read_binary_data_from_the_function(self):
+        gen_load_binary = BlobGenerator('binary1000000', 'binary', self.value_size, start=1,
+                                        end=2016 * self.docs_per_day + 1)
+        gen_load_json = JsonDocGenerator('binary', op_type="create", end=2016 * self.docs_per_day)
+        # load binary data on dst bucket and non json on src bucket with identical keys so that we can read them
+        self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_json, self.buckets[0].kvs[1], "create",
+                                   exp=0, flag=0, batch_size=1000)
+        self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_binary, self.buckets[0].kvs[1], "create",
+                                   exp=0, flag=0, batch_size=1000)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.READ_BUCKET_OP_ON_DST)
+        self.deploy_function(body)
+        # wait for some time so that exception_count increases
+        # This is because we can't read binary data from handler code
+        self.sleep(60)
+        stats = self.rest.get_all_eventing_stats()
+        bucket_op_exception_count = stats[0]["failure_stats"]["bucket_op_exception_count"]
+        self.undeploy_and_delete_function(body)
+        log.info("stats : {0}".format(json.dumps(stats, sort_keys=True, indent=4)))
+        if bucket_op_exception_count == 0:
+            self.fail("Reading binary data succeeded from handler code")

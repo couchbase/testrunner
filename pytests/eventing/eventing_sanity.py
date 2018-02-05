@@ -1,3 +1,5 @@
+import copy
+
 from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
@@ -140,21 +142,12 @@ class EventingSanity(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
-    def test_syntax_error(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.SYNTAX_ERROR)
-        try:
-            self.deploy_function(body, deployment_fail=True)
-        except Exception as e:
-            if "Unexpected end of input" not in str(e):
-                self.fail("Deployment is expected to be failed but no message of failure")
-
     def test_n1ql_iterators_with_break_and_continue(self):
         values = ['1', '10']
         # create 100 non json docs
         # number of docs is intentionally reduced as handler code runs 1 n1ql queries/mutation
         gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=100)
+        gen_load_non_json_del = copy.deepcopy(gen_load_non_json)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.n1ql_helper = N1QLHelper(shell=self.shell,
                                       max_verify=self.max_verify,
@@ -171,11 +164,16 @@ class EventingSanity(EventingBaseTest):
         # load the data
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
                                    'create')
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATORS, execution_timeout=30)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATORS, execution_timeout=60)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, 100)
+        # delete all the docs
+        self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
+                                   'delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # undeploy and delete the function
         self.undeploy_and_delete_function(body)
         # delete all the primary indexes
         self.n1ql_helper.drop_primary_index(using_gsi=True, server=self.n1ql_node)
-

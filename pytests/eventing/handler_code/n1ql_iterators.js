@@ -10,6 +10,11 @@ function OnUpdate(doc, meta) {
     }
 }
 function OnDelete(meta) {
+    var query_result = SELECT * FROM metadata LIMIT 10;
+    res1 = test_try_catch_throw(query_result);
+    if (res1){
+        delete dst_bucket[meta.id];
+    }
 }
 
 function test_continue(query_result){
@@ -129,6 +134,43 @@ function test_labelled_break(query_result){
     }
     log("test_labelled_break :: count : ",count);
     log("test_labelled_break :: count1 : ",count1);
+    if (count === count1){
+        return true;
+    } else {
+        return false;
+    }
+}
+
+function test_try_catch_throw(query_result){
+    var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9 , 10];
+    var count = 0;
+    for(var row of nums) {
+        try{
+            for(var row of nums) {
+                ++count;
+                if(count == 5 || count == 7){
+                    throw 'Error';
+                }
+            }
+        } catch(e) {
+            ++count;
+		}
+	}
+    var count1 = 0;
+    for(var row of query_result) {
+        try{
+            for(var row of query_result) {
+                ++count1;
+                if(count1 == 5 || count1 == 7){
+                    throw 'Error';
+                }
+            }
+        } catch(e) {
+            ++count1;
+		}
+	}
+    log("test_try_catch_throw :: count : ",count);
+    log("test_try_catch_throw :: count1 : ",count1);
     if (count === count1){
         return true;
     } else {
