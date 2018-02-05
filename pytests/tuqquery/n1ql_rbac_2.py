@@ -276,14 +276,15 @@ class RbacN1QL(QueryTests):
         role_list = self.roles[0]['roles']
         if any((True for x in valid_roles if x in role_list)):
             self.assertTrue(any("success" not in line for line in output),
-                            "Able to alter index on {0} as user {1}".
-                            format(self.buckets[0].name, self.users[0]['id']))
-            self.log.info("Alter Query failed as expected")
-        else:
-            self.assertTrue(any("success" in line for line in output),
                             "Unable to alter index on {0} as user {1}".
                             format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Alter Query executed successfully")
+            self.sleep(120,"Allowing alter index to complete in the background before test cleanup")
+        else:
+            self.assertTrue(any("success" in line for line in output),
+                            "Able to alter index on {0} as user {1}".
+                            format(self.buckets[0].name, self.users[0]['id']))
+            self.log.info("Alter Query failed as expected")
 
 
     def test_grant_role(self):
