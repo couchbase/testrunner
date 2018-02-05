@@ -4911,7 +4911,7 @@ class AutoFailoverNodesFailureTask(Task):
         ui_logs = rest.get_logs(10)
         ui_logs_text = [t["text"] for t in ui_logs]
         ui_logs_time = [t["serverTime"] for t in ui_logs]
-        expected_log = "Starting failing over 'ns_1@{}'".format(
+        expected_log = "Starting failing over ['ns_1@{}']".format(
             failed_over_node.ip)
         if expected_log in ui_logs_text:
             failed_over_time = ui_logs_time[ui_logs_text.index(expected_log)]
