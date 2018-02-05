@@ -3300,9 +3300,15 @@ class RemoteMachineShellConnection:
                  .format(self.ip, info.domain))
             return '%s.%s' % (info.hostname[0], info.domain)
         else:
-            log.info("domain name of this {0} is {1}"
-                 .format(self.ip, info.domain[0][0]))
-            return '%s.%s' % (info.hostname[0], info.domain[0][0])
+            if info.domain[0]:
+                if info.domain[0][0]:
+                    log.info("domain name of this {0} is {1}"
+                         .format(self.ip, info.domain[0][0]))
+                    return "{0}.{1}".format(info.hostname[0], info.domain[0][0])
+                else:
+                    mesg = "Need to set domain name in server {0} like 'sc.couchbase.com'"\
+                                                                           .format(self.ip)
+                    raise Exception(mesg)
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
