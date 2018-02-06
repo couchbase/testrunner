@@ -25,6 +25,7 @@ from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 from security.rbac_base import RbacBase
+from security.x509main import x509main
 
 
 class RenameNodeException(XDCRException):
@@ -1018,6 +1019,11 @@ class CouchbaseCluster:
         return "Couchbase Cluster: %s, Master Ip: %s" % (
             self.__name, self.__master_node.ip)
 
+    def generate_server_certificates_using_ip(self):
+        x509main(self.__master_node)._generate_cert(self.__nodes, type="openssl")
+        for node in self.__nodes:
+            x509main(node).setup_master()
+
     def __stop_rebalance(self):
         rest = RestConnection(self.__master_node)
         if rest._rebalance_progress_status() == 'running':
@@ -1044,6 +1050,9 @@ class CouchbaseCluster:
                 self.__mem_quota = mem_quota
         if self.__use_hostname:
             self.__hostnames.update(NodeHelper.rename_nodes(self.__nodes))
+
+        if TestInputSingleton.input.param("demand_encryption", "None"):
+            self.generate_server_certificates_using_ip()
 
     def get_host_names(self):
         return self.__hostnames
