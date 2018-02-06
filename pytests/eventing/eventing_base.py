@@ -317,7 +317,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             else:
                 core_dump_count = int(core_dump_count)
             if core_dump_count > 0:
-                log.info("===== CORE DUMPS SEEN ON EVENTING NODES, SERVER {0}=====".format(eventing_node.ip))
+                log.info("===== CORE DUMPS SEEN ON EVENTING NODES, SERVER {0} : {1} crashes seen =====".format(
+                         eventing_node.ip, core_dump_count))
             shell.disconnect()
 
     def print_execution_and_failure_stats(self,name):
