@@ -48,7 +48,7 @@ class couch_dbinfo_Runner(object):
         self.local = local
 
     def run(self):
-        file_name = "%s-%s-couch-dbinfo.txt" % (self.server.ip, time_stamp())
+        file_name = "%s-%s-couch-dbinfo.txt" % (self.server.ip.replace('[', '').replace(']', ''), time_stamp())
         if not self.local:
             from lib.remote.remote_util import RemoteMachineShellConnection
             remote_client = RemoteMachineShellConnection(self.server)
@@ -86,7 +86,7 @@ class cbcollectRunner(object):
         self.local = local
 
     def run(self):
-        file_name = "%s-%s-diag.zip" % (self.server.ip, time_stamp())
+        file_name = "%s-%s-diag.zip" % (self.server.ip.replace('[', '').replace(']', ''), time_stamp())
         if not self.local:
             from lib.remote.remote_util import RemoteMachineShellConnection
             remote_client = RemoteMachineShellConnection(self.server)
