@@ -2819,7 +2819,10 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
         self.terminate_processes(self.info, terminate_process_list)
 
-    def log_command_output(self, output, error, track_words=()):
+    def log_command_output(self, stdout, stderr, track_words=()):
+        error = stderr.splitlines()
+        output = stdout.splitlines()
+
         # success means that there are no track_words in the output
         # and there are no errors at all, if track_words is not empty
         # if track_words=(), the result is not important, and we return True
