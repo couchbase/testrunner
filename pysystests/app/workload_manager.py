@@ -19,6 +19,7 @@ import testcfg as cfg
 from celery.exceptions import TimeoutError
 from celery.signals import task_postrun
 from celery.utils.log import get_task_logger
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 logger = get_task_logger(__name__)
 
@@ -823,8 +824,7 @@ class ClusterStatus(object):
             address = {'server_ip' : ref_node.ip, 'port' : ref_node.port}
             rest = create_rest(**address)
 
-            command = "node(global:whereis_name(ns_orchestrator))"
-            status, content = rest.diag_eval(command)
+            status, content = ClusterOperationHelper.find_orchestrator_with_rest(rest)
 
             if status == True:
                 content = re.sub(r".*@", "", content).strip("'").split(':')
