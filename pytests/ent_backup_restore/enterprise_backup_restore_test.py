@@ -1138,7 +1138,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if not self._check_output(fail_msg, output):
                     self.fail("cbbackupmgr failed to block user to backup")
             if self.cluster_new_role == "views_admin[*]":
-                self.assertTrue(self._check_output("Error backing up cluster: Invalid permissions",
+                self.assertTrue(self._check_output("Error backing up cluster: ",
                                 output), "Expected error message not thrown")
             status, _, message = self.backup_list()
             if not status:
@@ -1159,7 +1159,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 print "Exception error:   ", e
             if self.cluster_new_role in users_can_not_backup_all:
                 error_found = False
-                error_messages = ["Error backing up cluster: Forbidden",
+                error_messages = ["Error backing up cluster: ",
                                   "Could not find file shard_0.fdb",
                                   "Error backing up cluster: Invalid permissions",
                                   "Database file is empty",
