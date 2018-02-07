@@ -380,7 +380,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def kill_erlang_service(self, server):
         remote_client = RemoteMachineShellConnection(server)
         os_info = remote_client.extract_remote_info()
-        remote_client.kill_erlang(os_info)
+        log.info("os_info : {0}", os_info)
+        if os_info.type.lower() == "windows":
+            remote_client.kill_erlang(os="windows")
+        else:
+            remote_client.kill_erlang()
         remote_client.start_couchbase()
         remote_client.disconnect()
         # wait for restart and warmup on all node

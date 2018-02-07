@@ -91,7 +91,7 @@ class EventingLifeCycle(EventingBaseTest):
         task.result()
         self.sleep(30)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_function_pause_resume_in_a_loop_for_n1ql_operations(self):
@@ -108,7 +108,7 @@ class EventingLifeCycle(EventingBaseTest):
         task.result()
         self.sleep(30)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_function_pause_resume_in_a_loop_for_doc_timers(self):
@@ -125,7 +125,7 @@ class EventingLifeCycle(EventingBaseTest):
         task.result()
         self.sleep(30)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_export_function(self):
