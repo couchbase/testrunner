@@ -482,7 +482,7 @@ class ClusterOperationHelper(object):
     # Returns the otpNode for Orchestrator
     def find_orchestrator(master):
         rest = RestConnection(master)
-        command = "node(global:whereis_name(ns_orchestrator))"
+        command = "mb_master:master_node()."
         status, content = rest.diag_eval(command)
         # Get rid of single quotes 'ns_1@10.1.3.74'
         content = content.replace("'", '')
