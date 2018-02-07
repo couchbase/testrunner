@@ -889,7 +889,9 @@ class RemoteMachineShellConnection:
             self.stop_current_python_running(mesg)
 
     def download_build(self, build):
-        return self.download_binary(build.url, build.deliverable_type, build.name, latest_url=build.url_latest_build)
+        return self.download_binary(build.url, build.deliverable_type, build.name,
+                                                latest_url=build.url_latest_build,
+                                                version=build.product_version)
 
     def disable_firewall(self):
         self.extract_remote_info()
@@ -916,9 +918,11 @@ class RemoteMachineShellConnection:
             if self.nonroot:
                 self.connect_with_user(user=self.username)
 
-    def download_binary(self, url, deliverable_type, filename, latest_url=None, skip_md5_check=True):
+    def download_binary(self, url, deliverable_type, filename, latest_url=None,
+                                              version="", skip_md5_check=True):
         self.extract_remote_info()
         self.disable_firewall()
+        file_status = False
         if self.info.type.lower() == 'windows':
             self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
             self.terminate_processes(self.info, \
@@ -946,26 +950,26 @@ class RemoteMachineShellConnection:
                 version = tmp[1] + "-" + tmp[0]
 
             exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
+            command = "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe "\
+                                        "--no-check-certificate"\
+                                        " -q {0} -O {1}.exe';ls -lh;".format(url, version)
+            file_location = "/cygdrive/c/tmp/"
+            deliverable_type = "exe"
             if not exist:
-                output, error = self.execute_command(
-                     "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
-                                                    " {0} -O {1}.exe';ls -lh;".format(url, version))
+                output, error = self.execute_command(command)
                 self.log_command_output(output, error)
-                return self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
+                if not self.file_exists(file_location, '{0}.exe'.format(version)):
+                    file_status = self.check_and_retry_download_binary(command,
+                                                             file_location, version)
+                return file_status
             else:
                 log.info('File {0}.exe exist in tmp directory'.format(version))
                 return True
 
-
-
-#            output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
-#            self.log_command_output(output, error)
-#            output, error = self.execute_command(
-#                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -lh;".format(url))
-#            self.log_command_output(output, error)
-            #return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
         elif self.info.distribution_type.lower() == 'mac':
-            output, error = self.execute_command('cd ~/Downloads ; rm -rf couchbase-server* ; rm -rf Couchbase\ Server.app ; curl -O {0}'.format(url))
+            command = "cd ~/Downloads ; rm -rf couchbase-server* ;"\
+                      " rm -rf Couchbase\ Server.app ; curl -O {0}".format(url)
+            output, error = self.execute_command(command)
             self.log_command_output(output, error)
             output, error = self.execute_command('ls -lh  ~/Downloads/%s' % filename)
             self.log_command_output(output, error)
@@ -979,7 +983,11 @@ class RemoteMachineShellConnection:
         # build.product has the full name
         # first remove the previous file if it exist ?
         # fix this :
-            output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
+            command1 = "cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ;"\
+                                     " rm -f * ; mv $D/* . ; rmdir $D".format(filename)
+            command_root = "cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh".format(filename, url)
+            file_location = "/tmp"
+            output, error = self.execute_command_raw(command1)
             self.log_command_output(output, error)
             if skip_md5_check:
                 if self.nonroot:
@@ -1013,8 +1021,7 @@ class RemoteMachineShellConnection:
                                                                      self.nr_home_path))
                     self.log_command_output(output, error)
                 else:
-                    output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh'\
-                                                                                  .format(filename, url))
+                    output, error = self.execute_command_raw(command_root)
                     self.log_command_output(output, error)
             else:
                 log.info('get md5 sum for local and remote')
@@ -1031,7 +1038,12 @@ class RemoteMachineShellConnection:
                 """ binary is saved at current user directory """
                 return self.file_exists(self.nr_home_path, filename)
             else:
-                return self.file_exists('/tmp', filename)
+                file_status = self.file_exists(file_location, filename)
+                if not file_status:
+                    file_status = self.check_and_retry_download_binary(command_root,
+                                                                      file_location,
+                                                                      version)
+                return file_status
             # for linux environment we can just
             # figure out what version , check if /tmp/ has the
             # binary and then return True if binary is installed
@@ -1190,14 +1202,14 @@ class RemoteMachineShellConnection:
         try:
             filenames = sftp.listdir_attr(remotepath)
             for name in filenames:
-                if name.filename == filename and int(name.st_size) > 0:
+                if filename in name.filename and int(name.st_size) > 0:
                     sftp.close()
                     return True
-                elif name.filename == filename and int(name.st_size) == 0:
+                elif filename in name.filename and int(name.st_size) == 0:
                     if name.filename == NR_INSTALL_LOCATION_FILE:
                         continue
                     log.info("File {0} will be deleted".format(filename))
-                    sftp.remove(remotepath + filename)
+                    self.execute_command("rm -rf {0}*{1}*".format(remotepath + filename))
             sftp.close()
             return False
         except IOError:
@@ -1236,17 +1248,40 @@ class RemoteMachineShellConnection:
         deliverable_type = "exe"
         if url and url.split(".")[-1] == "msi":
             deliverable_type = "msi"
-        exist = self.file_exists('/cygdrive/c/tmp/', '{0}.{1}'.format(version, deliverable_type))
+        exist = self.file_exists('/cygdrive/c/tmp/', version)
         log.info('**** about to do the wget ****')
+        command = "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe "\
+                        " --no-check-certificate"\
+                        " -q {0} -O {1}.{2}';ls -lh;".format(url, version, deliverable_type)
+        file_location = "/cygdrive/c/tmp/"
         if not exist:
-            output, error = self.execute_command(
-                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
-                                            " {0} -O {1}.{2}';ls -lh;".format(url, version,
-                                                                              deliverable_type))
+            output, error = self.execute_command(command)
             self.log_command_output(output, error)
         else:
-            log.info('File {0}.{1} exist in tmp directory'.format(version, deliverable_type))
-        return self.file_exists('/cygdrive/c/tmp/', '{0}.{1}'.format(version, deliverable_type))
+            log.info('File {0}.{1} exist in tmp directory'.format(version,
+                                                                  deliverable_type))
+        file_status = self.file_exists('/cygdrive/c/tmp/', version)
+        if not file_status:
+            file_status = self.check_and_retry_download_binary(command, file_location, version)
+        return file_status
+
+    def check_and_retry_download_binary(self, command, file_location,
+                                        version, time_of_try=2):
+        count = 1
+        file_status = self.file_exists(file_location, version)
+        while count <= time_of_try and not file_status:
+            log.info(" *** try to download binary again {0} time(s)".format(count))
+            output, error = self.execute_command(command)
+            self.log_command_output(output, error)
+            file_status = self.file_exists(file_location, version)
+            count += 1
+            if not file_status and count == 2:
+                log.error("build {0} did not download completely at server {1}"
+                                                   .format(version, self.ip))
+                mesg = "stop job due to failure download build {0} at {1} " \
+                                                     .format(version, self.ip)
+                self.stop_current_python_running(mesg)
+        return file_status
 
     def copy_file_local_to_remote(self, src_path, des_path):
         sftp = self._ssh_client.open_sftp()
