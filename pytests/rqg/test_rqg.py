@@ -956,9 +956,10 @@ class RQGTests(BaseTestCase):
 
             # Run SQL Query
             sql_result = expected_result
+            client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
             if expected_result is None:
-                columns, rows = self.client._execute_query(query=sql_query)
-                sql_result = self.client._gen_json_from_results(columns, rows)
+                columns, rows = client._execute_query(query=sql_query)
+                sql_result = client._gen_json_from_results(columns, rows)
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
