@@ -7,7 +7,6 @@ import base64
 import requests
 import urllib
 import random
-import os
 
 class ServerInfo():
     def __init__(self,
@@ -97,39 +96,25 @@ class x509main:
                             + x509main.CACERTFILEPATH + "rootCA.srl -extfile ./pytests/security/v3_ca.ext -out " + x509main.CACERTFILEPATH +"int.pem -days 365 -sha256")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
+
             for server in servers:
                 output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH +server.ip + ".key " + str(key_length))
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
-
-                # write a node specific ssl2.conf with the altnames
-                from shutil import copyfile
-                copyfile("./pytests/security/ssl.conf", "./pytests/security/ssl2.conf")
-                fin = open("./pytests/security/ssl2.conf", "a+")
-                if ".com" in server.ip:
-                    fin.write("\nDNS.0 = {0}".format(server.ip))
-                else:
-                    fin.write("\nIP.0 = {0}".format(server.ip.replace('[', '').replace(']', '')))
-                fin.close()
-
-                # print file contents for easy debugging
-                fout = open("./pytests/security/ssl2.conf", "r")
-                print fout.read()
-                fout.close()
-
-                output, error = shell.execute_command(
-                    "openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "' -config ./pytests/security/ssl2.conf")
-                log.info('Output message is {0} and error message is {1}'.format(output, error))
+                output, error= shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "'")
+                log.info ('Output message is {0} and error message is {1}'.format(output,error))
                 output, error = shell.execute_command("openssl x509 -req -in "+ x509main.CACERTFILEPATH + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
-                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256 -extfile ./pytests/security/ssl2.conf -extensions req_ext")
+                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
                 output, error = shell.execute_command("openssl x509 -req -days 300 -in " + x509main.CACERTFILEPATH  + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
-                                x509main.CACERTFILEPATH + "int.key -set_serial 01 -out " + x509main.CACERTFILEPATH + server.ip + ".pem -extfile ./pytests/security/ssl2.conf -extensions req_ext")
+                                x509main.CACERTFILEPATH + "int.key -set_serial 01 -out " + x509main.CACERTFILEPATH + server.ip + ".pem")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
                 output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".pem " + x509main.CACERTFILEPATH + "int.pem > " + x509main.CACERTFILEPATH + "long_chain"+server.ip+".pem")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
-                output, error = shell.execute_command("cp " + x509main.CACERTFILEPATH + "ca.pem " + x509main.CACERTFILEPATH + "root.crt")
-                log.info ('Output message is {0} and error message is {1}'.format(output,error))
-                os.remove("./pytests/security/ssl2.conf")
+
+            output, error = shell.execute_command("cp " + x509main.CACERTFILEPATH + "ca.pem " + x509main.CACERTFILEPATH + "root.crt")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
+
+
 
     def _reload_node_certificate(self,host):
         rest = RestConnection(host)
