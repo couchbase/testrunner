@@ -109,6 +109,19 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             raise Exception(
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
+    def wait_for_undeployment(self, name):
+        result = self.rest.get_deployed_eventing_apps()
+        count = 0
+        while name in result and count < 20:
+            self.sleep(30, message="Waiting for undeployment of function...")
+            count += 1
+            result = self.rest.get_deployed_eventing_apps()
+        if count == 20:
+            raise Exception(
+                'Eventing took lot of time to undeploy')
+
+
+
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
                                 skip_stats_validation=False, bucket=None, timeout=600):
         # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
@@ -409,7 +422,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("all keys {}".format(res))
         for a in res:
             self.rest.undeploy_function(a)
-        self.sleep(30)
+        for a in res:
+            self.wait_for_undeployment(a)
         self.rest.delete_all_function()
 
     def change_time_zone(self,server,timezone="UTC"):
