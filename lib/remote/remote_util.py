@@ -1209,7 +1209,7 @@ class RemoteMachineShellConnection:
                     if name.filename == NR_INSTALL_LOCATION_FILE:
                         continue
                     log.info("File {0} will be deleted".format(filename))
-                    self.execute_command("rm -rf {0}*{1}*".format(remotepath + filename))
+                    self.execute_command("rm -rf {0}*{1}*".format(remotepath,filename))
             sftp.close()
             return False
         except IOError:
