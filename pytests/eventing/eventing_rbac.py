@@ -59,7 +59,7 @@ class EventingRBAC(EventingBaseTest):
         RbacBase().create_user_source(user, 'builtin', self.master)
         user_role_list = [{'id': 'ro_admin', 'name': 'Read Only Admin', 'roles': 'ro_admin'}]
         RbacBase().add_user_role(user_role_list, self.rest, 'builtin')
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         body['settings']['rbacpass'] = 'password'
         body['settings']['rbacrole'] = 'ro_admin'
         body['settings']['rbacuser'] = 'ro_admin'
@@ -76,7 +76,7 @@ class EventingRBAC(EventingBaseTest):
         RbacBase().create_user_source(user, 'builtin', self.master)
         user_role_list = [{'id': 'cluster_admin', 'name': 'Cluster Admin', 'roles': 'cluster_admin'}]
         RbacBase().add_user_role(user_role_list, self.rest, 'builtin')
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         body['settings']['rbacpass'] = 'password'
         body['settings']['rbacrole'] = 'cluster_admin'
         body['settings']['rbacuser'] = 'cluster_admin'
