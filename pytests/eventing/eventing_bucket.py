@@ -95,6 +95,11 @@ class EventingBucket(EventingBaseTest):
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+        try:
+            self.cleanup_eventing()
+        except:
+            # This is just a cleanup API. Ignore the exceptions.
+            pass
 
     def test_eventing_where_destination_bucket_is_in_dgm(self):
         # push the destination bucket to dgm
