@@ -1,6 +1,7 @@
 import copy
 
 from lib.couchbase_helper.stats_tools import StatsCommon
+from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator, BlobGenerator
@@ -30,6 +31,28 @@ class EventingBucket(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
+        handler_code = self.input.param('handler_code', 'bucket_op')
+        if handler_code == 'bucket_op':
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+        elif handler_code == 'bucket_op_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == 'n1ql_op_with_timers':
+            # index is required for delete operation through n1ql
+            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                          max_verify=self.max_verify,
+                                          buckets=self.buckets,
+                                          item_flag=self.item_flag,
+                                          n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list,
+                                          log=self.log, input=self.input,
+                                          master=self.master,
+                                          use_rest=True
+                                          )
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+            self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
+        else:
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
     def tearDown(self):
         super(EventingBucket, self).tearDown()
@@ -54,7 +77,7 @@ class EventingBucket(EventingBaseTest):
                       batch_size=self.batch_size)
         except:
             pass
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         # Wait for eventing to catch up with all the update mutations and verify results
@@ -76,7 +99,7 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_where_destination_bucket_is_in_dgm(self):
         # push the destination bucket to dgm
         total_items = self.push_to_dgm(self.dst_bucket_name, 20)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # load documents on the source bucket
@@ -102,7 +125,7 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_where_source_bucket_is_in_dgm(self):
         # push the source bucket to dgm
         self.push_to_dgm(self.src_bucket_name, 50)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # load documents on the source bucket
@@ -126,7 +149,7 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_where_metadata_bucket_is_in_dgm(self):
         # push the metadata bucket to dgm
         self.push_to_dgm(self.metadata_bucket_name, 50)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # load documents on the source bucket
@@ -135,7 +158,7 @@ class EventingBucket(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name,
                                      self.docs_per_day * 2016,  # since we have deployed with dcp boundary from_now
-                                     )
+                                     skip_stats_validation=True)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -151,7 +174,7 @@ class EventingBucket(EventingBaseTest):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         # push the metadata bucket to dgm
         items_from_dgm = self.push_to_dgm(self.dst_bucket_name, 50)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
         try:
@@ -179,7 +202,7 @@ class EventingBucket(EventingBaseTest):
 
     def test_bucket_compaction_when_eventing_is_processing_mutations(self):
         gen_load_copy = copy.deepcopy(self.gens_load)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -191,7 +214,7 @@ class EventingBucket(EventingBaseTest):
         task = self.cluster.async_load_gen_docs(self.master, self.metadata_bucket_name, gen_load_copy,
                                                 self.buckets[0].kvs[1], "create")
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         task.result()
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -247,7 +270,7 @@ class EventingBucket(EventingBaseTest):
                                                    eviction_policy='nruEviction')
         self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         # deploy function
         self.deploy_function(body)
         # load data

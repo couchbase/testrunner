@@ -1,6 +1,7 @@
 import copy
 import json
 
+from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
@@ -30,13 +31,35 @@ class EventingRecovery(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
+        handler_code = self.input.param('handler_code', 'bucket_op')
+        if handler_code == 'bucket_op':
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+        elif handler_code == 'bucket_op_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == 'n1ql_op_with_timers':
+            # index is required for delete operation through n1ql
+            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                          max_verify=self.max_verify,
+                                          buckets=self.buckets,
+                                          item_flag=self.item_flag,
+                                          n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list,
+                                          log=self.log, input=self.input,
+                                          master=self.master,
+                                          use_rest=True
+                                          )
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+            self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
+        else:
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
     def tearDown(self):
         super(EventingRecovery, self).tearDown()
 
     def test_killing_eventing_consumer_when_eventing_is_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -44,7 +67,7 @@ class EventingRecovery(EventingBaseTest):
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -60,7 +83,7 @@ class EventingRecovery(EventingBaseTest):
 
     def test_killing_eventing_producer_when_eventing_is_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -85,7 +108,7 @@ class EventingRecovery(EventingBaseTest):
     def test_killing_memcached_when_eventing_is_processing_mutations(self):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -112,7 +135,7 @@ class EventingRecovery(EventingBaseTest):
     def test_killing_erlang_when_eventing_is_processing_mutations(self):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -139,7 +162,7 @@ class EventingRecovery(EventingBaseTest):
     def test_reboot_eventing_node_when_it_is_processing_mutations(self):
         gen_load_non_json_del = copy.deepcopy(self.gens_load)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -165,7 +188,7 @@ class EventingRecovery(EventingBaseTest):
 
     def test_network_partitioning_eventing_node_when_its_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         try:
             # partition the eventing node when its processing mutations
@@ -297,11 +320,11 @@ class EventingRecovery(EventingBaseTest):
             self.change_time_zone(kv_node, timezone="America/Los_Angeles")
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
-            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+            body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -316,11 +339,11 @@ class EventingRecovery(EventingBaseTest):
             self.change_time_zone(kv_node, timezone="America/Los_Angeles")
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
-            body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+            body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -328,18 +351,17 @@ class EventingRecovery(EventingBaseTest):
         finally:
             self.change_time_zone(kv_node, timezone="UTC")
 
-
     def test_partial_rollback(self):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         log.info("kv nodes:{0}".format(kv_node))
         for node in kv_node:
             mem_client = MemcachedClientHelper.direct_client(node, self.src_bucket_name)
             mem_client.stop_persistence()
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               worker_count=3)
         try:
-            task=self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load, self.buckets[0].kvs[1],
-                                         'create')
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create')
         except Exception as e:
             log.info("error while loading data")
         self.deploy_function(body,wait_for_bootstrap=False)

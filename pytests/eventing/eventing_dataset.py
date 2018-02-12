@@ -44,6 +44,16 @@ class EventingDataset(EventingBaseTest):
                                       master=self.master,
                                       use_rest=True
                                       )
+        handler_code = self.input.param('handler_code', 'bucket_op')
+        if handler_code == 'bucket_op':
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1
+        elif handler_code == 'bucket_op_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == 'n1ql_op_with_timers':
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+            self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
+        else:
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1
 
     def tearDown(self):
         super(EventingDataset, self).tearDown()
@@ -55,7 +65,7 @@ class EventingDataset(EventingBaseTest):
                                    exp=0, flag=0, batch_size=1000)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -77,7 +87,7 @@ class EventingDataset(EventingBaseTest):
         # load binary data
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_binary, self.buckets[0].kvs[1], "create",
                                    exp=0, flag=0, batch_size=1000)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # convert data from binary to json
         # use the same doc-id's as binary to update from binary to json
@@ -103,7 +113,7 @@ class EventingDataset(EventingBaseTest):
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_binary, self.buckets[0].kvs[1], 'create')
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
                                    'create')
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -162,7 +172,7 @@ class EventingDataset(EventingBaseTest):
         # create a doc using n1ql query
         query = "INSERT INTO  " + self.src_bucket_name + " ( KEY, VALUE ) VALUES ('key11111','from N1QL query')"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, len(keys) + 1, skip_stats_validation=True)
@@ -185,7 +195,7 @@ class EventingDataset(EventingBaseTest):
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.insert(docid, {'some': 'value'})
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
@@ -209,7 +219,7 @@ class EventingDataset(EventingBaseTest):
         bucket = Bucket(url, username="cbadminbucket", password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {})
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
@@ -238,7 +248,7 @@ class EventingDataset(EventingBaseTest):
         gens_load = self.generate_docs_bigdata(self.docs_per_day, document_size=document_size)
         self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=10)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1,
+        body = self.create_save_function_body(self.function_name, self.handler_code,
                                               data_chan_size=data_chan_size, worker_queue_cap=worker_queue_cap)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
