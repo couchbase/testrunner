@@ -1197,7 +1197,7 @@ class RemoteMachineShellConnection:
             log.info("found these files : {0}".format(files_matched))
         return files_matched
 
-    def file_exists(self, remotepath, filename):
+    def file_exists(self, remotepath, filename, pause_time=30):
         sftp = self._ssh_client.open_sftp()
         try:
             filenames = sftp.listdir_attr(remotepath)
@@ -1209,7 +1209,13 @@ class RemoteMachineShellConnection:
                     if name.filename == NR_INSTALL_LOCATION_FILE:
                         continue
                     log.info("File {0} will be deleted".format(filename))
+                    if not remotepath.endswith("/"):
+                        remotepath += "/"
                     self.execute_command("rm -rf {0}*{1}*".format(remotepath,filename))
+                    self.sleep(pause_time, "** Network or sever may be busy. **"\
+                                           "\nWait {0} seconds before executing next instrucion"\
+                                                                             .format(pause_time))
+
             sftp.close()
             return False
         except IOError:
@@ -1266,16 +1272,16 @@ class RemoteMachineShellConnection:
         return file_status
 
     def check_and_retry_download_binary(self, command, file_location,
-                                        version, time_of_try=2):
+                                        version, time_of_try=3):
         count = 1
-        file_status = self.file_exists(file_location, version)
+        file_status = self.file_exists(file_location, version, pause_time=60)
         while count <= time_of_try and not file_status:
             log.info(" *** try to download binary again {0} time(s)".format(count))
             output, error = self.execute_command(command)
             self.log_command_output(output, error)
-            file_status = self.file_exists(file_location, version)
+            file_status = self.file_exists(file_location, version, pause_time=60)
             count += 1
-            if not file_status and count == 2:
+            if not file_status and count == 3:
                 log.error("build {0} did not download completely at server {1}"
                                                    .format(version, self.ip))
                 mesg = "stop job due to failure download build {0} at {1} " \
