@@ -3498,3 +3498,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         else:
             self.backup_restore_validate(compare_uuid=False,
                                          seqno_compare_function=compare_function)
+
+    def test_cbbackupmgr_restore_with_vbuckets_filter(self):
+        """
+           cbbackupmgr restore --vbuckets-filter 2,3,4,5,6
+           it may require to get minimum 2 nodes servers to run this test
+        """
+        if "5.5" > self.cb_version[:3]:
+            self.fail("This test is only for cb version 5.5 and later. ")
+        self.num_items = 1000
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        if self.should_fail:
+            self.backup_restore()
+        else:
+            self.backup_restore_validate()
