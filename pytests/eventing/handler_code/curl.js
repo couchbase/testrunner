@@ -1,5 +1,7 @@
 function OnUpdate(doc, meta) {
-    var curl=SELECT CURL("https://maps.googleapis.com/maps/api/geocode/json",
-           {"data":"address=Half+Moon+Bay" , "request":"GET"} );
-    dst_bucket["curl"]=curl.execQuery();
+    var curl=SELECT CURL("http://localhost:8091/pools/default/buckets",{"header":"authorization: Basic QWRtaW5pc3RyYXRvcjpwYXNzd29yZA==",
+                 "request":"GET"});
+    var res=curl.execQuery();
+    log("result: ",res);
+    dst_bucket["curl"]=res
 }
