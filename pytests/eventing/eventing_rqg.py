@@ -56,6 +56,7 @@ class EventingRQG(EventingBaseTest):
     join_map = {"PREVIOUS_TABLE.FIELD":"src_bucket.email","CURRENT_TABLE.FIELD":"_bucket.email","STRING_FIELD ": "email ", "NUMERIC_FIELD ": "age ", "UPPER_BOUND_VALUE": "8",
                   "LOWER_BOUND_VALUE": "0", "NUMERIC_FIELD_LIST": "age", "STRING_FIELD_LIST": "email",
                   "( LIST )": "[1,2,3]"}
+    field_map = {"NUMERIC_VALUE":"0"}
 
     def tearDown(self):
         super(EventingRQG, self).tearDown()
@@ -132,7 +133,7 @@ class EventingRQG(EventingBaseTest):
 
 
     def create_function_and_deploy(self, query, replace=True):
-        log.debug("creating handler code for :",query)
+        log.info("creating handler code for :{}".format(query))
         if replace:
             file_path = self.generate_eventing_file(self._convert_template_n1ql(query))
         else:
@@ -145,12 +146,19 @@ class EventingRQG(EventingBaseTest):
 
 
     def _convert_template_n1ql(self, query):
-        n1ql = str(query).replace("BUCKET_NAME", self.src_bucket_name);
-        n1ql = str(n1ql).replace("TRUNCATE", "TRUNC");
-        if "GROUP BY" in n1ql:
+        n1ql = str(query).replace("BUCKET_NAME", self.src_bucket_name)
+        n1ql = str(n1ql).replace("TRUNCATE", "TRUNC")
+        for k, v in self.field_map.items():
+            n1ql = str(n1ql).replace(k, v)
+        if "HAVING" in n1ql:
             for k, v in self.having_map.items():
                 n1ql=str(n1ql).replace(k,v)
             group_fields = re.search(r'GROUP BY(.*?)HAVING', n1ql).group(1)
+            n1ql = n1ql.replace("GROUPBY_FIELDS", group_fields)
+        elif "GROUP BY" in n1ql:
+            for k, v in self.having_map.items():
+                n1ql=str(n1ql).replace(k,v)
+            group_fields = re.search(r'GROUP BY(.*?);', n1ql).group(1)
             n1ql = n1ql.replace("GROUPBY_FIELDS", group_fields)
         if "UPDATE" in n1ql:
             for k,v in self.update_map.items():
