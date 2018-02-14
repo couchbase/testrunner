@@ -50,6 +50,11 @@ class EventingSettings(EventingBaseTest):
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
     def tearDown(self):
+        try:
+            self.cleanup_eventing()
+        except:
+            # This is just a cleanup API. Ignore the exceptions.
+            pass
         super(EventingSettings, self).tearDown()
 
     def test_eventing_with_non_default_setting_values(self):
