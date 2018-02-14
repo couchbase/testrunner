@@ -909,14 +909,13 @@ class RemoteMachineShellConnection:
             command_1 = "/sbin/iptables -F"
             command_2 = "/sbin/iptables -t nat -F"
             if self.nonroot:
-                self.connect_with_user()
+                log.info("\n Non root or non sudo has no right to disable firewall")
+                return
             output, error = self.execute_command(command_1)
             self.log_command_output(output, error)
             output, error = self.execute_command(command_2)
             self.log_command_output(output, error)
             self.connect_with_user(user=self.username)
-            if self.nonroot:
-                self.connect_with_user(user=self.username)
 
     def download_binary(self, url, deliverable_type, filename, latest_url=None,
                                               version="", skip_md5_check=True):
