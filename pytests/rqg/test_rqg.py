@@ -18,6 +18,7 @@ from sdk_client import SDKClient
 import shutil
 from os import listdir
 from os.path import isfile, join
+import traceback
 
 
 class RQGTests(BaseTestCase):
@@ -653,33 +654,14 @@ class RQGTests(BaseTestCase):
         query_index_run = self._run_queries_and_verify(aggregate, self.subquery, n1ql_query=n1ql_query, sql_query=sql_query, expected_result=expected_result)
         result_run["run_query_without_index_hint"] = query_index_run
 
-        if self.aggregate_pushdown:
-            message = "Pass"
-            explain_check = False
-            explain_n1ql = "EXPLAIN " + n1ql_query
-            try:
-                actual_result = self.n1ql_helper.run_cbq_query(query=explain_n1ql, server=self.n1ql_server)
-                self.log.info(actual_result)
-                if "index_group_aggs" in str(actual_result):
-                    explain_check = True
-                if not explain_check:
-                    message = "aggregate query {0} with index {1} failed explain result, index_group_aggs not found".format(n1ql_query, indexes)
-                    self.log.info(message)
-            except Exception, ex:
-                self.log.info(ex)
-                message = ex
-                explain_check = False
-            finally:
-                result_run["aggregate_explain_check"] = {"success": explain_check, "result": message}
+        if expected_result is None:
+            expected_result = self._gen_expected_result(sql_query, test_case_number)
+            data["expected_result"] = expected_result
 
         if self.set_limit > 0 and n1ql_query.find("DISTINCT") > 0:
             result_limit = self.query_helper._add_limit_to_query(n1ql_query, self.set_limit)
             query_index_run = self._run_queries_and_verify(aggregate, self.subquery, n1ql_query=result_limit, sql_query=sql_query, expected_result=expected_result)
             result_run["run_query_with_limit"] = query_index_run
-
-        if expected_result is None:
-            expected_result = self._gen_expected_result(sql_query, test_case_number)
-            data["expected_result"] = expected_result
 
         # add primary index hint and run query
         if self.run_query_with_primary:
@@ -701,10 +683,34 @@ class RQGTests(BaseTestCase):
             result = self._run_queries_with_explain(n1ql_query, indexes)
             result_run.update(result)
 
+        if self.aggregate_pushdown:
+            for index_name in indexes.keys():
+                result_run["aggregate_explain_check::"+str(index_name)] = self._run_query_with_pushdown_check(n1ql_query, indexes[index_name])
+
         result_queue.put(result_run)
         self._check_and_push_failure_record_queue(result_run, data, failure_record_queue)
         self.query_count += 1
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
+
+    def _run_query_with_pushdown_check(self, n1ql_query, index):
+        message = "Pass"
+        explain_check = False
+        query = self.query_helper._add_index_hints_to_query(n1ql_query, [index])
+        explain_n1ql = "EXPLAIN " + query
+        try:
+            actual_result = self.n1ql_helper.run_cbq_query(query=explain_n1ql, server=self.n1ql_server)
+            if "index_group_aggs" in str(actual_result):
+                explain_check = True
+            if not explain_check:
+                message = "aggregate query {0} with index {1} failed explain result, index_group_aggs not found".format(n1ql_query, index)
+                self.log.info(message)
+                self.log.info(str(actual_result))
+        except Exception, ex:
+            self.log.info(ex)
+            message = ex
+            explain_check = False
+        finally:
+            return {"success": explain_check, "result": message}
 
     def _generate_test_data(self, test_data):
         data = test_data
@@ -787,12 +793,16 @@ class RQGTests(BaseTestCase):
                         keyword_map[keyword] += 1
                 failure_map[test_case_number] = {"sql_query": sql_query, "n1ql_query": n1ql_query,
                                                  "run_result": message, "keyword_list": keyword_list}
-        summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Percentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total))
+        pass_percent = 0
+        if total > 0:
+            summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Percentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total))
+        else:
+            summary = " No Query Results Found"
         if len(keyword_map) > 0:
             summary += "\n [ KEYWORD FAILURE DISTRIBUTION ] \n"
         for keyword in keyword_map.keys():
             summary += keyword+" :: " + str((keyword_map[keyword]*100)/total)+"%\n "
-        if len(failure_reason_map)  > 0:
+        if len(failure_reason_map) > 0:
             summary += "\n [ FAILURE TYPE DISTRIBUTION ] \n"
             for keyword in failure_reason_map.keys():
                 summary += keyword+" :: " + str((failure_reason_map[keyword]*100)/total)+"%\n "
@@ -893,7 +903,10 @@ class RQGTests(BaseTestCase):
                 rows = []
             else:
                 columns, rows = client._execute_query(query=sql)
-            sql_result = self.client._gen_json_from_results(columns, rows)
+            if self.aggregate_pushdown:
+                sql_result = self.client._gen_json_from_results_repeated_columns(columns, rows)
+            else:
+                sql_result = self.client._gen_json_from_results(columns, rows)
             client._close_mysql_connection()
         except Exception, ex:
             self.log.info(ex)
@@ -959,7 +972,11 @@ class RQGTests(BaseTestCase):
             client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
             if expected_result is None:
                 columns, rows = client._execute_query(query=sql_query)
-                sql_result = client._gen_json_from_results(columns, rows)
+                if self.aggregate_pushdown:
+                    sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
+                else:
+                    sql_result = client._gen_json_from_results(columns, rows)
+            client._close_mysql_connection()
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
@@ -972,12 +989,15 @@ class RQGTests(BaseTestCase):
                         return {"success": True, "result": "Pass"}
                 return {"success": False, "result": str("different results")}
             try:
-                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints)
+                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
             except Exception, ex:
                 self.log.info(ex)
+                traceback.print_exc()
                 return {"success": False, "result": str(ex)}
             return {"success": True, "result": "Pass"}
         except Exception, ex:
+            self.log.info(ex)
+            traceback.print_exc()
             return {"success": False, "result": str(ex)}
 
     def _run_queries_and_verify_crud(self, n1ql_query=None, sql_query=None, expected_result=None, table_name=None):
@@ -1600,7 +1620,7 @@ class RQGTests(BaseTestCase):
                 if not result[key]["success"]:
                     failure_types.append(key)
                     message += " Scenario ::  {0} \n".format(key)
-                    message += " Reason :: "+result[key]["result"]+"\n"
+                    message += " Reason :: " + str(result[key]["result"]) + "\n"
         return check, message, failure_types
 
     def _check_and_push_failure_record_queue(self, result, data, failure_record_queue):

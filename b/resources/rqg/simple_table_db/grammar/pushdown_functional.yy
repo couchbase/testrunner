@@ -6,16 +6,14 @@ select:
 	SELECT sel_from FROM BUCKET_NAME WHERE numeric_condition group_by_order_by |
 	SELECT sel_from FROM BUCKET_NAME WHERE string_condition group_by_order_by |
 	SELECT sel_from FROM BUCKET_NAME WHERE bool_condition group_by_order_by |
-	SELECT sel_from_same_field FROM BUCKET_NAME WHERE same_field_condition group_by_order_by_same_field |
 
 	SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE complex_condition |
     SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE numeric_condition |
     SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE string_condition |
-    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE bool_condition |
-    SELECT sel_from_same_field FROM BUCKET_NAME WHERE same_field_condition ;
+    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE bool_condition ;
 
 sel_from_no_group_by:
-    sel_agg_a |
+    sel_agg_a, COUNT(1) |
     sel_agg_a, sel_agg_b |
     sel_agg_a, sel_agg_b, sel_agg_c ;
 
@@ -33,22 +31,97 @@ sel_from:
     sel_non_agg AS A, sel_agg_a, sel_non_agg AS B ;
 
 sel_agg_a:
-    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | AVG( non_string_field ) ;
+    agg( agg_expression ) ;
 
 sel_agg_b:
-    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | AVG( non_string_field ) ;
+    agg( agg_expression ) ;
 
 sel_agg_c:
-    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | AVG( non_string_field ) ;
+    agg( agg_expression ) ;
+
+agg_expression:
+    extra_expression_a num_func( non_string_field ) extra_expression_b |
+    extra_expression_a special_num_funcs extra_expression_b |
+    extra_expression_a string_func( string_field ) extra_expression_b |
+    extra_expression_a special_string_func extra_expression_b |
+    extra_expression_a special_date_func extra_expression_b ;
 
 sel_non_agg:
     GROUPBY_FIELD;
 
-sel_from_same_field:
-    COUNT( SAME_FIELD ) | MIN( SAME_FIELD ) | MAX( SAME_FIELD ) ;
-
 any_field:
     NUMERIC_FIELD | STRING_FIELD | BOOL_FIELD | DATETIME_FIELD;
+
+agg:
+    MIN |
+    MAX |
+    SUM |
+    COUNT |
+    AVG ;
+
+num_func:
+    ABS |
+    CEIL |
+    COS |
+    DEGREES |
+    RADIANS |
+    SIGN |
+    SIN |
+    TAN |
+    FLOOR ;
+
+# special cases: ATAN2, E, PI, POWER, ROUND, TRUNC, RANDOM, ACOS, ASIN, ATAN,
+
+special_num_funcs:
+    SQRT( ABS( non_string_field ) ) |
+    LN( ABS( non_string_field ) ) |
+    LOG( ABS( non_string_field ) ) |
+    EXP( COS( non_string_field ) ) ;
+
+string_func:
+    LENGTH ;
+
+special_string_func:
+    POSITION( string_field ? search_string ) |
+    POSITION( LOWER( string_field ) ? search_string ) |
+    POSITION( LOWER( string_field ) ? LOWER( search_string ) ) |
+    POSITION( string_field ? UPPER( search_string ) ) |
+    POSITION( UPPER( string_field ) ? search_string ) |
+    POSITION( UPPER( string_field ) ? UPPER( search_string ) ) ;
+
+search_string:
+    "a" |
+    "e" |
+    "i" |
+    "o" |
+    "u" |
+    "r" |
+    "s" |
+    "t" |
+    "l" |
+    "n" ;
+
+special_date_func:
+    DATE_PART_STR( datetime_field & date_part ) ;
+
+date_part:
+    "DAY" |
+    "MONTH" |
+    "YEAR" ;
+
+extra_expression_a:
+    2 + |
+    2 - |
+    2 * |
+     |
+    2 / ;
+
+extra_expression_b:
+    + 2 |
+    - 2 |
+    * 2 |
+     |
+    / 2 ;
 
 complex_condition:
 	(condition) AND (condition) | condition;
@@ -56,12 +129,6 @@ complex_condition:
 condition:
 	numeric_condition | string_condition | bool_condition | (string_condition AND numeric_condition) | (bool_condition AND numeric_condition) |
 	 (bool_condition AND numeric_condition) | (bool_condition AND string_condition) | (numeric_condition AND string_condition AND bool_condition);
-
-same_field_condition:
-    numeric_condition | string_condition | bool_condition ;
-
-group_by_order_by_same_field:
-    GROUP BY SAME_FIELD ;
 
 field:
 	NUMERIC_FIELD | STRING_FIELD;

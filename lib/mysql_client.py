@@ -15,7 +15,7 @@ import json
 
 class MySQLClient(object):
     """Python MySQLClient Client Implementation for testrunner"""
-    def __init__(self, database=None, host="127.0.0.1", user_id="root", password=""):
+    def __init__(self, database=None, host="localhost", user_id="root", password=""):
         self.database = database
         self.host = host
         self.user_id = user_id
@@ -65,6 +65,8 @@ class MySQLClient(object):
         columns = []
         for row in desc:
             columns.append({"column_name": row[0], "type": FieldType.get_info(row[1]).lower()})
+
+        cur.close()
         return columns, rows
 
     def _execute_sub_query(self, query=""):
@@ -77,7 +79,6 @@ class MySQLClient(object):
                 return row[0]
             row_subquery.append(row[0])
         return row_subquery
-
 
     def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key=""):
         primary_key_index = 0
@@ -112,14 +113,30 @@ class MySQLClient(object):
             data.append(map)
         return data
 
+    def _gen_json_from_results_repeated_columns(self, columns, rows):
+        data = []
+        # Convert to JSON and capture in a dictionary
+        for row in rows:
+            index = 0
+            map = {}
+            for column in columns:
+                value = row[index]
+                map[column["column_name"]+str(index)] = self._convert_to_mysql_json_compatible_val(value, column["type"])
+                index += 1
+            data.append(map)
+        return data
+
     def _convert_to_mysql_json_compatible_val(self, value, type):
         if isinstance(value, float):
             return round(value, 0)
         if "tiny" in str(type):
             if value == 0:
                 return False
-            else:
+            elif value == 1:
                 return True
+            else:
+                print("********* " + str(value))
+                return None
         if "int" in str(type):
             return value
         if "long" in str(type):
