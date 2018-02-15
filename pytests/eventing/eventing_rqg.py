@@ -56,7 +56,7 @@ class EventingRQG(EventingBaseTest):
     join_map = {"PREVIOUS_TABLE.FIELD":"src_bucket.email","CURRENT_TABLE.FIELD":"_bucket.email","STRING_FIELD ": "email ", "NUMERIC_FIELD ": "age ", "UPPER_BOUND_VALUE": "8",
                   "LOWER_BOUND_VALUE": "0", "NUMERIC_FIELD_LIST": "age", "STRING_FIELD_LIST": "email",
                   "( LIST )": "[1,2,3]"}
-    field_map = {"NUMERIC_VALUE":"0"}
+    field_map = {"NUMERIC_VALUE":"0","STRING_VALUES":"\"a@b.c\""}
 
     def tearDown(self):
         super(EventingRQG, self).tearDown()
