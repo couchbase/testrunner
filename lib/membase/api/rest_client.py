@@ -1623,6 +1623,13 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
+    def set_index_planner_settings(self, setting, timeout=120):
+        api = self.index_baseUrl + 'settings/planner?{0}'.format(setting)
+        status, content, header = self._http_request(api, timeout=timeout)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
     def get_index_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats'
         status, content, header = self._http_request(api, timeout=timeout)
