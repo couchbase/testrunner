@@ -189,7 +189,8 @@ class Installer(object):
                 openssl = params["openssl"]
 
         if ok:
-            if "url" in params and params["url"] != "":
+            if "url" in params and params["url"] != ""\
+               and isinstance(params["url"], str):
                 direct_build_url = params["url"]
         if ok:
             if "linux_repo" in params and params["linux_repo"].lower() == "true":
