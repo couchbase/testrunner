@@ -13,6 +13,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
+        self.ansi_join = self.input.param("ansi_join", False)
         self.index_lost_during_move_out = []
         self.verify_using_index_status = self.input.param("verify_using_index_status",False)
         self.use_replica_when_active_down = self.input.param("use_replica_when_active_down",True)

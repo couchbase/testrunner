@@ -2691,15 +2691,17 @@ class QueriesIndexTests(QueryTests):
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results']==expected_result['results'])
                 self.assertTrue(actual_result['results']==[{u'$1': self.docs_per_day*2016}])
+                self.assertTrue("index_group_aggs" in str(plan))
+                self.assertEqual(plan['~children'][0]['index_group_aggs']['aggregates'][0]['aggregate'], "COUNT")
                 self.assertTrue(
-                    plan['~children'][0]['#operator'] == 'IndexCountScan2',
-                    "IndexCountScan is not being used")
+                    plan['~children'][0]['#operator'] == 'IndexScan3',
+                    "IndexScan3 is not being used")
                 self.query = "explain select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result2)
                 self.assertTrue(
-                    plan['~children'][0]['#operator'] != 'IndexCountScan2',
-                    "IndexCountScan should not be used in subquery")
+                    plan['~children'][0]['#operator'] != 'IndexScan3',
+                    "IndexScan3 should not be used in subquery")
                 self.query = "select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 self.query = "select a.cnt from (select count(1) as cnt from %s where _id is not null) as a " %(bucket.name)

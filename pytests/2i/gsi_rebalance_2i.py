@@ -36,23 +36,31 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             raise Exception("OS not supported.")
         self.rand = random.randint(1, 1000000000)
         self.alter_index = self.input.param("alter_index",None)
+        if self.ansi_join:
+            self.rest.load_sample("travel-sample")
 
     def tearDown(self):
         super(SecondaryIndexingRebalanceTests, self).tearDown()
 
     def test_gsi_rebalance_out_indexer_node(self):
         self.run_operation(phase="before")
+        if self.ansi_join:
+            expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        if self.ansi_join:
+            self.ansi_join_query(stage="post_rebalance", expected=expected_result)
         self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        if self.ansi_join:
+            self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance, [],
                                                       [nodes_out_list])
@@ -79,6 +87,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def test_gsi_rebalance_swap_rebalance(self):
         self.run_operation(phase="before")
+        if self.ansi_join:
+            expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -88,6 +98,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         log.info(self.servers[:self.nodes_init])
         # do a swap rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        if self.ansi_join:
+            self.ansi_join_query(stage="post_rebalance", expected=expected_result)
         self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -109,6 +121,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
+        if self.ansi_join:
+            self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       to_add_nodes, to_remove_nodes, swap_rebalance=True)
@@ -356,6 +370,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def test_hard_failover_and_full_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.run_operation(phase="before")
+        if self.ansi_join:
+            expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         # failover the indexer node
@@ -366,6 +382,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
         self.rest.add_back_node('ns_1@' + index_server.ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        if self.ansi_join:
+            self.ansi_join_query(stage="post_rebalance", expected=expected_result)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
@@ -373,6 +391,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.log.info(msg.format(result))
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        if self.ansi_join:
+            self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [], [], )
@@ -380,6 +400,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def test_hard_failover_and_delta_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        if self.ansi_join:
+            expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -391,6 +413,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.rest.set_recovery_type('ns_1@' + index_server.ip, "delta")
         self.rest.add_back_node('ns_1@' + index_server.ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        if self.ansi_join:
+            self.ansi_join_query(stage="post_rebalance", expected=expected_result)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
@@ -398,6 +422,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.log.info(msg.format(result))
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        if self.ansi_join:
+            self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [], [], )
@@ -428,6 +454,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def test_graceful_failover_and_full_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        if self.ansi_join:
+            expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -439,6 +467,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
         self.rest.add_back_node('ns_1@' + index_server.ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        if self.ansi_join:
+            self.ansi_join_query(stage="post_rebalance", expected=expected_result)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
@@ -446,6 +476,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.log.info(msg.format(result))
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        if self.ansi_join:
+            self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [], [], )
@@ -453,6 +485,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def test_graceful_failover_and_delta_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        if self.ansi_join:
+            expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -464,6 +498,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.rest.set_recovery_type('ns_1@' + index_server.ip, "delta")
         self.rest.add_back_node('ns_1@' + index_server.ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        if self.ansi_join:
+            self.ansi_join_query(stage="post_rebalance", expected=expected_result)
         self.run_operation(phase="during")
         if reb1:
             result = self.rest.monitorRebalance()
@@ -471,6 +507,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.log.info(msg.format(result))
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        if self.ansi_join:
+            self.ansi_join_query()
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       [], [], )
@@ -2958,3 +2996,16 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def _create_replica_index(self, query):
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+
+    def ansi_join_query(self, stage="", expected=""):
+        query = "select * from (select default.country from default d unnest d.travel_details as default limit 1000) d1 " \
+                "inner join `travel-sample` t on (d1.country == t.country)"
+        if stage == "pre_rebalance":
+            self.n1ql_helper.run_cbq_query(query="CREATE INDEX idx ON `travel-sample`(country)", server=self.n1ql_node)
+            expected_results = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+            return expected_results
+        elif stage =="post_rebalance":
+            actual_results = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+            self.assertEqual(expected['metrics']['resultCount'], actual_results['metrics']['resultCount'])
+        else:
+            self.n1ql_helper.run_cbq_query(query="DROP INDEX `travel-sample`.idx", server=self.n1ql_node)
