@@ -1755,7 +1755,7 @@ class CouchbaseCluster:
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
-                             bucket_priority=None, flush_enabled=1, lww=False):
+                             bucket_priority=None, flush_enabled=1, lww=False, maxttl=None):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -1786,13 +1786,14 @@ class CouchbaseCluster:
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
+        bucket_params['maxTTL'] = maxttl
         return bucket_params
 
     def create_sasl_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH,
-            bucket_type=None):
+            bucket_type=None, maxttl=None):
         """Create sasl buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1810,7 +1811,8 @@ class CouchbaseCluster:
                 replicas=num_replicas,
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority,
-                bucket_type=bucket_type)
+                bucket_type=bucket_type,
+                maxttl=maxttl)
 
             bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name,password='password',
                                                                           bucket_params=sasl_params))
@@ -1819,7 +1821,8 @@ class CouchbaseCluster:
                     name=name, authType="sasl", saslPassword="password",
                     num_replicas=num_replicas, bucket_size=bucket_size,
                     eviction_policy=eviction_policy,
-                    bucket_priority=bucket_priority
+                    bucket_priority=bucket_priority,
+                    maxttl=maxttl
                 ))
 
         for task in bucket_tasks:
@@ -1830,7 +1833,7 @@ class CouchbaseCluster:
             port=None, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH,
-            bucket_type=None):
+            bucket_type=None, maxttl=None):
         """Create standard buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1855,7 +1858,8 @@ class CouchbaseCluster:
                 replicas=num_replicas,
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority,
-                bucket_type=bucket_type)
+                bucket_type=bucket_type,
+                maxttl=maxttl)
 
             bucket_tasks.append(
                 self.__clusterop.async_create_standard_bucket(
@@ -1872,7 +1876,7 @@ class CouchbaseCluster:
                     port=start_port + i,
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority,
-
+                    maxttl=maxttl
                 ))
 
         for task in bucket_tasks:
@@ -1882,7 +1886,7 @@ class CouchbaseCluster:
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH,
-            bucket_type=None):
+            bucket_type=None, maxttl=None):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
@@ -1895,7 +1899,8 @@ class CouchbaseCluster:
             replicas=num_replicas,
             eviction_policy=eviction_policy,
             bucket_priority=bucket_priority,
-            bucket_type=bucket_type
+            bucket_type=bucket_type,
+            maxttl=maxttl
         )
         self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
@@ -1906,7 +1911,8 @@ class CouchbaseCluster:
                 num_replicas=num_replicas,
                 bucket_size=bucket_size,
                 eviction_policy=eviction_policy,
-                bucket_priority=bucket_priority
+                bucket_priority=bucket_priority,
+                maxttl=maxttl
             ))
 
     def create_fts_index(self, name, source_type='couchbase',
@@ -3137,6 +3143,7 @@ class FTSBaseTest(unittest.TestCase):
             num_buckets)
 
         bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
+        maxttl = TestInputSingleton.input.param("maxttl", None)
 
         if self._create_default_bucket:
             self._cb_cluster.create_default_bucket(
@@ -3144,21 +3151,24 @@ class FTSBaseTest(unittest.TestCase):
                 self._num_replicas,
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority,
-                bucket_type=bucket_type)
+                bucket_type=bucket_type,
+                maxttl=maxttl)
 
         self._cb_cluster.create_sasl_buckets(
             bucket_size, num_buckets=self.__num_sasl_buckets,
             num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority,
-            bucket_type=bucket_type)
+            bucket_type=bucket_type,
+            maxttl=maxttl)
 
         self._cb_cluster.create_standard_buckets(
             bucket_size, num_buckets=self.__num_stand_buckets,
             num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority,
-            bucket_type=bucket_type)
+            bucket_type=bucket_type,
+            maxttl=maxttl)
 
     def create_buckets_on_cluster(self):
         # if mixed priority is set by user, set high priority for sasl and
@@ -3414,10 +3424,11 @@ class FTSBaseTest(unittest.TestCase):
                                          index_doc_count,
                                          es_index_count))
                     if bucket_doc_count == 0:
-                        self.sleep(5,
-                            "looks like docs haven't been loaded yet...")
-                        retry_count -= 1
-                        continue
+                        if item_count and item_count != 0:
+                            self.sleep(5,
+                                "looks like docs haven't been loaded yet...")
+                            retry_count -= 1
+                            continue
 
                     if item_count and index_doc_count > item_count:
                         break

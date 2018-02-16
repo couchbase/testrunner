@@ -41,6 +41,21 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
+    def test_maxttl_setting(self):
+        self.create_simple_default_index()
+        maxttl = int(self._input.param("maxttl", None))
+        self.sleep(maxttl,
+                "Waiting for expiration at the elapse of bucket maxttl")
+        self._cb_cluster.run_expiry_pager()
+        self.wait_for_indexing_complete(item_count=0)
+        self.validate_index_count(must_equal=0)
+        for index in self._cb_cluster.get_indexes():
+            query = eval(self._input.param("query", str(self.sample_query)))
+            hits, _, _, _ = index.execute_query(query,
+                                             zero_results_ok=True,
+                                             expected_hits=0)
+            self.log.info("Hits: %s" % hits)
+
     def query_in_dgm(self):
         self.create_simple_default_index()
         for index in self._cb_cluster.get_indexes():
