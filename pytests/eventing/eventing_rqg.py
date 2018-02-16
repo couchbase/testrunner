@@ -128,7 +128,7 @@ class EventingRQG(EventingBaseTest):
                 log.error(e)
             finally:
                 self.undeploy_delete_all_functions()
-                self.delete_temp_handler_code()
+        self.delete_temp_handler_code()
         self.verify_n1ql_stats(s)
 
 
@@ -170,8 +170,11 @@ class EventingRQG(EventingBaseTest):
         return n1ql
 
     def generate_eventing_file(self, query):
-        if not os.path.exists(HANDLER_CODE.N1QL_TEMP_PATH):
-            os.makedirs(HANDLER_CODE.N1QL_TEMP_PATH)
+        try:
+            if not os.path.exists(HANDLER_CODE.N1QL_TEMP_PATH):
+                os.makedirs(HANDLER_CODE.N1QL_TEMP_PATH)
+        except OSError as err:
+            print(err)
         script_dir = os.path.dirname(__file__)
         abs_file_path = os.path.join(script_dir, HANDLER_CODE.N1QL_TEMP)
         fh = open(abs_file_path, "r")
@@ -199,6 +202,7 @@ class EventingRQG(EventingBaseTest):
 
 
     def delete_temp_handler_code(self, path=HANDLER_CODE.N1QL_TEMP_PATH):
+        log.info("deleting all the handler codes")
         script_dir = os.path.dirname(__file__)
         dirPath = os.path.join(script_dir, path)
         fileList = os.listdir(dirPath)
