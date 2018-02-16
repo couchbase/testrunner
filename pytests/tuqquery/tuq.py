@@ -582,6 +582,8 @@ class QueryTests(BaseTestCase):
             elif self.dataset == 'bigdata':
                 #not working
                 generators = json_generator.generate_docs_bigdata(end=(1000*docs_per_day), start=start, value_size=self.value_size)
+            elif self.dataset == 'array':
+                generators = json_generator.generate_all_type_documents_for_gsi(docs_per_day=docs_per_day, start=start)
             elif self.dataset == 'join':
                 types = ['Engineer', 'Sales', 'Support']
                 join_yr = [2010, 2011]
