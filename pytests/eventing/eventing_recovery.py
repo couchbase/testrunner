@@ -224,6 +224,7 @@ class EventingRecovery(EventingBaseTest):
         # reboot eventing node when it is processing mutations
         self.reboot_server(n1ql_node)
         task.result()
+        self.sleep(60)
         stats = self.rest.get_all_eventing_stats()
         on_update_failure = stats[0]["execution_stats"]["on_update_failure"]
         n1ql_op_exception_count = stats[0]["failure_stats"]["n1ql_op_exception_count"]
@@ -231,7 +232,7 @@ class EventingRecovery(EventingBaseTest):
         log.info("stats : {0}".format(stats))
         if on_update_failure != n1ql_op_exception_count or on_update_failure == 0 or n1ql_op_exception_count == 0:
             self.fail("No n1ql exceptions were found when n1ql node was rebooted while it was"
-                      "processing queries from handler code or stats returned incorrect value")
+                      " processing queries from handler code or stats returned incorrect value")
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),

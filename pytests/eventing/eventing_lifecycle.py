@@ -1,6 +1,8 @@
 import json
 import os
 import logging
+import re
+
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
@@ -160,4 +162,33 @@ class EventingLifeCycle(EventingBaseTest):
         self.wait_for_bootstrap_to_complete("test_import_function")  # we have hardcoded function name as it's imported
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results("test_import_function", self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_debugger(self):
+        count = 0
+        match = False
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        # Start eventing debugger
+        out1 = self.rest.start_eventing_debugger(self.function_name)
+        log.info(" Started eventing debugger : {0}".format(out1))
+        # do some mutations
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # get debugger url
+        pattern = re.compile(r'chrome-devtools://devtools/bundled/inspector.html(.*)')
+        while count < 10:
+            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            matched = re.match(pattern, out2)
+            if matched:
+                log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
+                match = True
+                break
+            count += 1
+            self.sleep(30)
+        if not match:
+            self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
+        # stop debugger
+        self.rest.stop_eventing_debugger(self.function_name)
+        # undeploy and delete the function
         self.undeploy_and_delete_function(body)

@@ -4254,6 +4254,44 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    '''
+            Start debugger
+    '''
+    def start_eventing_debugger(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/startDebugger/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            Stop debugger
+    '''
+    def stop_eventing_debugger(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/stopDebugger/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            Get debugger url
+    '''
+    def get_eventing_debugger_url(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/getDebuggerUrl/?name=" + name
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
