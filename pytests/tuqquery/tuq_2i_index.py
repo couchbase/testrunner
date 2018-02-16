@@ -1474,13 +1474,13 @@ class QueriesIndexTests(QueryTests):
                                  'join_yr != 2011'
                     actual_result= self.run_cbq_query()
                     plan=self.ExplainPlanHelper(actual_result)
-                    self.assertTrue(plan['~children'][0]['scan']['index']==idx)
+                    self.assertTrue(plan['~children'][0]['index'] == idx)
                     self.assertTrue("covers" in str(plan))
                     self.query = 'select meta().id from default where join_day between 0 and 5 and ' \
                                  'join_yr != 2011'
                     actual_result= self.run_cbq_query(query_params={'profile' : 'timings'})
                     self.assertTrue("covers" in str( actual_result['profile']['executionTimings']['~children'][0]['~child']['~children']))
-                    self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][0]['scan']['index'] == idx)
+                    self.assertTrue(actual_result['profile']['executionTimings']['~children'][0]['~child']['~children'][0]['index'] == idx)
                     expected_result = [doc for doc in all_docs_list if  doc['join_day'] >= 0 and doc['join_day'] <= 5 and doc['join_yr'] != 2011 ]
                     num_of_items = len(expected_result)
                     for i in [0,1,2]:

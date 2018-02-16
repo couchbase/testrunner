@@ -143,9 +143,11 @@ class QueryTests(BaseTestCase):
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
-                self.sleep(30,'wait for analytics setup')
+                self.sleep(30, 'wait for analytics setup')
         except Exception, ex:
             self.log.error('SUITE SETUP FAILED')
+            self.log.info(ex)
+            traceback.print_exc()
             self.tearDown()
         self.log.info("==============  QueryTests suite_setup has completed ==============")
 
@@ -674,6 +676,7 @@ class QueryTests(BaseTestCase):
         if not queries_errors:
             self.fail("No queries to run!")
         check_code = False
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for query_template, error_arg in queries_errors.iteritems():
                 if isinstance(error_arg,str):
@@ -960,22 +963,28 @@ class QueryTests(BaseTestCase):
         items = 0
         for gen_load in gens_load:
             items += (gen_load.end - gen_load.start)
-        shell = RemoteMachineShellConnection(self.master)
+
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             try:
-                self.log.info("Delete directory's content %s/data/default/%s ..." % (self.directory_flat_json, bucket.name))
+                shell = RemoteMachineShellConnection(self.master)
+                self.log.info("Delete directory's content %sdata/default/%s ..." % (self.directory_flat_json, bucket.name))
                 o = shell.execute_command('rm -rf %sdata/default/*' % self.directory_flat_json)
-                self.log.info("Create directory %s/data/default/%s..." % (self.directory_flat_json, bucket.name))
+                self.log.info("Create directory %sdata/default/%s..." % (self.directory_flat_json, bucket.name))
                 o = shell.execute_command('mkdir -p %sdata/default/%s' % (self.directory_flat_json, bucket.name))
                 self.log.info("Load %s documents to %sdata/default/%s..." % (items, self.directory_flat_json, bucket.name))
                 for gen_load in gens_load:
+                    gen_load.reset()
                     for i in xrange(gen_load.end):
                         key, value = gen_load.next()
                         out = shell.execute_command("echo '%s' > %sdata/default/%s/%s.json" % (value, self.directory_flat_json,
                                                                                                 bucket.name, key))
                 self.log.info("LOAD IS FINISHED")
+            except Exception, ex:
+                self.log.info(ex)
+                traceback.print_exc()
             finally:
-               shell.disconnect()
+                shell.disconnect()
 
     '''Two separate flags are used to control whether or not a primary index is created, one for tuq(skip_index)
        and one for newtuq(skip_primary_index) we should go back and merge these flags and fix the conf files'''
@@ -2424,36 +2433,31 @@ class QueryTests(BaseTestCase):
                     self.run_cbq_query(query=query)
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
+
                 fn = getattr(self, query_method)
                 query = fn()
+        except Exception as ex:
+            self.info.log(ex)
         finally:
             return indexes, query
 
     def run_intersect_scan_explain_query(self, indexes_names, query_temp):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             if query_temp.find('%s') > 0:
                 query_temp = query_temp % bucket.name
-            query = 'EXPLAIN %s' % (query_temp)
+            query = 'EXPLAIN %s' % query_temp
             res = self.run_cbq_query(query=query)
             plan = self.ExplainPlanHelper(res)
             self.log.info('-'*100)
-            if (query.find("CREATE INDEX") < 0):
-                result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
-                    else plan["~children"][0]
-                if not(result['scans'][0]['#operator']=='DistinctScan'):
-                    if not (result["#operator"] == 'UnionScan'):
-                        self.assertTrue(result["#operator"] == 'IntersectScan',
-                                        "Index should be intersect scan and is %s" % (plan))
-                    # actual_indexes = []
-                    # for scan in result['scans']:
-                    #     print scan
-                    #     if (scan['#operator'] == 'IndexScan'):
-                    #         actual_indexes.append([result['scans'][0]['index']])
-                    #
-                    #     elif (scan['#operator'] == 'DistinctScan'):
-                    #         actual_indexes.append([result['scans'][0]['scan']['index']])
-                    #     else:
-                    #          actual_indexes.append(scan['index'])
+            if query.find("CREATE INDEX") < 0:
+                result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] else plan["~children"][0]
+                if result['scans'][0]['#operator'] !='DistinctScan':
+                    if result["#operator"] != 'UnionScan':
+                        if "ORDER BY" in query:
+                            self.assertTrue(result["#operator"] == 'OrderedIntersectScan', "Index should be orderedintersect scan and is %s" % (plan))
+                        else:
+                            self.assertTrue(result["#operator"] == 'IntersectScan', "Index should be intersect scan and is %s" % (plan))
                     if result["#operator"] == 'UnionScan':
                         actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
                                           for results in result['scans'] for scan in results['scans']]
@@ -2463,7 +2467,7 @@ class QueryTests(BaseTestCase):
                     actual_indexes = [x.encode('UTF8') for x in actual_indexes]
                     self.log.info('actual indexes "{0}"'.format(actual_indexes))
                     self.log.info('compared against "{0}"'.format(indexes_names))
-                    self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+                    self.assertTrue(set(actual_indexes) == set(indexes_names), "Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
             else:
                 result = plan
                 self.assertTrue(result['#operator'] == 'CreateIndex',

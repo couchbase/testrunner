@@ -40,6 +40,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_escaped_identifiers(self):
+        self.fail_if_no_buckets()
         queries_errors = {'SELECT name FROM {0} as bucket': ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
         for bucket in self.buckets:
@@ -86,6 +87,7 @@ class QuerySanityTests(QueryTests):
     #These bugs are not planned to be fixed therefore this test isnt in any confs
     '''MB-19887 and MB-24303: These queries were returning incorrect results with views.'''
     def test_views(self):
+        self.fail_if_no_buckets()
         created_indexes = []
         try:
             idx = "ix1"
@@ -108,7 +110,6 @@ class QuerySanityTests(QueryTests):
             result = self.run_cbq_query('select x,y,z from default use index (iv1 using view) '
                                         'where x is not missing')
             self.assertTrue(result['results'] == expected_result)
-
         finally:
             for idx in created_indexes:
                 self.query = "DROP INDEX %s.%s USING VIEW" % ("default", idx)
@@ -120,6 +121,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_all(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT ALL job_title FROM %s ORDER BY job_title'  % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -129,6 +131,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_all_nested(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT ALL tasks_points.task1 FROM %s '  % (bucket.name) +\
                          'ORDER BY tasks_points.task1'
@@ -198,6 +201,7 @@ class QuerySanityTests(QueryTests):
         self.negative_common_body(queries_errors)
 
     def test_any(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE (ANY skill IN %s.skills SATISFIES skill = 'skill2010' END) AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 END) AND  NOT (job_title = 'Sales') ORDER BY name" % (bucket.name, bucket.name, bucket.name)
 
@@ -214,6 +218,7 @@ class QuerySanityTests(QueryTests):
 
     #This test isnt used anywhere
     def test_any_within(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s "  % (bucket.name) +\
                          "WHERE ANY vm within %s.VMs SATISFIES vm.RAM = 5 END" % (
@@ -228,6 +233,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(sorted(actual_result['results']), expected_result)
 
     def test_any_no_in_clause(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' end)" % (
@@ -248,6 +254,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_prepared_any_no_in_clause(self):
+        self.fail_if_no_buckets()
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
@@ -266,6 +273,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(result['metrics']['resultCount']==1)
 
     def test_any_external(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s WHERE '  % (bucket.name) +\
                          'ANY x IN ["Support", "Management"] SATISFIES job_title = x END ' +\
@@ -279,6 +287,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_every(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES CEIL(vm.memory) > 5 END)" % (
@@ -308,6 +317,7 @@ class QuerySanityTests(QueryTests):
          self.negative_common_body(queries_errors)
 
     def test_array(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories" +\
             " FROM %s WHERE VMs IS NOT NULL "  % (bucket.name)
@@ -322,6 +332,7 @@ class QuerySanityTests(QueryTests):
 
     #This test is not used anywhere
     def test_array_objects(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT VMs[*].os from %s" % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -341,6 +352,7 @@ class QuerySanityTests(QueryTests):
 
     #This test is not used anywhere
     def test_slicing(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(name)[0:5] as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -375,6 +387,7 @@ class QuerySanityTests(QueryTests):
                 self.assertTrue(len(item['names']) <= 5, "Slicing doesn't work")
 
     def test_count_prepare(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "create index idx_cover on %s(join_mo,join_day) where join_mo > 7" % (bucket.name)
             self.run_cbq_query()
@@ -407,6 +420,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_like(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM {0} WHERE job_title LIKE 'S%' ORDER BY name".format(bucket.name)
             actual_result = self.run_cbq_query()
@@ -456,6 +470,7 @@ class QuerySanityTests(QueryTests):
 
 
     def test_like_any(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE (ANY vm IN %s.VMs" % (
                                                         bucket.name, bucket.name) +\
@@ -474,6 +489,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_like_every(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE (EVERY vm IN %s.VMs " % (
                                                         bucket.name, bucket.name) +\
@@ -492,6 +508,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_like_aliases(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name AS NAME from %s " % (bucket.name) +\
             "AS EMPLOYEE where EMPLOYEE.name LIKE '_mpl%' ORDER BY name"
@@ -506,6 +523,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_like_wildcards(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
                          "LIKE '%@%.%' ORDER BY email"
@@ -527,6 +545,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_prepared_like_wildcards(self):
+        self.fail_if_no_buckets()
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
@@ -542,6 +561,7 @@ class QuerySanityTests(QueryTests):
 
 
     def test_between(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM {0} WHERE join_mo BETWEEN 1 AND 6 ORDER BY name".format(bucket.name)
             actual_result = self.run_cbq_query()
@@ -571,6 +591,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_group_by(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
                          "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
@@ -589,6 +610,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_group_by_having(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "from %s WHERE join_mo>7 GROUP BY tasks_points.task1 " % (bucket.name) +\
                          "HAVING COUNT(tasks_points.task1) > 0 SELECT tasks_points.task1 " +\
@@ -605,6 +627,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_group_by_aggr_fn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
                          "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
@@ -632,6 +655,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_prepared_group_by_aggr_fn(self):
+        self.fail_if_no_buckets()
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
@@ -654,6 +678,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(result['metrics']['resultCount']==0)
 
     def test_group_by_satisfy(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, AVG(test_rate) as avg_rate FROM %s " % (bucket.name) +\
                          "WHERE (ANY skill IN %s.skills SATISFIES skill = 'skill2010' end) " % (
@@ -697,6 +722,7 @@ class QuerySanityTests(QueryTests):
 
     #This test has no usages anywhere
     def test_groupby_first(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select job_title, (FIRST p FOR p IN ARRAY_AGG(name) END) as names from {0} group by job_title order by job_title ".format(bucket.name)
             actual_result = self.run_cbq_query()
@@ -717,6 +743,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_ceil(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, ceil(test_rate) as rate from %s"  % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -738,6 +765,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_floor(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, floor(test_rate) as rate from %s"  % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -763,6 +791,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], [])
 
     def test_greatest(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, GREATEST(skills[0], skills[1]) as SKILL from %s"  % (
                                                                                 bucket.name)
@@ -778,6 +807,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_least(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, LEAST(skills[0], skills[1]) as SKILL from %s"  % (
                                                                             bucket.name)
@@ -793,6 +823,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_meta(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT distinct name FROM %s WHERE META(%s).`type` = "json"'  % (
                                                                             bucket.name, bucket.name)
@@ -813,6 +844,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_meta_like(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "%s"'  % (
                                                                             bucket.name, bucket.name,"query%")
@@ -826,6 +858,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_meta_like(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s WHERE META(%s).id '  % (bucket.name, bucket.name) +\
                          'LIKE "employee%"'
@@ -840,6 +873,7 @@ class QuerySanityTests(QueryTests):
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
     def test_meta_flags(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT DISTINCT META(%s).flags as flags FROM %s'  % (
                                                                 bucket.name, bucket.name)
@@ -848,6 +882,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_long_values(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'insert into %s values("k051", { "id":-9223372036854775808  } )'%(bucket.name)
             self.run_cbq_query()
@@ -887,29 +922,19 @@ class QuerySanityTests(QueryTests):
             self.query = 'delete from '+bucket.name+' where meta().id in ["k051","k021","k011","k041","k031"]'
             self.run_cbq_query()
 
-            # client = SDKClient(bucket = "default", hosts = [host], scheme = scheme)
-            # expected_result = []
-            # keys = ["k01","k02","k03","k04","k05"]
-            # for key in keys:
-            #     a, cas, b = client.get(key)
-            #     expected_result.append({"cas" : int(cas)})
-            # expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))[0:10]
-            # print "expected result is {0}".format(expected_result)
-
-            #self._verify_results(actual_result, expected_result)
-
     def test_meta_cas(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'select meta().cas from {0} order by meta().id limit 10'.format(bucket.name)
             actual_result = self.run_cbq_query()
             print actual_result
-
 
     def test_meta_negative(self):
         queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_length(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'Select name, email from %s where LENGTH(job_title) = 5'  % (
                                                                             bucket.name)
@@ -924,6 +949,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_upper(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT DISTINCT UPPER(job_title) as JOB from %s'  % (
                                                                         bucket.name)
@@ -938,6 +964,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_lower(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT distinct email from %s" % (bucket.name) +\
                          " WHERE LOWER(job_title) < 't'"
@@ -953,6 +980,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_round(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, round(test_rate) as rate from %s" % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -966,6 +994,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_trunc(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, TRUNC(test_rate, 0) as rate from %s" % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -979,6 +1008,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_first(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, FIRST vm.os for vm in VMs end as OS from %s" % (
                                                                            bucket.name)
@@ -1001,6 +1031,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_substr(self):
+        self.fail_if_no_buckets()
         indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
         for index in indices_to_test:
             for bucket in self.buckets:
@@ -1020,6 +1051,7 @@ class QuerySanityTests(QueryTests):
                 self._verify_results(sorted_query_docs, sorted_expected_result)
 
     def test_substr0(self):
+        self.fail_if_no_buckets()
         indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
         for index in indices_to_test:
             for bucket in self.buckets:
@@ -1039,6 +1071,7 @@ class QuerySanityTests(QueryTests):
                 self._verify_results(sorted_query_docs, sorted_expected_result)
 
     def test_substr1(self):
+        self.fail_if_no_buckets()
         indices_to_test = [-100, -2, -1, 0, 1, 2, 100]
         for index in indices_to_test:
             for bucket in self.buckets:
@@ -1063,6 +1096,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_agg_counters(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             vals = []
             keys = []
@@ -1088,6 +1122,7 @@ class QuerySanityTests(QueryTests):
 
 
     def test_sum(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT join_mo, SUM(tasks_points.task1) as points_sum" +\
                         " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
@@ -1139,6 +1174,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_sum(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT join_mo, SUM(tasks_points.task1) as points_sum" +\
                         " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
@@ -1153,6 +1189,7 @@ class QuerySanityTests(QueryTests):
         self.negative_common_body(queries_errors)
 
     def test_avg(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT join_mo, AVG(tasks_points.task1) as points_avg" +\
                         " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
@@ -1223,6 +1260,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_min(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT join_mo, MIN(test_rate) as rate FROM %s " % (bucket.name) +\
                          "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
@@ -1250,6 +1288,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_max(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT join_mo, MAX(test_rate) as rate FROM %s " % (bucket.name) +\
                          "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
@@ -1277,6 +1316,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_agg_distinct(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(DISTINCT name) as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1293,6 +1333,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_length(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_length(array_agg(DISTINCT name)) as num_names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1322,6 +1363,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_append(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title," +\
                          " array_append(array_agg(DISTINCT name), 'new_name') as names" +\
@@ -1357,6 +1399,7 @@ class QuerySanityTests(QueryTests):
 
 
     def test_prepared_array_append(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title," +\
                          " array_append(array_agg(DISTINCT name), 'new_name') as names" +\
@@ -1365,6 +1408,7 @@ class QuerySanityTests(QueryTests):
             self.prepared_common_body()
 
     def test_array_union_symdiff(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'select ARRAY_SORT(ARRAY_UNION(["skill1","skill2","skill2010","skill2011"],skills)) as skills_union from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result = self.run_cbq_query()
@@ -1385,6 +1429,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(actual_result['results'] == [{u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}])
 
     def test_let(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
             actual_result = self.run_cbq_query()
@@ -1392,9 +1437,10 @@ class QuerySanityTests(QueryTests):
             self.assertTrue( "u'x1': {u'name': 1}" in str(actual_result['results']))
 
     def test_let_missing(self):
-      for bucket in self.buckets:
-          created_indexes = []
-          try:
+        self.fail_if_no_buckets()
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
                 self.query = 'CREATE INDEX ix1 on %s(x1)' % (bucket.name)
                 self.run_cbq_query()
                 created_indexes.append("ix1")
@@ -1403,20 +1449,21 @@ class QuerySanityTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT x1, x2 FROM %s o LET o = CASE WHEN o.type = "doc" THEN o ELSE MISSING END WHERE x1 = 5'  % (bucket.name)
                 try:
-                        self.run_cbq_query(self.query)
+                    self.run_cbq_query(self.query)
                 except CBQError as ex:
-                        self.assertTrue(str(ex).find("Duplicate variable o already in scope") != -1,
+                    self.assertTrue(str(ex).find("Duplicate variable o already in scope") != -1,
                                         "Error is incorrect.")
                 else:
-                        self.fail("There was no errors.")
+                    self.fail("There was no errors.")
                 self.query = 'delete from %s use keys["k01","k02"]'  % (bucket.name)
                 self.run_cbq_query()
-          finally:
+            finally:
                 for idx in created_indexes:
-                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
-                        actual_result = self.run_cbq_query()
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
 
     def test_optimized_let(self):
+        self.fail_if_no_buckets()
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
         res =self.run_cbq_query()
         plan = self.ExplainPlanHelper(res)
@@ -1439,8 +1486,9 @@ class QuerySanityTests(QueryTests):
         self.assertTrue(res['results']==[])
 
     def test_correlated_queries(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
-          if(bucket.name == "default"):
+          if bucket.name == "default":
             self.query = 'create index ix1 on %s(x,id)'%bucket.name
             self.run_cbq_query()
             self.query = 'insert into %s (KEY, VALUE) VALUES ("kk02",{"x":100,"y":101,"z":102,"id":"kk02"})'%(bucket.name)
@@ -1532,6 +1580,7 @@ class QuerySanityTests(QueryTests):
 
     #This test has no uses anywhere
     def test_object_concat_remove(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'select object_concat({"name":"test"},{"test":123},tasks_points) as obj from %s order by meta().id limit 10;' % bucket.name
             actual_result=self.run_cbq_query()
@@ -1540,9 +1589,8 @@ class QuerySanityTests(QueryTests):
             actual_result=self.run_cbq_query()
             self.assertTrue(actual_result['results'],([{u'$1': {u'abc': 1, u'fgh': 3}}]))
 
-
-
     def test_array_concat(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title," +\
                          " array_concat(array_agg(name), array_agg(email)) as names" +\
@@ -1583,6 +1631,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(actual_result2==expected_result2)
 
     def test_array_prepend(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title," +\
                          " array_prepend(1.2, array_agg(test_rate)) as rates" +\
@@ -1652,6 +1701,7 @@ class QuerySanityTests(QueryTests):
 
 
     def test_array_remove(self):
+        self.fail_if_no_buckets()
         value = 'employee-1'
         for bucket in self.buckets:
             self.query = "SELECT job_title," +\
@@ -1691,6 +1741,7 @@ class QuerySanityTests(QueryTests):
     def test_array_insert(self):
         value1 = 'skill-20'
         value2 = 'skill-21'
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT array_insert(skills, 1, '%s','%s') " % (value1,value2) +\
                          " FROM %s limit 1" % (bucket.name)
@@ -1700,6 +1751,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue( actual_list['results'] == expected_result )
 
     def test_array_avg(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_avg(array_agg(test_rate))" +\
             " as rates FROM %s GROUP BY job_title" % (bucket.name)
@@ -1720,6 +1772,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_contains(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_contains(array_agg(name), 'employee-1')" +\
             " as emp_job FROM %s GROUP BY job_title" % (bucket.name)
@@ -1736,6 +1789,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_count(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_count(array_agg(name)) as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1753,6 +1807,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_distinct(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_distinct(array_agg(name)) as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1770,6 +1825,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_max(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_max(array_agg(test_rate)) as rates" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1787,6 +1843,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_sum(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, round(array_sum(array_agg(test_rate))) as rates" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1804,6 +1861,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_array_min(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_min(array_agg(test_rate)) as rates" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1832,6 +1890,7 @@ class QuerySanityTests(QueryTests):
         self._verify_results(actual_result['results'], expected_result)
 
     def test_array_put(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-1') as emp_job" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1887,8 +1946,8 @@ class QuerySanityTests(QueryTests):
         self._verify_results(actual_result['results'], expected_result)
 
     def test_array_replace(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
-
             self.query = "SELECT job_title, array_replace(array_agg(name), 'employee-1', 'employee-47') as emp_job" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
 
@@ -1918,8 +1977,8 @@ class QuerySanityTests(QueryTests):
         self._verify_results(actual_result['results'], expected_result)
 
     def test_array_sort(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
-
             self.query = "SELECT job_title, array_sort(array_agg(distinct test_rate)) as emp_job" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
 
@@ -1936,8 +1995,8 @@ class QuerySanityTests(QueryTests):
 
     #This test has no usages anywhere
     def test_poly_length(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
-
             query_fields = ['tasks_points', 'VMs', 'skills']
             for query_field in query_fields:
                 self.query = "Select length(%s) as custom_num from %s order by custom_num" % (query_field, bucket.name)
@@ -1953,6 +2012,7 @@ class QuerySanityTests(QueryTests):
                 self._verify_results(actual_result['results'], expected_result)
 
     def test_array_agg(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(name) as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1976,6 +2036,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_case(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN 'winter'" +\
                          " WHEN join_mo < 6 AND join_mo > 2 THEN 'spring' " +\
@@ -1996,6 +2057,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_case_expr(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, CASE job_title WHEN 'Sales' THEN 'Marketing'" +\
                          "ELSE job_title END AS dept FROM %s" % (bucket.name)
@@ -2018,6 +2080,7 @@ class QuerySanityTests(QueryTests):
         self._verify_results(actual_result['results'], expected_result)
 
     def test_in_int(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s where join_mo in [1,6]" % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -2041,6 +2104,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_in_str(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -2067,11 +2131,13 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_in_str(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
             self.prepared_common_body()
 
     def test_logic_expr(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 > 1 AND tasks_points.task1 < 4"
@@ -2087,6 +2153,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_equal_int(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 = 4"
@@ -2108,6 +2175,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_equal_str(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name)+\
             "name = 'employee-4'"
@@ -2129,6 +2197,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_not_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 != 1 ORDER BY task"
@@ -2142,6 +2211,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_not_equal_more_less(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 <> 1 ORDER BY task"
@@ -2155,6 +2225,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_every_comparision_not_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 END)" % (
@@ -2177,6 +2248,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_every_comparision_not_equal_less_more(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 END)" % (
@@ -2199,6 +2271,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_any_between(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
@@ -2227,6 +2300,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_any_less_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
@@ -2255,6 +2329,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_any_more_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
@@ -2283,6 +2358,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_prepared_between(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
@@ -2293,6 +2369,7 @@ class QuerySanityTests(QueryTests):
             self.prepared_common_body()
 
     def test_named_prepared_between(self):
+        self.fail_if_no_buckets()
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
@@ -2318,6 +2395,7 @@ class QuerySanityTests(QueryTests):
 
 
     def test_prepared_comparision_not_equal_less_more(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 END)" % (
@@ -2326,6 +2404,7 @@ class QuerySanityTests(QueryTests):
             self.prepared_common_body()
 
     def test_prepared_comparision_not_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 END)" % (
@@ -2334,6 +2413,7 @@ class QuerySanityTests(QueryTests):
             self.prepared_common_body()
 
     def test_prepared_more_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory >= 5 END)" % (
@@ -2342,6 +2422,7 @@ class QuerySanityTests(QueryTests):
             self.prepared_common_body()
 
     def test_prepared_less_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory <= 5 END)" % (
@@ -2350,6 +2431,7 @@ class QuerySanityTests(QueryTests):
             self.prepared_common_body()
 
     def test_let_not_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select compare from %s let compare = (test_rate != 2)" % (bucket.name)
 
@@ -2361,6 +2443,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_let_between(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select compare from %s let compare = (test_rate between 1 and 3)" % (bucket.name)
 
@@ -2372,6 +2455,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_let_not_equal_less_more(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select compare from %s let compare = (test_rate <> 2)" % (bucket.name)
 
@@ -2383,6 +2467,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_let_more_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select compare from %s let compare = (test_rate >= 2)" % (bucket.name)
 
@@ -2394,6 +2479,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_let_less_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select compare from %s let compare = (test_rate <= 2)" % (bucket.name)
 
@@ -2405,15 +2491,15 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_equal_not_equal(self):
-        template= "SELECT join_day, join_mo FROM %s WHERE " +\
+        self.fail_if_no_buckets()
+        template = "SELECT join_day, join_mo FROM %s WHERE " +\
             "join_day == 1 and join_mo != 2 ORDER BY join_day, join_mo"
         for bucket in self.buckets:
-            self.query = template % (bucket.name)
+            self.query = template % bucket.name
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['join_day'], doc['join_mo']))
+            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['join_day'], doc['join_mo']))
 
-            expected_result = [{"join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
+            expected_result = [{"join_mo": doc['join_mo'], "join_day" : doc['join_day']}
                                for doc in self.full_list
                                if doc['join_day'] == 1 and doc["join_mo"] != 2]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_day'], doc['join_mo']))
@@ -2421,6 +2507,7 @@ class QuerySanityTests(QueryTests):
         return template
 
     def test_comparition_more_and_less_equal(self):
+        self.fail_if_no_buckets()
         template= "SELECT join_yr, test_rate FROM %s WHERE join_yr >= 2010 AND test_rate <= 4"
         for bucket in self.buckets:
             self.query = template % (bucket.name)
@@ -2437,6 +2524,7 @@ class QuerySanityTests(QueryTests):
         return template
 
     def test_comparition_null_missing(self):
+        self.fail_if_no_buckets()
         template= "SELECT skills, VMs FROM %s WHERE " +\
             "skills is not null AND VMs is not missing"
         for bucket in self.buckets:
@@ -2452,6 +2540,7 @@ class QuerySanityTests(QueryTests):
         return template
 
     def test_comparition_aggr_fns(self):
+        self.fail_if_no_buckets()
         template= "SELECT count(join_yr) years, sum(test_rate) rate FROM %s"
         for bucket in self.buckets:
             self.query = template % (bucket.name)
@@ -2467,12 +2556,14 @@ class QuerySanityTests(QueryTests):
 
     #This test has no uses anywhere
     def test_comparition_meta(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT meta(default).id, meta(default).type FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
 
     def test_comparition_more_less_equal(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 >= 1 AND tasks_points.task1 <= 4"
@@ -2488,6 +2579,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_expr(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 > tasks_points.task1"
@@ -2495,6 +2587,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result['results'], [])
 
     def test_arithm(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, SUM(test_rate) % COUNT(distinct join_yr)" +\
             " as avg_per_year from {0} group by job_title".format(bucket.name)
@@ -2560,6 +2653,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_explain(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             res = self.run_cbq_query()
             self.log.info(res)
@@ -2572,7 +2666,8 @@ class QuerySanityTests(QueryTests):
 #   EXPLAIN WITH A PARTICULAR INDEX
 ##############################################################################################
     #Test has no usages anywhere
-    def test_explain_particular_index(self,index):
+    def test_explain_particular_index(self, index):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             res = self.run_cbq_query()
             self.log.info(res)
@@ -2586,7 +2681,8 @@ class QuerySanityTests(QueryTests):
 #   EXPLAIN WITH UNION SCAN: Covering Indexes
 ##############################################################################################
     #Test has no usages anywhere
-    def test_explain_union(self,index):
+    def test_explain_union(self, index):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             res = self.run_cbq_query()
             plan = self.ExplainPlanHelper(res)
@@ -2678,6 +2774,7 @@ class QuerySanityTests(QueryTests):
         self.assertTrue("msec" in res["results"][0], "No msec field")
 
     def test_where(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
             ' where date_part_str(now_str(),"month") < join_mo AND date_part_str(now_str(),"year")' +\
@@ -2702,6 +2799,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_date_where(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
             ' where date_part_str(now_str(),"month") < join_mo AND date_part_str(now_str(),"year")' +\
@@ -2756,8 +2854,8 @@ class QuerySanityTests(QueryTests):
                         "Result expected: %s. Actual %s" % (now_time.second, res["results"]))
         self.assertTrue("msec" in res["results"][0], "There are no msec in results")
 
-
     def test_where_millis(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select join_yr, join_mo, join_day, name from %s" % (bucket.name) +\
             " where join_mo < 10 and join_day < 10 and str_to_millis(tostr(join_yr) || '-0'" +\
@@ -2779,6 +2877,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_order_by_dates(self):
+        self.fail_if_no_buckets()
         orders = ["asc", "desc"]
         for order in orders:
             for bucket in self.buckets:
@@ -2810,6 +2909,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_type(self):
+        self.fail_if_no_buckets()
         types_list = [("name", "string"), ("tasks_points", "object"),
                       ("some_wrong_key", "missing"),
                       ("skills", "array"), ("VMs[0].RAM", "number"),
@@ -2827,6 +2927,7 @@ class QuerySanityTests(QueryTests):
                 self.log.info("Type for %s(%s) is checked." % (name_item, type_item))
 
     def test_check_types(self):
+        self.fail_if_no_buckets()
         types_list = [("name", "ISSTR", True), ("skills[0]", "ISSTR", True),
                       ("test_rate", "ISSTR", False), ("VMs", "ISSTR", False),
                       ("false", "ISBOOL", True), ("join_day", "ISBOOL", False),
@@ -2844,6 +2945,7 @@ class QuerySanityTests(QueryTests):
                 self.log.info("Fn %s(%s) is checked. (%s)" % (fn, name_item, expected_result))
 
     def test_types_in_satisfy(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES ISOBJ(vm) END) AND" % (
@@ -2872,11 +2974,11 @@ class QuerySanityTests(QueryTests):
         self.log.info("TONUM is checked")
 
     def test_to_str(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT TOSTR(join_mo) month FROM %s" % bucket.name
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-
             self.query = "SELECT REVERSE(TOSTR(join_mo)) rev_month FROM %s" % bucket.name
             actual_result1 = self.run_cbq_query()
             actual_result2 = sorted(actual_result1['results'])
@@ -2896,6 +2998,7 @@ class QuerySanityTests(QueryTests):
 
     #Test has no usages anywhere
     def test_to_array(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT job_title, toarray(name) as names" +\
             " FROM %s" % (bucket.name)
@@ -2915,31 +3018,26 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_concatenation(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT name || \" \" || job_title as employee" +\
             " FROM %s" % (bucket.name)
-
             actual_list = self.run_cbq_query()
-
             actual_result = sorted(actual_list['results'], key=lambda doc: (doc['employee']))
-
             expected_result = [{"employee" : doc["name"] + " " + doc["job_title"]}
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['employee']))
             self._verify_results(actual_result, expected_result)
 
     def test_concatenation_where(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT name, skills' +\
             ' FROM %s WHERE skills[0]=("skill" || "2010")' % (bucket.name)
-
             actual_list = self.run_cbq_query()
-
             self.query = 'SELECT name, skills' +\
             ' FROM %s WHERE reverse(skills[0])=("0102" || "lliks")' % (bucket.name)
-
             actual_list1 = self.run_cbq_query()
-
             actual_result = sorted(actual_list['results'])
             actual_result2 = sorted(actual_list1['results'])
             expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
@@ -2954,10 +3052,10 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_select_split_fn(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT SPLIT(email, '@')[0] as login" +\
             " FROM %s" % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"login" : doc["email"].split('@')[0]}
@@ -2966,10 +3064,10 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_split_where(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s' % (bucket.name) +\
             ' WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]'
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
@@ -2984,9 +3082,9 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_union(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s union select email from %s" % (bucket.name, bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
@@ -2997,6 +3095,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_union(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s union select email from %s" % (bucket.name, bucket.name)
             self.prepared_common_body()
@@ -3014,6 +3113,7 @@ class QuerySanityTests(QueryTests):
         self._verify_results(actual_result, expected_result)
 
     def test_union_all(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s union all select email from %s" % (bucket.name, bucket.name)
 
@@ -3039,9 +3139,9 @@ class QuerySanityTests(QueryTests):
         self._verify_results(actual_result, expected_result)
 
     def test_union_where(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s union select email from %s where join_mo > 2" % (bucket.name, bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
@@ -3055,6 +3155,7 @@ class QuerySanityTests(QueryTests):
         created_indexes = []
         ind_list = ["one", "two"]
         index_name="one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
@@ -3062,8 +3163,6 @@ class QuerySanityTests(QueryTests):
                     self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
                     self.query = "CREATE INDEX %s ON %s(email,join_mo) USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3072,11 +3171,8 @@ class QuerySanityTests(QueryTests):
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
             self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            #for a in actual_result:
-                #print "{0}".format(a)
             expected_result = [{"name" : doc["name"]}
                                 for doc in self.full_list]
             expected_result.extend([{"email" : doc["email"]}
@@ -3096,9 +3192,9 @@ class QuerySanityTests(QueryTests):
             self.run_cbq_query()
 
     def test_union_aggr_fns(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select count(name) as names from %s union select count(email) as emails from %s" % (bucket.name, bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"names" : len(self.full_list)}]
@@ -3110,6 +3206,7 @@ class QuerySanityTests(QueryTests):
         created_indexes = []
         ind_list = ["one", "two"]
         index_name="one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
@@ -3117,8 +3214,6 @@ class QuerySanityTests(QueryTests):
                     self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
                     self.query = "CREATE INDEX %s ON %s(email)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3150,14 +3245,12 @@ class QuerySanityTests(QueryTests):
         created_indexes = []
         ind_list = ["one"]
         index_name="one"
-
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "metaindex%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX %s ON %s(meta().id,meta().cas)  USING %s" % (index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3165,17 +3258,12 @@ class QuerySanityTests(QueryTests):
             self.query="explain select meta().id, meta().cas from {0} where meta().id is not null order by meta().id limit 10".format(bucket.name)
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
-
             self.query="select meta().id, meta().cas from {0} where meta().id is not null order by meta().id limit 10".format(bucket.name)
-
-
             actual_list = self.run_cbq_query()
             actual_result = (actual_list['results'])
-
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
-
             self.covering_index = False
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
@@ -3186,19 +3274,16 @@ class QuerySanityTests(QueryTests):
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
-            #self.assertEqual(sorted(actual_result) ,sorted(expected_result))
-
     def test_meta_where(self):
         created_indexes = []
         ind_list = ["one"]
         index_name="one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "meta_where%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX {0} ON {1}(meta().id,meta().cas)  where meta().id like 'query-testemployee6%' USING {2}".format(index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3206,15 +3291,12 @@ class QuerySanityTests(QueryTests):
             self.query="explain select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
-
             self.query="select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
-
             self.covering_index = False
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
@@ -3224,39 +3306,37 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(actual_result,sorted(expected_list['results']))
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
-            #self.assertTrue(actual_result == expected_result)
 
     def test_meta_ambiguity(self):
-         for bucket in self.buckets:
-             self.query = "create index idx on %s(META())" %(bucket.name)
-             self.run_cbq_query()
-             self.query = "create index idx2 on {0}(META({0}))".format(bucket.name)
-             self.run_cbq_query()
-             self.query = "SELECT  META() as meta_c FROM %s  ORDER BY meta_c limit 10" %(bucket.name)
-             actual_result = self.run_cbq_query()
-             self.assertTrue(actual_result['status']=="success")
-             self.query = "SELECT  META(test) as meta_c FROM %s as test  ORDER BY meta_c limit 10" %(bucket.name)
-             actual_result = self.run_cbq_query()
-             self.assertTrue(actual_result['status']=="success")
-             self.query = "SELECT META(t1).id as id FROM default t1 JOIN default t2 ON KEYS t1.id;"
-             self.assertTrue(actual_result['status']=="success")
-             self.query = "drop index %s.idx" %(bucket.name)
-             self.run_cbq_query()
-             self.query = "drop index %s.idx2" %(bucket.name)
-             self.run_cbq_query()
+        self.fail_if_no_buckets()
+        for bucket in self.buckets:
+            self.query = "create index idx on %s(META())" %(bucket.name)
+            self.run_cbq_query()
+            self.query = "create index idx2 on {0}(META({0}))".format(bucket.name)
+            self.run_cbq_query()
+            self.query = "SELECT  META() as meta_c FROM %s  ORDER BY meta_c limit 10" %(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['status']=="success")
+            self.query = "SELECT  META(test) as meta_c FROM %s as test  ORDER BY meta_c limit 10" %(bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['status']=="success")
+            self.query = "SELECT META(t1).id as id FROM default t1 JOIN default t2 ON KEYS t1.id;"
+            self.assertTrue(actual_result['status']=="success")
+            self.query = "drop index %s.idx" %(bucket.name)
+            self.run_cbq_query()
+            self.query = "drop index %s.idx2" %(bucket.name)
+            self.run_cbq_query()
 
     def test_meta_where_greater_than(self):
         created_indexes = []
         ind_list = ["one"]
         index_name="one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "meta_where%s" % ind
                 if ind =="one":
-
                     self.query = "CREATE INDEX {0} ON {1}(meta().id,meta().cas)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3264,18 +3344,13 @@ class QuerySanityTests(QueryTests):
             self.query="explain select meta().id, meta().cas from {0} where meta().id >10 order by meta().id".format(bucket.name)
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
-
             self.query="select meta().id, meta().cas from {0} where meta().id >10 order by meta().id limit 10".format(bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
-
             self.covering_index = False
-
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
             self._wait_for_index_online(bucket, '#primary')
@@ -3285,12 +3360,11 @@ class QuerySanityTests(QueryTests):
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
-            #self.assertTrue(actual_result == expected_result)
-
     def test_meta_partial(self):
         created_indexes = []
         ind_list = ["one"]
         index_name="one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "meta_where%s" % ind
@@ -3306,67 +3380,55 @@ class QuerySanityTests(QueryTests):
             self.query="explain select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id limit 10".format(bucket.name)
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
-
             self.query="select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
-
             self.covering_index = False
-
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, name from {0} use index(`#primary`) where meta().id > 10 and name is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            #expected_result = sorted(expected_list['results'])
             self.assertTrue(actual_result,sorted(expected_list['results']))
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
-            #self.assertTrue(actual_result == expected_result)
 
     def test_meta_non_supported(self):
         created_indexes = []
         ind_list = ["one"]
         index_name="one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "meta_cas_%s" % ind
                 if ind =="one":
-                    #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
                     queries_errors = {'CREATE INDEX ONE ON default(meta().cas) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().flags) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().expiration) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().cas) using VIEW' : ('syntax error', 3000)}
-                    # if self.gsi_type:
-                    #     for query in queries_errors.iterkeys():
-                    #         query += " WITH {'index_type': 'memdb'}"
-                    #self.negative_common_body(queries_errors)
 
     def test_meta_negative_namespace(self):
         created_indexes = []
         ind_list = ["one"]
         index_name="one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "meta_cas_%s" % ind
                 if ind =="one":
-                    #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
                     queries_errors = {'CREATE INDEX TWO ON default(meta(invalid).id) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX THREE ON default(meta(invalid).id) using VIEW' : ('syntax error', 3000),
                                       'CREATE INDEX FOUR ON default(meta()) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX FIVE ON default(meta()) using VIEW' : ('syntax error', 3000)}
-                    # if self.gsi_type:
-                    #     for query in queries_errors.iterkeys():
-                    #         query += " WITH {'index_type': 'memdb'}"
                     self.negative_common_body(queries_errors)
 
 ######################## META NEW END ######################################
 
     def test_intersect(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
@@ -3379,7 +3441,8 @@ class QuerySanityTests(QueryTests):
     def test_intersect_covering(self):
         created_indexes = []
         ind_list = ["one", "two"]
-        index_name="one"
+        index_name = "one"
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
@@ -3387,8 +3450,6 @@ class QuerySanityTests(QueryTests):
                     self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
                     self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name,self.index_type)
-                # if self.gsi_type:
-                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3417,8 +3478,8 @@ class QuerySanityTests(QueryTests):
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
-
     def test_intersect_all(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
@@ -3429,11 +3490,13 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_intersect(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             self.prepared_common_body()
 
     def test_except_secondsetempty(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "drop primary index on %s USING %s" % (bucket.name,self.primary_indx_type);
             self.run_cbq_query()
@@ -3455,6 +3518,7 @@ class QuerySanityTests(QueryTests):
                 self.run_cbq_query()
 
     def test_except(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s except select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
@@ -3465,6 +3529,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_except_all(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s except all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
@@ -3480,9 +3545,9 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_within_list_object(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, VMs from %s WHERE 5 WITHIN VMs" % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
@@ -3492,14 +3557,15 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_within_list_object(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, VMs from %s WHERE 5 WITHIN VMs" % (bucket.name)
             self.prepared_common_body()
 
     def test_within_list_of_lists(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, VMs from %s where name within [['employee-2', 'employee-4'], ['employee-5']] " % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
@@ -3509,9 +3575,9 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_within_object(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, tasks_points from %s WHERE 1 WITHIN tasks_points" % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"], "tasks_points" : doc["tasks_points"]}
@@ -3521,9 +3587,9 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_within_array(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = " select name, skills from %s where 'skill2010' within skills" % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
@@ -3538,24 +3604,23 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_raw(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select raw name from %s " % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             self.query = "select raw reverse(reverse(name)) from %s " % (bucket.name)
             actual_list1 = self.run_cbq_query()
             actual_result1 = sorted(actual_list1['results'])
-
             expected_result = [doc["name"] for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
             self._verify_results(actual_result, actual_result1)
 
     def test_raw_limit(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select raw skills[0] from %s limit 5" % (bucket.name)
-
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [doc["skills"][0] for doc in self.full_list][:5]
@@ -3563,6 +3628,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_raw_order(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select raw name from {0} order by name {1}".format(bucket.name,"desc")
             actual_list = self.run_cbq_query()
@@ -3570,7 +3636,6 @@ class QuerySanityTests(QueryTests):
             expected_result = [ doc["name"]
                                for doc in self.full_list]
             expected_result = sorted(expected_result,reverse=True)
-           # expected_result = sorted(expected_result,reverse=True)
             self.assertEqual(actual_result, expected_result)
             self.query = "select raw name from {0} order by name {1}".format(bucket.name,"asc")
             actual_list = self.run_cbq_query()
@@ -3590,6 +3655,7 @@ class QuerySanityTests(QueryTests):
             self.assertEqual(actual_result,expected_result)
 
     def test_push_limit(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
              self.query = 'insert into %s(KEY, VALUE) VALUES ("f01", {"f1":"f1"})' % (bucket.name)
              self.run_cbq_query()
@@ -3679,6 +3745,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_nanif(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select join_day, join_mo, NANIF(join_day, join_mo) as equality" +\
                          " from %s" % (bucket.name)
@@ -3692,6 +3759,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_posinf(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select join_day, join_mo, POSINFIF(join_day, join_mo) as equality" +\
                          " from %s" % (bucket.name)
@@ -3722,6 +3790,7 @@ class QuerySanityTests(QueryTests):
         self.negative_common_body(queries_errors)
 
     def test_contains(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name from %s where contains(job_title, 'Sale')" % (bucket.name)
 
@@ -3739,6 +3808,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_initcap(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select INITCAP(VMs[0].os) as OS from %s" % (bucket.name)
 
@@ -3750,6 +3820,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_title(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select TITLE(VMs[0].os) as OS from %s" % (bucket.name)
 
@@ -3770,11 +3841,13 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result1, expected_result1)
 
     def test_prepared_title(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select TITLE(VMs[0].os) as OS from %s" % (bucket.name)
             self.prepared_common_body()
 
     def test_position(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select POSITION(VMs[1].name, 'vm') pos from %s" % (bucket.name)
             actual_list = self.run_cbq_query()
@@ -3841,6 +3914,7 @@ class QuerySanityTests(QueryTests):
         self.assertEqual(actual, expected)
 
     def test_regex_contains(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select email from %s where REGEXP_CONTAINS(email, '-m..l')" % (bucket.name)
 
@@ -3859,6 +3933,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_regex_like(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select email from %s where REGEXP_LIKE(email, '.*-mail.*')" % (bucket.name)
 
@@ -3923,6 +3998,7 @@ class QuerySanityTests(QueryTests):
         self.assertEqual(actual, expected)
 
     def test_regex_replace(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, REGEXP_REPLACE(email, '-mail', 'domain') as mail from %s" % (bucket.name)
 
@@ -3943,6 +4019,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_replace(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, REPLACE(email, 'a', 'e', 1) as mail from %s" % (bucket.name)
 
@@ -3955,6 +4032,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_repeat(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select REPEAT(name, 2) as name from %s" % (bucket.name)
 
@@ -3971,6 +4049,7 @@ class QuerySanityTests(QueryTests):
 ##############################################################################################
 
     def test_let_nums(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select test_r, test_r > 2 compare from %s let test_r = (test_rate / 2)" % (bucket.name)
 
@@ -3983,11 +4062,13 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_let_nums(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select test_r, test_r > 2 compare from %s let test_r = (test_rate / 2)" % (bucket.name)
             self.prepared_common_body()
 
     def test_let_string(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "select name, join_date date from %s let join_date = tostr(join_yr) || '-' || tostr(join_mo)" % (bucket.name)
 
@@ -4006,6 +4087,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result2,expected_result2)
 
     def test_letting(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
             if self.analytics:
@@ -4022,6 +4104,7 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_letting(self):
+        self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
             self.prepared_common_body()

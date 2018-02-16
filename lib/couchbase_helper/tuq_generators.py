@@ -609,7 +609,6 @@ class JsonGenerator:
                                                start=start, end=docs_per_day))
         return generators
 
-
     def generate_docs_employee_array(self, docs_per_day = 1, start=0, isShuffle = False):
         generators = []
         #simple array
