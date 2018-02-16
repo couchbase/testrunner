@@ -231,6 +231,10 @@ class BucketCreateTask(Task):
         self.enable_replica_index = bucket_params['enable_replica_index']
         self.eviction_policy = bucket_params['eviction_policy']
         self.lww = bucket_params['lww']
+        if 'maxTTL' in bucket_params:
+            self.maxttl = bucket_params['maxTTL']
+        else:
+            self.maxttl = 0
         self.flush_enabled = bucket_params['flush_enabled']
         if bucket_params['bucket_priority'] is None or bucket_params['bucket_priority'].lower() is 'low':
             self.bucket_priority = 3
@@ -277,7 +281,8 @@ class BucketCreateTask(Task):
                                flushEnabled=self.flush_enabled,
                                evictionPolicy=self.eviction_policy,
                                threadsNumber=self.bucket_priority,
-                               lww=self.lww
+                               lww=self.lww,
+                               maxTTL=self.maxttl
                                )
             else:
                 rest.create_bucket(bucket=self.bucket,
@@ -290,7 +295,8 @@ class BucketCreateTask(Task):
                                replica_index=self.enable_replica_index,
                                flushEnabled=self.flush_enabled,
                                evictionPolicy=self.eviction_policy,
-                               lww=self.lww)
+                               lww=self.lww,
+                               maxTTL=self.maxttl)
             self.state = CHECKING
             task_manager.schedule(self)
 
