@@ -963,8 +963,7 @@ class RQGTests(BaseTestCase):
         result_run = {}
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
-        #import pdb;pdb.set_trace()
-        for i,item in enumerate(hints):
+        for i, item in enumerate(hints):
             if "simple_table" in item:
                 hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
         try:
@@ -974,13 +973,13 @@ class RQGTests(BaseTestCase):
                 query_params={}
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server,query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
-            #self.log.info(actual_result)
             # Run SQL Query
             sql_result = expected_result
-            if expected_result == None:
-                columns, rows = self.client._execute_query(query = sql_query)
-                sql_result = self.client._gen_json_from_results(columns, rows)
-            #self.log.info(sql_result)
+            client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+            if expected_result is None:
+                columns, rows = client._execute_query(query = sql_query)
+                sql_result = client._gen_json_from_results(columns, rows)
+            client._close_mysql_connection()
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
