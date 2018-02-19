@@ -107,6 +107,7 @@ class RQGTests(BaseTestCase):
                 self.os = self.shell.extract_remote_info().type.lower()
             except Exception, ex:
                 self.log.error('SETUP FAILED')
+                traceback.print_exc()
                 self.tearDown()
 
     def tearDown(self):
@@ -904,12 +905,13 @@ class RQGTests(BaseTestCase):
             else:
                 columns, rows = client._execute_query(query=sql)
             if self.aggregate_pushdown:
-                sql_result = self.client._gen_json_from_results_repeated_columns(columns, rows)
+                sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
             else:
-                sql_result = self.client._gen_json_from_results(columns, rows)
+                sql_result = client._gen_json_from_results(columns, rows)
             client._close_mysql_connection()
         except Exception, ex:
             self.log.info(ex)
+            traceback.print_exc()
             if ex.message.__contains__("SQL syntax") or ex.message.__contains__("ERROR"):
                 print "Error in sql syntax"
         return sql_result
@@ -971,7 +973,14 @@ class RQGTests(BaseTestCase):
             sql_result = expected_result
             client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
             if expected_result is None:
-                columns, rows = client._execute_query(query=sql_query)
+                try:
+                    columns, rows = client._execute_query(query=sql_query)
+                except Exception, ex:
+                    self.log.info(ex)
+                    traceback.print_exc()
+                    client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+                    columns, rows = client._execute_query(query=sql_query)
+                    pass
                 if self.aggregate_pushdown:
                     sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
                 else:
@@ -1397,7 +1406,7 @@ class RQGTests(BaseTestCase):
             t.start()
             thread_list.append(t)
         for t in thread_list:
-                t.join()
+            t.join()
 
     def _gen_secondary_indexes_per_table(self, table_name="", index_map={}, sleep_time=2):
         defer_mode = str({"defer_build": "true"})
@@ -1449,6 +1458,7 @@ class RQGTests(BaseTestCase):
                     build_index_list.append(index_name)
                 except Exception, ex:
                     self.log.info(ex)
+                    traceback.print_exc()
                     raise
         # Run Build Query
         if build_index_list is not None and len(build_index_list) > 0:
@@ -1470,6 +1480,7 @@ class RQGTests(BaseTestCase):
                     self.sleep(15, "sleep after building index")
                 except Exception, ex:
                     self.log.info(ex)
+                    traceback.print_exc()
                     raise
                 self.sleep(sleep_time)
 
@@ -1487,6 +1498,7 @@ class RQGTests(BaseTestCase):
                     build_index_list.append(index_name)
                 except Exception, ex:
                     self.log.info(ex)
+                    traceback.print_exc()
                     raise
             # Run Build Query
             if build_index_list is not None and len(build_index_list) > 0:
@@ -1496,6 +1508,7 @@ class RQGTests(BaseTestCase):
                     self.log.info(actual_result)
                 except Exception, ex:
                     self.log.info(ex)
+                    traceback.print_exc()
                     raise
                 # Monitor till the index is built
                 tasks = []
@@ -1505,6 +1518,7 @@ class RQGTests(BaseTestCase):
                     for task in tasks:
                         task.result()
                 except Exception, ex:
+                    traceback.print_exc()
                     self.log.info(ex)
 
     def _extract_secondary_index_map_from_file(self, file_path="/tmp/index.txt"):
@@ -1531,6 +1545,7 @@ class RQGTests(BaseTestCase):
                     build_index_list.append(index_name)
             except Exception, ex:
                 self.log.info(ex)
+                traceback.print_exc()
                 raise
         # Run Build Query
         if build_index_list is not None and len(build_index_list) > 0:
@@ -1540,6 +1555,7 @@ class RQGTests(BaseTestCase):
                 self.log.info(actual_result)
             except Exception, ex:
                 self.log.info(ex)
+                traceback.print_exc()
                 raise
             # Monitor till the index is built
             tasks = []
@@ -1553,6 +1569,7 @@ class RQGTests(BaseTestCase):
                 for task in tasks:
                     task.result()
             except Exception, ex:
+                traceback.print_exc()
                 self.log.info(ex)
 
     def async_monitor_index(self, bucket, index_name=None):
