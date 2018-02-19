@@ -948,7 +948,10 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the bucket was flushed."""
-        _task = self.async_failover(servers, failover_nodes, graceful, use_hostnames, timeout)
+        if timeout is None:
+            _task = self.async_failover(servers, failover_nodes, graceful, use_hostnames)
+        else:
+            _task = self.async_failover(servers, failover_nodes, graceful, use_hostnames, timeout)
         return _task.result(timeout)
 
     def async_bucket_flush(self, server, bucket='default'):
