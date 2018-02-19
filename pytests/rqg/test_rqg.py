@@ -723,10 +723,7 @@ class RQGTests(BaseTestCase):
 
     def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue, failure_record_queue=None, table_name=None):
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
-        if table_name is not None:
-            client = self.client_map[table_name]
-        else:
-            client = self.client
+        client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
         if n1ql_query.find("copy_simple_table") > 0:
@@ -1013,10 +1010,6 @@ class RQGTests(BaseTestCase):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-        if table_name is not None:
-            client = self.client_map[table_name]
-        else:
-            client = self.client
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
         for i, item in enumerate(hints):
@@ -1027,9 +1020,11 @@ class RQGTests(BaseTestCase):
             n1ql_result = actual_result["results"]
             # Run SQL Query
             sql_result = expected_result
+            client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
             if expected_result is None:
                 columns, rows = client._execute_query(query=sql_query)
                 sql_result = client._gen_json_from_results(columns, rows)
+            client._close_mysql_connection()
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
