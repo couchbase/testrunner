@@ -123,13 +123,12 @@ class docloaderTests(CliBaseTest):
                                'vb_replica_curr_items', '==', items * available_replicas))
             stats_tasks.append(self.cluster.async_wait_for_stats(self.servers[:self.num_servers], bucket, '',
                                'curr_items_tot', '==', items * (available_replicas + 1)))
-
         for task in stats_tasks:
             task.result(60)
 
     def get_number_of_files(self, file):
         if self.os != "windows":
-            command = "find %s/ -name *.json | wc -l" % (file)
+            command = "find %s/ -name '*.json' | wc -l" % (file)
             output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
             if 'unable to resolve host' in output[0]:
@@ -139,7 +138,7 @@ class docloaderTests(CliBaseTest):
             else:
                 a = int(output[0])
 
-            command = "find %s/design_docs/ -name *.json | wc -l" % (file)
+            command = "find %s/design_docs/ -name '*.json' | wc -l" % (file)
             output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
             if 'unable to resolve host' in output[0]:
