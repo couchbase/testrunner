@@ -1,5 +1,5 @@
 from xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RestConnection
 from couchbase_helper.documentgenerator import BlobGenerator
 import json
 
@@ -26,6 +26,7 @@ class compression(XDCRNewBaseTest):
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
         shell.disconnect()
+        return output, error
 
     def _verify_compression(self, cluster, compr_bucket_name="", uncompr_bucket_name="", compression_type="None"):
         repls = cluster.get_remote_clusters()[0].get_replications()
@@ -162,3 +163,103 @@ class compression(XDCRNewBaseTest):
                                  uncompr_bucket_name="standard_bucket_2",
                                  compression_type=compression_type)
         self.verify_results()
+
+    def test_compression_with_pause_resume(self):
+        repeat = self._input.param("repeat", 5)
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+
+        gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+        gen_create = BlobGenerator('comprTwo-', 'comprTwo-', self._value_size, end=self._num_items)
+        self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+
+        self.async_perform_update_delete()
+
+        for i in range(0, repeat):
+            self.src_cluster.pause_all_replications()
+            self.sleep(30)
+            self.src_cluster.resume_all_replications()
+
+        self._verify_compression(cluster=self.src_cluster,
+                                 compr_bucket_name="standard_bucket_1",
+                                 uncompr_bucket_name="standard_bucket_2",
+                                 compression_type=compression_type)
+        self.verify_results()
+
+    def test_compression_with_optimistic_threshold_change(self):
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+
+        src_conn = RestConnection(self.src_cluster.get_master_node())
+        src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'optimisticReplicationThreshold',
+                                self._optimistic_threshold)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_2', 'optimisticReplicationThreshold',
+                                self._optimistic_threshold)
+
+        self.src_cluster.pause_all_replications()
+
+        gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+        gen_create = BlobGenerator('comprTwo-', 'comprTwo-', self._value_size, end=self._num_items)
+        self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+
+        self.src_cluster.resume_all_replications()
+
+        self.perform_update_delete()
+
+        self._verify_compression(cluster=self.src_cluster,
+                                 compr_bucket_name="standard_bucket_1",
+                                 uncompr_bucket_name="standard_bucket_2",
+                                 compression_type=compression_type)
+        self.verify_results()
+
+    def test_compression_with_advanced_settings(self):
+        batch_count = self._input.param("batch_count", 10)
+        batch_size = self._input.param("batch_size", 2048)
+        source_nozzle = self._input.param("source_nozzle", 2)
+        target_nozzle = self._input.param("target_nozzle", 2)
+
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+
+        src_conn = RestConnection(self.src_cluster.get_master_node())
+        src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'workerBatchSize', batch_count)
+        src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'docBatchSizeKb', batch_size)
+        src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'sourceNozzlePerNode', source_nozzle)
+        src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'targetNozzlePerNode', target_nozzle)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'workerBatchSize', batch_count)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'docBatchSizeKb', batch_size)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'sourceNozzlePerNode', source_nozzle)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'targetNozzlePerNode', target_nozzle)
+
+        self.src_cluster.pause_all_replications()
+
+        gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+        gen_create = BlobGenerator('comprTwo-', 'comprTwo-', self._value_size, end=self._num_items)
+        self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+
+        self.src_cluster.resume_all_replications()
+
+        self.perform_update_delete()
+
+        self._verify_compression(cluster=self.src_cluster,
+                                 compr_bucket_name="standard_bucket_1",
+                                 uncompr_bucket_name="standard_bucket_2",
+                                 compression_type=compression_type)
+        self.verify_results()
+
+    def test_compression_with_capi(self):
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        output, error = self._set_compression_type(self.src_cluster, "default", compression_type)
+        self.assertTrue("The value can not be specified for CAPI replication" in output[0], "Compression enabled for CAPI")
+        self.log.info("Compression not enabled for CAPI as expected")
