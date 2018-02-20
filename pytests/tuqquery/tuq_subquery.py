@@ -113,7 +113,7 @@ class QuerySubqueryTests(QueryTests):
     def test_subquery_letting(self):
         self.query = 'select meta().id,total from {0} GROUP BY meta().id LETTING total = COUNT(META().id) order by meta().id limit 3'.format('default')
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['results'], [{"id": "query-testemployee10153.1877827-0", "total": 1}, {"id": "query-testemployee10153.1877827-1", "total": 1}, {"id": "query-testemployee10153.1877827-10", "total": 1}])
+        self.assertEqual(actual_result['results'], [{"id": "query-testemployee10153.1877827-0", "total": 1}, {"id": "query-testemployee10153.1877827-1", "total": 1}, {"id": "query-testemployee10153.1877827-2", "total": 1}])
         self.query = 'select meta().id,total from {0} GROUP BY meta().id LETTING total = (SELECT RAW SUM(VMs.memory) FROM default.VMs AS VMs)[0] order by meta().id limit 10'.format('default')
         try:
             self.run_cbq_query()
