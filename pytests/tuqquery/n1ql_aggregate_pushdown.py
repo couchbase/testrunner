@@ -13,6 +13,7 @@ class AggregatePushdownClass(QueryTests):
         super(AggregatePushdownClass, self).setUp()
         self.n1ql_helper = N1QLHelper(master=self.master)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.array_type = self.input.param("array_type", "all")
 
     def tearDown(self):
         super(AggregatePushdownClass, self).tearDown()
@@ -35,31 +36,31 @@ class AggregatePushdownClass(QueryTests):
                     for non_array_second_field in non_array_fields:
                         if non_array_second_field == non_array_first_field:
                             query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
-                                                                                      non_array_first_field["where_clause"],
-                                                                                      non_array_first_field["name"]),
+                                                                      non_array_first_field["where_clause"],
+                                                                      non_array_first_field["name"]),
                                                  select_array_where_clause.format(non_array_first_field["name"],
-                                                                                  array_field["where_clause"],
-                                                                                  non_array_first_field["name"])
+                                                                      array_field["where_clause"],
+                                                                      non_array_first_field["name"])
                                                 ]
                         else:
                             query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
-                                                                                      non_array_first_field["where_clause"],
-                                                                                      non_array_first_field["name"]),
+                                                      non_array_first_field["where_clause"],
+                                                      non_array_first_field["name"]),
                                                  select_non_array_where_clause.format(non_array_first_field["name"],
-                                                                                      non_array_first_field["where_clause"],
-                                                                                      non_array_second_field["name"]),
+                                                      non_array_first_field["where_clause"],
+                                                      non_array_second_field["name"]),
                                                  select_array_where_clause.format(non_array_first_field["name"],
-                                                                                  array_field["where_clause"],
-                                                                                  non_array_first_field["name"]),
+                                                      array_field["where_clause"],
+                                                      non_array_first_field["name"]),
                                                  select_array_where_clause.format(non_array_first_field["name"],
-                                                                                  array_field["where_clause"],
-                                                                                  non_array_second_field["name"]),
+                                                      array_field["where_clause"],
+                                                      non_array_second_field["name"]),
                                                  select_non_array_where_clause.format(non_array_first_field["name"],
-                                                                                      non_array_second_field["where_clause"],
-                                                                                      non_array_first_field["name"]),
+                                                                      non_array_second_field["where_clause"],
+                                                                      non_array_first_field["name"]),
                                                  select_non_array_where_clause.format(non_array_first_field["name"],
-                                                                                      non_array_second_field["where_clause"],
-                                                                                      non_array_second_field["name"])
+                                                                      non_array_second_field["where_clause"],
+                                                                      non_array_second_field["name"])
                                                  ]
                         for bucket in self.buckets:
                             for query_template in query_definitions:
@@ -82,8 +83,137 @@ class AggregatePushdownClass(QueryTests):
 
             for drop_def in index_name_def["drop_definitions"]:
                 result = self.run_cbq_query(drop_def)
-        log.info("create_index_count: " + str(create_index_count))
-        log.info("query_count: " + str(query_count))
+            self.assertEqual(len(failed_queries_in_explain), 0,
+                             "Aggregate Pushdown Query Explain fails: "
+                             "lenth : {0} \n queries: {1}".format(len(failed_queries_in_explain), failed_queries_in_explain))
+            self.assertEqual(len(failed_queries_in_result), 0,
+                             "Aggregate Pushdown Query Results fails: {0}".format(failed_queries_in_result))
+
+    def test_array_aggregate_non_array_group_array(self):
+        create_index_count = 0
+        query_count = 0
+        failed_queries_in_explain = []
+        failed_queries_in_result = []
+        for index_name_def in self._create_array_index_definitions():
+            for create_def in index_name_def["create_definitions"]:
+                result = self.run_cbq_query(create_def)
+                create_index_count += 1
+            array_field = index_name_def["fields"][0]
+            non_array_fields = [index_name_def["fields"][1], index_name_def["fields"][2]]
+            for aggr_func in AGGREGATE_FUNCTIONS:
+                select_non_array_where_clause = "SELECT " + aggr_func + "(d.{0}) from %s d USE INDEX (`%s`)" \
+                                                                        "UNNEST d.`{1}` AS t where d.{2} GROUP BY t"
+                select_array_where_clause = "SELECT " + aggr_func + "(d.{0}) from %s d USE INDEX (`%s`) {1}  GROUP BY t"
+                for non_array_first_field in non_array_fields:
+                    for non_array_second_field in non_array_fields:
+                        if non_array_second_field == non_array_first_field:
+                            query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"])]
+                        else:
+                            query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_second_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_second_field["where_clause"])]
+                        for bucket in self.buckets:
+                            for query_template in query_definitions:
+                                for index_name in index_name_def["index_names"]:
+                                    query = query_template % (bucket.name, index_name)
+                                    result = self.run_cbq_query(query)
+                                    query_count += 1
+                                    explain_verification = self._verify_aggregate_explain_results(query_template,
+                                                                                                  index_name,
+                                                                                                  index_name_def["fields"],
+                                                                                                  bucket.name)
+                                    if explain_verification is False:
+                                        failed_queries_in_explain.append(query)
+                                        log.info("Query {0} failed in explain".format(query))
+                                    query_verification = self._verify_aggregate_query_results(result, query_template,
+                                                                                              bucket.name)
+                                    if query_verification is not True:
+                                        failed_queries_in_result.append(query)
+                                        log.info(query_verification)
+
+            for drop_def in index_name_def["drop_definitions"]:
+                result = self.run_cbq_query(drop_def)
+        self.assertEqual(len(failed_queries_in_explain), 0,
+                         "Aggregate Pushdown Query Explain fails: {0}".format(failed_queries_in_explain))
+        self.assertEqual(len(failed_queries_in_result), 0,
+                         "Aggregate Pushdown Query Results fails: {0}".format(failed_queries_in_result))
+
+    def test_array_aggregate_non_array_without_group_by(self):
+        create_index_count = 0
+        query_count = 0
+        failed_queries_in_explain = []
+        failed_queries_in_result = []
+        for index_name_def in self._create_array_index_definitions():
+            for create_def in index_name_def["create_definitions"]:
+                result = self.run_cbq_query(create_def)
+                create_index_count += 1
+            array_field = index_name_def["fields"][0]
+            non_array_fields = [index_name_def["fields"][1], index_name_def["fields"][2]]
+            for aggr_func in AGGREGATE_FUNCTIONS:
+                select_non_array_where_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1}"
+                select_array_where_clause = "SELECT " + aggr_func + "(d.{0}) from %s d USE INDEX (`%s`) {1}"
+                for non_array_first_field in non_array_fields:
+                    for non_array_second_field in non_array_fields:
+                        if non_array_second_field == non_array_first_field:
+                            query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"])]
+                        else:
+                            query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      non_array_second_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      non_array_second_field["where_clause"])]
+                        for bucket in self.buckets:
+                            for query_template in query_definitions:
+                                for index_name in index_name_def["index_names"]:
+                                    query = query_template % (bucket.name, index_name)
+                                    result = self.run_cbq_query(query)
+                                    query_count += 1
+                                    explain_verification = self._verify_aggregate_explain_results(query_template,
+                                                                                                  index_name,
+                                                                                                  index_name_def["fields"],
+                                                                                                  bucket.name)
+                                    if explain_verification is False:
+                                        failed_queries_in_explain.append(query)
+                                        log.info("Query {0} failed in explain".format(query))
+                                    query_verification = self._verify_aggregate_query_results(result, query_template,
+                                                                                              bucket.name)
+                                    if query_verification is not True:
+                                        failed_queries_in_result.append(query)
+                                        log.info(query_verification)
+
+            for drop_def in index_name_def["drop_definitions"]:
+                result = self.run_cbq_query(drop_def)
+            self.assertEqual(len(failed_queries_in_explain), 0,
+                             "Aggregate Pushdown Query Explain fails: {0}".format(failed_queries_in_explain))
+            self.assertEqual(len(failed_queries_in_result), 0,
+                             "Aggregate Pushdown Query Results fails: {0}".format(failed_queries_in_result))
 
     def _create_array_index_definitions(self):
         array_fields = [{"name": "travel_history", "where_clause": "UNNEST d.`travel_history` AS t where t > 'I'"},
@@ -94,15 +224,21 @@ class AggregatePushdownClass(QueryTests):
                             {"name": "email", "where_clause": "email is not null"}]
         create_index_definitions = []
         for arr_field in array_fields:
-            arr_field_defn = "ALL ARRAY t FOR t in `{0}` END".format(arr_field["name"])
+            if self.array_type == "all":
+                arr_field_defn = "ALL ARRAY t FOR t in `{0}` END".format(arr_field["name"])
+            else:
+                arr_field_defn = "DISTINCT ARRAY t FOR t in `{0}` END".format(arr_field["name"])
             for first_field in non_array_fields[:-1]:
                 for second_field in non_array_fields[non_array_fields.index(first_field)+1:]:
                     if first_field["name"] == second_field["name"]:
                         continue
                     index_names_defn = {}
+
                     index_names = ["{0}_{1}_{2}".format(first_field["name"], second_field["name"], arr_field["name"]),
                                    "{0}_{1}_{2}".format(first_field["name"], arr_field["name"], second_field["name"]),
                                    "{0}_{1}_{2}".format(arr_field["name"], first_field["name"], second_field["name"])]
+                    if self.array_type == "distinct":
+                        index_names = ["distinct_{0}".format(inx) for inx in index_names]
                     index_names_defn["index_names"] = index_names
                     index_names_defn["fields"] = [arr_field, first_field, second_field]
                     create_index_clause = "CREATE INDEX {0} on %s ({1}, {2}, {3})"
@@ -129,15 +265,17 @@ class AggregatePushdownClass(QueryTests):
             if field["name"] in query.split("where")[1].split("GROUP")[0] or \
                             field["name"] in \
                             query.split("USE INDEX")[1].split(")")[1].split("GROUP")[0]:
-                if not index_name.startswith(field["name"]):
-                    allow_pushdown = False
+                where_field = field["name"]
+                if where_field == index_fields[0]:
+                    if not index_name.startswith(where_field):
+                        allow_pushdown = False
+                        break
             if "UNNEST" not in query:
                 if "DISTINCT" not in index_name:
                     for aggr_func in ["SUM", "COUNT", "COUNTN", "AVG"]:
                         if aggr_func in query:
                             allow_pushdown = False
                             break
-
         explain_query = "EXPLAIN " + query
         explain_query = explain_query % (bucket, index_name)
         explain_result = self.run_cbq_query(explain_query)
@@ -148,17 +286,19 @@ class AggregatePushdownClass(QueryTests):
 
     def _verify_aggregate_query_results(self, result, query, bucket):
         primary_query = query % (bucket, "#primary")
-        actual_result = sorted(self.run_cbq_query(primary_query)["results"])
-        expected_result = sorted(result["results"])
+        primary_result = self.run_cbq_query(primary_query)
+        return self._verify_results(sorted(primary_result['results']), sorted(result["results"]))
 
-        def _gen_dict(res):
+    def _verify_results(self, actual_result, expected_result):
+        log.info(" Analyzing Actual Result")
+
+        def _gen_dict(result):
             result_set = []
-            if res is not None and len(res) > 0:
-                for val in res:
+            if result is not None and len(result) > 0:
+                for val in result:
                     for key in val.keys():
                         result_set.append(val[key])
             return result_set
-        log.info(" Analyzing Actual Result")
         actual_result = _gen_dict(actual_result)
         log.info(" Analyzing Expected Result")
         expected_result = _gen_dict(expected_result)
