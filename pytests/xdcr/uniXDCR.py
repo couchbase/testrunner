@@ -923,7 +923,7 @@ class unidirectional(XDCRNewBaseTest):
                                                  + ":11210 | wc -l")
             conn.log_command_output(output, error)
             self.log.info("No. of memcached connections in iteration {0}:  {1}".format(i+1, output[0]))
-            self.assertLessEqual(int(output[0]), int(before), "Number of memcached connections increased")
+            self.assertLessEqual(abs(int(output[0]) - int(before)), 5, "Number of memcached connections changed beyond allowed limit")
 
         for task in load_tasks:
             task.result()
