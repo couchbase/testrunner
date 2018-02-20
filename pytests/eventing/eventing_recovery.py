@@ -36,6 +36,8 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == 'bucket_op_with_cron_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
         elif handler_code == 'n1ql_op_with_timers':
             # index is required for delete operation through n1ql
             self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")

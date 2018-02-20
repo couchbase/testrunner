@@ -323,7 +323,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                                        format(panic_str, eventing_log))
                 log.info("\n {0}".format(panic_trace))
                 self.panic_count = count
-            dir_name_crash = str(dir_name) + '/../crash/'
+            os_info = shell.extract_remote_info()
+            if os_info.type.lower() == "windows":
+                # This is a fixed path in all windows systems inside couchbase
+                dir_name_crash = 'c://CrashDumps'
+            else:
+                dir_name_crash = str(dir_name) + '/../crash/'
             core_dump_count, err = shell.execute_command("ls {0}| wc -l".format(dir_name_crash))
             if isinstance(core_dump_count, list):
                 core_dump_count = int(core_dump_count[0])

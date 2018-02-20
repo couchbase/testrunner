@@ -49,6 +49,8 @@ class EventingDataset(EventingBaseTest):
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE1
         elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == 'bucket_op_with_cron_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
         elif handler_code == 'n1ql_op_with_timers':
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
