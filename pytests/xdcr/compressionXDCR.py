@@ -1,6 +1,7 @@
 from xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
 from remote.remote_util import RemoteMachineShellConnection, RestConnection
 from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.cluster import Cluster
 import json
 
 class compression(XDCRNewBaseTest):
@@ -10,6 +11,7 @@ class compression(XDCRNewBaseTest):
         self.src_master = self.src_cluster.get_master_node()
         self.dest_cluster = self.get_cb_cluster_by_name('C2')
         self.dest_master = self.dest_cluster.get_master_node()
+        self.cluster = Cluster()
 
     def tearDown(self):
         super(compression, self).tearDown()
@@ -173,8 +175,6 @@ class compression(XDCRNewBaseTest):
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
-        gen_create = BlobGenerator('comprTwo-', 'comprTwo-', self._value_size, end=self._num_items)
-        self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.async_perform_update_delete()
 
@@ -182,6 +182,8 @@ class compression(XDCRNewBaseTest):
             self.src_cluster.pause_all_replications()
             self.sleep(30)
             self.src_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
 
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
@@ -205,12 +207,12 @@ class compression(XDCRNewBaseTest):
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
-        gen_create = BlobGenerator('comprTwo-', 'comprTwo-', self._value_size, end=self._num_items)
-        self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.resume_all_replications()
 
-        self.perform_update_delete()
+        self.async_perform_update_delete()
+
+        self._wait_for_replication_to_catchup()
 
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
@@ -243,12 +245,12 @@ class compression(XDCRNewBaseTest):
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
-        gen_create = BlobGenerator('comprTwo-', 'comprTwo-', self._value_size, end=self._num_items)
-        self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.resume_all_replications()
 
-        self.perform_update_delete()
+        self.async_perform_update_delete()
+
+        self._wait_for_replication_to_catchup()
 
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
@@ -263,3 +265,118 @@ class compression(XDCRNewBaseTest):
         output, error = self._set_compression_type(self.src_cluster, "default", compression_type)
         self.assertTrue("The value can not be specified for CAPI replication" in output[0], "Compression enabled for CAPI")
         self.log.info("Compression not enabled for CAPI as expected")
+
+    def test_compression_with_rebalance_in(self):
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+
+        self.src_cluster.pause_all_replications()
+
+        gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+
+        self.src_cluster.resume_all_replications()
+
+        self.async_perform_update_delete()
+
+        self.src_cluster.rebalance_in()
+
+        self._wait_for_es_replication_to_catchup()
+
+        self._verify_compression(cluster=self.src_cluster,
+                                 compr_bucket_name="standard_bucket_1",
+                                 uncompr_bucket_name="standard_bucket_2",
+                                 compression_type=compression_type)
+        self.verify_results()
+
+    def test_compression_with_rebalance_out(self):
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+
+        self.src_cluster.pause_all_replications()
+
+        gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+
+        self.src_cluster.resume_all_replications()
+
+        self.async_perform_update_delete()
+
+        self.src_cluster.rebalance_out()
+
+        self._wait_for_es_replication_to_catchup()
+
+        self._verify_compression(cluster=self.src_cluster,
+                                 compr_bucket_name="standard_bucket_1",
+                                 uncompr_bucket_name="standard_bucket_2",
+                                 compression_type=compression_type)
+        self.verify_results()
+
+    def test_compression_with_swap_rebalance(self):
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+
+        self.src_cluster.pause_all_replications()
+
+        gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+
+        self.src_cluster.resume_all_replications()
+
+        self.async_perform_update_delete()
+
+        self.src_cluster.swap_rebalance()
+
+        self._wait_for_es_replication_to_catchup()
+
+        self._verify_compression(cluster=self.src_cluster,
+                                 compr_bucket_name="standard_bucket_1",
+                                 uncompr_bucket_name="standard_bucket_2",
+                                 compression_type=compression_type)
+        self.verify_results()
+
+    def test_compression_with_failover(self):
+        self.setup_xdcr()
+        self.sleep(60)
+        compression_type = self._input.param("compression_type", "Snappy")
+        self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+
+        self.src_cluster.pause_all_replications()
+
+        gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
+
+        self.src_cluster.resume_all_replications()
+
+        self.async_perform_update_delete()
+
+        src_conn = RestConnection(self.src_cluster.get_master_node())
+        graceful = self._input.param("graceful", False)
+        self.recoveryType = self._input.param("recoveryType", None)
+        self.src_cluster.failover(graceful=graceful)
+
+        self.sleep(30)
+
+        if self.recoveryType:
+            server_nodes = src_conn.node_statuses()
+            for node in server_nodes:
+                if node.ip == self._input.servers[1].ip:
+                    src_conn.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
+                    self.sleep(30)
+                    src_conn.add_back_node(otpNode=node.id)
+            rebalance = self.cluster.async_rebalance(self.src_cluster.get_nodes(), [], [])
+            rebalance.result()
+
+        self._wait_for_replication_to_catchup()
+
+        self._verify_compression(cluster=self.src_cluster,
+                                 compr_bucket_name="standard_bucket_1",
+                                 uncompr_bucket_name="standard_bucket_2",
+                                 compression_type=compression_type)
+        self.verify_results()
