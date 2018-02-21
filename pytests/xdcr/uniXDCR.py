@@ -929,3 +929,17 @@ class unidirectional(XDCRNewBaseTest):
             task.result()
 
         self.log.info("No. of memcached connections did not increase with pausing and resuming replication multiple times")
+
+    def test_maxttl_setting(self):
+        maxttl = int(self._input.param("maxttl", None))
+        self.setup_xdcr_and_load()
+        self.merge_all_buckets()
+        self._wait_for_replication_to_catchup()
+        self.sleep(maxttl, "waiting for docs to expire per maxttl properly")
+        for bucket in self.src_cluster.get_buckets():
+            items = RestConnection(self.src_master).get_active_key_count(bucket)
+            self.log.info("Docs in source bucket is {0} after maxttl has elapsed".format(items))
+            if items != 0:
+                self.fail("Docs in source bucket is not 0 after maxttl has elapsed")
+        self._wait_for_replication_to_catchup()
+
