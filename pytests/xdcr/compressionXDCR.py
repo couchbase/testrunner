@@ -283,7 +283,7 @@ class compression(XDCRNewBaseTest):
 
         self.src_cluster.rebalance_in()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
@@ -308,7 +308,7 @@ class compression(XDCRNewBaseTest):
 
         self.src_cluster.rebalance_out()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
@@ -333,7 +333,7 @@ class compression(XDCRNewBaseTest):
 
         self.src_cluster.swap_rebalance()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
