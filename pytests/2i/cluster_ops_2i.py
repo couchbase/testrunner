@@ -148,3 +148,27 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             query_definitions = self.query_definitions,
             create_index = False, drop_index = True,
             query_with_explain = False, query = False)
+
+    def test_maxttl_setting(self):
+        """
+        Load data, create index, check if all docs are indexed
+        Wait until maxttl has elapsed, check if all docs are deleted
+        and the deletes are indexed
+        :return:
+        """
+        maxttl = int(self.input.param("maxttl", None))
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = True, drop_index = False,
+            query_with_explain = False, query = False)
+        self.sleep(20)
+        self._verify_bucket_count_with_index_count()
+        self.sleep(maxttl, "waiting for docs to be expired automatically per maxttl rule")
+        self._expiry_pager(self.master)
+        self.sleep(60, "wait for expiry pager to run on all nodes...")
+        for bucket in self.buckets:
+            items = RestConnection(self.master).get_active_key_count(bucket)
+            self.log.info("Docs in source bucket is {0} after maxttl has elapsed".format(items))
+            if items != 0:
+                self.fail("Docs in source bucket is not 0 after maxttl has elapsed")
+        self._verify_bucket_count_with_index_count()
