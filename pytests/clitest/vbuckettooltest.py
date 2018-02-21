@@ -23,7 +23,7 @@ class VBucketToolTests(CliBaseTest):
         self._load_by_vbuckets(self.buckets[0])
         shell = RemoteMachineShellConnection(self.master)
         try:
-            prefix = 'curl http://localhost:%s/pools/default/buckets/%s |' % (
+            prefix = 'curl -g http://localhost:%s/pools/default/buckets/%s |' % (
                       self.master.port or '8091', self.buckets[0].name)
             for vb, items in self.keys_per_vbuckets_dict.iteritems():
                 o, _ = shell.execute_vbuckettool(items, prefix)
@@ -42,7 +42,7 @@ class VBucketToolTests(CliBaseTest):
         bucket = RestConnection(self.master).get_bucket(self.buckets[0])
         shell = RemoteMachineShellConnection(self.master)
         try:
-            prefix = 'curl http://localhost:%s/pools/default/buckets/%s |' % (
+            prefix = 'curl -g http://localhost:%s/pools/default/buckets/%s |' % (
                       self.master.port or '8091', bucket.name)
             for vb, items in self.keys_per_vbuckets_dict.iteritems():
                 o, _ = shell.execute_vbuckettool(items, prefix)

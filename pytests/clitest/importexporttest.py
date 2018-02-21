@@ -1218,7 +1218,7 @@ class ImportExportTests(CliBaseTest):
             elif self.imex_type == "csv":
                 self.log.info("Verify csv import data")
                 shell = RemoteMachineShellConnection(self.master)
-                curl_cmd = "curl -X GET -u Administrator:password " \
+                curl_cmd = "curl -g -X GET -u Administrator:password " \
                       "http://%s:8091/pools/default/buckets/default/docs?" \
                       "include_docs=false&skip=0" % self.master.ip
                 output, error = shell.execute_command(curl_cmd)
@@ -1233,7 +1233,7 @@ class ImportExportTests(CliBaseTest):
                                                     k["id"] for k in bucket_keys):
                         self.fail("Failed to import key %s to bucket"
                                   % src_data[x])
-                    curl_cmd = "curl -X GET -u Administrator:password " \
+                    curl_cmd = "curl -g -X GET -u Administrator:password " \
                             "http://%s:8091/pools/default/buckets/default/docs/%d" \
                                % (self.master.ip, x)
                     if self.omit_empty:
