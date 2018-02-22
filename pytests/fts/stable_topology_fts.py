@@ -1662,7 +1662,7 @@ class StableTopFTS(FTSBaseTest):
         :return: Nothing
         """
         fts_ssl_port=18094
-        import json, os, subprocess
+        import json, subprocess
         idx = {"sourceName": "default",
                "sourceType": "couchbase",
                "type": "fulltext-index"}
@@ -1677,7 +1677,7 @@ class StableTopFTS(FTSBaseTest):
         f.write(cert)
         f.close()
 
-        cmd = "curl -k -E cert.pem "+\
+        cmd = "curl -g -k -E cert.pem "+\
               "-XPUT -H \"Content-Type: application/json\" "+\
               "-u Administrator:password "+\
               "https://{0}:{1}/api/index/default_idx -d ".\
@@ -1687,7 +1687,7 @@ class StableTopFTS(FTSBaseTest):
         self.log.info("Running command : {0}".format(cmd))
         output = subprocess.check_output(cmd, shell=True)
         if json.loads(output) == {"status":"ok"}:
-            query = "curl -k -E cert.pem " + \
+            query = "curl -g -k -E cert.pem " + \
                     "-XPOST -H \"Content-Type: application/json\" " + \
                     "-u Administrator:password " + \
                     "https://{0}:18094/api/index/default_idx/query -d ". \
