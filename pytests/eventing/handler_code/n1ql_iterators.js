@@ -1,6 +1,18 @@
 function OnUpdate(doc, meta) {
     log('document : ', meta.id);
-    var query_result = SELECT * FROM src_bucket LIMIT 10;
+    // We have intentionally left new lines to test multi line n1ql query support
+    var query_result = SELECT
+
+            *
+
+
+
+                       FROM src_bucket
+
+
+
+
+                                                       LIMIT 10;
     res1 = test_continue(query_result);
     res2 = test_break(query_result);
     res3 = test_labelled_continue(query_result);
@@ -10,7 +22,13 @@ function OnUpdate(doc, meta) {
     }
 }
 function OnDelete(meta) {
-    var query_result = SELECT * FROM metadata LIMIT 10;
+    // We have intentionally scrambled the query
+    var query_result = SELECT
+                              *
+                                   FROM
+                                            metadata
+                                                        LIMIT
+                                                                10;
     res1 = test_try_catch_throw(query_result);
     if (res1){
         delete dst_bucket[meta.id];
