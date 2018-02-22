@@ -325,7 +325,7 @@ class CreateBucketTests(BaseTestCase):
                             --bucket-type={0} \
                             --bucket-port=11222 \
                             --bucket-ramsize=200 \
-                            --bucket-maxttl=400 \
+                            --max-ttl=400 \
                             --wait '.format(bucket_type)
             o, e = shell.execute_couchbase_cli(cli_command="bucket-create", options=options)
             self.assertEqual(o[0], 'SUCCESS: Bucket created')
@@ -355,15 +355,17 @@ class CreateBucketTests(BaseTestCase):
                 num_actual = self.get_item_count(self.master,"default")
                 if int(num_actual) == self.total_items_travel_sample:
                     break
-            self.assertTrue(int(num_actual) == self.total_items_travel_sample,
-                            "Items number expected %s, actual %s" % (
-                                    self.total_items_travel_sample, num_actual))
+                self.assertTrue(int(num_actual) == self.total_items_travel_sample,
+                                "Items number expected %s, actual %s" % (
+                                        self.total_items_travel_sample, num_actual))
             self.log.info("Total items %s " % num_actual)
             self.sleep(400, "waiting for docs to expire per maxttl rule")
-            self.expire_pager(self.servers)
+            self.expire_pager([self.master])
             num_actual = self.get_item_count(self.master, "default")
             if int(num_actual) == 0:
                 self.fail("Item count is not 0 after maxttl has elapsed")
+            else:
+                self.log.info("SUCCESS: Item count is 0 after maxttl has elapsed")
         else:
             self.log.info("This test is not designed to run in pre-vulcan(5.5.0) versions")
 
