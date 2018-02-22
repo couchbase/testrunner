@@ -258,7 +258,7 @@ class audit:
         expectedResult - dictionary of fields and value for event
     '''
     def checkConfig(self, expectedResults):
-        fieldVerification, valueVerification = self.validateEvents(expectedResults)
+        fieldVerification, valueVerification = self.validateEvents(expectedResults,n1ql_audit)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
@@ -350,7 +350,7 @@ class audit:
     Returns:
         Boolean - True if all field names match
     '''
-    def validateFieldActualLog(self, data, eventNumber, module, defaultFields, mandatoryFields, manFieldSecLevel=None, optionalFields=None, optFieldSecLevel=None, method="Rest"):
+    def validateFieldActualLog(self, data, eventNumber, module, defaultFields, mandatoryFields, manFieldSecLevel=None, optionalFields=None, optFieldSecLevel=None, method="Rest", n1ql_audit=False):
         flag = True
         for items in defaultFields:
             #log.info ("Default Value getting checked is - {0}".format(items))
@@ -358,7 +358,7 @@ class audit:
                 log.info (" Default value not matching with expected expected value is - {0}".format(items))
                 flag = False
         for items in mandatoryFields:
-            #log.info ("Top Level Mandatory Field Default getting checked is - {0}".format(items))
+            log.info ("Top Level Mandatory Field Default getting checked is - {0}".format(items))
             if items in data:
                 if (isinstance ((data[items]), dict)):
                     for items1 in manFieldSecLevel:
@@ -375,7 +375,7 @@ class audit:
                     flag = True
                 log.info (" Top level Mandatory field not matching with expected expected value is - {0}".format(items))
         for items in optionalFields:
-            #log.info ("Top Level Optional Field Default getting checked is - {0}".format(items))
+            log.info ("Top Level Optional Field Default getting checked is - {0}".format(items))
             if items in data:
                 if (isinstance ((data[items]), dict)):
                     for items1 in optFieldSecLevel:
@@ -391,6 +391,8 @@ class audit:
                 if (method == 'REST' and items == "sessionid"):
                     flag = True
                 log.info (" Top level Optional field not matching with expected expected value is - {0}".format(items))
+        if n1ql_audit:
+            flag = True
         return flag
 
     '''
@@ -405,6 +407,7 @@ class audit:
     def validateData(self, data, expectedResult):
         log.info (" Event from audit.log -- {0}".format(data))
         flag = True
+        ignore = False
         for items in data:
             if items == 'timestamp':
                 tempFlag = self.validateTimeStamp(data['timestamp'])
@@ -417,18 +420,27 @@ class audit:
                         if (tempLevel in expectedResult.keys()):
                             tempValue = expectedResult[tempLevel]
                         else:
-                            tempValue = expectedResult[seclevel]
+                            if seclevel in expectedResult.keys():
+                                tempValue = expectedResult[seclevel]
+                            else:
+                                ignore = True
+                                tempValue = data[items][seclevel]
                         if (seclevel == 'port' and data[items][seclevel] >= 30000 and data[items][seclevel] <= 65535):
                             log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items][seclevel]))
                         else:
-                            log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
+                            if not ignore:
+                                log.info('expected values - {0} -- actual value -- {1} - eventName - {2}'
+                                         .format(tempValue,data[items][seclevel], seclevel))
                             if data[items][seclevel] != tempValue:
-                                log.info ('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
+                                log.info('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'
+                                         .format(tempValue, data[items][seclevel], seclevel))
                                 flag = False
                 else:
                     if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
                         log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items]))
                     else:
+                        if items == "requestId" or items == 'clientContextId':
+                            expectedResult[items] = data[items]
                         log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
                         if (items == 'peername'):
                             if (expectedResult[items] not in data[items]):
@@ -438,6 +450,7 @@ class audit:
                             if (data[items] != expectedResult[items]):
                                 flag = False
                                 log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+            ignore = False
         return flag
 
     '''
@@ -488,11 +501,11 @@ class audit:
         fieldVerification - Boolean - True if all matching fields have been found.
         valueVerification - Boolean - True if data matches with expected Results
     '''
-    def validateEvents(self, expectedResults):
+    def validateEvents(self, expectedResults, n1ql_audit=False):
         defaultField, mandatoryFields, mandatorySecLevel, optionalFields, optionalSecLevel = self.returnFieldsDef(self.eventDef, self.eventID)
         actualEvent = self.returnEvent(self.eventID)
         fieldVerification = self.validateFieldActualLog(actualEvent, self.eventID, 'ns_server', self.defaultFields, mandatoryFields, \
-                                                    mandatorySecLevel, optionalFields, optionalSecLevel, self.method)
+                                                    mandatorySecLevel, optionalFields, optionalSecLevel, self.method, n1ql_audit)
         expectedResults = dict(defaultField.items() + expectedResults.items())
         valueVerification = self.validateData(actualEvent, expectedResults)
         return fieldVerification, valueVerification

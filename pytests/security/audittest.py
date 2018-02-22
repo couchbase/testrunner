@@ -67,9 +67,9 @@ class auditTest(BaseTestCase):
         content =  rest.set_user_roles(user_id=username,payload=payload)
 
     #Wrapper around auditmain
-    def checkConfig(self, eventID, host, expectedResults):
+    def checkConfig(self, eventID, host, expectedResults, n1ql_audit=False):
         Audit = audit(eventID=self.eventID, host=host)
-        fieldVerification, valueVerification = Audit.validateEvents(expectedResults)
+        fieldVerification, valueVerification = Audit.validateEvents(expectedResults, n1ql_audit)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
