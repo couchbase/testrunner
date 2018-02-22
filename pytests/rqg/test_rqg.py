@@ -670,6 +670,8 @@ class RQGTests(BaseTestCase):
             query = self.query_helper._add_index_hints_to_query(n1ql_query, [index_info])
             query_index_run = self._run_queries_and_verify(aggregate, self.subquery, n1ql_query=query, sql_query=sql_query, expected_result=expected_result)
             result_run["run_query_with_primary"] = query_index_run
+            if self.aggregate_pushdown == "primary":
+                result_run["aggregate_explain_check::#primary"] = self._run_query_with_pushdown_check(n1ql_query, index_info)
 
         # adds USE INDEX and runs query
         if self.run_query_with_secondary:

@@ -951,6 +951,8 @@ class QueryHelper(object):
         bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
         all_field_names = string_field_names + numeric_field_names + datetime_field_names + bool_field_names
         new_sql = sql
+        if "PRIMARY_KEY" in sql:
+            new_sql = new_sql.replace("PRIMARY_KEY", "primary_key_id")
         if "BOOL_FIELD_LIST" in sql:
             new_list = self._generate_random_range(bool_field_names)
             new_sql = new_sql.replace("BOOL_FIELD_LIST", self._convert_list(new_list, "numeric"))
@@ -1193,6 +1195,14 @@ class QueryHelper(object):
         temp_sql = "LOG( 10, ".join(sql_list)
         return temp_sql
 
+    def aggregate_special_convert(self, map):
+        map["n1ql"] = map["n1ql"].replace("?", ",").replace("&", ",")
+        map["n1ql"] = map["n1ql"].replace("SUBSTR", "SUBSTR1")
+        map["sql"] = self.convert_sql_position_func(str(map["sql"]))
+        map["sql"] = self.convert_sql_datetime_func(str(map["sql"]))
+        map["sql"] = self.convert_sql_log_func(str(map["sql"]))
+        return map
+
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template="", table_map={}, table_name="simple_table", define_gsi_index=False, ansi_joins=False, aggregate_pushdown=False):
         index_name_with_occur_fields_where = None
         index_name_with_expression = None
@@ -1208,6 +1218,9 @@ class QueryHelper(object):
                 "expected_result": None,
                 "indexes": {} }
         if not define_gsi_index:
+            if aggregate_pushdown == "primary":
+                map["n1ql"] = map["n1ql"].replace("primary_key_id", "meta().id ")
+                map = self.aggregate_special_convert(map)
             return map
         sql_map = self._divide_sql(n1ql)
         where_condition = sql_map["where_condition"]
@@ -1221,10 +1234,7 @@ class QueryHelper(object):
 
         if aggregate_pushdown:
             aggregate_pushdown_index_name, create_aggregate_pushdown_index_statement = self.create_aggregate_pushdown_index(table_name, table_fields, sql_map, aggregate_pushdown)
-            map["n1ql"] = map["n1ql"].replace("?", ",").replace("&", ",")
-            map["sql"] = self.convert_sql_position_func(str(map["sql"]))
-            map["sql"] = self.convert_sql_datetime_func(str(map["sql"]))
-            map["sql"] = self.convert_sql_log_func(str(map["sql"]))
+            map = self.aggregate_special_convert(map)
         else:
             if where_condition and ("OR" not in where_condition):
                 for field in table_fields:
@@ -1511,6 +1521,8 @@ class QueryHelper(object):
         bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
         all_field_names = string_field_names + numeric_field_names + datetime_field_names + bool_field_names
         new_sql = sql
+        if "PRIMARY_KEY" in sql:
+            new_sql = new_sql.replace("PRIMARY_KEY", "primary_key_id ")
         if "SAME_FIELD" in sql:
             where_field_names_list = self.extract_field_names(sql_map['where_condition'], all_field_names)
             new_sql = re.sub(r'SAME_FIELD', self.random_field_choice(where_field_names_list), new_sql)
@@ -1610,6 +1622,11 @@ class QueryHelper(object):
                     field_name, values = self._search_field(["int", "mediumint", "double", "float", "decimal"], table_map)
                     new_sql += token.replace("NUMERIC_FIELD", field_name)+space
                     numeric_check = True
+                elif "PRIMARY_KEY" in token:
+                    string_check = True
+                    add_token = False
+                    field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
+                    new_sql = new_sql + token.replace("PRIMARY_KEY", "primary_key_id ")
             else:
                 if string_check:
                     if token == "IS":
