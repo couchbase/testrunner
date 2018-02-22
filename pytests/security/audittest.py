@@ -86,21 +86,21 @@ class auditTest(BaseTestCase):
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno', \
-                               'storage_mode':'couchstore','max_ttl':0,'compression_mode':'off', 'maxTTL': 300}
+                               'storage_mode':'couchstore','max_ttl':0,'compression_mode':'off'}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                               '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly', maxTTL=300)
+                               '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
 
         elif (ops in ['update']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':209715200, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
-                               "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':'','storage_mode':'couchstore', 'maxTTL': 600}
+                               "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':'','storage_mode':'couchstore'}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
-                               0, expectedResults['num_threads'], 0 , 'valueOnly', maxTTL=600 )
+                               0, expectedResults['num_threads'], 0 , 'valueOnly')
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
-                               "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore', 'maxTTL': 200}
+                               "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore'}
             rest.change_bucket_props(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                                     '11211', 1, 1, maxTTL=200)
+                                     '11211', 1, 1)
 
         elif (ops in ['delete']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
