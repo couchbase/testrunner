@@ -587,12 +587,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.passwd_env_with_prompt:
             self.log.info("set password env to prompt")
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         if self.replace_ttl:
             if self.replace_ttl != "none":
                 if self.replace_ttl == "all" or self.replace_ttl == "expired":
                     if self.replace_ttl_with is None:
                         self.fail("Need to include param 'replace-ttl-with' value")
-                    args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                    if self.replace_ttl_with:
+                        if self.replace_ttl_with.startswith("epoch"):
+                            time_extend = self.replace_ttl_with[5:]
+                            cmd = "date +%s --date='{0} seconds'".format(time_extend)
+                            epoch_time, error = remote_client.execute_command(cmd)
+                            if epoch_time:
+                                self.replace_ttl_with = epoch_time[0]
+                                args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                                         .format(self.replace_ttl, epoch_time[0])
+                        else:
+                            args += " --replace-ttl {0} --replace-ttl-with {1}"\
                                      .format(self.replace_ttl, self.replace_ttl_with)
                 elif self.replace_ttl == "add-none":
                     args += " --replace-ttl none"
@@ -613,7 +624,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             else:
                 args += " --vbucket-filter {0}".format(self.vbucket_filter)
 
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                    password_env, user_env)
         output, error = remote_client.execute_command(command)
@@ -689,8 +699,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     sleep_time = int(self.replace_ttl_with)/3
                     self.sleep(int(sleep_time), " wait to check items before it expired")
             else:
-                sleep_time = int(self.replace_ttl_with) + 10
-                self.sleep(int(sleep_time), " wait for items to be expired")
+                if int(self.replace_ttl_with) > 2592000:
+                    self.log.info("Time is set more than 30 days.  No need to sleep")
+                else:
+                    sleep_time = int(self.replace_ttl_with) + 10
+                    self.sleep(int(sleep_time), " wait for items to be expired")
         if self.vbucket_filter and self.vbucket_filter != "empty":
             self._validate_restore_vbucket_filter()
         else:
