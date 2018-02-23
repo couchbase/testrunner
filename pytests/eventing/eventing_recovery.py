@@ -206,6 +206,8 @@ class EventingRecovery(EventingBaseTest):
             self.stop_firewall_on_node(eventing_node)
         finally:
             self.stop_firewall_on_node(eventing_node)
+        # This is intentionally added
+        self.sleep(60)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')

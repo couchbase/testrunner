@@ -1,6 +1,6 @@
 function OnUpdate(doc, meta) {
     log('document : ', meta.id);
-    // We have intentionally left new lines to test multi line n1ql query support
+    // We have intentionally left new lines to test multi line n1ql support in eventing
     var query_result = SELECT
 
             *
@@ -28,7 +28,8 @@ function OnDelete(meta) {
                                    FROM
                                             metadata
                                                         LIMIT
-                                                                10;
+                                                                10
+                                                        ;
     res1 = test_try_catch_throw(query_result);
     if (res1){
         delete dst_bucket[meta.id];

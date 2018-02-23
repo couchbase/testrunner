@@ -1,6 +1,6 @@
 import json
 
-from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator
+from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator, JSONNonDocGenerator
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from couchbase.bucket import Bucket
@@ -140,11 +140,14 @@ class EventingNegative(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_function_where_handler_code_takes_more_time_to_execute_than_execution_timeout(self):
-        keys = ['customer123', 'customer1234', 'customer12345']
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
-        for doc_id in keys:
-            bucket.upsert(doc_id, {'name' : doc_id})
+        # Note to Self : Never use SDK's unless you really have to. It is difficult to upgrade or maintain correct
+        # sdk versions on the slaves. Scripts will be notoriously unreliable when you run on jenkins slaves.
+        num_docs = 10
+        values = ['1', '10']
+        # create 10 non json docs on source bucket
+        gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=num_docs)
+        self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
+                                   'create')
         # create a function which sleeps for 5 secs and set execution_timeout to 1s
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EXECUTION_TIME_MORE_THAN_TIMEOUT,
                                               execution_timeout=1)
@@ -162,7 +165,7 @@ class EventingNegative(EventingBaseTest):
             # get sum of all timeout_count
             exec_timeout_count += out[0]["failure_stats"]["timeout_count"]
         # check whether all the function executions timed out and is equal to number of docs created
-        if exec_timeout_count != len(keys):
+        if exec_timeout_count != num_docs:
             self.fail("Not all event executions timed out : Expected : {0} Actual : {1}".format(len(keys),
                                                                                                 exec_timeout_count))
         self.undeploy_and_delete_function(body)
