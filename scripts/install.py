@@ -475,6 +475,11 @@ class CouchbaseServerInstaller(Installer):
         cluster_initialized = False
         server = params["server"]
         remote_client = RemoteMachineShellConnection(params["server"])
+        success = True
+        success &= remote_client.is_couchbase_installed()
+        if not success:
+            mesg = "\n\nServer {0} failed to install".format(params["server"].ip)
+            sys.exit(mesg)
         while time.time() < start_time + 5 * 60:
             try:
                 rest = RestConnection(server)
@@ -1201,8 +1206,6 @@ def main():
     else:
         log.info('Doing  serial install****')
         success = InstallerJob().sequential_install(input.servers, input.test_params)
-    if not success:
-        sys.exit(log_install_failed)
     if "product" in input.test_params and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
         print "verify installation..."
         success = True

@@ -1920,7 +1920,12 @@ class RemoteMachineShellConnection:
                 if error and error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server':
                         log.info("Ignore this error for opensuse os")
                         error = []
-
+            if output:
+                server_ip = "\n\n**** Installing on server: {0} ****".format(self.ip)
+                output.insert(0, server_ip)
+            if error:
+                server_ip = "\n\n**** Installing on server: {0} ****".format(self.ip)
+                error.insert(0, server_ip)
             success &= self.log_command_output(output, error, track_words)
             nonroot_path_start = ""
             if not self.nonroot:
@@ -2607,6 +2612,12 @@ class RemoteMachineShellConnection:
                         uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
                     log.info('running rpm -e to remove couchbase-server')
                     output, error = self.execute_command(uninstall_cmd)
+                    if output:
+                        server_ip = "\n\n**** Uninstalling on server: {0} ****".format(self.ip)
+                        output.insert(0, server_ip)
+                    if error:
+                        server_ip = "\n\n**** Uninstalling on server: {0} ****".format(self.ip)
+                        error.insert(0, server_ip)
                     self.log_command_output(output, error)
             self.terminate_processes(self.info, terminate_process_list)
             if not self.nonroot:
