@@ -953,6 +953,34 @@ class JsonGenerator:
                                                 [confirm_question_values], start=start, end=1))
         return generators
 
+    def generate_doc_for_aggregate_pushdown(self, start=0, docs_per_day=10):
+        generators = []
+        bool_vals = [True, False]
+        template = r'{{ "name":"{0}", "business_name": "{1}", "age":{2}, "weight": {3}, "debt":{4}, "passwords":{5}, ' \
+                   r'"transactions":{6}, "address":{7}, "travel_history":{8}, "credit_cards":{9}}}'
+        for i in range(docs_per_day):
+            name = random.choice(FIRST_NAMES)
+            last_name = random.choice(LAST_NAMES)
+            business_name = name + "_" + last_name
+            age = random.randint(25, 70)
+            weight = round(random.uniform(50.1, 115.5), 2)
+            debt = random.randint(-999999, -100000)
+            passwords = []
+            for i in range(random.randint(10, 50)):
+                passwords.append(random.randint(-10000, 99999))
+                passwords.append(''.join(random.choice(string.ascii_lowercase) for _ in range(9)))
+            transactions = [random.randint(1000, 9999999) for _ in range(random.randint(10, 50))]
+            address = {}
+            address["country"] = random.choice(COUNTRIES)
+            address["postal_code"] = random.randint(200000, 800000)
+            travel_history = [random.choice(COUNTRIES[:9]) for i in range(1, 11)]
+            credit_cards = [random.randint(-1000000, 9999999) for i in range(random.randint(3, 7))]
+            prefix = "bank_record_" + str(random.random()*100000)
+            generators.append(DocumentGenerator(prefix, template, [name], [business_name], [age], [weight], [debt],
+                                                [passwords], [transactions], [address], [travel_history],
+                                                [credit_cards], start=start, end=1))
+        return generators
+
     def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day = 1, isShuffle = False):
         generators = []
         count = 1

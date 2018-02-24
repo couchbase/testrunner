@@ -1887,7 +1887,13 @@ class RestConnection(object):
         status, content, header = self._http_request(api)
         return json.loads(content)
 
-
+    def set_query_index_api_mode(self, index_api_mode=3):
+        api = self.query_baseUrl + 'admin/settings'
+        query_api_setting = {"max-index-api": index_api_mode}
+        status, content, header = self._http_request(api, 'POST', json.dumps(query_api_setting))
+        if not status:
+            raise Exception(content)
+        log.info("{0} set".format(query_api_setting))
 
     def fetch_bucket_xdcr_stats(self, bucket='default', zoom='minute'):
         """Return deserialized bucket xdcr stats.
