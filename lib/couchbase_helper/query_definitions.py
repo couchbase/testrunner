@@ -32,8 +32,11 @@ AND = "and"
 OR = "or"
 
 class QueryDefinition(object):
-    def __init__(self, name = "default", index_name = "Random", index_fields = [], index_creation_template = INDEX_CREATION_TEMPLATE,
-        index_drop_template = INDEX_DROP_TEMPLATE, query_template = "", groups = [], index_where_clause = None, gsi_type = None):
+    def __init__(self, name = "default", index_name = "Random", index_fields = [],
+                 index_creation_template = INDEX_CREATION_TEMPLATE,
+                 index_drop_template = INDEX_DROP_TEMPLATE,
+                 query_template = "", groups = [],
+                 index_where_clause = None, gsi_type = None, partition_by_fields = []):
         self.name = str(uuid.uuid4()).replace("-","")
         self.index_name = index_name
         self.index_fields = index_fields
@@ -42,10 +45,11 @@ class QueryDefinition(object):
         self.index_drop_template = index_drop_template
         self.query_template = query_template
         self.groups = groups
+        self.partition_by_fields = partition_by_fields
 
     def generate_index_create_query(self, bucket="default", use_gsi_for_secondary=True,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
-                                    num_replica=None, desc=None):
+                                    num_replica=None, desc=None, partition_by_fields = []):
         deployment_plan = {}
         if desc is None:
             query = "CREATE INDEX {0} ON {1}({2})".format(self.index_name, bucket, ",".join(self.index_fields))
@@ -59,6 +63,8 @@ class QueryDefinition(object):
             # remove the extra comma
             collations = collations[:-1]
             query = "CREATE INDEX {0} ON {1}({2})".format(self.index_name, bucket, collations)
+        if self.partition_by_fields:
+            query += " PARTITION BY HASH (" + ", ".join(self.partition_by_fields) + ")"
         if index_where_clause:
             query += " WHERE " + index_where_clause
         if use_gsi_for_secondary:
@@ -201,6 +207,41 @@ class SQLDefinitionGenerator:
                              index_fields = ["join_yr","job_title"],
                              query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
                              groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,"employee"], index_where_clause = " job_title IS NOT NULL "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name=index_name_prefix + "job_title_join_yr_name_partitioned_name",
+                index_fields=["name", "join_yr", "job_title"],
+                query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
+                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
+                groups=["employee_partitioned_index"],
+                index_where_clause=" job_title IS NOT NULL ", partition_by_fields = ["name"]))
+        definitions_list.append(
+            QueryDefinition(
+                index_name=index_name_prefix + "job_title_join_yr_name_partitioned_job_title",
+                index_fields=["name", "join_yr", "job_title"],
+                query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
+                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
+                groups=["employee_partitioned_index"],
+                index_where_clause=" job_title IS NOT NULL ",
+                partition_by_fields=["job_title"]))
+        definitions_list.append(
+            QueryDefinition(
+                index_name=index_name_prefix + "job_title_join_yr_name_partitioned_job_year",
+                index_fields=["name", "join_yr", "job_title"],
+                query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
+                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
+                groups=["employee_partitioned_index"],
+                index_where_clause=" job_title IS NOT NULL ",
+                partition_by_fields=["job_year"]))
+        definitions_list.append(
+            QueryDefinition(
+                index_name=index_name_prefix + "job_title_join_yr_name_partitioned_meta_id",
+                index_fields=["name", "join_yr", "job_title"],
+                query_template=RANGE_SCAN_TEMPLATE.format(emit_fields,
+                                                          " %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
+                groups=["employee_partitioned_index","employee_partitioned_index_meta_id"],
+                index_where_clause=" job_title IS NOT NULL ",
+                partition_by_fields=["meta().id"]))
         return definitions_list
 
     def generate_sabre_data_query_definitions(self):
