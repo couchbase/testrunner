@@ -25,7 +25,7 @@ class ImportExportTests(CliBaseTest):
     def setUp(self):
         super(ImportExportTests, self).setUp()
         self.cluster_helper = Cluster()
-        self.ex_path = self.tmp_path + "export/"
+        self.ex_path = self.tmp_path + "export{0}/".format(self.master.ip)
         self.num_items = self.input.param("items", 1000)
         self.localhost = self.input.param("localhost", False)
         self.json_create_gen = JsonDocGenerator("imex", op_type="create",
@@ -112,7 +112,7 @@ class ImportExportTests(CliBaseTest):
         updated = self.input.param("updated", False)
         update_field = self.input.param("update_field", None)
         path = self.input.param("path", None)
-        self.ex_path = self.tmp_path + "export/"
+        self.ex_path = self.tmp_path + "export{0}/".format(self.master.ip)
         master = self.servers[0]
         server = copy.deepcopy(master)
 
@@ -146,9 +146,11 @@ class ImportExportTests(CliBaseTest):
                 in linux:   /tmp/export
                 in windows: /cygdrive/c/tmp/export """
             self.log.info("remove old export dir in %s" % self.tmp_path)
-            self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
-            self.log.info("create export dir in %s" % self.tmp_path)
-            self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+            self.shell.execute_command("rm -rf {0}export{1} "\
+                                       .format(self.tmp_path, self.master.ip))
+            self.log.info("create export dir in {0}".format(self.tmp_path))
+            self.shell.execute_command("mkdir {0}export{1}"\
+                                       .format(self.tmp_path, self.master.ip))
             """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
             export_file = self.ex_path + bucket.name
@@ -288,8 +290,10 @@ class ImportExportTests(CliBaseTest):
                             self.fail("Fail to import json file")
                     elif self.test_type == "export":
                         self.test_type = "cbexport"
-                        self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
-                        self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+                        self.shell.execute_command("rm -rf {0}export{1}"\
+                                                   .format(self.tmp_path,self.master.ip))
+                        self.shell.execute_command("mkdir {0}export{1}"\
+                                                   .format(self.tmp_path, self.master.ip))
                         export_file = self.ex_path + bucket.name
                         if self.imex_type == "json":
                             if self.cmd_ext:
@@ -350,8 +354,10 @@ class ImportExportTests(CliBaseTest):
                             % (self.cli_command_path, "cbworkloadgen", self.cmd_ext,
                                server.ip, new_port, options["docs"], bucket.name)
                         self.shell.execute_command(load_cmd)
-                self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
-                self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+                self.shell.execute_command("rm -rf {0}export{1}"\
+                                           .format(self.tmp_path, self.master.ip))
+                self.shell.execute_command("mkdir {0}export{1}"\
+                                           .format(self.tmp_path,self.master.ip))
                 """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
                 if len(self.buckets) >= 1:
@@ -420,8 +426,10 @@ class ImportExportTests(CliBaseTest):
                            self.generate_flag)
         elif self.test_type == "export":
             cmd = "cbexport"
-            self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
-            self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+            self.shell.execute_command("rm -rf {0}export{1}"\
+                                       .format(self.tmp_path, self.master.ip))
+            self.shell.execute_command("mkdir {0}export{1}" \
+                                       .format(elf.tmp_path, self.master.ip))
             export_file = self.ex_path + "default"
             cmd_str = "%s%s%s %s %s %s %s Administrator %s password %s default "\
                                                              "  %s lines %s %s "\
@@ -608,8 +616,10 @@ class ImportExportTests(CliBaseTest):
             include_flag = ""
             if self.include_key_flag:
                 include_flag = " --include-key"
-            self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
-            self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+            self.shell.execute_command("rm -rf {0}export{1}"\
+                                       .format(self.tmp_path, self.master.ip))
+            self.shell.execute_command("mkdir {0}export{1}"\
+                                       .format(self.tmp_path, self.master.ip))
             if self.imex_type == "json":
                 for bucket in self.buckets:
                     self.log.info("load json to bucket %s " % bucket.name)
@@ -783,7 +793,7 @@ class ImportExportTests(CliBaseTest):
         import_method = self.input.param("import_method", "file://")
         if "url" in import_method:
             import_method = ""
-        self.ex_path = self.tmp_path + "export/"
+        self.ex_path = self.tmp_path + "export{0}/".format(self.master.ip)
         master = self.servers[0]
         server = copy.deepcopy(master)
 
@@ -842,9 +852,11 @@ class ImportExportTests(CliBaseTest):
                 in linux:   /tmp/export
                 in windows: /cygdrive/c/tmp/export """
             self.log.info("remove old export dir in %s" % self.tmp_path)
-            self.shell.execute_command("rm -rf %sexport " % self.tmp_path)
+            self.shell.execute_command("rm -rf {0}export{1}"\
+                                       .format(self.tmp_path, self.master.ip))
             self.log.info("create export dir in %s" % self.tmp_path)
-            self.shell.execute_command("mkdir %sexport " % self.tmp_path)
+            self.shell.execute_command("mkdir {0}export{1}"\
+                                       .format(self.tmp_path, self.master.ip))
             if self.check_preload_keys:
                 for bucket in self.buckets:
                     self.cluster_helper.wait_for_stats([self.master], bucket.name, "",
@@ -1277,18 +1289,19 @@ class ImportExportTests(CliBaseTest):
             found = self.shell.file_exists(self.ex_path, export_file_name)
             if found:
                 self.log.info("copy export file from remote to local")
-                if os.path.exists("/tmp/export%s" % self.master.ip):
-                    shutil.rmtree("/tmp/export%s" % self.master.ip)
-                os.makedirs("/tmp/export%s" % self.master.ip)
+                if os.path.exists("/tmp/export{0}".format(self.master.ip)):
+                    shutil.rmtree("/tmp/export{0}".format(self.master.ip))
+                os.makedirs("/tmp/export{0}".format(self.master.ip))
                 self.shell.copy_file_remote_to_local(self.ex_path+export_file_name,
-                                                    "/tmp/export%s/" % self.master.ip \
+                                                    "/tmp/export{0}/".format(self.master.ip) \
                                                     + export_file_name)
                 self.log.info("compare 2 json files")
                 if self.format_type == "lines":
                     sample_file = open("resources/imex/json_%s_lines" % options["docs"])
                     samples = sample_file.read().splitlines()
                     samples = [x.replace(" ", "") for x in samples]
-                    export_file = open("/tmp/export%s/" % self.master.ip + export_file_name)
+                    export_file = open("/tmp/export{0}/".format(self.master.ip)\
+                                                             + export_file_name)
 
                     exports = export_file.read().splitlines()
                     for x in range(len(exports)):
@@ -1313,13 +1326,16 @@ class ImportExportTests(CliBaseTest):
                         self.fail("export and sample json does not match")
                     sample_file.close()
                     export_file.close()
+                    self.log.info("remove file /tmp/export{0}".format(self.master.ip))
+                    shutil.rmtree("/tmp/export{0}".format(self.master.ip))
                 elif self.format_type == "list":
                     sample_file = open("resources/imex/json_list_%s_lines"\
                                                                  % options["docs"])
                     samples = sample_file.read()
                     samples = ast.literal_eval(samples)
                     samples.sort(key=lambda k: k['name'])
-                    export_file = open("/tmp/export%s/" % self.master.ip + export_file_name)
+                    export_file = open("/tmp/export{0}/".format(self.master.ip)\
+                                                             + export_file_name)
                     exports = export_file.read()
                     exports = ast.literal_eval(exports)
                     exports.sort(key=lambda k: k['name'])
@@ -1333,6 +1349,8 @@ class ImportExportTests(CliBaseTest):
                         self.fail("export and sample json files did not match")
                     sample_file.close()
                     export_file.close()
+                    self.log.info("remove file /tmp/export{0}".format(self.master.ip))
+                    shutil.rmtree("/tmp/export{0}".format(self.master.ip))
             else:
                 file_exist = True
                 if self.secure_conn and self.no_cacert:
