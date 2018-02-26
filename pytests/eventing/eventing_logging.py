@@ -59,9 +59,6 @@ class EventingLogging(EventingBaseTest):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
-        expected_results_list = {"real_userid:source": "ns_server", "real_userid:user": "Administrator",
-                                 "context": "<nil>", "id": 32771, "name": "List Deployed",
-                                 "description": "Eventing deployed functions list was read"}
         expected_results_undeploy = {"real_userid:source": "ns_server", "real_userid:user": "Administrator",
                                      "context": self.function_name, "id": 32779, "name": "Set Settings",
                                      "description": "Save settings for a given app"}
@@ -72,7 +69,6 @@ class EventingLogging(EventingBaseTest):
                                    "context": self.function_name, "id": 32769, "name": "Delete Function",
                                    "description": "Eventing function definition was deleted"}
         # check audit log if the un deploy operation is present in audit log
-        self.check_config(32771, eventing_node, expected_results_list)
         self.check_config(32779, eventing_node, expected_results_undeploy)
         # check audit log if the delete operation is present in audit log
         self.check_config(32773, eventing_node, expected_results_delete_draft)

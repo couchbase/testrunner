@@ -3610,8 +3610,13 @@ class RemoteMachineShellConnection:
     def change_env_variables(self, dict):
         prefix = "\\n    "
         shell = self._ssh_client.invoke_shell()
-        init_file = "couchbase_init.d"
-        file_path = "/opt/couchbase/etc/"
+        _, sv, _ = self.get_cbversion("linux")
+        if sv in COUCHBASE_FROM_SPOCK:
+            init_file = "couchbase-server"
+            file_path = "/opt/couchbase/bin/"
+        else:
+            init_file = "couchbase_init.d"
+            file_path = "/opt/couchbase/etc/"
         environmentVariables = ""
         self.extract_remote_info()
         if self.info.type.lower() == "windows":
@@ -3623,10 +3628,17 @@ class RemoteMachineShellConnection:
         o, r = self.execute_command("cp " + sourceFile + " " + backupfile)
         self.log_command_output(o, r)
         command = "sed -i 's/{0}/{0}".format("ulimit -l unlimited")
+        """
+           From spock, the file to edit is in /opt/couchbase/bin/couchbase-server
+        """
         for key in dict.keys():
             o, r = self.execute_command("sed -i 's/{1}.*//' {0}".format(sourceFile, key))
             self.log_command_output(o, r)
-
+            if sv in COUCHBASE_FROM_SPOCK:
+                o, r = self.execute_command("sed -i 's/export ERL_FULLSWEEP_AFTER/export ERL_FULLSWEEP_AFTER\\n{1}="
+                                            "{2}\\nexport {1}/' {0}".
+                                            format(sourceFile, key, dict[key]))
+                self.log_command_output(o, r)
         if self.info.type.lower() == "windows":
             command = "sed -i 's/{0}/{0}".format("set NS_ERTS=%NS_ROOT%\erts-5.8.5.cb1\bin")
 
@@ -3660,8 +3672,16 @@ class RemoteMachineShellConnection:
         shell = self._ssh_client.invoke_shell()
         if getattr(self, "info", None) is None:
             self.info = self.extract_remote_info()
-        init_file = "couchbase_init.d"
-        file_path = "/opt/couchbase/etc/"
+        """
+           From spock, the file to edit is in /opt/couchbase/bin/couchbase-server
+        """
+        _, sv, _ = self.get_cbversion("linux")
+        if sv in COUCHBASE_FROM_SPOCK:
+            init_file = "couchbase-server"
+            file_path = "/opt/couchbase/bin/"
+        else:
+            init_file = "couchbase_init.d"
+            file_path = "/opt/couchbase/etc/"
         if self.info.type.lower() == "windows":
             init_file = "service_start.bat"
             file_path = "/cygdrive/c/Program\ Files/Couchbase/Server/bin/"

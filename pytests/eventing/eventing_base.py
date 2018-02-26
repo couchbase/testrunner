@@ -82,9 +82,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['deployment_status'] = deployment_status
         body['settings']['description'] = description
         body['settings']['log_level'] = self.eventing_log_level
-        body['settings']['rbacpass'] = rbacpass
-        body['settings']['rbacrole'] = rbacrole
-        body['settings']['rbacuser'] = rbacuser
+        # See MB-26756, reason for commenting out these lines
+        # body['settings']['rbacpass'] = rbacpass
+        # body['settings']['rbacrole'] = rbacrole
+        # body['settings']['rbacuser'] = rbacuser
         body['settings']['skip_timer_threshold'] = skip_timer_threshold
         body['settings']['sock_batch_size'] = sock_batch_size
         body['settings']['tick_duration'] = tick_duration
@@ -119,8 +120,6 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if count == 20:
             raise Exception(
                 'Eventing took lot of time to undeploy')
-
-
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
                                 skip_stats_validation=False, bucket=None, timeout=600):

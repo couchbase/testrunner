@@ -314,9 +314,12 @@ class EventingBucket(EventingBaseTest):
         # create an alias so that src bucket is also destination bucket
         del body['depcfg']['buckets'][0]
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.src_bucket_name})
-        try:
-            # deploy the function
-            self.deploy_function(body)
-        except Exception as ex:
-            if "Bucket binding for source bucket disallowed" not in str(ex):
-                self.fail("Eventing deployment succeeded even when source and destination buckets are same")
+        self.deploy_function(body)
+        # sleep intentionally added as we are validating no mutations are processed by eventing
+        self.sleep(60)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # Undeploy and delete the function
+        self.undeploy_and_delete_function(body)
+
+
+
