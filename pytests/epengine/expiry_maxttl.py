@@ -25,6 +25,7 @@ class ExpiryMaxTTL(BaseTestCase):
         task.result()
         while RestConnection(self.master).get_active_key_count(bucket) != num_items:
             self.sleep(2, "waiting for docs to get loaded")
+        self.log.info("Item count = {0}".format(RestConnection(self.master).get_active_key_count(bucket)))
         return
 
     def _update_bucket_maxTTL(self, maxttl):
