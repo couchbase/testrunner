@@ -72,8 +72,7 @@ class x509tests(BaseTestCase):
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
         '''
-
-
+    
     def createBulkDocuments(self,client):
         start_num = 0
         end_num = 10000

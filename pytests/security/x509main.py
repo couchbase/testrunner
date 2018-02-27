@@ -66,7 +66,7 @@ class x509main:
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
         shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
-
+        
         if type == 'go':
             files = []
             cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
@@ -75,6 +75,8 @@ class x509main:
             output,error = shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "interm -sign-with=" + x509main.CACERTFILEPATH + "root -common-name=Intemediate\ Authority")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
             for server in servers:
+                if "[" in server.ip:
+                    server.ip = server.ip.replace("[", "").replace("]", "")
                 output, error = shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + server.ip + " -sign-with=" + x509main.CACERTFILEPATH + "interm -common-name=" + server.ip + " -final=true")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
                 output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".crt " + x509main.CACERTFILEPATH + "interm.crt  > " + " " + x509main.CACERTFILEPATH + "long_chain"+server.ip+".pem")
@@ -98,6 +100,9 @@ class x509main:
 
 
             for server in servers:
+                #check if the ip address is ipv6 raw ip address, remove [] brackets
+                if "[" in server.ip:
+                    server.ip = server.ip.replace("[", "").replace("]", "")
                 output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH +server.ip + ".key " + str(key_length))
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
                 output, error= shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "'")
@@ -198,12 +203,15 @@ class x509main:
         api = rest.baseUrl + url
         self._rest_upload_file(api,x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE,"Administrator",'password')
 
-
     def _validate_ssl_login(self,host=None,port=18091,username='Administrator',password='password'):
         key_file = x509main.CACERTFILEPATH + "/" + x509main.CAKEYFILE
         cert_file = x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE
         if host is None:
             host = self.host.ip
+        # check if the ip is raw ip address
+        if host.count(':') > 0:
+            # raw ipv6? enclose in square brackets
+            host = '[' + host + ']'
         try:
             r = requests.get("https://"+host+":18091",verify=cert_file)
             if r.status_code == 200:
