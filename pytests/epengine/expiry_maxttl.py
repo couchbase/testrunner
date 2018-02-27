@@ -22,7 +22,10 @@ class ExpiryMaxTTL(BaseTestCase):
                                              bucket.kvs[1],
                                              "create",
                                              exp)
-        return task.result()
+        task.result()
+        while RestConnection(self.master).get_active_key_count(bucket) != num_items:
+            self.sleep(2, "waiting for docs to get loaded")
+        return
 
     def _update_bucket_maxTTL(self, maxttl):
         for bucket in self.buckets:
