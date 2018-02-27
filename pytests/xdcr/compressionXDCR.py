@@ -56,7 +56,9 @@ class compression(XDCRNewBaseTest):
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
         output = json.loads(output[0])
-        compressed_data_replicated = output["nodeStats"]["{0}:8091".format(cluster.get_master_node().ip)][-1]
+        compressed_data_replicated = 0
+        for node in cluster.get_nodes():
+            compressed_data_replicated += output["nodeStats"]["{0}:8091".format(node.ip)][-1]
         self.log.info("Compressed data for replication {0} is {1}".format(compr_repl_id, compressed_data_replicated))
 
         base_url = "http://" + cluster.get_master_node().ip + ":8091/pools/default/buckets/" + uncompr_bucket_name + \
@@ -65,7 +67,9 @@ class compression(XDCRNewBaseTest):
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
         output = json.loads(output[0])
-        uncompressed_data_replicated = output["nodeStats"]['{0}:8091'.format(cluster.get_master_node().ip)][-1]
+        uncompressed_data_replicated = 0
+        for node in cluster.get_nodes():
+            uncompressed_data_replicated += output["nodeStats"]['{0}:8091'.format(node.ip)][-1]
         self.log.info("Uncompressed data for replication {0} is {1}".format(uncompr_repl_id, uncompressed_data_replicated))
 
         self.assertTrue(uncompressed_data_replicated > compressed_data_replicated,
@@ -236,10 +240,10 @@ class compression(XDCRNewBaseTest):
         src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'docBatchSizeKb', batch_size)
         src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'sourceNozzlePerNode', source_nozzle)
         src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'targetNozzlePerNode', target_nozzle)
-        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'workerBatchSize', batch_count)
-        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'docBatchSizeKb', batch_size)
-        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'sourceNozzlePerNode', source_nozzle)
-        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_1', 'targetNozzlePerNode', target_nozzle)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_2', 'workerBatchSize', batch_count)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_2', 'docBatchSizeKb', batch_size)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_2', 'sourceNozzlePerNode', source_nozzle)
+        src_conn.set_xdcr_param('standard_bucket_2', 'standard_bucket_2', 'targetNozzlePerNode', target_nozzle)
 
         self.src_cluster.pause_all_replications()
 
