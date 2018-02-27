@@ -321,5 +321,21 @@ class EventingBucket(EventingBaseTest):
         # Undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
-
-
+    def test_eventing_where_we_read_source_bucket_data_from_handler_code(self):
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_READ_SOURCE_BUCKET,
+                                              worker_count=3)
+        # create an alias so that src bucket as well so that we can read data from source bucket
+        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.deploy_function(body)
+        # sleep intentionally added as we are validating no mutations are processed by eventing
+        self.sleep(60)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
