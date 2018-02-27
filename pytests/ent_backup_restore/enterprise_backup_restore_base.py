@@ -594,7 +594,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     if self.replace_ttl_with is None:
                         self.fail("Need to include param 'replace-ttl-with' value")
                     if self.replace_ttl_with:
-                        if self.replace_ttl_with.startswith("epoch"):
+                        if str(self.replace_ttl_with).startswith("epoch"):
                             time_extend = self.replace_ttl_with[5:]
                             cmd = "date +%s --date='{0} seconds'".format(time_extend)
                             epoch_time, error = remote_client.execute_command(cmd)
@@ -620,7 +620,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 all_vbuckets = "0"
                 for x in range (1, 1023):
                     all_vbuckets += "," + str(x)
-                args += " ----vbucket-filter {0}".format(all_vbuckets)
+                args += " --vbucket-filter {0}".format(all_vbuckets)
             else:
                 args += " --vbucket-filter {0}".format(self.vbucket_filter)
 
