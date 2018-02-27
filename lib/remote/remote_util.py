@@ -2343,7 +2343,8 @@ class RemoteMachineShellConnection:
 
     def remove_folders(self, list):
         for folder in list:
-            output, error = self.execute_command("rm -rf {0}".format(folder))
+            output, error = self.execute_command("rm -rf {0}".format(folder),
+                                                                debug=False)
             self.log_command_output(output, error)
 
     def couchbase_uninstall(self, windows_msi=False, product=None):
@@ -3093,16 +3094,18 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM {0}*"\
-                                                        .format(process_name))
+                                            .format(process_name), debug=False)
             self.log_command_output(o, r)
         else:
             if (force == True):
                 o, r = self.execute_command("kill -9 "
-                   "$(ps aux | grep '{0}' |  awk '{{print $2}}') ".format(process_name))
+                   "$(ps aux | grep '{0}' |  awk '{{print $2}}') "\
+                               .format(process_name), debug=False)
                 self.log_command_output(o, r)
             else:
                 o, r = self.execute_command("kill "
-                    "$(ps aux | grep '{0}' |  awk '{{print $2}}') ".format(process_name))
+                    "$(ps aux | grep '{0}' |  awk '{{print $2}}') "\
+                                 .format(process_name), debug=False)
                 self.log_command_output(o, r)
 
     def disconnect(self):
