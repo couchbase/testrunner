@@ -44,6 +44,7 @@ class ExpiryMaxTTL(BaseTestCase):
             self._load_json(bucket, self.num_items, exp=int(self.maxttl)+500)
         self.sleep(int(self.maxttl), "waiting for all docs to expire per maxTTL rule...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = RestConnection(self.master).get_active_key_count(bucket)
             RestConnection(self.master).get_active_key_count(bucket)
@@ -71,6 +72,7 @@ class ExpiryMaxTTL(BaseTestCase):
             self._load_json(bucket, self.num_items, exp=int(self.maxttl)-100)
         self.sleep(int(self.maxttl-100), "waiting for all docs to expire per maxTTL rule...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = RestConnection(self.master).get_active_key_count(bucket)
             self.log.info("Doc expiry set to = {0}s, maxTTL = {1}s, after {2}s, item count = {3}".format(
@@ -99,6 +101,7 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(60, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = RestConnection(self.master).get_active_key_count(bucket)
             self.log.info("Doc expiry set to = 100s, maxTTL = 60s"
@@ -108,6 +111,7 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(40, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = RestConnection(self.master).get_active_key_count(bucket)
             self.log.info("Doc expiry set to = 100s, maxTTL = 60s"
@@ -121,6 +125,7 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(60, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = RestConnection(self.master).get_active_key_count(bucket)
             self.log.info("Doc expiry set to = 100s, maxTTL = 60s, after 100s,"
@@ -198,6 +203,7 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(40, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = RestConnection(self.master).get_active_key_count(bucket)
             self.log.info("Doc expiry set to = 100s, maxTTL at the time of doc creation = 200s"
@@ -207,6 +213,7 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(60, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = RestConnection(self.master).get_active_key_count(bucket)
             self.log.info("Doc expiry set to = 100s, maxTTL at the time of doc creation = 200s"
@@ -233,6 +240,7 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(40, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = rest.get_active_key_count(bucket)
             self.log.info("Items: {0}".format(items))
@@ -241,6 +249,7 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(20, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
+        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = rest.get_active_key_count(bucket)
             self.log.info("Items: {0}".format(items))
