@@ -1,0 +1,8 @@
+{
+    "state" : "enable",
+    "prefixes" : [
+        { "path" : "subject.cn", "prefix" : "www.cb-", "delimiter" : "." },
+        { "path" : "san.dnsname", "prefix" : "us.", "delimiter" : "." },
+        { "path" : "san.uri", "prefix" : "www.", "delimiter" : "." }
+    ]
+}

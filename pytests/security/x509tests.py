@@ -10,6 +10,7 @@ from threading import Thread, Event
 from remote.remote_util import RemoteMachineShellConnection
 from security.auditmain import audit
 from security.rbac_base import RbacBase
+import os, subprocess
 
 class x509tests(BaseTestCase):
 
@@ -19,8 +20,21 @@ class x509tests(BaseTestCase):
         SSLtype = self.input.param("SSLtype","go")
         encryption_type = self.input.param('encryption_type',"")
         key_length=self.input.param("key_length",1024)
-        x509main(self.master)._generate_cert(self.servers,type=SSLtype,encryption=encryption_type,key_length=key_length)
+        #Input parameters for state, path, delimeters and prefixes
+        self.state = self.input.param("state",'enable')
+        self.paths = self.input.param('paths',"subject.cn:san.dnsname:san.uri").split(":")
+        self.prefixs = self.input.param('prefixs','www.cb-:us.:www.').split(":")
+        self.delimeters = self.input.param('delimeter','.:.:.') .split(":")
+        testuser = [{'id': 'user1', 'name': 'user1',
+                                                'password': 'password'}]
+        rolelist = [{'id': 'user1', 'name': 'user1',
+                                                      'roles': 'admin'}]
+        RbacBase().create_user_source(testuser, 'builtin', self.master)
+        status = RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
         self.ip_address = self.getLocalIPAddress()
+        self.ip_address = '172.16.1.174'
+        #Generate cert and pass on the client ip for cert generation
+        x509main(self.master)._generate_cert(self.servers,type=SSLtype,encryption=encryption_type,key_length=key_length,client_ip=self.ip_address)
         enable_audit=self.input.param('audit',None)
         if enable_audit:
             Audit = audit(host=self.master)
@@ -63,6 +77,7 @@ class x509tests(BaseTestCase):
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
     def getLocalIPAddress(self):
+        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -71,7 +86,6 @@ class x509tests(BaseTestCase):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
-        '''
     
     def createBulkDocuments(self,client):
         start_num = 0
@@ -640,6 +654,32 @@ class x509tests(BaseTestCase):
         expectedResults = {"expires":"2049-12-31T23:59:59.000Z","subject":"CN="+self.master.ip,"ip":self.ip_address, "port":57457,"source":"ns_server", \
                                "user":"Administrator"}
         self.checkConfig(8230, self.master, expectedResults)
+    
+    def test_rest_api_newer(self):
+        root_ca_path = x509main.CACERTFILEPATH + x509main.CACERTFILE
+        client_cert_pem = x509main.CACERTFILEPATH + self.ip_address + ".pem"
+        client_cert_key = x509main.CACERTFILEPATH + self.ip_address + ".key"
+        rest = RestConnection(self.master)
+        
+        x509main(self.master).setup_master(self.state, self.paths, self.prefixs, self.delimeters)
+        
+        #x509main().setup_cluster_nodes_ssl(self.servers,reload_cert=True)
+        rest.create_bucket(bucket='default', ramQuotaMB=100)
+        '''
+        if self.master.ip.count(':') > 0:
+            # raw ipv6? enclose in square brackets
+            temp = '[' + self.master.ip + ']'
+        else:
+            temp = self.master.ip
+        ''' 
+        cmd = "curl -v --cacert " + root_ca_path + " --cert-type PEM --cert " + client_cert_pem + " --key-type PEM --key " + client_cert_key + \
+              " https://{0}:{1}/pools/default". \
+                  format(self.master.ip, '18091')
+
+        print cmd
+        shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
+        output = shell.execute_command(cmd)
+        print output
 
 
 class x509_upgrade(NewUpgradeBaseTest):
