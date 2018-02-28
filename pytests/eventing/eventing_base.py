@@ -44,6 +44,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.docs_per_day = self.input.param("doc-per-day", 1)
+        self.use_memory_manager = self.input.param('use_memory_manager', True)
         random.seed(datetime.time)
         self.function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
 
@@ -55,12 +56,13 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=10000, cleanup_timers=False,
                                   dcp_stream_boundary="everything", deployment_status=True,
-                                  rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
+                                  # rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
-                                  data_chan_size=10000, worker_queue_cap=100000):
+                                  data_chan_size=10000, worker_queue_cap=100000,
+                                  ):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -97,6 +99,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['execution_timeout'] = execution_timeout
         body['settings']['data_chan_size'] = data_chan_size
         body['settings']['worker_queue_cap'] = worker_queue_cap
+        # See MB-27967, the reason for adding this config
+        body['settings']['use_memory_manager'] = self.use_memory_manager
         return body
 
     def wait_for_bootstrap_to_complete(self, name):
