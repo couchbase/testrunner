@@ -260,9 +260,7 @@ class AscDescTests(QueryTests):
                     self.run_cbq_query(query='ascdescquery1', is_prepared=True)
                 except Exception, ex:
                     msg = "Error message is %s." % str(ex)
-                    self.assertTrue(str(ex).find("Index Not Found - cause: queryport.indexNotFound") != -1, msg)
-                else:
-                    self.fail("Error message expected")
+                    self.fail("query should not fail")
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
