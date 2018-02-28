@@ -240,7 +240,6 @@ class ExpiryMaxTTL(BaseTestCase):
 
         self.sleep(40, "waiting before running expiry pager...")
         self.expire_pager(self.servers)
-        self.sleep(20, "waiting for item count to come down...")
         for bucket in self.buckets:
             items = rest.get_active_key_count(bucket)
             self.log.info("Items: {0}".format(items))
