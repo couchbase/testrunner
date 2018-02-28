@@ -219,7 +219,7 @@ class MySQLClient(object):
                     target_map[table_name] = field_info['Field']
         return target_map
 
-    def _gen_index_combinations_for_tables(self, index_type="GSI"):
+    def _gen_index_combinations_for_tables(self, index_type="GSI", partitioned_indexes=False):
         index_map = {}
         map = self._get_pkey_map_for_tables_without_primary_key_column()
         for table_name in map.keys():
@@ -252,7 +252,16 @@ class MySQLClient(object):
             for table_name in index_map.keys():
                 final_map[table_name] = {}
                 for index_name in index_map[table_name].keys():
-                    definition = "CREATE INDEX {0} ON {1}({2}) USING {3}".format(index_name, self.database+"_"+table_name, ",".join(index_map[table_name][index_name]), index_type)
+                    if partitioned_indexes:
+                        definition = "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) USING {3}".format(
+                            index_name, self.database + "_" + table_name,
+                            ",".join(index_map[table_name][index_name]),
+                            index_type)
+                    else:
+                        definition = "CREATE INDEX {0} ON {1}({2}) USING {3}".format(
+                            index_name, self.database + "_" + table_name,
+                            ",".join(index_map[table_name][index_name]),
+                            index_type)
                     final_map[table_name][index_name] =\
                         {
                             "type": index_type,
@@ -376,7 +385,7 @@ class MySQLClient(object):
                 f.write(json.dumps(map)+"\n")
         f.close()
 
-    def _convert_template_query_info(self, n1ql_queries=[], table_map={}, define_gsi_index=True, gen_expected_result=False, ansi_joins=False, aggregate_pushdown=False):
+    def _convert_template_query_info(self, n1ql_queries=[], table_map={}, define_gsi_index=True, gen_expected_result=False, ansi_joins=False, aggregate_pushdown=False, partitioned_indexes=False):
         helper = QueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
@@ -396,11 +405,13 @@ class MySQLClient(object):
                                                                                                      table_map=table_map,
                                                                                                      define_gsi_index=define_gsi_index,
                                                                                                      ansi_joins=ansi_joins,
-                                                                                                     aggregate_pushdown=aggregate_pushdown)
+                                                                                                     aggregate_pushdown=aggregate_pushdown,
+                                                                                                     partitioned_indexes=partitioned_indexes)
             else:
                 sql_n1ql_index_map = helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(n1ql_query,
                                                                                                              table_map=table_map,
-                                                                                                             define_gsi_index=define_gsi_index)
+                                                                                                             define_gsi_index=define_gsi_index,
+                                                                                                             partitioned_indexes=partitioned_indexes)
             if gen_expected_result:
                 sql_query = sql_n1ql_index_map["sql"]
                 try:

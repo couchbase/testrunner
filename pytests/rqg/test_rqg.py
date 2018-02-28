@@ -84,6 +84,8 @@ class RQGTests(BaseTestCase):
         self.drop_index = self.input.param("drop_index", False)
         self.drop_bucket = self.input.param("drop_bucket", False)
         self.dynamic_indexing = self.input.param("dynamic_indexing", False)
+        self.partitioned_indexes = self.input.param("partitioned_indexes",
+                                                    False)
         self.pushdown = self.input.param("pushdown", False)
         self.subquery = self.input.param("subquery", False)
         self.drop_secondary_indexes = self.input.param("drop_secondary_indexes", True)
@@ -220,7 +222,8 @@ class RQGTests(BaseTestCase):
             list = [data[data.keys()[0]] for data in test_batch]
             list = self.client._convert_template_query_info(table_map=table_map, n1ql_queries=list,
                                                             define_gsi_index=self.use_secondary_index,
-                                                            gen_expected_result=True)
+                                                            gen_expected_result=True,
+                                                            partitioned_indexes=self.partitioned_indexes)
             # Create threads and run the batch
             for test_case in list:
                 test_case_input = test_case
@@ -277,7 +280,8 @@ class RQGTests(BaseTestCase):
                     n1ql_queries=list,
                     define_gsi_index=self.use_secondary_index,
                     gen_expected_result=False,
-                    ansi_joins=self.ansi_joins)
+                    ansi_joins=self.ansi_joins,
+                    partitioned_indexes=self.partitioned_indexes)
             if not self.subquery:
                 if self.use_secondary_index:
                     self._generate_secondary_indexes_in_batches(list)
@@ -543,7 +547,8 @@ class RQGTests(BaseTestCase):
             list_info = self.client._convert_template_query_info(
                     table_map=table_map,
                     n1ql_queries=list,
-                    define_gsi_index=self.use_secondary_index)
+                    define_gsi_index=self.use_secondary_index,
+                    partitioned_indexes=self.partitioned_indexes)
             thread_list = []
             test_case_number = start_test_case_number
             for test_case_input in list_info:
@@ -564,7 +569,8 @@ class RQGTests(BaseTestCase):
         sql_n1ql_index_map_list = self.client._convert_template_query_info(table_map=table_name_description_map,
                                                                            n1ql_queries=query_template_list,
                                                                            define_gsi_index=self.use_secondary_index,
-                                                                           aggregate_pushdown=self.aggregate_pushdown)
+                                                                           aggregate_pushdown=self.aggregate_pushdown,
+                                                                           partitioned_indexes=self.partitioned_indexes)
 
         for sql_n1ql_index_map in sql_n1ql_index_map_list:
             sql_n1ql_index_map["n1ql"] = sql_n1ql_index_map['n1ql'].replace("simple_table", self.database+"_"+"simple_table")
@@ -1166,7 +1172,7 @@ class RQGTests(BaseTestCase):
                   'int_field1','varchar_field1']
         if self.create_secondary_indexes:
             if self.use_mysql:
-                self.sec_index_map = self.client._gen_index_combinations_for_tables()
+                self.sec_index_map = self.client._gen_index_combinations_for_tables(partitioned_indexes=self.partitioned_indexes)
             else:
                 self.sec_index_map = self._extract_secondary_index_map_from_file(self.secondary_index_info_path)
         if not self.generate_input_only:
@@ -1212,7 +1218,10 @@ class RQGTests(BaseTestCase):
 
     def _build_primary_indexes(self, using_gsi=True):
         if self.create_primary_index:
-            self.n1ql_helper.create_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
+            if not self.partitioned_indexes:
+                self.n1ql_helper.create_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
+            else:
+                self.n1ql_helper.create_partitioned_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
 
     def _load_data_in_buckets_using_mc_bin_client(self, bucket, data_set):
         client = VBucketAwareMemcached(RestConnection(self.master), bucket)
@@ -1406,7 +1415,10 @@ class RQGTests(BaseTestCase):
             t.join()
 
     def _gen_secondary_indexes_per_table(self, table_name="", index_map={}, sleep_time=2):
-        defer_mode = str({"defer_build": "true"})
+        if self.partitioned_indexes:
+            defer_mode = str({"defer_build": "true", "num_partition":2})
+        else:
+            defer_mode = str({"defer_build": "true"})
         build_index_list = []
         batch_index_definitions = index_map
         if self.pushdown:
@@ -1423,7 +1435,13 @@ class RQGTests(BaseTestCase):
                     for i in xrange(1, len(input)):
                         index_name = "ix_" + str(i) + str(x)
                     fields_indexed = fields_indexed+"," + str(x[i])
-                query = "CREATE INDEX {0} ON {1}({2})".format(index_name, table_name, fields_indexed)
+                if self.partitioned_indexes:
+                    query = "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id)".format(
+                        index_name, table_name, fields_indexed)
+                else:
+                    query = "CREATE INDEX {0} ON {1}({2})".format(index_name,
+                                                                  table_name,
+                                                                  fields_indexed)
                 build_index_list.append(index_name)
                 self.log.info(" Running Query {0} ".format(query))
                 try:
@@ -1447,7 +1465,8 @@ class RQGTests(BaseTestCase):
         else:
             for index_name in batch_index_definitions.keys():
                 query = "{0} WITH {1}".format(
-                    batch_index_definitions[index_name]["definition"], defer_mode)
+                        batch_index_definitions[index_name]["definition"],
+                        defer_mode)
                 build_index_list.append(index_name)
                 self.log.info(" Running Query {0} ".format(query))
                 try:
@@ -1526,6 +1545,8 @@ class RQGTests(BaseTestCase):
         if self.generate_input_only:
             return
         defer_mode = str({"defer_build": "true"})
+        if self.partitioned_indexes:
+            defer_mode = str({"defer_build": "true", "num_partition":2})
         batch_index_definitions = {}
         build_index_list = []
         # add indexes to batch_index_definitions

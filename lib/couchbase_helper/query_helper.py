@@ -1051,7 +1051,7 @@ class QueryHelper(object):
         field_string = field_string.strip()
         return field_string
 
-    def create_aggregate_pushdown_index(self, table_name, table_fields, sql_map, aggregate_pushdown):
+    def create_aggregate_pushdown_index(self, table_name, table_fields, sql_map, aggregate_pushdown, partitioned_indexes=False):
         where_condition = sql_map["where_condition"]
         select_from = sql_map["select_from"]
         #from_fields = sql_map["from_fields"]
@@ -1107,16 +1107,35 @@ class QueryHelper(object):
 
             if aggregate_pushdown_fields_in_order and aggregate_pushdown == "secondary":
                 aggregate_pushdown_index_name = "{0}_aggregate_pushdown_index_{1}".format(table_name, self._random_int())
-                create_aggregate_pushdown_index = \
-                    "CREATE INDEX {0} ON {1}({2}) USING GSI".format(aggregate_pushdown_index_name, table_name, self._convert_list(aggregate_pushdown_fields_in_order, "numeric"))
+
+                if not partitioned_indexes :
+                    create_aggregate_pushdown_index = \
+                        "CREATE INDEX {0} ON {1}({2}) USING GSI".format(aggregate_pushdown_index_name, table_name, self._convert_list(aggregate_pushdown_fields_in_order, "numeric"))
+                else:
+                    create_aggregate_pushdown_index = \
+                        "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) USING GSI".format(
+                            aggregate_pushdown_index_name, table_name,
+                            self._convert_list(
+                                aggregate_pushdown_fields_in_order, "numeric"))
                 return aggregate_pushdown_index_name, create_aggregate_pushdown_index
             if aggregate_pushdown_fields_in_order and aggregate_pushdown == "partial":
                 aggregate_pushdown_index_name = "{0}_aggregate_pushdown_index_{1}".format(table_name, self._random_int())
-                create_aggregate_pushdown_index = \
-                    "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(aggregate_pushdown_index_name,
+
+                if not partitioned_indexes:
+                    create_aggregate_pushdown_index = \
+                        "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(aggregate_pushdown_index_name,
                                                                               table_name,
                                                                               self._convert_list(aggregate_pushdown_fields_in_order, "numeric"),
                                                                               where_condition)
+                else:
+                    create_aggregate_pushdown_index = \
+                        "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) WHERE {3} USING GSI".format(
+                            aggregate_pushdown_index_name,
+                            table_name,
+                            self._convert_list(
+                                aggregate_pushdown_fields_in_order, "numeric"),
+                            where_condition)
+
                 return aggregate_pushdown_index_name, create_aggregate_pushdown_index
         elif aggregate_pushdown == "functional":
             select_from_fields = [self.remove_aggregate_func(expr).replace("AS A", "").replace("AS B", "").replace("?", ",").replace("&", ",") for expr in select_from.split(",")]
@@ -1203,7 +1222,7 @@ class QueryHelper(object):
         map["sql"] = self.convert_sql_log_func(str(map["sql"]))
         return map
 
-    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template="", table_map={}, table_name="simple_table", define_gsi_index=False, ansi_joins=False, aggregate_pushdown=False):
+    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template="", table_map={}, table_name="simple_table", define_gsi_index=False, ansi_joins=False, aggregate_pushdown=False, partitioned_indexes=False):
         index_name_with_occur_fields_where = None
         index_name_with_expression = None
         index_name_fields_only = None
@@ -1233,7 +1252,7 @@ class QueryHelper(object):
         field_that_occur = []
 
         if aggregate_pushdown:
-            aggregate_pushdown_index_name, create_aggregate_pushdown_index_statement = self.create_aggregate_pushdown_index(table_name, table_fields, sql_map, aggregate_pushdown)
+            aggregate_pushdown_index_name, create_aggregate_pushdown_index_statement = self.create_aggregate_pushdown_index(table_name, table_fields, sql_map, aggregate_pushdown, partitioned_indexes)
             map = self.aggregate_special_convert(map)
         else:
             if where_condition and ("OR" not in where_condition):
@@ -1245,20 +1264,41 @@ class QueryHelper(object):
                 index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name, "_".join(field_that_occur), self._random_int())
                 index_name_with_expression = "{0}_expression_based_{1}".format(table_name, self._random_int())
 
-                create_index_fields_occur_with_where = \
-                "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_occur_fields_where,
-                                                                          table_name,
-                                                                          self._convert_list(field_that_occur, "numeric"),
-                                                                          where_condition)
+                if not partitioned_indexes:
+                    create_index_fields_occur_with_where = \
+                    "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_occur_fields_where,
+                                                                              table_name,
+                                                                              self._convert_list(field_that_occur, "numeric"),
+                                                                              where_condition)
+                else:
+                    create_index_fields_occur_with_where = \
+                        "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) WHERE {3} USING GSI".format(
+                            index_name_with_occur_fields_where,
+                            table_name,
+                            self._convert_list(field_that_occur, "numeric"),
+                            where_condition)
 
-                create_index_name_fields_only = \
-                "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_fields_only,
-                                                                table_name,
-                                                                self._convert_list(field_that_occur, "numeric"))
+                if not partitioned_indexes:
+                    create_index_name_fields_only = \
+                        "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_fields_only,
+                                                                        table_name,
+                                                                        self._convert_list(field_that_occur, "numeric"))
+                else:
+                    create_index_name_fields_only = \
+                        "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) USING GSI".format(
+                            index_name_fields_only,
+                            table_name,
+                            self._convert_list(field_that_occur, "numeric"))
 
-                create_index_name_with_expression = "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_with_expression,
-                                                                                                    table_name,
-                                                                                                    where_condition)
+                if not partitioned_indexes:
+                    create_index_name_with_expression = "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_with_expression,
+                                                                                                        table_name,
+                                                                                                        where_condition)
+                else:
+                    create_index_name_with_expression = "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) USING GSI".format(
+                        index_name_with_expression,
+                        table_name,
+                        where_condition)
 
         if aggregate_pushdown_index_name:
             map["indexes"][aggregate_pushdown_index_name] = \
@@ -1293,7 +1333,7 @@ class QueryHelper(object):
                             }
         return map
 
-    def _convert_sql_template_to_value_for_secondary_indexes_sub_queries(self, n1ql_template="", table_map={}, table_name="simple_table", define_gsi_index=True):
+    def _convert_sql_template_to_value_for_secondary_indexes_sub_queries(self, n1ql_template="", table_map={}, table_name="simple_table", define_gsi_index=True, partitioned_indexes=False):
         sql, query_list, table_map = self._gen_sql_with_deep_selects(sql=n1ql_template, table_map=table_map, table_name=table_name)
         n1ql = self._gen_sql_to_nql(sql)
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type="sql")
@@ -1319,9 +1359,16 @@ class QueryHelper(object):
                         field_that_occur.append(field)
             if where_condition and ("OR" not in where_condition):
                 index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name, self._random_alphanumeric(4))
-                create_index_name_fields_only = \
-                "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_fields_only, table_name,
-                                                                self._convert_list(field_that_occur, "numeric"))
+
+                if not partitioned_indexes:
+                    create_index_name_fields_only = \
+                        "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_fields_only, table_name,
+                                                                        self._convert_list(field_that_occur, "numeric"))
+                else:
+                    create_index_name_fields_only = \
+                        "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) USING GSI".format(
+                            index_name_fields_only, table_name,
+                            self._convert_list(field_that_occur, "numeric"))
                 map["indexes"][index_name_fields_only] = \
                     {
                         "name":index_name_fields_only,

@@ -442,6 +442,36 @@ class N1QLHelper():
                     self.log.error('ERROR during index creation %s' % str(ex))
                     raise ex
 
+    def create_partitioned_primary_index(self, using_gsi=True, server=None):
+        if server is None:
+            server = self.master
+        for bucket in self.buckets:
+            self.query = "CREATE PRIMARY INDEX ON %s " % bucket.name
+            if using_gsi:
+                self.query += " PARTITION BY HASH(meta().id) USING GSI"
+            if not using_gsi:
+                self.query += " USING VIEW "
+            if self.use_rest:
+                try:
+                    check = self._is_index_in_list(bucket.name, "#primary",
+                                                   server=server)
+                    if not check:
+                        self.run_cbq_query(server=server,
+                                           query_params={'timeout': '900s'})
+                        check = self.is_index_online_and_in_list(bucket.name,
+                                                                 "#primary",
+                                                                 server=server)
+                        if not check:
+                            raise Exception(
+                                " Timed-out Exception while building primary index for bucket {0} !!!".format(
+                                    bucket.name))
+                    else:
+                        raise Exception(
+                            " Primary Index Already present, This looks like a bug !!!")
+                except Exception, ex:
+                    self.log.error('ERROR during index creation %s' % str(ex))
+                    raise ex
+
     def verify_index_with_explain(self, actual_result, index_name, check_covering_index=False):
         check = True
         if check_covering_index:
