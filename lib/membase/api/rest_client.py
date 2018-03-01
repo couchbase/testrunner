@@ -3143,7 +3143,7 @@ class RestConnection(object):
         response,content = http.request(api, "POST", headers=headers, body=json.dumps(body))
         return response,content
 
-    def get_query_admin_settings(self,server):
+    def get_query_admin_settings(self, server):
         http = httplib2.Http()
         n1ql_port = 8093
         api = "http://%s:%s/" % (server.ip, n1ql_port) + "admin/settings"
@@ -3160,6 +3160,13 @@ class RestConnection(object):
         response, content = http.request(api, "GET", headers=headers)
         return response, content
     '''End Monitoring/Profiling Rest Calls'''
+
+    def create_whitelist(self, server, whitelist):
+        http = httplib2.Http()
+        api = "http://%s:%s/" % (server.ip, server.port) + "settings/querySettings/curlWhitelist"
+        headers = self._create_headers_with_auth('Administrator', 'password')
+        response,content = http.request(api, "POST", headers=headers, body=json.dumps(whitelist))
+        return response,content
 
     def query_tool(self, query, port=8093, timeout=1300, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):

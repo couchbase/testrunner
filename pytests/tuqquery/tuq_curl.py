@@ -1,12 +1,5 @@
-import logging
-import threading
-import json
-import uuid
-import time
-import os
 from tuq import QueryTests
 from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
 
@@ -56,7 +49,7 @@ class QueryCurlTests(QueryTests):
         self.full_access = self.input.param("full_access", True)
         self.run_cbq_query('delete from system:prepareds')
         if self.full_access:
-            self.shell.create_whitelist(self.n1ql_certs_path, {"all_access":True})
+            self.rest.create_whitelist(self.master, {"all_access": True})
         self.log.info("==============  QueryCurlTests setup has completed ==============")
         self.log_config_info()
 
@@ -125,7 +118,7 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         # Compare the curl statement to the expected result of the n1ql query done normally
         expected_result = self.run_cbq_query('select * from default limit 5')
-        self.assertTrue(json_curl['results'][0]['$1']['results'] == expected_result['results'])
+        self.assertEqual(json_curl['results'][0]['$1']['results'], expected_result['results'])
 
     '''Basic test for using GET in curl'''
     def test_GET(self):
@@ -144,7 +137,7 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath,select_query + from_query,'', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         expected_result = self.run_cbq_query('select * from default limit 5')
-        self.assertEqual(json_curl['results'][0]['result']['results'],expected_result['results'])
+        self.assertEqual(json_curl['results'][0]['result']['results'], expected_result['results'])
 
     '''Basic Test that tests if curl works inside the where clause of a query'''
     def test_where(self):
