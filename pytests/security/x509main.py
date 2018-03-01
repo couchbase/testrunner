@@ -37,8 +37,6 @@ class x509main:
     GOCERTGENFILE = "gencert.go"
     INCORRECT_ROOT_CERT = "incorrect_root_cert.crt"
     SLAVE_HOST = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
-    CLIENT_CERT_AUTH_JSON = 'client_cert_auth1.json'
-    CLIENT_CERT_AUTH_TEMPLATE = 'client_cert_config_template.txt'
 
     def __init__(self,
                  host=None,
@@ -64,7 +62,7 @@ class x509main:
         for server in servers:
             x509main(server)._setup_node_certificates(reload_cert=reload_cert,host=server)
 
-    def _generate_cert(self,servers,root_cn='Root\ Authority',type='go',encryption="",key_length=1024,client_ip=0):
+    def _generate_cert(self,servers,root_cn='Root\ Authority',type='go',encryption="",key_length=1024):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
         shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
@@ -119,24 +117,6 @@ class x509main:
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
             output, error = shell.execute_command("cp " + x509main.CACERTFILEPATH + "ca.pem " + x509main.CACERTFILEPATH + "root.crt")
-            log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            
-            #Check if client_ip is ipv6, remove []
-            if "[" in client_ip:
-                client_ip = client_ip.replace("[", "").replace("]", "")
-            
-            #Generate Certificate for the client
-            output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH +client_ip + ".key " + str(key_length))
-            log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            output, error= shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + client_ip + ".key -out " + x509main.CACERTFILEPATH + client_ip + ".csr -config ./pytests/security/clientconf.conf")
-            log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            output, error = shell.execute_command("openssl x509 -req -in "+ x509main.CACERTFILEPATH + client_ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
-                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + client_ip + ".pem -days 365 -sha256 -extfile ./pytests/security/clientconf.conf")
-            log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + client_ip + ".pem " + x509main.CACERTFILEPATH + "int.pem > " + x509main.CACERTFILEPATH + "long_chain"+client_ip+".pem")
-            log.info ('Output message is {0} and error message is {1}'.format(output,error))
-
-            
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
 
@@ -222,13 +202,6 @@ class x509main:
         url = "controller/uploadClusterCA"
         api = rest.baseUrl + url
         self._rest_upload_file(api,x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE,"Administrator",'password')
-    
-    def _upload_cluster_ca_settings(self,username,password):
-        temp = self.host
-        rest = RestConnection(temp)
-        url = "settings/clientCertAuth"
-        api = rest.baseUrl + url
-        self._rest_upload_file(api,x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON,"Administrator",'password')
 
     def _validate_ssl_login(self,host=None,port=18091,username='Administrator',password='password'):
         key_file = x509main.CACERTFILEPATH + "/" + x509main.CAKEYFILE
@@ -257,31 +230,6 @@ class x509main:
         status, content, header = rest._http_request(api, 'GET')
         return status, content, header
 
-    def setup_master(self, state, paths, prefixs, delimeters, user='Administrator',password='password'):
+    def setup_master(self,user='Administrator',password='password'):
         x509main(self.host)._upload_cluster_ca_certificate(user,password)
         x509main(self.host)._setup_node_certificates()
-        self.write_client_cert_json_new(state, paths, prefixs, delimeters)
-        x509main(self.host)._upload_cluster_ca_settings(user,password)
-        
-    #write a new config json file based on state, paths, perfixes and delimeters
-    def write_client_cert_json_new(self, state, paths, prefixs, delimeters):
-        template_path = './pytests/security/' + x509main.CLIENT_CERT_AUTH_TEMPLATE
-        config_json = x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON
-        target_file = open(config_json, 'w')
-        source_file = open(template_path, 'r')
-        #state = state
-        #paths = ['subject.cn']
-        #prefixs  = ['www.cb-']
-        #delimeters = ["."]
-        client_cert= '{"state" : ' + "'" + state + "'" + ", 'prefixes' : [ "
-        for line in source_file:
-            for path, prefix, delimeter in zip(paths, prefixs, delimeters):
-                line1 = line.replace("@2","'" + path + "'")
-                line2 = line1.replace("@3","'" + prefix + "'")
-                line3 = line2.replace("@4","'" + delimeter + "'")
-                temp_client_cert = "{ " +  line3 + " },"
-                client_cert = client_cert + temp_client_cert
-        client_cert = client_cert.replace("'",'"')
-        client_cert = client_cert + " ]}" 
-        print client_cert
-        target_file.write(client_cert)
