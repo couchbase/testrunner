@@ -82,6 +82,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                                               self.maxParallelIndexers,\
                                        self.maxParallelReplicaIndexers,\
                                                              self.port)
+        self.add_built_in_server_user(node=self.master)
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self.create_buckets()
         self.n1ql_server = None
@@ -455,6 +456,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                                             + str(self.total_buckets)
             self.rest = RestConnection(self.master)
             self._bucket_creation()
+            self.sleep(5, "sleep after create bucket")
             self.total_buckets +=1
             bucket_created = True
         except Exception, ex:

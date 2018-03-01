@@ -176,8 +176,19 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.product in ["couchbase", "couchbase-server", "cb"]:
             success = True
             for server in servers:
-                success &= RemoteMachineShellConnection(server).is_couchbase_installed()
+                shell = RemoteMachineShellConnection(server)
+                info = shell.extract_remote_info()
+                success &= shell.is_couchbase_installed()
                 self.sleep(5, "sleep 5 seconds to let cb up completely")
+                ready = RestHelper(RestConnection(server)).is_ns_server_running(60)
+                if not ready:
+                    if "cento 7" in info.distribution_version.lower():
+                        self.log.info("run systemctl daemon-reload")
+                        shell.execute_command("systemctl daemon-reload", debug=False)
+                        shell.start_server()
+                    else:
+                        log.error("Couchbase-server did not start...")
+                shell.disconnect()
                 if not success:
                     sys.exit("some nodes were not install successfully!")
         if self.rest is None:

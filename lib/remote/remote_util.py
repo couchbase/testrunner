@@ -813,53 +813,56 @@ class RemoteMachineShellConnection:
                 output, e = self.execute_command("systemctl status ntpd")
                 for line in output:
                     if "Active: active (running)" in line:
-                        log.info("ntp was installed in this server %s" % self.ip)
+                        log.info("ntp was installed in this server {0}".format(self.ip))
                         ntp_installed = True
                 if not ntp_installed:
                     log.info("ntp not installed yet or not run.\n"\
                              "Let remove any old one and install ntp")
-                    self.execute_command("yum erase -y ntp")
-                    self.execute_command("yum install -y ntp")
-                    self.execute_command("systemctl start ntpd")
-                    self.execute_command("systemctl enable ntpd")
-                    self.execute_command("firewall-cmd --add-service=ntp --permanent")
-                    self.execute_command("firewall-cmd --reload")
+                    self.execute_command("yum erase -y ntp", debug=False)
+                    self.execute_command("yum install -y ntp", debug=False)
+                    self.execute_command("systemctl start ntpd", debug=False)
+                    self.execute_command("systemctl enable ntpd", debug=False)
+                    self.execute_command("firewall-cmd --add-service=ntp --permanent",
+                                                                          debug=False)
+                    self.execute_command("firewall-cmd --reload", debug=False)
                     do_install = True
                 timezone, _ = self.execute_command("date")
                 if "PST" not in timezone[0]:
                     log.info("Set time zone in centos 7 to America/Los_Angeles (PST)")
-                    self.execute_command("timedatectl set-timezone America/Los_Angeles")
+                    self.execute_command("timedatectl set-timezone America/Los_Angeles",
+                                                                            debug=False)
             elif "centos release 6" in self.info.distribution_version.lower():
                 os_version = "centos 6"
                 log.info("Check ntpd service in centos 6")
                 output, e = self.execute_command("/etc/init.d/ntpd status")
                 if not output:
-                    log.info("ntp was not installed on %s server yet.  "\
-                             "Let install ntp on this server " % self.ip)
-                    self.execute_command("yum install -y ntp ntpdate")
-                    self.execute_command("chkconfig ntpd on")
-                    self.execute_command("ntpdate pool.ntp.org")
-                    self.execute_command("/etc/init.d/ntpd start")
+                    log.info("ntp was not installed on {0} server yet.  "\
+                             "Let install ntp on this server ".format(self.ip))
+                    self.execute_command("yum install -y ntp ntpdate", debug=False)
+                    self.execute_command("chkconfig ntpd on", debug=False)
+                    self.execute_command("ntpdate pool.ntp.org", debug=False)
+                    self.execute_command("/etc/init.d/ntpd start", debug=False)
                     do_install = True
                 elif output and "ntpd is stopped" in output[0]:
-                    log.info("ntp is not running.  Let remove it and install again in %s"\
-                                                            % self.ip)
-                    self.execute_command("yum erase -y ntp")
-                    self.execute_command("yum install -y ntp ntpdate")
-                    self.execute_command("chkconfig ntpd on")
-                    self.execute_command("ntpdate pool.ntp.org")
-                    self.execute_command("/etc/init.d/ntpd start")
+                    log.info("ntp is not running.  Let remove it and install again in {0}"\
+                                                            .format(self.ip))
+                    self.execute_command("yum erase -y ntp", debug=False)
+                    self.execute_command("yum install -y ntp ntpdate", debug=False)
+                    self.execute_command("chkconfig ntpd on", debug=False)
+                    self.execute_command("ntpdate pool.ntp.org", debug=False)
+                    self.execute_command("/etc/init.d/ntpd start", debug=False)
                     do_install = True
                 elif output and "is running..." in output[0]:
                     ntp_installed = True
-                    log.info("ntp was installed in this server %s" % self.ip)
+                    log.info("ntp was installed in this server {0}".format(self.ip))
                 timezone, _ = self.execute_command("date")
                 if "PST" not in timezone[0]:
                     log.info("Set time zone in centos 6 to America/Los_Angeles (PST)")
-                    self.execute_command("cp /etc/localtime /root/old.timezone")
-                    self.execute_command("rm -rf /etc/localtime")
+                    self.execute_command("cp /etc/localtime /root/old.timezone",
+                                                                    debug=False)
+                    self.execute_command("rm -rf /etc/localtime", debug=False)
                     self.execute_command("ln -s /usr/share/zoneinfo/America/Los_Angeles "
-                                         "/etc/localtime")
+                                         "/etc/localtime", debug=False)
             else:
                 log.info("will add install in other os later, no set do install")
 
@@ -878,9 +881,9 @@ class RemoteMachineShellConnection:
                     log.info("ntp is installed and running on this server %s" % self.ip)
                     ntp_installed = True
 
-        log.info("Date and time on this server %s" % self.ip)
+        log.info("Date and time on this server {0}".format(self.ip))
         output, _ = self.execute_command("date")
-        log.info("\n%s" % output)
+        log.info("\n{0}".format(output))
         if not ntp_installed and "centos" in os_version:
             mesg = "\n===============\n"\
                    "        This server {0} \n"\
@@ -1861,14 +1864,14 @@ class RemoteMachineShellConnection:
 
             if self.info.deliverable_type == 'rpm':
                 if self.nonroot:
-                    op, er = self.execute_command('cd %s; rpm2cpio %s ' \
+                    op, er = self.execute_command('cd {0}; rpm2cpio {1} ' \
                         '|  cpio --extract --make-directories --no-absolute-filenames ' \
-                                                       % (self.nr_home_path, build.name))
+                                     .format(self.nr_home_path, build.name), debug=False)
                     self.log_command_output(op, er)
-                    output, error = self.execute_command('cd %s%s; ./bin/install/reloc.sh `pwd` ' \
-                                                         % (self.nr_home_path, LINUX_CB_PATH))
+                    output, error = self.execute_command('cd {0}{1}; ./bin/install/reloc.sh `pwd` '\
+                                            .format(self.nr_home_path, LINUX_CB_PATH), debug=False)
                     self.log_command_output(output, error)
-                    op, er = self.execute_command('cd %s;pwd' % self.nr_home_path)
+                    op, er = self.execute_command('cd {0};pwd'.format(self.nr_home_path))
                     self.log_command_output(op, er)
                     """ command to start Couchbase Server in non root
                         /home/nonroot_user/opt/couchbase/bin/couchbase-server \-- -noinput -detached
@@ -1887,15 +1890,15 @@ class RemoteMachineShellConnection:
                                                              .format(environment, build.name))
                     else:
                         output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
-                                                             .format(environment, build.name))
+                                                .format(environment, build.name), debug=False)
             elif self.info.deliverable_type == 'deb':
                 if self.nonroot:
                     op, er = self.execute_command('cd %s; dpkg-deb -x %s %s '
                                                 % (self.nr_home_path, build.name,
                                                    self.nr_home_path))
                     self.log_command_output(op, er)
-                    output, error = self.execute_command('cd %s%s; ./bin/install/reloc.sh `pwd`'\
-                                                               % (self.nr_home_path, LINUX_CB_PATH))
+                    output, error = self.execute_command('cd {0}{1}; ./bin/install/reloc.sh `pwd`'\
+                                                        .format(self.nr_home_path, LINUX_CB_PATH))
                     self.log_command_output(output, error)
                     op, er = self.execute_command('pwd')
                     self.log_command_output(op, er)
@@ -1911,10 +1914,10 @@ class RemoteMachineShellConnection:
                     self.install_missing_lib()
                     if force:
                         output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'\
-                                                             .format(environment, build.name))
+                                                 .format(environment, build.name), debug=False)
                     else:
                         output, error = self.execute_command('{0}dpkg -i /tmp/{1}'\
-                                                             .format(environment, build.name))
+                                                 .format(environment, build.name), debug=False)
 
             if "SUSE" in self.info.distribution_type:
                 if error and error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server':
@@ -4500,16 +4503,21 @@ class RemoteMachineShellConnection:
                 #self.execute_command("/etc/init.d/couchbase-server stop")
                 #self.sleep(15)
                 self.execute_command('export NS_SERVER_CBAUTH_URL='
-                                    '"http://{0}:8091/_cbauth"'.format(server.ip))
+                                    '"http://{0}:8091/_cbauth"'.format(server.ip),
+                                                                      debug=False)
                 self.execute_command('export NS_SERVER_CBAUTH_USER="{0}"'\
-                                                        .format(rest_username))
+                                                        .format(rest_username),
+                                                                debug=False)
                 self.execute_command('export NS_SERVER_CBAUTH_PWD="{0}"'\
-                                                    .format(rest_password))
+                                                    .format(rest_password),
+                                                               debug=False)
                 self.execute_command('export NS_SERVER_CBAUTH_RPC_URL='
-                                '"http://{0}:8091/cbauth-demo"'.format(server.ip))
+                                '"http://{0}:8091/cbauth-demo"'.format(server.ip),
+                                                                      debug=False)
                 self.execute_command('export CBAUTH_REVRPC_URL='
                                      '"http://{0}:{1}@{2}:8091/query"'\
-                                  .format(rest_username, rest_password,server.ip))
+                                  .format(rest_username, rest_password,server.ip),
+                                                                      debug=False)
 
     def change_system_time(self, time_change_in_seconds):
 
