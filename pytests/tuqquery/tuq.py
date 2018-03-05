@@ -926,6 +926,33 @@ class QueryTests(BaseTestCase):
               % (actual_result[:100], actual_result[-100:], expected_result[:100], expected_result[-100:])
         self.assertTrue(actual_result == expected_result, msg)
 
+    def _verify_aggregate_query_results(self, result, query, bucket):
+        def _gen_dict(res):
+            result_set = []
+            if res is not None and len(res) > 0:
+                for val in res:
+                    for key in val.keys():
+                        result_set.append(val[key])
+            return result_set
+
+        self.restServer = self.get_nodes_from_services_map(service_type="n1ql")
+        self.rest = RestConnection(self.restServer)
+        self.rest.set_query_index_api_mode(1)
+        primary_query = query % (bucket, "#primary")
+        primary_result = self.run_cbq_query(primary_query)
+        self.rest.set_query_index_api_mode(3)
+        self.log.info(" Analyzing Actual Result")
+
+        actual_result = _gen_dict(sorted(primary_result["results"]))
+        self.log.info(" Analyzing Expected Result")
+        expected_result = _gen_dict(sorted(result["results"]))
+        if len(actual_result) != len(expected_result):
+            return False
+        if actual_result != expected_result:
+            return False
+        return True
+
+
     def check_missing_and_extra(self, actual, expected):
         missing, extra = [], []
         for item in actual:

@@ -174,6 +174,85 @@ class AggregatePushdownClass(QueryTests):
                          "Aggregate Pushdown Query Results fails: {0}".format(failed_queries_in_result))
         log.info("Failed Aggregate Queries in Explain: {0}".format(failed_queries_in_explain))
 
+    def test_array_aggregate_non_array_multiple_group(self):
+        create_index_count = 0
+        query_count = 0
+        failed_queries_in_explain = []
+        failed_queries_in_result = []
+        for index_name_def in self._create_array_index_definitions():
+            for create_def in index_name_def["create_definitions"]:
+                result = self.run_cbq_query(create_def)
+                create_index_count += 1
+            array_field = index_name_def["fields"][0]
+            non_array_fields = [index_name_def["fields"][1], index_name_def["fields"][2]]
+            if self.aggr_distinct:
+                aggregate_functions = DISTINCT_AGGREGATE_FUNCTIONS
+            else:
+                aggregate_functions = AGGREGATE_FUNCTIONS
+            for aggr_func in aggregate_functions:
+                if self.aggr_distinct:
+                    select_non_array_where_clause = "SELECT " + aggr_func + "(DISTINCT d.{0}) from %s d USE INDEX (`%s`)" \
+                                                                        "UNNEST d.`{1}` AS t where d.{2} GROUP BY "
+                    select_array_where_clause = "SELECT " + aggr_func + "(DISTINCT d.{0}) from %s d USE INDEX (`%s`) {1} GROUP BY "
+                else:
+                    select_non_array_where_clause = "SELECT " + aggr_func + "(d.{0}) from %s d USE INDEX (`%s`)" \
+                                                                        "UNNEST d.`{1}` AS t where d.{2} GROUP BY "
+                    select_array_where_clause = "SELECT " + aggr_func + "(d.{0}) from %s d USE INDEX (`%s`) {1}  GROUP BY "
+
+                for non_array_first_field in non_array_fields:
+                    for non_array_second_field in non_array_fields:
+                        if non_array_second_field == non_array_first_field:
+                            query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"])]
+                        else:
+                            query_definitions = [select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_first_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"]),
+                                                 select_array_where_clause.format(non_array_first_field["name"],
+                                                                                  array_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_second_field["where_clause"]),
+                                                 select_non_array_where_clause.format(non_array_first_field["name"],
+                                                                                      array_field["name"],
+                                                                                      non_array_second_field["where_clause"])]
+                        for query_template in query_definitions:
+                            query_template += [", ".join(tup[0]["name"], tup[1]["name"], tup[2]["name"])
+                                               for tup in itertools.permutations(index_name_def["fields"])]
+
+                        for bucket in self.buckets:
+                            for query_template in query_definitions:
+                                for index_name in index_name_def["index_names"]:
+                                    query = query_template % (bucket.name, index_name)
+                                    result = self.run_cbq_query(query)
+                                    query_count += 1
+                                    explain_verification = self._verify_aggregate_explain_results(query_template,
+                                                                                                  index_name,
+                                                                                                  index_name_def["fields"],
+                                                                                                  bucket.name)
+                                    if explain_verification is False:
+                                        failed_queries_in_explain.append(query)
+                                        log.info("Query {0} failed in explain".format(query))
+                                    query_verification = self._verify_aggregate_query_results(result, query_template,
+                                                                                              bucket.name)
+                                    if query_verification is not True:
+                                        failed_queries_in_result.append(query)
+                                        log.info(query_verification)
+
+            for drop_def in index_name_def["drop_definitions"]:
+                result = self.run_cbq_query(drop_def)
+        self.assertEqual(len(failed_queries_in_result), 0,
+                         "Aggregate Pushdown Query Results fails: {0}".format(failed_queries_in_result))
+        log.info("Failed Aggregate Queries in Explain: {0}".format(failed_queries_in_explain))
+
     def test_array_aggregate_non_array_without_group_by(self):
         create_index_count = 0
         query_count = 0
@@ -605,31 +684,3 @@ class AggregatePushdownClass(QueryTests):
         else:
             check = "index_group_aggs" not in str(explain_result)
         return check
-
-    def _verify_aggregate_query_results(self, result, query, bucket):
-        self.restServer = self.get_nodes_from_services_map(service_type="n1ql")
-        self.rest = RestConnection(self.restServer)
-        self.rest.set_query_index_api_mode(1)
-        primary_query = query % (bucket, "#primary")
-        primary_result = self.run_cbq_query(primary_query)
-        self.rest.set_query_index_api_mode(3)
-        return self._verify_results(sorted(primary_result['results']), sorted(result["results"]))
-
-    def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
-        log.info(" Analyzing Actual Result")
-
-        def _gen_dict(result):
-            result_set = []
-            if result is not None and len(result) > 0:
-                for val in result:
-                    for key in val.keys():
-                        result_set.append(val[key])
-            return result_set
-        actual_result = _gen_dict(actual_result)
-        log.info(" Analyzing Expected Result")
-        expected_result = _gen_dict(expected_result)
-        if len(actual_result) != len(expected_result):
-            return False
-        if actual_result != expected_result:
-            return False
-        return True

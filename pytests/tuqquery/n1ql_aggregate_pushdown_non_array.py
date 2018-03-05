@@ -351,31 +351,3 @@ class AggregatePushdownClass(QueryTests):
         else:
             check = "index_group_aggs" not in str(explain_result)
         return check
-
-    def _verify_aggregate_query_results(self, result, query, bucket):
-        self.restServer = self.get_nodes_from_services_map(service_type="n1ql")
-        self.rest = RestConnection(self.restServer)
-        self.rest.set_query_index_api_mode(1)
-        primary_query = query % (bucket, "#primary")
-        primary_result = self.run_cbq_query(primary_query)
-        self.rest.set_query_index_api_mode(3)
-        return self._verify_results(sorted(primary_result['results']), sorted(result["results"]))
-
-    def _verify_results(self, actual_result, expected_result):
-        log.info(" Analyzing Actual Result")
-
-        def _gen_dict(result):
-            result_set = []
-            if result is not None and len(result) > 0:
-                for val in result:
-                    for key in val.keys():
-                        result_set.append(val[key])
-            return result_set
-        actual_result = _gen_dict(actual_result)
-        log.info(" Analyzing Expected Result")
-        expected_result = _gen_dict(expected_result)
-        if len(actual_result) != len(expected_result):
-            return False
-        if actual_result != expected_result:
-            return False
-        return True
