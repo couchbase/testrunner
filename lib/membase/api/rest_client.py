@@ -4078,7 +4078,7 @@ class RestConnection(object):
     def undeploy_function(self, name):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "api/v1/functions/" + name +"/settings"
-        body= {"deployment_status":False,"processing_status":False}
+        body= {"deployment_status": False, "processing_status": False}
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers,
@@ -4100,6 +4100,18 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    '''
+            Delete single function
+    '''
+    def delete_single_function(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "api/v1/functions/" + name
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
 
     '''
             Delete the Function from UI
@@ -4315,6 +4327,18 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return content
+
+    def create_function(self, name, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "api/v1/functions/" + name
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

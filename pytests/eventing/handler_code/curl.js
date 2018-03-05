@@ -3,5 +3,7 @@ function OnUpdate(doc, meta) {
                  "request":"GET"});
     var res=curl.execQuery();
     log("result: ",res);
-    dst_bucket["curl"]=res
+    if(res[0]["$1"][0]["bucketType"] === "membase"){
+        dst_bucket["curl"]=res
+    }
 }

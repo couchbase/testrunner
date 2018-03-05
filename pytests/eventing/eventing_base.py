@@ -103,25 +103,25 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['use_memory_manager'] = self.use_memory_manager
         return body
 
-    def wait_for_bootstrap_to_complete(self, name):
+    def wait_for_bootstrap_to_complete(self, name, iterations=20):
         result = self.rest.get_deployed_eventing_apps()
         count = 0
-        while name not in result and count < 20:
+        while name not in result and count < iterations:
             self.sleep(30, message="Waiting for eventing node to come out of bootstrap state...")
             count += 1
             result = self.rest.get_deployed_eventing_apps()
-        if count == 20:
+        if count == iterations:
             raise Exception(
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
-    def wait_for_undeployment(self, name):
+    def wait_for_undeployment(self, name, iterations=20):
         result = self.rest.get_deployed_eventing_apps()
         count = 0
-        while name in result and count < 20:
+        while name in result and count < iterations:
             self.sleep(30, message="Waiting for undeployment of function...")
             count += 1
             result = self.rest.get_deployed_eventing_apps()
-        if count == 20:
+        if count == iterations:
             raise Exception(
                 'Eventing took lot of time to undeploy')
 
@@ -219,12 +219,25 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
-        # save the function so that it appears in UI
-        content = self.rest.save_function(body['appname'], body)
-        # deploy the function
-        log.info("Deploying the following handler code")
+        # # save the function so that it appears in UI
+        # content = self.rest.save_function(body['appname'], body)
+        # # deploy the function
+        # log.info("Deploying the following handler code")
+        # log.info("\n{0}".format(body['appcode']))
+        # content1 = self.rest.deploy_function(body['appname'], body)
+        # log.info("deploy Application : {0}".format(content1))
+        # if deployment_fail:
+        #     res = json.loads(content1)
+        #     if not res["compile_success"]:
+        #         return
+        #     else:
+        #         raise Exception("Deployment is expected to be failed but no message of failure")
+        # if wait_for_bootstrap:
+        #     # wait for the function to come out of bootstrap state
+        #     self.wait_for_bootstrap_to_complete(body['appname'])
+        log.info("Deploying the following handler code : {0}".format(body['appname']))
         log.info("\n{0}".format(body['appcode']))
-        content1 = self.rest.deploy_function(body['appname'], body)
+        content1 = self.rest.create_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content1))
         if deployment_fail:
             res = json.loads(content1)
@@ -241,21 +254,28 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.delete_function(body)
 
     def undeploy_function(self, body):
-        body['settings']['deployment_status'] = False
-        body['settings']['processing_status'] = False
-        # save the function so that it disappears from UI
-        content = self.rest.save_function(body['appname'], body)
-        # undeploy the function
-        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Undeploy Application : {0}".format(content1))
-        return content, content1
+        # body['settings']['deployment_status'] = False
+        # body['settings']['processing_status'] = False
+        # # save the function so that it disappears from UI
+        # content = self.rest.save_function(body['appname'], body)
+        # # undeploy the function
+        # content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        # log.info("Undeploy Application : {0}".format(content1))
+        # return content, content1
+        content = self.rest.undeploy_function(body['appname'])
+        log.info("Undeploy Application : {0}".format(body['appname']))
+        self.wait_for_undeployment(body['appname'])
+        return content
 
     def delete_function(self, body):
         # delete the function from the UI and backend
-        content = self.rest.delete_function_from_temp_store(body['appname'])
-        content1 = self.rest.delete_function(body['appname'])
+        # content = self.rest.delete_function_from_temp_store(body['appname'])
+        # content1 = self.rest.delete_function(body['appname'])
+        # log.info("Delete Application : {0}".format(body['appname']))
+        # return content, content1
+        content1 = self.rest.delete_single_function(body['appname'])
         log.info("Delete Application : {0}".format(body['appname']))
-        return content, content1
+        return content1
 
     def pause_function(self, body):
         body['settings']['deployment_status'] = True

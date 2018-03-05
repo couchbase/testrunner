@@ -7,6 +7,7 @@ from pytests.eventing.eventing_constants import HANDLER_CODE,HANDLER_CODE_ERROR
 from pytests.eventing.eventing_base import EventingBaseTest, log
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from pytests.security.rbacmain import rbacmain
+from lib.remote.remote_util import RemoteMachineShellConnection
 import json
 
 class EventingN1QL(EventingBaseTest):
@@ -38,6 +39,13 @@ class EventingN1QL(EventingBaseTest):
                                       master=self.master,
                                       use_rest=True
                                       )
+        self.n1ql_certs_path = "/opt/couchbase/var/lib/couchbase/n1qlcerts"
+        shell = RemoteMachineShellConnection(self.n1ql_node)
+        shell_type = shell.extract_remote_info().distribution_type
+        if shell_type.lower() == 'windows':
+            self.path = testconstants.WIN_COUCHBASE_BIN_PATH
+            self.curl_path = "%scurl" % self.path
+            self.n1ql_certs_path = "/cygdrive/c/Program\ Files/Couchbase/server/var/lib/couchbase/n1qlcerts"
 
     def tearDown(self):
         super(EventingN1QL, self).tearDown()
@@ -125,18 +133,19 @@ class EventingN1QL(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_curl(self):
+        n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.rest.create_whitelist(self.master, {"all_access": True})
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name,HANDLER_CODE.CURL,dcp_stream_boundary="from_now",
                                               execution_timeout=15)
         self.deploy_function(body)
-        #create a mutation via N1QL
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        # create a mutation via N1QL
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         self.verify_eventing_results(self.function_name, 1, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
-
 
     def test_anonymous(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

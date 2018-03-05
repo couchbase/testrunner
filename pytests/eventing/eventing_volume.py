@@ -21,7 +21,7 @@ class EventingVolume(EventingBaseTest):
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
         if self.create_functions_buckets:
             # self.bucket_size = 500
-            # self.meta_bucket_size = 100
+            # self.meta_bucket_size = 500
             self.bucket_size = 100
             self.meta_bucket_size = 100
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
@@ -41,7 +41,7 @@ class EventingVolume(EventingBaseTest):
                                                 bucket_params=bucket_params_meta)
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.batch_size = 20
+        self.batch_size = 10000
         # index is required for delete operation through n1ql
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.n1ql_helper = N1QLHelper(shell=self.shell,
@@ -73,34 +73,36 @@ class EventingVolume(EventingBaseTest):
         # Wait for bootstrap to complete for all the functions
         self.wait_for_all_boostrap_to_complete(functions)
         # Validate the results of all the functions deployed
-        self.verify_eventing_results_of_all_functions(docs_expected=self.docs_per_day * 2016, verify_results=False)
+        self.verify_eventing_results_of_all_functions(docs_expected=self.docs_per_day * 2016, verify_results=False,
+                                                      timeout=6000 * self.docs_per_day)
         # Load data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Validate the results of all the functions deployed
-        self.verify_eventing_results_of_all_functions(docs_expected=0, verify_results=False)
+        self.verify_eventing_results_of_all_functions(docs_expected=0, verify_results=False,
+                                                      timeout=6000 * self.docs_per_day)
         # Undeploy and delete all the functions
         self.undeploy_delete_all_functions()
 
     def deploy_all_the_functions(self):
-        # deploy the first function
+        # deploy the first function - Bucket op
         body1 = self.create_save_function_body(self.function_name + "_bucket_op",
-                                               HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
+                                               HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         self.deploy_function(body1, wait_for_bootstrap=False)
-        # deploy the second function
-        body2 = self.create_save_function_body(self.function_name + "_bucket_op_with_timers",
-                                               HANDLER_CODE.BUCKET_OPS_WITH_TIMERS,
+        # deploy the second function - Bucket op with cron timers
+        body2 = self.create_save_function_body(self.function_name + "_bucket_op_with_cron_timers",
+                                               HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS,
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         # this is required to deploy multiple functions at the same time
         del body2['depcfg']['buckets'][0]
         body2['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name1})
         self.deploy_function(body2, wait_for_bootstrap=False)
-        # deploy the third function
-        body3 = self.create_save_function_body(self.function_name + "_n1ql_op_with_timers",
-                                               HANDLER_CODE.N1QL_OPS_WITH_TIMERS,
+        # deploy the third function - N1QL op with doc timers
+        body3 = self.create_save_function_body(self.function_name + "_n1ql_op_with_doc_timers",
+                                               HANDLER_CODE.N1QL_OPS_WITH_TIMERS1,
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         # this is required to deploy multiple functions at the same time
@@ -112,16 +114,16 @@ class EventingVolume(EventingBaseTest):
 
     def wait_for_all_boostrap_to_complete(self, functions):
         for function_name in functions:
-            self.wait_for_bootstrap_to_complete(function_name['appname'])
+            self.wait_for_bootstrap_to_complete(function_name['appname'], iterations=40)
 
-    def verify_eventing_results_of_all_functions(self, docs_expected, verify_results=True):
+    def verify_eventing_results_of_all_functions(self, docs_expected, verify_results=True,  timeout=600):
         if verify_results:
             # Verify the results of all the buckets
-            self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True, timeout=timeout)
             self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True,
-                                         bucket=self.dst_bucket_name1)
+                                         bucket=self.dst_bucket_name1, timeout=timeout)
             self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True,
-                                         bucket=self.dst_bucket_name2)
+                                         bucket=self.dst_bucket_name2, timeout=timeout)
         else:
             # Just print the stats after sleeping for 10 mins. Required to get the latest stats.
             self.sleep(600)
