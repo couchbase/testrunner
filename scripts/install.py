@@ -468,9 +468,7 @@ class CouchbaseServerInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-        log.info('*****CouchbaseServerInstaller initialize the application ****')
-
-
+        #log.info('*****CouchbaseServerInstaller initialize the application ****')
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]

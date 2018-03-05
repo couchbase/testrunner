@@ -699,8 +699,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     sleep_time = int(self.replace_ttl_with)/3
                     self.sleep(int(sleep_time), " wait to check items before it expired")
             else:
-                if int(self.replace_ttl_with) > 2592000:
-                    self.log.info("Time is set more than 30 days.  No need to sleep")
+                if int(self.replace_ttl_with) > 14400:
+                    self.log.info("Time is set more than 4 hours.  No need to sleep")
                 else:
                     sleep_time = int(self.replace_ttl_with) + 10
                     self.sleep(int(sleep_time), " wait for items to be expired")
