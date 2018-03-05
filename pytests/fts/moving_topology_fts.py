@@ -571,8 +571,10 @@ class MovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         self._cb_cluster.reboot_one_node(test_case=self)
+        self.sleep(5)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
+        self.validate_index_count(equal_bucket_doc_count=True)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
                                              expected_hits=self._num_items)
