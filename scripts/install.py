@@ -487,8 +487,17 @@ class CouchbaseServerInstaller(Installer):
                     RemoteUtilHelper.use_hostname_for_server_settings(server)
 
                 if params.get('enable_ipv6', 0):
-                    RestConnection(server).rename_node(
+                    status, content = RestConnection(server).rename_node(
                         hostname=server.ip.replace('[', '').replace(']', ''))
+                    if status:
+                        log.info("Node {0} renamed to {1}".format(server.ip,
+                                                                  server.ip.replace('[', '').
+                                                                  replace(']', '')))
+                    else:
+                        log.error("Error renaming node {0} to {1}: {2}".
+                                  format(server.ip,
+                                         server.ip.replace('[', '').replace(']', ''),
+                                         content))
 
                 # Make sure that data_path and index_path are writable by couchbase user
                 for path in set(filter(None, [server.data_path, server.index_path])):
