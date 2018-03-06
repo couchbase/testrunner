@@ -1041,7 +1041,7 @@ class QueryTests(BaseTestCase):
                         self.run_cbq_query()
                         self.primary_index_created = True
                         if self.primary_indx_type.lower() == 'gsi':
-                            self._wait_for_index_online(bucket, '#primary')
+                            self._wait_for_index_online(bucket.name, '#primary')
                     except Exception, ex:
                         self.log.info(str(ex))
 
@@ -1067,11 +1067,17 @@ class QueryTests(BaseTestCase):
                 if 'keyspace_id' not in item['indexes']:
                     self.log.error(item)
                     continue
-                if item['indexes']['keyspace_id'] == bucket.name:
+                bucket_name = ""
+                if type(bucket) is str:
+                    bucket_name = bucket
+                else:
+                    bucket_name = bucket.name
+                if item['indexes']['keyspace_id'] == bucket_name:
                     if item['indexes']['state'] == "online":
                         return
             self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
+
 
 ##############################################################################################
 #
@@ -2460,7 +2466,7 @@ class QueryTests(BaseTestCase):
                     query = "CREATE INDEX %s ON %s(%s) USING %s" % (
                         index_name, bucket.name, ','.join(field.split(';')), self.index_type)
                     self.run_cbq_query(query=query)
-                    self._wait_for_index_online(bucket, index_name)
+                    self._wait_for_index_online(bucket.name, index_name)
                     indexes.append(index_name)
 
                 fn = getattr(self, query_method)
@@ -2629,7 +2635,7 @@ class QueryTests(BaseTestCase):
             self.query = 'select * from %s use keys ["%s"]'  % (bucket.name, '","'.join(keys))
             try:
                 self.run_cbq_query()
-                self._wait_for_index_online(bucket, '#primary')
+                self._wait_for_index_online(bucket.name, '#primary')
             except:
                 pass
             self.sleep(15, 'Wait for index rebuild')
@@ -2711,7 +2717,7 @@ class QueryTests(BaseTestCase):
             self.run_cbq_query(query=query)
 
             if self.indx_type.lower() == 'gsi':
-                self._wait_for_index_online(bucket, index_name)
+                self._wait_for_index_online(bucket.name, index_name)
         indexes.append(index_name)
         return indexes
 
