@@ -339,3 +339,43 @@ class EventingBucket(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_eventing_with_different_compression_modes(self):
+        compression_mode = self.input.param('compression_mode', 'passive')
+        bucket_type = self.input.param('bucket_type', 'membase')
+        # delete existing couchbase buckets which will be created as part of setup
+        for bucket in self.buckets:
+            self.rest.delete_bucket(bucket.name)
+        # create buckets with the same name with different compression modes
+        if bucket_type != "ephemeral":
+            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas,
+                                                   bucket_type=bucket_type, compression_mode=compression_mode)
+        else:
+            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas,
+                                                   bucket_type=bucket_type, compression_mode=compression_mode,
+                                                   eviction_policy='noEviction')
+        tasks = []
+        for bucket in self.buckets:
+            tasks.append(self.cluster.async_create_standard_bucket(name=bucket.name, port=STANDARD_BUCKET_PORT + 1,
+                                                                   bucket_params=bucket_params))
+        for task in tasks:
+            task.result()
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+        # intentionally added , as it requires some time for eventing-consumers to shutdown
+        self.sleep(30)
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")

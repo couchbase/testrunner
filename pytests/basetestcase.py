@@ -174,6 +174,7 @@ class BaseTestCase(unittest.TestCase):
             self.lww = self.input.param("lww",
                                         False)  # only applies to LWW but is here because the bucket is created here
             self.maxttl = self.input.param("maxttl", None)
+            self.compression_mode = self.input.param("compression_mode", 'passive')
             self.sasl_bucket_name = "bucket"
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
@@ -207,7 +208,8 @@ class BaseTestCase(unittest.TestCase):
                                                        replicas=self.num_replicas,
                                                        enable_replica_index=self.enable_replica_index,
                                                        eviction_policy=self.eviction_policy, bucket_priority=None,
-                                                       lww=self.lww, maxttl=self.maxttl)
+                                                       lww=self.lww, maxttl=self.maxttl,
+                                                       compression_mode=self.compression_mode)
 
             membase_params = copy.deepcopy(shared_params)
             membase_params['bucket_type'] = 'membase'
@@ -527,7 +529,8 @@ class BaseTestCase(unittest.TestCase):
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                               bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
-                              bucket_priority=None, flush_enabled=1, lww=False, maxttl=None):
+                              bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
+                              compression_mode='passive'):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -561,6 +564,7 @@ class BaseTestCase(unittest.TestCase):
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
+        bucket_params['compressionMode'] = compression_mode
         return bucket_params
 
     def _bucket_creation(self):
@@ -570,7 +574,7 @@ class BaseTestCase(unittest.TestCase):
                                                              replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                              enable_replica_index=self.enable_replica_index,
                                                              eviction_policy=self.eviction_policy, lww=self.lww,
-                                                             maxttl=self.maxttl)
+                                                             maxttl=self.maxttl, compression_mode=self.compression_mode)
             self.cluster.create_default_bucket(default_params)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size,

@@ -2125,6 +2125,10 @@ class RestConnection(object):
         bucket_info = self.get_bucket_json(bucket=bucket)
         return bucket_info['maxTTL']
 
+    def get_bucket_compressionMode(self, bucket='default'):
+        bucket_info = self.get_bucket_json(bucket=bucket)
+        return bucket_info['compressionMode']
+
     def is_lww_enabled(self, bucket='default'):
         bucket_info = self.get_bucket_json(bucket=bucket)
         try:
@@ -2189,7 +2193,8 @@ class RestConnection(object):
                       flushEnabled=1,
                       evictionPolicy='valueOnly',
                       lww=False,
-                      maxTTL=None):
+                      maxTTL=None,
+                      compressionMode='passive'):
 
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
@@ -2239,6 +2244,9 @@ class RestConnection(object):
 
         if maxTTL:
             init_params['maxTTL'] = maxTTL
+
+        if compressionMode:
+            init_params['compressionMode'] = compressionMode
 
         if bucketType == 'ephemeral':
             del init_params['replicaIndex']     # does not apply to ephemeral buckets, and is even rejected
@@ -2291,7 +2299,8 @@ class RestConnection(object):
                       replicaIndex=None,
                       flushEnabled=None,
                       timeSynchronization=None,
-                      maxTTL=None):
+                      maxTTL=None,
+                      compressionMode=None):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
@@ -2317,6 +2326,8 @@ class RestConnection(object):
             params_dict["timeSynchronization"] = timeSynchronization
         if maxTTL:
             params_dict["maxTTL"] = maxTTL
+        if compressionMode:
+            params_dict["compressionMode"] = compressionMode
 
         params = urllib.urlencode(params_dict)
 

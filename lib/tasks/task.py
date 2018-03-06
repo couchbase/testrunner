@@ -235,6 +235,10 @@ class BucketCreateTask(Task):
             self.maxttl = bucket_params['maxTTL']
         else:
             self.maxttl = 0
+        if 'compressionMode' in bucket_params:
+            self.compressionMode = bucket_params['compressionMode']
+        else:
+            self.compressionMode = 'passive'
         self.flush_enabled = bucket_params['flush_enabled']
         if bucket_params['bucket_priority'] is None or bucket_params['bucket_priority'].lower() is 'low':
             self.bucket_priority = 3
@@ -282,7 +286,8 @@ class BucketCreateTask(Task):
                                evictionPolicy=self.eviction_policy,
                                threadsNumber=self.bucket_priority,
                                lww=self.lww,
-                               maxTTL=self.maxttl
+                               maxTTL=self.maxttl,
+                               compressionMode=self.compressionMode
                                )
             else:
                 rest.create_bucket(bucket=self.bucket,
@@ -296,7 +301,8 @@ class BucketCreateTask(Task):
                                flushEnabled=self.flush_enabled,
                                evictionPolicy=self.eviction_policy,
                                lww=self.lww,
-                               maxTTL=self.maxttl)
+                               maxTTL=self.maxttl,
+                               compressionMode=self.compressionMode)
             self.state = CHECKING
             task_manager.schedule(self)
 
