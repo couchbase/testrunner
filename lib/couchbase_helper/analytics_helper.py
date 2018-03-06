@@ -108,6 +108,36 @@ class AnalyticsHelper():
         if actual_result != expected_result:
             raise Exception(msg)
 
+    def _verify_results_rqg_new(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+        new_n1ql_result = []
+        for result in n1ql_result:
+            if result != {}:
+                for key in result.keys():
+                    if key.find('_shadow') != -1:
+                        new_n1ql_result.append(result[key])
+                    else:
+                        new_n1ql_result.append(result)
+                        break
+        n1ql_result = new_n1ql_result
+        if self._is_function_in_result(hints):
+            return self._verify_results_rqg_for_function(n1ql_result, sql_result)
+        check = self._check_sample(n1ql_result, hints)
+        actual_result = n1ql_result
+        if actual_result == [{}]:
+            actual_result = []
+        if check:
+            actual_result = self._gen_dict(n1ql_result)
+        actual_result = sorted(actual_result)
+        expected_result = sorted(sql_result)
+        if len(actual_result) != len(expected_result):
+            extra_msg = self._get_failure_message(expected_result, actual_result)
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
+                                            len(actual_result), len(expected_result), extra_msg))
+        msg = "The number of rows match but the results mismatch, please check"
+        if self._sort_data(actual_result) != self._sort_data(expected_result):
+            extra_msg = self._get_failure_message(expected_result, actual_result)
+            raise Exception(msg+"\n "+extra_msg)
+        
     def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
         new_n1ql_result = []
         for result in n1ql_result:

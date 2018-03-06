@@ -18,7 +18,7 @@ from couchbase_helper.analytics_helper import AnalyticsHelper
 from couchbase_helper.query_helper import QueryHelper
 from remote.remote_util import RemoteMachineShellConnection
 from lib.membase.helper.bucket_helper import BucketOperationHelper
-
+import random
 
 class RQGASTERIXTests(BaseTestCase):
     """ Class for defining tests for RQG base testing """
@@ -146,6 +146,7 @@ class RQGASTERIXTests(BaseTestCase):
             self.sleep(10,"Updating maxBucket count to 15")
 
     def _initialize_mysql_client(self):
+        self.database = "simple_table_db_26988493"
         if self.reset_database:
             self.client = MySQLClient(host = self.mysql_url,
                 user_id = self.user_id, password = self.password)
@@ -432,6 +433,19 @@ class RQGASTERIXTests(BaseTestCase):
 
 
     def _run_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
+        if "NUMERIC_VALUE1" in n1ql_query:
+            limit = random.randint(1, 30)
+            n1ql_query = n1ql_query.replace("NUMERIC_VALUE1", str(limit))
+            sql_query = sql_query.replace("NUMERIC_VALUE1", str(limit))
+            if limit < 10:
+                offset = limit - 2
+            else:
+                offset = limit - 10
+            n1ql_query = n1ql_query.replace("NUMERIC_VALUE2", str(offset))
+            sql_query = sql_query.replace("NUMERIC_VALUE2", str(offset))
+            self.log.info(" SQL QUERY :: {0}".format(sql_query))
+            self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+            
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         result_run = {}
         # Run n1ql query
@@ -459,7 +473,7 @@ class RQGASTERIXTests(BaseTestCase):
                         return {"success":True, "result": "Pass"}
                 return {"success":False, "result": str("different results")}
             try:
-                self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+                self.n1ql_helper._verify_results_rqg_new(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
                 self.log.info(ex)
                 return {"success":False, "result": str(ex)}
