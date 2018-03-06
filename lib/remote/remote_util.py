@@ -3163,7 +3163,7 @@ class RemoteMachineShellConnection:
                             etc_issue = line
                             break
                         # strip all extra characters
-                    etc_issue = etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(' ')
+                    etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(' ')
                     if etc_issue.lower().find('ubuntu') != -1:
                         os_distro = 'Ubuntu'
                         os_version = etc_issue
