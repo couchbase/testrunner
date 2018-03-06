@@ -17,6 +17,9 @@ class AggregatePushdownClass(QueryTests):
         self.n1ql_helper = N1QLHelper(master=self.master)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.aggr_distinct = self.input.param("aggr_distinct", False)
+        self.order_by = self.input.param("order_by", False)
+        self.having = self.input.param("having", False)
+        self.offset_limit = self.input.param("offset_limit", False)
 
     def tearDown(self):
         super(AggregatePushdownClass, self).tearDown()
@@ -39,8 +42,24 @@ class AggregatePushdownClass(QueryTests):
                         select_clause = "SELECT " + aggr_func + "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                     else:
                         select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
-                    query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"], index_fields[0]["name"])
-                                         for tup in itertools.permutations(index_fields)]
+                    if self.order_by:
+                        select_clause += " ORDER BY {3}"
+                        if self.offset_limit:
+                            select_clause += " ORDER BY {3} LIMIT 10 OFFSET 200"
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"], index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
+                    elif self.having:
+                        select_clause += " HAVING {3} is not null"
+                        if self.offset_limit:
+                            select_clause += " HAVING {3} is not null LIMIT 10 OFFSET 200"
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"], index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
+                    else:
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
                 for bucket in self.buckets:
                     for query_definition in query_definitions:
                         query = query_definition % (bucket.name, index_name)
@@ -79,8 +98,24 @@ class AggregatePushdownClass(QueryTests):
                         select_clause = "SELECT " + aggr_func + "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                     else:
                         select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
-                    query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"], index_fields[1]["name"])
-                                         for tup in itertools.permutations(index_fields)]
+                    if self.order_by:
+                        select_clause += " ORDER BY {3}"
+                        if self.offset_limit:
+                            select_clause += " ORDER BY {3} LIMIT 10 OFFSET 200"
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"], index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
+                    elif self.having:
+                        select_clause += " HAVING {3} is not null"
+                        if self.offset_limit:
+                            select_clause += " HAVING {3} is not null LIMIT 10 OFFSET 200"
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"], index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
+                    else:
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
                 for bucket in self.buckets:
                     for query_definition in query_definitions:
                         query = query_definition % (bucket.name, index_name)
@@ -119,8 +154,24 @@ class AggregatePushdownClass(QueryTests):
                         select_clause = "SELECT " + aggr_func + "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                     else:
                         select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
-                    query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"], index_fields[2]["name"])
-                                         for tup in itertools.permutations(index_fields)]
+                    if self.order_by:
+                        select_clause += " ORDER BY {3}"
+                        if self.offset_limit:
+                            select_clause += " ORDER BY {3} LIMIT 10 OFFSET 200"
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"], index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
+                    elif self.having:
+                        select_clause += " HAVING {3} is not null"
+                        if self.offset_limit:
+                            select_clause += " HAVING {3} is not null LIMIT 10 OFFSET 200"
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"], index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
+                    else:
+                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                                  index_fields[0]["name"])
+                                             for tup in itertools.permutations(index_fields)]
                 for bucket in self.buckets:
                     for query_definition in query_definitions:
                         query = query_definition % (bucket.name, index_name)
@@ -300,6 +351,44 @@ class AggregatePushdownClass(QueryTests):
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
             log.info("Following queries failed in explain: {0}".format(failed_queries_in_explain))
+
+    def test_aggregate_unsupported_methods(self):
+        def test_aggregate_group_by_leading(self):
+            failed_queries_in_explain = []
+            failed_queries_in_result = []
+            for index_name_def in self._create_array_index_definitions():
+                for create_def in index_name_def["create_definitions"]:
+                    result = self.run_cbq_query(create_def)
+                    query_definitions = []
+                    index_name = index_name_def["index_name"]
+                    index_fields = index_name_def["fields"]
+
+                    if self.aggr_distinct:
+                        select_clause = "SELECT  ARRAY_AGG(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                    else:
+                        select_clause = "SELECT ARRAY_AGG({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                    query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
+                                                              index_fields[0]["name"])
+                                         for tup in itertools.permutations(index_fields)]
+                    for bucket in self.buckets:
+                        for query_definition in query_definitions:
+                            query = query_definition % (bucket.name, index_name)
+                            result = self.run_cbq_query(query)
+                            explain_verification = self._verify_aggregate_explain_results(query,
+                                                                                          index_name,
+                                                                                          index_fields)
+                            if not explain_verification:
+                                failed_queries_in_explain.append(query)
+                            query_verification = self._verify_aggregate_query_results(result, query_definition,
+                                                                                      bucket.name)
+                            if not query_verification:
+                                failed_queries_in_result.append(query)
+                for drop_def in index_name_def["drop_definitions"]:
+                    result = self.run_cbq_query(drop_def)
+            self.assertEqual(len(failed_queries_in_result), 0,
+                             "Following Queries failed in result: {0}".format(failed_queries_in_result))
+            if failed_queries_in_explain:
+                log.info("Following queries failed in explain: {0}".format(failed_queries_in_explain))
 
     def _create_array_index_definitions(self):
         index_fields = [{"name": "name", "where_clause": "name = 'Kala'"},
