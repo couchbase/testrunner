@@ -146,7 +146,6 @@ class RQGASTERIXTests(BaseTestCase):
             self.sleep(10,"Updating maxBucket count to 15")
 
     def _initialize_mysql_client(self):
-        self.database = "simple_table_db_26988493"
         if self.reset_database:
             self.client = MySQLClient(host = self.mysql_url,
                 user_id = self.user_id, password = self.password)
