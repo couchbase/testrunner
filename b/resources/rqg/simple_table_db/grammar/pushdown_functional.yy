@@ -7,10 +7,14 @@ select:
 	SELECT sel_from FROM BUCKET_NAME WHERE string_condition group_by_order_by |
 	SELECT sel_from FROM BUCKET_NAME WHERE bool_condition group_by_order_by |
 
-	SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE complex_condition |
-    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE numeric_condition |
-    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE string_condition |
-    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE bool_condition ;
+	SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE complex_condition maybe_limit_offset |
+    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE numeric_condition maybe_limit_offset |
+    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE string_condition maybe_limit_offset |
+    SELECT sel_from_no_group_by FROM BUCKET_NAME WHERE bool_condition maybe_limit_offset ;
+
+maybe_limit_offset:
+    |
+    limit 10 offset 4;
 
 sel_from_no_group_by:
     sel_agg_a, COUNT(1) |

@@ -2,8 +2,12 @@ query:
  	select;
 
 select:
-	SELECT sel_field_groupby FROM BUCKET_NAME WHERE primary_condition GROUP BY primary_group_by_expression |
-    SELECT sel_field_no_groupby FROM BUCKET_NAME WHERE primary_condition;
+    SELECT sel_field_groupby FROM BUCKET_NAME WHERE primary_condition GROUP BY primary_group_by_expression |
+    SELECT sel_field_no_groupby FROM BUCKET_NAME WHERE primary_condition maybe_limit_offset;
+
+maybe_limit_offset:
+    |
+    limit 10 offset 4;
 
 sel_field_groupby:
     COUNT(1), agg_expression |

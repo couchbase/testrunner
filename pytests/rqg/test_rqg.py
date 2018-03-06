@@ -1556,6 +1556,8 @@ class RQGTests(BaseTestCase):
         for index_name in batch_index_definitions.keys():
             query = "{0} WITH {1}".format(batch_index_definitions[index_name]["definition"], defer_mode)
             query = query.replace("ON simple_table", "ON "+self.database+"_"+"simple_table")
+            if self.aggregate_pushdown:
+                query = query.replace("limit 10 offset 4", "")
             self.log.info(" Running Query {0} ".format(query))
             try:
                 self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
