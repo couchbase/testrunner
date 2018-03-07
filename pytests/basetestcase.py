@@ -2246,11 +2246,15 @@ class BaseTestCase(unittest.TestCase):
                     if (port != 8091 and port == int(server.port)) or \
                             (port == 8091 and server.ip.lower() == ip.lower()):
                         list.append(server)
-            self.log.info("list of all nodes in cluster: {0}".format(list))
+            self.log.info("list of {0} nodes in cluster: {1}".format(service_type, list))
             if get_all_nodes:
                 return list
             else:
-                return list[0]
+                try:
+                    return list[0]
+                except IndexError as e:
+                    self.log.info(self.services_map)
+                    raise e
 
     def get_services(self, tgt_nodes, tgt_services, start_node=1):
         services = []
