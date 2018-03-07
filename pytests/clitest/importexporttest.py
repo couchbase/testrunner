@@ -429,7 +429,7 @@ class ImportExportTests(CliBaseTest):
             self.shell.execute_command("rm -rf {0}export{1}"\
                                        .format(self.tmp_path, self.master.ip))
             self.shell.execute_command("mkdir {0}export{1}" \
-                                       .format(elf.tmp_path, self.master.ip))
+                                       .format(self.tmp_path, self.master.ip))
             export_file = self.ex_path + "default"
             cmd_str = "%s%s%s %s %s %s %s Administrator %s password %s default "\
                                                              "  %s lines %s %s "\
