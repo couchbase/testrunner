@@ -13,11 +13,14 @@ from pytests.query_tests_helper import QueryHelperTests
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from couchbase_helper.cluster import Cluster
 from gsi_replica_indexes import GSIReplicaIndexesTests
+from lib.membase.helper.cluster_helper import ClusterOperationHelper
 
 
 class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
     def setUp(self):
         super(GSIIndexPartitioningTests, self).setUp()
+        self.num_items = self.input.param("items",5000)
+        self.log.info("No. of items: {0}".format(str(self.num_items)))
         self.index_servers = self.get_nodes_from_services_map(
             service_type="index", get_all_nodes=True)
         self.rest = RestConnection(self.index_servers[0])
@@ -30,6 +33,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.recover_failed_node = self.input.param("recover_failed_node",
                                                     False)
         self.op_type = self.input.param("op_type", "create")
+        self.node_operation = self.input.param("node_op","reboot")
 
     def tearDown(self):
         super(GSIIndexPartitioningTests, self).tearDown()
@@ -131,6 +135,252 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         if not validated:
             self.fail("Looks like index was not created.")
+
+    def test_partition_index_by_non_indexed_field(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_statement,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = "idx1"
+        index_details["num_partitions"] = self.num_index_partitions
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index created not as expected")
+
+    def test_default_num_partitions(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        self.rest.set_index_settings(
+            {"indexer.numPartitions": 6})
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_statement,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = "idx1"
+        index_details["num_partitions"] = 6
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index created not as expected")
+
+    def test_change_default_num_partitions_after_create_index(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        self.rest.set_index_settings(
+            {"indexer.numPartitions": 16})
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_statement,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = "idx1"
+        index_details["num_partitions"] = 16
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index created not as expected")
+
+        self.rest.set_index_settings(
+            {"indexer.numPartitions": 32})
+
+        create_index_statement = "CREATE INDEX idx2 on default(namesalary) partition by hash(salary) USING GSI"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_statement,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = "idx2"
+        index_details["num_partitions"] = 32
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index created not as expected")
+
+        # Validate num_partitions for idx1 doesnt change
+        index_details = {}
+        index_details["index_name"] = "idx1"
+        index_details["num_partitions"] = 16
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Num partitions for existing indexes changed after updating default value")
+
+    def test_default_num_partitions_negative(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        self.rest.set_index_settings(
+            {"indexer.numPartitions": 8})
+
+        numpartition_values_str = ["abc", "2018-03-04 18:02:37"]
+        numpartition_values_num = [0,-5,46.6789]
+
+        for value in numpartition_values_str:
+
+            indexname = "index_" + str(random.randint(1,100))
+            try:
+                self.rest.set_index_settings(
+                    {"indexer.numPartitions": '{0}'.format(value)})
+
+                create_index_statement = "CREATE INDEX {0} on default(name,dept) partition by hash(salary) USING GSI".format(indexname)
+
+                self.n1ql_helper.run_cbq_query(query=create_index_statement,
+                                           server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+
+            self.sleep(10)
+            index_map = self.get_index_map()
+            self.log.info(index_map)
+
+            index_metadata = self.rest.get_indexer_metadata()
+            self.log.info("Indexer Metadata Before Build:")
+            self.log.info(index_metadata)
+
+            index_details = {}
+            index_details["index_name"] = indexname
+            index_details["num_partitions"] = 8
+            index_details["defer_build"] = False
+
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_details, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
+
+        for value in numpartition_values_num:
+            indexname = "index_" + str(random.randint(101, 200))
+            try:
+                self.rest.set_index_settings(
+                    {"indexer.numPartitions": value})
+
+                create_index_statement = "CREATE INDEX {0} on default(name,dept) partition by hash(salary) USING GSI".format(
+                    indexname)
+
+                self.n1ql_helper.run_cbq_query(query=create_index_statement,
+                                               server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+
+            self.sleep(10)
+            index_map = self.get_index_map()
+            self.log.info(index_map)
+
+            index_metadata = self.rest.get_indexer_metadata()
+            self.log.info("Indexer Metadata Before Build:")
+            self.log.info(index_metadata)
+
+            index_details = {}
+            index_details["index_name"] = indexname
+            index_details["num_partitions"] = 8
+            index_details["defer_build"] = False
+
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_details, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
+
+    def test_numpartitions_negative(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':null}}"
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        numpartition_values_str = ["abc","2018-03-04 18:02:37"]
+        for value in numpartition_values_str:
+        # Create partitioned index
+            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':'{0}'}}".format(value)
+            try:
+                self.n1ql_helper.run_cbq_query(
+                    query=create_index_statement,
+                    server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+            else:
+                self.fail("Index got created with an invalid num_partition value : {0}".format(value))
+
+        numpartition_values_num = [0, -5, 47.6789]
+        for value in numpartition_values_num:
+            # Create partitioned index
+            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}}}".format(
+                value)
+            try:
+                self.n1ql_helper.run_cbq_query(
+                    query=create_index_statement,
+                    server=self.n1ql_node)
+            except Exception, ex:
+                self.log.info(str(ex))
+            else:
+                self.fail(
+                    "Index got created with an invalid num_partition value : {0}".format(
+                        value))
 
     def test_partitioned_index_with_replica(self):
         self._load_emp_dataset(end=self.num_items)
@@ -967,6 +1217,70 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             if not index_map == {}:
                 self.fail("Indexes not dropped correctly")
 
+    def test_partitioned_index_warmup_behaviour(self):
+        node_out = self.servers[self.node_out]
+
+        self._load_emp_dataset(end=self.num_items)
+
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(name,dept,salary) partition by hash(name) USING GSI"
+        if self.defer_build:
+            create_index_query += " WITH {'defer_build':true}"
+
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = index_name_prefix
+        index_details["num_partitions"] = self.num_index_partitions
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index created not as expected")
+
+        remote_client = RemoteMachineShellConnection(node_out)
+        if self.node_operation == "kill_indexer":
+            remote_client.terminate_process(process_name="indexer")
+        else:
+            remote_client.reboot_node()
+        remote_client.disconnect()
+        # wait for restart and warmup on all node
+        self.sleep(self.wait_timeout * 3)
+        # disable firewall on these nodes
+        self.stop_firewall_on_node(node_out)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_out], self,
+                                                             wait_if_warmup=True)
+
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata After:")
+        self.log.info(index_metadata)
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index warmup behavior not as expected")
+
     def test_mutations_on_partitioned_indexes(self):
         self.run_async_index_operations(operation_type="create_index")
         self.run_doc_ops()
@@ -1062,7 +1376,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
     def test_scan_availability(self):
         create_index_query = "CREATE INDEX idx1 ON default(name,mutated) partition by hash(BASE64(meta().id)) USING GSI"
         if self.num_index_replicas:
-            create_index_query += " with {'num_replica':{{0}}};".format(
+            create_index_query += " with {{'num_replica':{0}}};".format(
                 self.num_index_replicas)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -1102,7 +1416,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
     def test_scan_availability_with_network_partitioning(self):
         create_index_query = "CREATE INDEX idx1 ON default(name,mutated) partition by hash(BASE64(meta().id)) USING GSI"
         if self.num_index_replicas:
-            create_index_query += " with {'num_replica':{{0}}};".format(
+            create_index_query += " with {{'num_replica':{0}}};".format(
                 self.num_index_replicas)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -1294,6 +1608,506 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.assertEqual(failures, 0,
                          "Some scans did not yield the same results for partitioned index and non-partitioned indexes. Details above.")
 
+    def test_load_balancing_amongst_partitioned_index_replicas(self):
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) partition by hash (meta().id) USING GSI  WITH {{'num_replica': {0}}};".format(
+            self.num_index_replicas)
+        select_query = "SELECT count(age) from default"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = index_name_prefix
+        index_details["num_partitions"] = self.num_index_partitions
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index created not as expected")
+
+        # Run select query 100 times
+        for i in range(0, 100):
+            self.n1ql_helper.run_cbq_query(query=select_query,
+                                           server=self.n1ql_node)
+
+        index_stats = self.get_index_stats(perNode=True)
+
+        load_balanced = True
+        for i in range(0, self.num_index_replicas + 1):
+            if i == 0:
+                index_name = index_name_prefix
+            else:
+                index_name = index_name_prefix + " (replica {0})".format(str(i))
+
+            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+                index_name, index_map)
+            num_request_served = index_stats[hostname]['default'][index_name][
+                "num_completed_requests"]
+            self.log.info("# Requests served by %s = %s" % (
+                index_name, num_request_served))
+            if num_request_served == 0:
+                load_balanced = False
+
+        if not load_balanced:
+            self.fail("Load is not balanced amongst index replicas")
+
+    def test_indexer_pushdowns_multiscan(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(name,dept,salary) partition by hash(meta().id) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select name from default where name is not missing and dept='HR' and salary > 120000 and salary < 150000"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        span_pushdown, _, _, _, _ = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            num_spans=3)
+
+        self.assertTrue(span_pushdown, "Operators not pushed down to indexer")
+
+        explain_query2 = "EXPLAIN select name from default where name is not missing and dept='HR' and salary BETWEEN 120000 and 150000"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query2,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 2 : {0}".format(results))
+
+        span_pushdown, _, _, _, _ = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            num_spans=3)
+
+        self.assertTrue(span_pushdown, "Operators not pushed down to indexer")
+
+        explain_query3 = "EXPLAIN select name from default where name is not missing and dept='HR' and (salary > 120000 or salary > 180000)"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query3,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 3 : {0}".format(results))
+
+        span_pushdown, _, _, _, _ = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            num_spans=3)
+
+        self.assertTrue(span_pushdown, "Operators not pushed down to indexer")
+
+    def test_indexer_pushdowns_offset_limit(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(name,dept,salary) partition by hash(meta().id) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select name from default where name is not missing and dept='HR' and salary > 120000 and salary < 150000 OFFSET 10 LIMIT 10"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        _, limit_pushdown, offset_pushdown, _, _ = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            offset=10, limit=10)
+
+        self.assertTrue(limit_pushdown & offset_pushdown,
+                        "Operators not pushed down to indexer")
+
+    def test_indexer_pushdowns_projection(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(name,dept,salary) partition by hash(meta().id) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select name from default where name is not missing and lower(dept) > 'accounts'"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        self.sleep(30)
+
+        _, _, _, projection_pushdown, _ = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            projection_list=[0, 1])
+
+        self.assertTrue(projection_pushdown,
+                        "Operators not pushed down to indexer")
+
+        explain_query2 = "EXPLAIN select name,dept,salary from default where name is not missing and lower(dept) > 'accounts'"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query2,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        _, _, _, projection_pushdown, _ = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            projection_list=[0, 1, 2])
+
+        self.assertTrue(projection_pushdown,
+                        "Operators not pushed down to indexer")
+
+        explain_query3 = "EXPLAIN select meta().id from default where name is not missing and lower(dept) > 'accounts'"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query3,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        _, _, _, projection_pushdown, _ = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            projection_list=[0, 1])
+
+        self.assertTrue(projection_pushdown,
+                        "Operators not pushed down to indexer")
+
+    def test_indexer_pushdowns_sorting(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(name,dept,salary) partition by hash(meta().id) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select name,dept,salary from default where name is not missing order by name,dept,salary"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        _, _, _, _, sorting_pushdown = self.validate_query_plan(
+            plan=results["results"][0]["plan"],
+            index_name="partitioned_idx1",
+            index_order_list=[{'keypos': 0}, {'keypos': 1}, {'keypos': 2}])
+
+        self.assertTrue(sorting_pushdown,
+                        "Operators not pushed down to indexer")
+
+        explain_query2 = "EXPLAIN select name,dept,salary from default where name is not missing order by name,dept"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query2,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 2 : {0}".format(results))
+
+        _, _, _, _, sorting_pushdown = self.validate_query_plan(
+            plan=results["results"][0]["plan"],
+            index_name="partitioned_idx1",
+            index_order_list=[{'keypos': 0}, {'keypos': 1}])
+
+        self.assertTrue(sorting_pushdown,
+                        "Operators not pushed down to indexer")
+
+        explain_query3 = "EXPLAIN select meta().id from default where name is not missing order by name"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query3,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 3 : {0}".format(results))
+
+        _, _, _, _, sorting_pushdown = self.validate_query_plan(
+            plan=results["results"][0]["plan"],
+            index_name="partitioned_idx1",
+            index_order_list=[{'keypos': 0}])
+
+        self.assertTrue(sorting_pushdown,
+                        "Operators not pushed down to indexer")
+
+    def test_indexer_pushdowns_sorting_desc(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(name,dept,salary desc) partition by hash(meta().id) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select name,dept,salary from default where name is not missing order by name,dept,salary desc"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        _, _, _, _, sorting_pushdown = self.validate_query_plan(
+            plan=results["results"][0]["plan"],
+            index_name="partitioned_idx1",
+            index_order_list=[{'keypos': 0}, {'keypos': 1},
+                              {"desc": True, 'keypos': 2}])
+
+        self.assertTrue(sorting_pushdown,
+                        "Operators not pushed down to indexer")
+
+    def test_multiple_operator_indexer_pushdowns(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(name,dept,salary) partition by hash(meta().id) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select name from default where name is not missing order by name OFFSET 10 LIMIT 10"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        scan_pushdown, limit_pushdown, offset_pushdown, projection_pushdown, sorting_pushdown = self.validate_query_plan(
+            plan=results["results"][0]["plan"], index_name="partitioned_idx1",
+            num_spans=1, offset=10, limit=10, index_order_list=[{'keypos': 0}],
+            projection_list=[0])
+
+        self.assertTrue(
+            scan_pushdown & limit_pushdown & offset_pushdown & projection_pushdown & sorting_pushdown,
+            "Operators not pushed down to indexer")
+
+    def test_aggregate_indexer_pushdowns_group_by_leading_keys(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(dept,name,salary) partition by hash(meta().id) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select dept,count(*) from default where dept is not missing GROUP BY dept"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
+        explain_query2 = "EXPLAIN select dept,sum(salary), min(salary), max(salary), avg(salary) from default where dept is not missing GROUP BY dept"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query2,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 2 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
+    def test_aggregate_indexer_pushdowns_group_by_partition_keys(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(dept,name,salary) partition by hash(LOWER(name),UPPER(dept)) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select name,dept,count(*) from default where dept is not missing GROUP BY name,dept"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
+        explain_query2 = "EXPLAIN select dept,sum(salary), min(salary), max(salary), avg(salary) from default where dept is not missing GROUP BY dept"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query2,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 2 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
+    def test_aggregate_indexer_pushdowns_partition_keys_index_keys(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(dept,name,salary) partition by hash(LOWER(dept)) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select salary,count(*) from default where dept is not missing GROUP BY salary"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
+        explain_query2 = "EXPLAIN select dept,sum(salary), min(salary), max(salary), avg(salary) from default where dept is not missing GROUP BY dept"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query2,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 2 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
+    def test_aggregate_indexer_pushdowns_groupby_trailing_keys_partition_keys(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(dept,name,salary) partition by hash(salary) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select salary,count(*) from default where dept is not missing GROUP BY salary"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
+    def test_aggregate_indexer_pushdowns_groupby_trailing_keys_not_partition_keys(
+            self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create Partitioned indexes
+        create_partitioned_index_query = "CREATE INDEX partitioned_idx1 ON default(dept,name,salary) partition by hash(dept) USING GSI with {{'num_partition':{0}}};".format(
+            self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_partitioned_index_query,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        explain_query1 = "EXPLAIN select salary,count(*) from default where dept is not missing GROUP BY salary"
+        results = self.n1ql_helper.run_cbq_query(query=explain_query1,
+                                                 server=self.n1ql_node)
+
+        self.log.info("Explain plan for query 1 : {0}".format(results))
+
+        agg_pushdown = False
+        if "index_group_aggs" in str(results):
+            agg_pushdown = True
+
+        self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
+
     def test_rebalance_out_with_partitioned_indexes_with_concurrent_querying(
             self):
         self._load_emp_dataset(end=self.num_items)
@@ -1305,10 +2119,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
                 self.num_index_replicas, self.num_index_partitions)
         else:
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}}}".format(
+                self.num_index_partitions)
+            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
+                self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -1354,6 +2168,114 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        t1.join()
+
+        self.sleep(30)
+
+        # Get Stats and index partition map after rebalance
+        node_list = copy.deepcopy(self.node_list)
+        node_list.remove(node_out_str)
+        self.log.info(node_list)
+
+        index_data_after = {}
+        for index in index_names:
+            _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index, node_list=node_list)
+            index_data_after[index] = {}
+            index_data_after[index]["item_count"] = total_item_count_after
+            index_data_after[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        for index in index_names:
+            # Validate index item count before and after
+            self.assertEqual(index_data_before[index]["item_count"],
+                             index_data_after[index]["item_count"],
+                             "Item count in index do not match after cluster ops.")
+
+            # Validate host list, partition count and partition distribution
+            self.assertTrue(
+                self.validate_partition_distribution_after_cluster_ops(
+                    index, index_data_before[index]["index_metadata"],
+                    index_data_after[index]["index_metadata"], [],
+                    [node_out]),
+                "Partition distribution post cluster ops has some issues")
+
+    def test_rebalance_out_with_partitioned_indexes_with_concurrent_querying_stop_and_resume(
+            self):
+        resume = self.input.param("resume_stopped_rebalance",False)
+        resume_delay = self.input.param("resume_delay",0)
+
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create partitioned index
+        if self.num_index_replicas > 0:
+            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
+                self.num_index_replicas, self.num_index_partitions)
+            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
+                self.num_index_replicas, self.num_index_partitions)
+        else:
+            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}}}".format(
+                self.num_index_partitions)
+            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
+                self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(
+                query=create_primary_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        self.sleep(30)
+
+        node_out = self.servers[self.node_out]
+        node_out_str = node_out.ip + ":" + str(node_out.port)
+
+        # Get Index Names
+        index_names = ["idx1", "pidx1"]
+        if self.num_index_replicas > 0:
+            for i in range(1, self.num_index_replicas + 1):
+                index_names.append("idx1 (replica {0})".format(str(i)))
+                index_names.append("pidx1 (replica {0})".format(str(i)))
+
+        self.log.info(index_names)
+
+        # Get Stats and index partition map before rebalance
+        index_data_before = {}
+        for index in index_names:
+            _, total_item_count_before, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index)
+            index_data_before[index] = {}
+            index_data_before[index]["item_count"] = total_item_count_before
+            index_data_before[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        # start querying
+        query = "select name,dept,salary from default where name is not missing and dept='HR' and salary > 120000;"
+        t1 = Thread(target=self._run_queries, args=(query, 30,))
+        t1.start()
+        # rebalance out a indexer node when querying is in progress
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        stopped = RestConnection(self.master).stop_rebalance(
+            wait_timeout=self.wait_timeout / 3)
+        self.assertTrue(stopped, msg="unable to stop rebalance")
+        rebalance.result()
+
+        if resume:
+            if resume_delay > 0:
+                self.sleep(resume_delay,"Sleep for some time before resume stopped rebalance")
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [], [node_out])
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
         t1.join()
 
         self.sleep(30)
@@ -1443,7 +2365,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         t1.start()
         # rebalance out a indexer node when querying is in progress
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [node_in], [], services=services_in)
+                                                 [node_in], [],
+                                                 services=services_in)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -1539,7 +2462,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         t1.start()
         # rebalance out a indexer node when querying is in progress
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [node_in], [node_out], services=services_in)
+                                                 [node_in], [node_out],
+                                                 services=services_in)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -1869,6 +2793,178 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     []),
                 "Partition distribution post cluster ops has some issues")
 
+    def test_rebalance_out_with_replica_partitioned_indexes_partition_loss(
+            self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
+            self.num_index_replicas, self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        self.sleep(30)
+
+        node_out = self.servers[self.node_out]
+        node_out_str = node_out.ip + ":" + str(node_out.port)
+
+        # Get Index Names
+        index_names = ["idx1"]
+        if self.num_index_replicas > 0:
+            for i in range(1, self.num_index_replicas + 1):
+                index_names.append("idx1 (replica {0})".format(str(i)))
+
+        self.log.info(index_names)
+
+        # rebalance out an indexer node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        self.sleep(30)
+
+        # Get Stats and index partition map after rebalance
+        node_list = copy.deepcopy(self.node_list)
+        node_list.remove(node_out_str)
+        self.log.info(node_list)
+
+        index_data_after = {}
+        total_index_item_count = 0
+        bucket_item_count = 0
+        total_partition_count = 0
+        for index in index_names:
+            bucket_item_count, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index, node_list=node_list)
+            index_data_after[index] = {}
+            index_data_after[index]["item_count"] = total_item_count_after
+            index_data_after[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+            total_index_item_count += total_item_count_after
+            total_partition_count += self.get_num_partitions_for_index(
+                self.rest.get_indexer_metadata(), index)
+
+        self.assertEqual(total_index_item_count, bucket_item_count,
+                         "Item count in index do not match after cluster ops.")
+
+        self.assertEqual(self.num_index_partitions, total_partition_count,
+                         "Some partitions are not available after rebalance")
+
+    def test_node_failure_during_rebalance_out_partitioned_indexes(
+            self):
+        fail_node = self.input.param("fail_node",None)
+        if fail_node:
+            node_to_fail = self.servers[fail_node]
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name)"
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        self.sleep(30)
+
+        node_out = self.servers[self.node_out]
+        node_out_str = node_out.ip + ":" + str(node_out.port)
+
+        # Get Index Names
+        index_names = ["idx1"]
+        if self.num_index_replicas > 0:
+            for i in range(1, self.num_index_replicas + 1):
+                index_names.append("idx1 (replica {0})".format(str(i)))
+
+        self.log.info(index_names)
+
+        # rebalance out an indexer node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+
+        reached = RestHelper(self.rest).rebalance_reached()
+
+        remote_client = RemoteMachineShellConnection(node_to_fail)
+        if self.node_operation == "kill_indexer":
+            remote_client.kill_indexer()
+        else:
+            remote_client.reboot_node()
+        remote_client.disconnect()
+        # wait for restart and warmup on all node
+        self.sleep(self.wait_timeout * 3)
+        # disable firewall on these nodes
+        self.stop_firewall_on_node(node_to_fail)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail], self,
+                                                             wait_if_warmup=True)
+
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_node_failure_during_rebalance_in_partitioned_indexes(
+            self):
+        fail_node = self.input.param("fail_node", None)
+
+        if fail_node:
+            node_to_fail = self.servers[fail_node]
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name)"
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        self.sleep(30)
+
+        node_in = self.servers[self.nodes_init]
+        node_in_str = node_in.ip + ":" + str(node_in.port)
+        services_in = ["index"]
+
+        # Get Index Names
+        index_names = ["idx1"]
+        if self.num_index_replicas > 0:
+            for i in range(1, self.num_index_replicas + 1):
+                index_names.append("idx1 (replica {0})".format(str(i)))
+
+        self.log.info(index_names)
+
+        # rebalance out an indexer node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [node_in], [],
+                                                 services=services_in)
+
+        reached = RestHelper(self.rest).rebalance_reached()
+
+        remote_client = RemoteMachineShellConnection(node_to_fail)
+        if self.node_operation == "kill_indexer":
+            remote_client.kill_indexer()
+        else:
+            remote_client.reboot_node()
+        remote_client.disconnect()
+        # wait for restart and warmup on all node
+        self.sleep(self.wait_timeout * 3)
+        # disable firewall on these nodes
+        self.stop_firewall_on_node(node_to_fail)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail], self,
+                                                             wait_if_warmup=True)
+
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
     def get_stats_for_partitioned_indexes(self, bucket_name="default",
                                           index_name=None, node_list=None):
         if node_list == None:
@@ -2044,6 +3140,19 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 "Partitions not distributed correctly post cluster ops")
 
         return is_num_partitions_equal & is_node_list_correct & is_partitions_distributed
+
+    def get_num_partitions_for_index(self,index_map,index_name):
+        num_partitions = 0
+        for index_map_item in index_map["status"]:
+            if index_map_item["name"] == index_name:
+                num_partitions = index_map_item["numPartition"]
+
+        if num_partitions == 0:
+            self.log.info("Index not found, or some other issue")
+        else:
+            return num_partitions
+
+
 
     # Description : Returns a list of create index statements generated randomly for emp dataset.
     #               The create index statements are generated by randomizing various parts of the statements like list of
@@ -2247,6 +3356,96 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     "Generated a malformed index definition. Discarding it.")
 
         return index_details
+
+    def validate_query_plan(self, plan, index_name, num_spans=0, limit=0,
+                            offset=0, projection_list=[], index_order_list=[]):
+        span_pushdown = False
+        limit_pushdown = False
+        offset_pushdown = False
+        projection_pushdown = False
+        sorting_pushdown = False
+
+        index_section_found = False
+        plan_index_section = {}
+        for plan_child in plan["~children"]:
+            if "index" in plan_child:
+                index_section_found = True
+                plan_index_section = plan_child
+                break;
+
+        for plan_child in plan["~children"]:
+            if not index_section_found:
+                for plan_child_child in plan_child["~children"]:
+                    if "index" in plan_child_child:
+                        index_section_found = True
+                        plan_index_section = plan_child_child
+                        break;
+            else:
+                break
+
+        if index_section_found:
+            if plan_index_section["index"] == index_name:
+                if num_spans > 0:
+                    if "spans" in plan_index_section:
+                        if len(plan_index_section["spans"][0][
+                                   "range"]) != num_spans:
+                            self.log.info(
+                                "Looks like all spans not pushed down to indexer. Spans pushed down to indexer = %s",
+                                len(plan_index_section["spans"]["range"]))
+                        else:
+                            self.log.info(
+                                "All spans pushed down to indexer")
+                            span_pushdown = True
+                    else:
+                        self.log.info("Spans not pushed down to indexer")
+
+                if limit > 0:
+                    if "limit" in plan_index_section:
+                        if int(plan_index_section["limit"]) != limit:
+                            self.log.info(
+                                "Limit not correctly pushed down to indexer")
+                        else:
+                            self.log.info(
+                                "Limit pushed down to indexer")
+                            limit_pushdown = True
+                    else:
+                        self.log.info("Limit not pushed down to indexer")
+
+                if offset > 0:
+                    if "offset" in plan_index_section:
+                        if int(plan_index_section["offset"]) != offset:
+                            self.log.info(
+                                "Offset not correctly pushed down to indexer")
+                        else:
+                            self.log.info(
+                                "Offset pushed down to indexer")
+                            offset_pushdown = True
+                    else:
+                        self.log.info("Offset not pushed down to indexer")
+
+                if projection_list:
+                    if "index_projection" in plan_index_section:
+                        if plan_index_section["index_projection"][
+                            "entry_keys"] != projection_list:
+                            self.log.info(
+                                "Projection not correctly pushed down to indexer")
+                        else:
+                            self.log.info(
+                                "Projection pushed down to indexer")
+                            projection_pushdown = True
+
+                if index_order_list:
+                    if "index_order" in plan_index_section:
+                        if plan_index_section["index_order"] != index_order_list:
+
+                            self.log.info(
+                                "Sorting not correctly pushed down to indexer")
+                        else:
+                            self.log.info(
+                                "Sorting pushed down to indexer")
+                            sorting_pushdown = True
+
+        return span_pushdown, limit_pushdown, offset_pushdown, projection_pushdown, sorting_pushdown
 
     def _load_emp_dataset(self, op_type="create", expiration=0, start=0,
                           end=1000):
