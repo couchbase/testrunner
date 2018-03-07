@@ -39,6 +39,7 @@ class RQGASTERIXTests(BaseTestCase):
         self.failure_record_path= self.input.param("failure_record_path","/tmp")
         self.use_mysql= self.input.param("use_mysql",True)
         self.joins = self.input.param("joins",False)
+        self.ansi_joins = self.input.param("ansi_joins", False)
         self.subquery = self.input.param("subquery",False)
         self.initial_loading_to_cb= self.input.param("initial_loading_to_cb",True)
         self.change_bucket_properties = self.input.param("change_bucket_properties",False)
@@ -323,6 +324,7 @@ class RQGASTERIXTests(BaseTestCase):
             list = self.client._convert_template_query_info(
                     table_map = table_map,
                     n1ql_queries = list,
+                    ansi_joins = self.ansi_joins,
                     gen_expected_result = False)
 
             # Create threads and run the batch
