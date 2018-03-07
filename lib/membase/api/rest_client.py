@@ -786,10 +786,13 @@ class RestConnection(object):
         if not headers:
             headers = self._create_headers()
         end_time = time.time() + timeout
-        log.debug("Executing {0} request for following api {1} with Params: {2}  and Headers: {3}".format(method,api,params,headers))
+        log.debug("Executing {0} request for following api {1} with Params: {2}  and Headers: {3}"\
+                                                                .format(method,api,params,headers))
+        count = 1
         while True:
             try:
-                response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers)
+                response, content = httplib2.Http(timeout=timeout).request(api, method,
+                                                                           params, headers)
                 if response['status'] in ['200', '201', '202']:
                     return True, content, response
                 else:
@@ -797,7 +800,8 @@ class RestConnection(object):
                         json_parsed = json.loads(content)
                     except ValueError as e:
                         json_parsed = {}
-                        json_parsed["error"] = "status: {0}, content: {1}".format(response['status'], content)
+                        json_parsed["error"] = "status: {0}, content: {1}"\
+                                                           .format(response['status'], content)
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
@@ -808,14 +812,20 @@ class RestConnection(object):
                     log.debug(''.join(traceback.format_stack()))
                     return False, content, response
             except socket.error as e:
-                log.error("socket error while connecting to {0} error {1} ".format(api, e))
+                if count < 4:
+                    log.error("socket error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
+                    log.error("Tried ta connect {0} times".format(count))
                     raise ServerUnavailableException(ip=self.ip)
             except httplib2.ServerNotFoundError as e:
-                log.error("ServerNotFoundError error while connecting to {0} error {1} ".format(api, e))
+                if count < 4:
+                    log.error("ServerNotFoundError error while connecting to {0} error {1} "\
+                                                                              .format(api, e))
                 if time.time() > end_time:
+                    log.error("Tried ta connect {0} times".format(count))
                     raise ServerUnavailableException(ip=self.ip)
             time.sleep(3)
+            count += 1
 
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         api = self.baseUrl + 'settings/web'

@@ -1860,7 +1860,7 @@ class RemoteMachineShellConnection:
                               "enable coredump cbenable_core_dumps.sh /tmp")
             else:
                 output, error = self.execute_command('/sbin/sysctl vm.swappiness={0}'.format(swappiness))
-                success &= self.log_command_output(output, error, track_words)
+                success &= self.log_command_output(output, error, track_words, debug=False)
 
             if self.info.deliverable_type == 'rpm':
                 if self.nonroot:
@@ -1887,7 +1887,7 @@ class RemoteMachineShellConnection:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if force:
                         output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
-                                                             .format(environment, build.name))
+                                                .format(environment, build.name), debug=False)
                     else:
                         output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
                                                 .format(environment, build.name), debug=False)
@@ -1920,7 +1920,8 @@ class RemoteMachineShellConnection:
                                                  .format(environment, build.name), debug=False)
 
             if "SUSE" in self.info.distribution_type:
-                if error and error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server':
+                if error and error[0] == 'insserv: Service network is missed in the runlevels 2'\
+                                         ' 4 to use service couchbase-server':
                         log.info("Ignore this error for opensuse os")
                         error = []
             if output:
@@ -1929,14 +1930,14 @@ class RemoteMachineShellConnection:
             if error:
                 server_ip = "\n\n**** Installing on server: {0} ****".format(self.ip)
                 error.insert(0, server_ip)
-            success &= self.log_command_output(output, error, track_words)
+            success &= self.log_command_output(output, error, track_words, debug=False)
             nonroot_path_start = ""
             if not self.nonroot:
                 nonroot_path_start = "/"
                 self.create_directory(path)
                 output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
-                                                         format(server_type, abbr_product, path))
-                success &= self.log_command_output(output, error, track_words)
+                                            format(server_type, abbr_product, path), debug=False)
+                success &= self.log_command_output(output, error, track_words, debug=False)
 
             if vbuckets:
                 """
@@ -1948,7 +1949,7 @@ class RemoteMachineShellConnection:
                                                      "export {0}_NUM_VBUCKETS/' "
                                                      "{3}opt/{2}/bin/{2}-server".
                                                      format(server_type.upper(), vbuckets,
-                                                            server_type, nonroot_path_start))
+                                            server_type, nonroot_path_start), debug=False)
                 success &= self.log_command_output(output, error, track_words)
             if upr is not None:
                 protocol = "tap"
@@ -1998,7 +1999,7 @@ class RemoteMachineShellConnection:
                                                           "builds will be skipped")
                     self.log_command_output(output, error, track_words)
                 else:
-                    success &= self.log_command_output(output, error, track_words)
+                    success &= self.log_command_output(output, error, track_words, debug=False)
         elif self.info.deliverable_type in ["zip"]:
             """ close Safari browser before install """
             self.terminate_process(self.info, "Safari")
@@ -2008,18 +2009,21 @@ class RemoteMachineShellConnection:
                                                       | awk '{print $2}' | xargs kill -9 ")
             self.log_command_output(o, r)
             self.sleep(20)
-            output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
+            output, error = self.execute_command("cd ~/Downloads ;sudo open couchbase-server*.zip")
             self.log_command_output(output, error)
             self.sleep(20)
-            output, error = self.execute_command("mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/")
+            cmd1 = "sudo mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/"
+            cmd2 = "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app"
+            cmd3 = "sudo open /Applications/Couchbase\ Server.app"
+            output, error = self.execute_command(cmd1)
             self.log_command_output(output, error)
-            output, error = self.execute_command("xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app")
+            output, error = self.execute_command(cmd2)
             self.log_command_output(output, error)
-            output, error = self.execute_command("open /Applications/Couchbase\ Server.app")
+            output, error = self.execute_command(cmd3)
             self.log_command_output(output, error)
 
-        output, error = self.execute_command("rm -f *-diag.zip")
-        self.log_command_output(output, error, track_words)
+        output, error = self.execute_command("rm -f *-diag.zip", debug=False)
+        self.log_command_output(output, error, track_words, debug=False)
         return success
 
     def install_server_win(self, build, version, startserver=True,
@@ -2839,13 +2843,14 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
         self.terminate_processes(self.info, terminate_process_list)
 
-    def log_command_output(self, output, error, track_words=()):
+    def log_command_output(self, output, error, track_words=(), debug=True):
         # success means that there are no track_words in the output
         # and there are no errors at all, if track_words is not empty
         # if track_words=(), the result is not important, and we return True
         success = True
         for line in error:
-            log.error(line)
+            if debug:
+                log.error(line)
             if track_words:
                 if "Warning" in line and "hugepages" in line:
                     log.info("There is a warning about transparent_hugepage "
@@ -2882,13 +2887,14 @@ class RemoteMachineShellConnection:
                               "\nGo to log_command_output to add error mesg to bypass it.")
                     success = False
         for line in output:
-            log.info(line)
+            if debug:
+                log.info(line)
             if any(s.lower() in line.lower() for s in track_words):
                 if "Warning" in line and "hugepages" in line:
                     log.info("There is a warning about transparent_hugepage may be in used when install cb server.\
                               So we will disable transparent_hugepage in this vm")
                     output, error = self.execute_command("echo never > /sys/kernel/mm/transparent_hugepage/enabled")
-                    self.log_command_output(output, error)
+                    self.log_command_output(output, error, debug=debug)
                     success = True
                 else:
                     success = False
