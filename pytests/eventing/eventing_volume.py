@@ -17,12 +17,11 @@ class EventingVolume(EventingBaseTest):
         self.dst_bucket_name2 = self.input.param('dst_bucket_name2', 'dst_bucket2')
         self.worker_count = self.input.param('worker_count', 3)
         self.cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 3)
-        # self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=3000)
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=3000)
         if self.create_functions_buckets:
             # self.bucket_size = 500
             # self.meta_bucket_size = 500
-            self.bucket_size = 100
+            self.bucket_size = 600
             self.meta_bucket_size = 100
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)
@@ -41,7 +40,7 @@ class EventingVolume(EventingBaseTest):
                                                 bucket_params=bucket_params_meta)
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
-        self.batch_size = 10000
+        self.batch_size = 1000000
         # index is required for delete operation through n1ql
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.n1ql_helper = N1QLHelper(shell=self.shell,
@@ -73,14 +72,14 @@ class EventingVolume(EventingBaseTest):
         # Wait for bootstrap to complete for all the functions
         self.wait_for_all_boostrap_to_complete(functions)
         # Validate the results of all the functions deployed
-        self.verify_eventing_results_of_all_functions(docs_expected=self.docs_per_day * 2016, verify_results=False,
-                                                      timeout=6000 * self.docs_per_day)
+        self.verify_eventing_results_of_all_functions(docs_expected=self.docs_per_day * 2016, verify_results=True,
+                                                      timeout=3600)
         # Load data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Validate the results of all the functions deployed
-        self.verify_eventing_results_of_all_functions(docs_expected=0, verify_results=False,
-                                                      timeout=6000 * self.docs_per_day)
+        self.verify_eventing_results_of_all_functions(docs_expected=0, verify_results=True,
+                                                      timeout=3600)
         # Undeploy and delete all the functions
         self.undeploy_delete_all_functions()
 
@@ -126,7 +125,7 @@ class EventingVolume(EventingBaseTest):
                                          bucket=self.dst_bucket_name2, timeout=timeout)
         else:
             # Just print the stats after sleeping for 10 mins. Required to get the latest stats.
-            self.sleep(600)
+            self.sleep(timeout)
             eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
             for eventing_node in eventing_nodes:
                 rest_conn = RestConnection(eventing_node)

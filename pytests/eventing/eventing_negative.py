@@ -45,7 +45,7 @@ class EventingNegative(EventingBaseTest):
             self.delete_function(body)
         except Exception as ex:
             log.info("output from delete API before undeploying function: {0}".format(str(ex)))
-            message = "Skipping delete request from temp store for app: {0} as it hasn't been undeployed".format(
+            message = "Skipping delete request from primary store for app: {0} as it hasn't been undeployed".format(
                 self.function_name)
             if message not in str(ex):
                 self.fail("Function delete succeeded even when function was in deployed state")
