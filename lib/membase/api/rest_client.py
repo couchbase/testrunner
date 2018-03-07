@@ -2245,7 +2245,7 @@ class RestConnection(object):
         if maxTTL:
             init_params['maxTTL'] = maxTTL
 
-        if compressionMode:
+        if compressionMode and self.is_enterprise_edition():
             init_params['compressionMode'] = compressionMode
 
         if bucketType == 'ephemeral':
@@ -2326,7 +2326,7 @@ class RestConnection(object):
             params_dict["timeSynchronization"] = timeSynchronization
         if maxTTL:
             params_dict["maxTTL"] = maxTTL
-        if compressionMode:
+        if compressionMode and self.is_enterprise_edition():
             params_dict["compressionMode"] = compressionMode
 
         params = urllib.urlencode(params_dict)
