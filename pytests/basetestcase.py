@@ -18,7 +18,7 @@ from couchbase_helper.cluster import Cluster
 from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
-from TestInput import TestInputSingleton
+from TestInput import TestInputSingleton, TestInputServer
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -32,6 +32,7 @@ from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from membase.helper.cluster_helper import ClusterOperationHelper
 from security.rbac_base import RbacBase
+
 
 from couchbase_cli import CouchbaseCLI
 import testconstants
@@ -2244,7 +2245,11 @@ class BaseTestCase(unittest.TestCase):
                         server.ip = hostname
                         shell.disconnect()
                     elif "couchbase.com" in server.ip and "couchbase.com" not in ip:
-                        shell = RemoteMachineShellConnection(ip)
+                        node = TestInputServer()
+                        node.ip = ip
+                        node.ssh_username = server.ssh_username
+                        node.ssh_password = server.ssh_password
+                        shell = RemoteMachineShellConnection(node)
                         hostname = shell.get_full_hostname()
                         self.log.info("convert IP: {0} to hostname: {1}" \
                                       .format(ip, hostname))
