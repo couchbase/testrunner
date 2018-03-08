@@ -2294,7 +2294,7 @@ class BaseTestCase(unittest.TestCase):
                 self.nodes_out_list.append(self.servers[1])
             return
         for service_fail_map in self.nodes_out_dist.split("-"):
-            tokens = service_fail_map.split(":")
+            tokens = service_fail_map.rsplit(":", 1)
             count = 0
             service_type = tokens[0]
             service_type_count = int(tokens[1])
