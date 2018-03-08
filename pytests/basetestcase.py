@@ -2243,6 +2243,13 @@ class BaseTestCase(unittest.TestCase):
                                       .format(server.ip, hostname))
                         server.ip = hostname
                         shell.disconnect()
+                    elif "couchbase.com" in server.ip and "couchbase.com" not in ip:
+                        shell = RemoteMachineShellConnection(ip)
+                        hostname = shell.get_full_hostname()
+                        self.log.info("convert IP: {0} to hostname: {1}" \
+                                      .format(ip, hostname))
+                        ip = hostname
+                        shell.disconnect()
                     if (port != 8091 and port == int(server.port)) or \
                             (port == 8091 and server.ip.lower() == ip.lower()):
                         list.append(server)
