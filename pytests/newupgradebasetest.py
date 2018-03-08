@@ -185,13 +185,16 @@ class NewUpgradeBaseTest(QueryHelperTests):
                 server.hostname = hostname
 
     def operations(self, servers, services=None):
-        self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
-                                            self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port)
+        self.quota = self._initialize_nodes(self.cluster, servers,
+                                            self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled,
+                                            self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers,
+                                            self.maxParallelReplicaIndexers, self.port)
         if self.port and self.port != '8091':
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
-        self.sleep(120, "wait to make sure node is ready")
+        self.sleep(20, "wait to make sure node is ready")
         if len(servers) > 1:
             if services is None:
                 self.cluster.rebalance([servers[0]], servers[1:], [],
@@ -199,8 +202,10 @@ class NewUpgradeBaseTest(QueryHelperTests):
             else:
                 set_services = services.split(",")
                 for i in range(1, len(set_services)):
-                    self.cluster.rebalance([servers[0]], [servers[i]], [], use_hostnames=self.use_hostnames, services=[set_services[i]])
-                    self.sleep(60)
+                    self.cluster.rebalance([servers[0]], [servers[i]], [],
+                                           use_hostnames=self.use_hostnames,
+                                           services=[set_services[i]])
+                    self.sleep(10)
 
         self.buckets = []
         gc.collect()
@@ -216,7 +221,8 @@ class NewUpgradeBaseTest(QueryHelperTests):
                     client.stop_persistence()
             self.sleep(10)
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
+        self._load_all_buckets(self.master, gen_load, "create", self.expire_time,
+                                                             flag=self.item_flag)
         if not self.stop_persistence:
             self._wait_for_stats_all_buckets(servers)
         else:
@@ -227,7 +233,7 @@ class NewUpgradeBaseTest(QueryHelperTests):
                     drain_rate += int(client.stats()["ep_queue_size"])
                 self.sleep(3, "Pause to load all items")
                 self.assertEqual(self.num_items * (self.num_replicas + 1), drain_rate,
-                                 "Persistence is stopped, drain rate is incorrect %s. Expected %s" % (
+                    "Persistence is stopped, drain rate is incorrect %s. Expected %s" % (
                                     drain_rate, self.num_items * (self.num_replicas + 1)))
         self.change_settings()
 
