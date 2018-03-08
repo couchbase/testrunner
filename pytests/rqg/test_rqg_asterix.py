@@ -435,7 +435,7 @@ class RQGASTERIXTests(BaseTestCase):
 
     def _run_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
         if "NUMERIC_VALUE1" in n1ql_query:
-            limit = random.randint(1, 30)
+            limit = random.randint(2, 30)
             n1ql_query = n1ql_query.replace("NUMERIC_VALUE1", str(limit))
             sql_query = sql_query.replace("NUMERIC_VALUE1", str(limit))
             if limit < 10:
