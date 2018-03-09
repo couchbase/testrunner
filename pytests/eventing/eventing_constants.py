@@ -5,6 +5,7 @@ class HANDLER_CODE:
     N1QL_INSERT_ON_UPDATE_WITH_DOC_TIMER = 'handler_code/n1ql_insert_with_doc_timer.js'
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'handler_code/n1ql_insert_with_cron_timer.js'
     BUCKET_OPS_WITH_DOC_TIMER = 'handler_code/bucket_op_with_doc_timer.js'
+    BUCKET_OPS_WITH_DOC_TIMER1 = 'handler_code/bucket_op_with_doc_timer1.js'
     BUCKET_OPS_WITH_CRON_TIMER = 'handler_code/bucket_op_with_cron_timer.js'
     BUCKET_OPS_WITH_CRON_TIMER_WITH_SECOND_BUCKET = 'handler_code/bucket_op_on_second_bucket_with_cron_timer.js'
     DELETE_BUCKET_OP_ON_DELETE = 'handler_code/delete_doc_bucket_op.js'

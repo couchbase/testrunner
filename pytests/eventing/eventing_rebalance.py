@@ -855,3 +855,32 @@ class EventingRebalance(EventingBaseTest):
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_function_deploy_when_a_node_is_rebalanced_in(self):
+        services_in = self.input.param("services_in","eventing")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        try:
+            # rebalance in a node when eventing is processing mutations
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [], services=[services_in])
+            self.sleep(timeout=5)
+            expected_progress = 10
+            reached = RestHelper(self.rest).rebalance_reached(expected_progress)
+            self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(expected_progress))
+            if not RestHelper(self.rest).is_cluster_rebalanced():
+                self.deploy_function(body)
+            else:
+                self.fail("Rebalance completed before we could start deployment of function")
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        except Exception as ex:
+            log.info("{0}".format(str(ex)))
+            if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
+                self.fail("Rebalance failed unexpectedly : {0}".format(str(ex)))
+        else:
+            self.fail("Deployment of function succeeded during rebalance...")
+        self.undeploy_and_delete_function(body)
