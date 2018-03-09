@@ -4105,9 +4105,8 @@ class RemoteMachineShellConnection:
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [COMMAND] [CLUSTER:[PORT]] [USER] [PASWORD] [OPTIONS]
         command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
-
-        output, error = self.execute_command(command, use_channel=True)
-        self.log_command_output(output, error)
+        log.info("command to run: {0}".format(command))
+        output, error = self.execute_command(command, debug=False, use_channel=True)
         return output, error
 
     def get_cluster_certificate_info(self, bin_path, cert_path,

@@ -180,7 +180,16 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
                 "ct_run", "curl", "curl-config", "derb", "dialyzer", "dump-guts", "epmd", "erl", "erlc", "escript", "genbrk", \
                 "gencfu", "gencnval", "genctd", "generate_cert", "genrb", "icu-config", "install", "makeconv", "mctimings", \
                 "memcached", "moxi", "reports", "sigar_port", "sqlite3", "to_erl", "tools", "typer", "uconv", "vbmap"]
-
+LOG_FILE_NAMES = ['cbcollect_info.log', 'couchbase.log', 'couchstore_local.log', 'ddocs.log', 'diag.log', 'fts_diag.json',
+                  'indexer_mprof.log', 'indexer_pprof.log', 'ini.log', 'kv_trace.json', 'master_events.log', 'memcached.log',
+                  'ns_server.analytics.log', 'ns_server.analytics_cbas.log', 'ns_server.analytics_shutdown.log',
+                  'ns_server.analytics_trace.json', 'ns_server.babysitter.log', 'ns_server.couchdb.log', 'ns_server.debug.log',
+                  'ns_server.error.log', 'ns_server.eventing.log', 'ns_server.fts.log', 'ns_server.goxdcr.log',
+                  'ns_server.http_access.log', 'ns_server.http_access_internal.log', 'ns_server.indexer.log',
+                  'ns_server.info.log', 'ns_server.json_rpc.log', 'ns_server.mapreduce_errors.log', 'ns_server.metakv.log',
+                  'ns_server.ns_couchdb.log', 'ns_server.projector.log', 'ns_server.query.log', 'ns_server.reports.log',
+                  'ns_server.stats.log', 'ns_server.views.log', 'ns_server.xdcr_target.log', 'projector_pprof.log',
+                  'stats.log', 'stats_archives.json', 'syslog.tar.gz', 'systemd_journal.gz', 'users.dets']
 # Allow for easy switch to a local mirror of the download stuff
 # (for people outside the mountain view office it's nice to be able to
 # be running this locally without being on VPN (which my test machines isn't)

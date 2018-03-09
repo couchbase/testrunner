@@ -126,8 +126,9 @@ class CreateBucketTests(BaseTestCase):
             serverInfo = self.servers[0]
             shell = RemoteMachineShellConnection(serverInfo)
             time.sleep(5)
-            output, error = shell.execute_command("curl -v -u Administrator:password \
-                            http://{0}:8091/logs | grep '{1}'".format(serverInfo.ip, self.log_message))
+            output, error = shell.execute_command("curl -g -v -u Administrator:password \
+                            http://{0}:8091/logs | grep '{1}'".format(serverInfo.ip,
+                                                                      self.log_message))
             if not output:
                 self.log.info("message {0} is not in log".format(self.log_message))
             elif output:
@@ -156,7 +157,7 @@ class CreateBucketTests(BaseTestCase):
             if self.node_version[:5] in COUCHBASE_FROM_WATSON:
                 self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
             shell = RemoteMachineShellConnection(self.master)
-            shell.execute_command("""curl -v -u Administrator:password \
+            shell.execute_command("""curl -g -v -u Administrator:password \
                          -X POST http://{0}:8091/sampleBuckets/install \
                       -d  '["travel-sample"]'""".format(self.master.ip))
             shell.disconnect()
@@ -244,13 +245,14 @@ class CreateBucketTests(BaseTestCase):
             bucket_quota_flag = "-m"
             data_set_location_flag = "-d"
         shell.execute_command("{0}cbdocloader -u Administrator -p password \
-                      {3} {1} -b travel-sample {4} 100 {5} {2}travel-sample.zip" \
+                      {3} {1}:{6} -b travel-sample {4} 100 {5} {2}travel-sample.zip" \
                                                       .format(self.bin_path,
                                                        self.master.ip,
                                                        self.sample_path,
                                                        cluster_flag,
                                                        bucket_quota_flag,
-                                                       data_set_location_flag))
+                                                       data_set_location_flag,
+                                                       self.master.port))
         shell.disconnect()
 
         buckets = RestConnection(self.master).get_buckets()

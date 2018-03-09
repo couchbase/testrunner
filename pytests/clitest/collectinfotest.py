@@ -6,6 +6,7 @@ from remote.remote_util import RemoteMachineHelper,\
                                RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper
+from testconstants import LOG_FILE_NAMES
 
 from couchbase_helper.document import View
 
@@ -146,7 +147,7 @@ class CollectinfoTests(CliBaseTest):
                 if len(error) > 0:
                     raise Exception("unable to list the files. Check ls command output for help")
                 missing_logs = False
-                for x in LOG_FILE_NAME_LIST:
+                for x in LOG_FILE_NAMES:
                     find_log = False
                     for output_line in output:
                         if output_line.find(x) >= 0:
