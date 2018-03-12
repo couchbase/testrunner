@@ -152,7 +152,7 @@ class audit:
     Returns:
         dictionary of actual event from audit.log
     '''
-    def returnEvent(self, eventNumber, audit_log_file=None):
+    def returnEvent(self, eventNumber, audit_log_file=None, filtering=False):
         try:
             data = []
             if audit_log_file is None:
@@ -166,7 +166,9 @@ class audit:
             f.close()
             return data[len(data) - 1]
         except:
-            log.info ("ERROR ---- Event Not Found in audit.log file. Please check the log file")
+            log.info("ERROR ---- Event Not Found in audit.log file. Please check the log file")
+            if filtering:
+                return None
 
     '''
     getAuditConfigElement - get element of a configuration file
@@ -510,6 +512,15 @@ class audit:
         valueVerification = self.validateData(actualEvent, expectedResults)
         return fieldVerification, valueVerification
 
+    '''
+    Make sure audit log is empty
+    '''
+    def validateEmpty(self):
+        actualEvent = self.returnEvent(self.eventID, filtering=True)
+        if actualEvent:
+            return False, actualEvent
+        else:
+            return True, actualEvent
 
     def checkLastEvent(self):
         try:

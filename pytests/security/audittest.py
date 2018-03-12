@@ -73,6 +73,13 @@ class auditTest(BaseTestCase):
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
+    #Check to make sure the audit code DOES NOT appear in the logs (for audit n1ql filtering)
+    def checkFilter(self, eventID, host):
+        Audit = audit(eventID=eventID, host=host)
+        exists, entry = Audit.validateEmpty()
+        self.assertTrue(exists, "There was an audit entry found. Audits for the code %s should not be logged. Here is the entry: %s" % (eventID, entry))
+
+
     #Tests to check for bucket events
     def test_bucketEvents(self):
         ops = self.input.param("ops", None)

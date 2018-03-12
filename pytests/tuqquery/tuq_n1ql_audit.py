@@ -10,6 +10,11 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
     def setUp(self):
         super(QueryN1QLAuditTests, self).setUp()
         self.log.info("==============  QueryN1QLAuditTests setup has started ==============")
+        self.audit_codes = [28672, 28673, 28674, 28675, 28676, 28677, 28678, 28679, 28680, 28681,
+                            28682, 28683, 28684, 28685, 28686, 28687, 28688]
+        self.unauditedID = self.input.param("unauditedID", "")
+        self.audit_url = "http://%s:%s/settings/audit" % (self.master.ip,self.master.port)
+        self.filter = self.input.param("filter", False)
         self.log.info("==============  QueryN1QLAuditTests setup has completed ==============")
         self.log_config_info()
 
@@ -30,6 +35,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
         role_list = [{'id': 'no_select', 'name': 'no_select', 'roles': '%s' % no_select_permissions},
                      {'id': 'query', 'name': 'query', 'roles': '%s' % query_permissions}]
         RbacBase().add_user_role(role_list, self.rest, 'builtin')
+        self.set_audit()
         self.log.info("==============  QueryN1QLAuditTests suite_setup has completed ==============")
         self.log_config_info()
 
@@ -51,15 +57,19 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
         source = 'ns_server'
 
         if (query_type =='create_index'):
-            self.run_cbq_query(query="CREATE INDEX idx on default(fake)")
+            if self.filter:
+                self.execute_filtered_query()
+            self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'CREATE INDEX statement', 'real_userid': {'source': source, 'user': user},
-                               'statement': 'CREATE INDEX idx on default(fake)',
+                               'statement': 'CREATE INDEX idx on default(join_day)',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
                                'description': 'A N1QL CREATE INDEX statement was executed'}
 
         elif (query_type =='build_index'):
-            self.run_cbq_query(query="CREATE INDEX idx3 on default(fake2) WITH {'defer_build':true}")
+            if self.filter:
+                self.execute_filtered_query()
+            self.run_cbq_query(query="CREATE INDEX idx3 on default(join_yr) WITH {'defer_build':true}")
             self.run_cbq_query(query="BUILD INDEX on default(idx3)")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'BUILD INDEX statement', 'real_userid': {'source': source, 'user': user},
@@ -68,6 +78,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL BUILD INDEX statement was executed'}
 
         elif(query_type == 'drop_index'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query='CREATE INDEX idx2 on default(fake1)')
             self.run_cbq_query(query='DROP INDEX default.idx2')
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
@@ -77,7 +89,13 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL DROP INDEX statement was executed'}
 
         elif(query_type == 'primary_index'):
+            if self.filter:
+                self.audit_codes.remove(self.eventID)
+                self.set_audit(set_disabled=True)
+
             self.run_cbq_query(query="CREATE PRIMARY INDEX on default")
+            if self.filter:
+                self.run_cbq_query(query="delete from default limit 1")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'CREATE PRIMARY INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'CREATE PRIMARY INDEX on default',
@@ -85,6 +103,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL CREATE PRIMARY INDEX statement was executed'}
 
         elif(query_type == 'select'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query="SELECT * FROM default LIMIT 100")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
@@ -93,6 +113,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL SELECT statement was executed'}
 
         elif(query_type == 'explain'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query="EXPLAIN SELECT * FROM default")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'EXPLAIN statement', 'real_userid': {'source': source, 'user': user},
@@ -101,6 +123,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL EXPLAIN statement was executed'}
 
         elif(query_type == 'prepare'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query="prepare a1 from select * from default")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'PREPARE statement', 'real_userid': {'source': source, 'user': user},
@@ -109,6 +133,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL PREPARE statement was executed'}
 
         elif(query_type == 'adhoc_false'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query="prepare a1 from select * from default")
             self.run_cbq_query(query="execute a1")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': False,
@@ -118,6 +144,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL SELECT statement was executed'}
 
         elif(query_type == 'unrecognized'):
+            if self.filter:
+                self.execute_filtered_query()
             try:
                 self.run_cbq_query(query="selec * fro default")
             except CBQError:
@@ -127,6 +155,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                    'id': self.eventID, 'description': 'An unrecognized statement was received by the N1QL query engine'}
 
         elif(query_type == 'insert'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query='INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                        '[ "11", "12", "13" ] })')
@@ -139,6 +169,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL INSERT statement was executed'}
 
         elif(query_type == 'upsert'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query='UPSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                        '[ "11", "12", "13" ] })')
@@ -151,6 +183,13 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL UPSERT statement was executed'}
 
         elif(query_type == 'delete'):
+            if self.filter:
+                self.audit_codes.remove(self.eventID)
+                self.set_audit(set_disabled=True)
+                try:
+                    self.run_cbq_query(query="selec * fro default")
+                except CBQError:
+                    self.log.info("Query is unrecognized (expected)")
             self.run_cbq_query(query='DELETE FROM `travel-sample` WHERE type = "hotel"')
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'DELETE statement', 'real_userid': {'source': source, 'user': user},
@@ -159,6 +198,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL DELETE statement was executed'}
 
         elif(query_type == 'update'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query='UPDATE `travel-sample` SET foo = 5')
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'UPDATE statement', 'real_userid': {'source': source, 'user': user},
@@ -167,6 +208,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL UPDATE statement was executed'}
 
         elif(query_type == 'merge'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query='MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source '
                                      'ON KEY "hotel_"|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy'
                                      ', t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy')
@@ -179,6 +222,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL MERGE statement was executed'}
 
         elif(query_type == 'grant'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query="GRANT query_external_access TO query")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'GRANT ROLE statement', 'real_userid': {'source': source, 'user': user},
@@ -187,6 +232,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL GRANT ROLE statement was executed'}
 
         elif(query_type == 'revoke'):
+            if self.filter:
+                self.execute_filtered_query()
             self.run_cbq_query(query="REVOKE query_system_catalog FROM query")
             expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
                                'name': 'REVOKE ROLE statement', 'real_userid': {'source': source, 'user': user},
@@ -206,3 +253,31 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                               'id': self.eventID, 'name': 'UNRECOGNIZED statement'}
 
         self.checkConfig(self.eventID, self.master, expectedResults, n1ql_audit=True)
+        if self.filter:
+            self.checkFilter(self.unauditedID, self.master)
+
+    def test_user_filter(self):
+        self.set_audit(disable_user=True)
+        cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_select' -p 'password' -q " % (self.master.ip, self.n1ql_port)
+        query = 'select * from default limit 100'
+        self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
+        self.checkFilter(self.unauditedID, self.master)
+
+
+    def set_audit(self, set_disabled=False, disable_user=False):
+        if set_disabled:
+            curl_output = self.shell.execute_command("%s -u Administrator:password -X POST -d 'auditdEnabled=%s;disabled=%s' %s"
+                                                    % (self.curl_path, 'true', ','.join(map(str, self.audit_codes)), self.audit_url))
+        elif disable_user:
+            curl_output = self.shell.execute_command("%s -u Administrator:password -X POST -d 'auditdEnabled=%s;disabledUsers=%s' %s"
+                                                    % (self.curl_path, 'true', 'no_select/local', self.audit_url))
+        else:
+            curl_output = self.shell.execute_command("%s -u Administrator:password -X POST -d 'auditdEnabled=%s' %s"
+                                                    % (self.curl_path, 'true', self.audit_url))
+        if "errors" in str(curl_output):
+            self.log.error("Auditing settings were not set correctly")
+
+    def execute_filtered_query(self):
+        self.audit_codes.remove(self.eventID)
+        self.set_audit(set_disabled=True)
+        self.run_cbq_query(query="delete from default limit 1")
