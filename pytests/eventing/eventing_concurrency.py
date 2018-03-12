@@ -135,6 +135,7 @@ class EventingConcurrency(EventingBaseTest):
             rest_src.add_remote_cluster(self.servers[2].ip, self.servers[2].port, self.servers[0].rest_username,
                                         self.servers[0].rest_password, "C2")
             rest_dst.create_bucket(bucket=self.src_bucket_name, ramQuotaMB=100)
+            self.sleep(30)
             # setup xdcr relationship
             repl_id = rest_src.start_replication('continuous', self.src_bucket_name, "C2")
             if repl_id is not None:

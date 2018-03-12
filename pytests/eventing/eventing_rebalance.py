@@ -879,8 +879,36 @@ class EventingRebalance(EventingBaseTest):
             rebalance.result()
         except Exception as ex:
             log.info("{0}".format(str(ex)))
-            if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
-                self.fail("Rebalance failed unexpectedly : {0}".format(str(ex)))
+            if "Rebalance ongoing on some/all Eventing nodes, creating new apps or changing settings for existing " \
+               "apps isn't allowed" not in str(ex):
+                self.fail("Function deployment did not fail with expected error message : {0}".format(str(ex)))
         else:
             self.fail("Deployment of function succeeded during rebalance...")
+        self.undeploy_and_delete_function(body)
+
+    def test_function_rebalance_when_lifecycle_operation_is_going_on(self):
+        services_in = self.input.param("services_in","eventing")
+        # worker_count_count is intentionally set to smaller value so that bootstrap takes more time completed
+        # and we get enough time
+        body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=1)
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # deploy the function, don't wait for bootstrap to complete
+        self.deploy_function(body, wait_for_bootstrap=False)
+        try:
+            # rebalance in a node when eventing is processing mutations
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [], services=[services_in])
+            self.sleep(timeout=5)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            self.wait_for_bootstrap_to_complete(self.function_name)
+        except Exception as ex:
+            log.info("{0}".format(str(ex)))
+            if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
+                self.fail("Rebalance failed with wrong error message : {0}".format(str(ex)))
+        else:
+            self.fail("Rebalance succeeded when lifecycle operation is going on...")
         self.undeploy_and_delete_function(body)

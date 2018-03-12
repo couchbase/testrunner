@@ -39,13 +39,6 @@ class EventingN1QL(EventingBaseTest):
                                       master=self.master,
                                       use_rest=True
                                       )
-        self.n1ql_certs_path = "/opt/couchbase/var/lib/couchbase/n1qlcerts"
-        shell = RemoteMachineShellConnection(self.n1ql_node)
-        shell_type = shell.extract_remote_info().distribution_type
-        if shell_type.lower() == 'windows':
-            self.path = testconstants.WIN_COUCHBASE_BIN_PATH
-            self.curl_path = "%scurl" % self.path
-            self.n1ql_certs_path = "/cygdrive/c/Program\ Files/Couchbase/server/var/lib/couchbase/n1qlcerts"
 
     def tearDown(self):
         super(EventingN1QL, self).tearDown()
