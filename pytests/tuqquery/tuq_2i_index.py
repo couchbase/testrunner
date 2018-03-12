@@ -1267,11 +1267,11 @@ class QueriesIndexTests(QueryTests):
                 self.query = "explain select meta().id from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END and VMs[0].os = 'ubuntu'"  % (bucket.name,bucket.name)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['index'] == idx)
+                self.assertTrue(plan['~children'][0]['scan']['index'] == idx)
                 self.query = 'explain select meta().id from {0} WHERE ANY i IN tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1 like "{1}" end) END and VMs[0].os = "ubuntu"' .format(bucket.name,'Sou%')
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['index'] == idx)
+                self.assertTrue(plan['~children'][0]['scan']['index'] == idx)
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -7008,7 +7008,7 @@ class QueriesIndexTests(QueryTests):
                              'AND  NOT (department = "Manager") ORDER BY name limit 10'
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
+                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan' or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
 
                 result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
                 result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
