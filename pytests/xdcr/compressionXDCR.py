@@ -11,7 +11,7 @@ class compression(XDCRNewBaseTest):
         self.src_master = self.src_cluster.get_master_node()
         self.dest_cluster = self.get_cb_cluster_by_name('C2')
         self.dest_master = self.dest_cluster.get_master_node()
-        self.chain_length = self._input.param("chain_length", "2")
+        self.chain_length = self._input.param("chain_length", 2)
         self.topology = self._input.param("ctopology", "chain")
         if self.chain_length > 2:
             self.c3_cluster = self.get_cb_cluster_by_name('C3')
