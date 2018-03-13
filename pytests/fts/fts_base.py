@@ -922,6 +922,14 @@ class FTSIndex:
             rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_doc_count(self.name)
 
+    def get_num_mutations_to_index(self, rest=None):
+        if not rest:
+            rest = RestConnection(self.__cluster.get_random_fts_node())
+        status, stat_value = rest.get_fts_stats(index_name=self.name,
+                                                bucket_name=self._source_name,
+                                                stat_name='num_mutations_to_index')
+        return stat_value
+
     def get_src_bucket_doc_count(self):
         return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
 
@@ -3449,6 +3457,15 @@ class FTSBaseTest(unittest.TestCase):
                     self.log.info(e)
                     retry_count -= 1
                 time.sleep(6)
+            # now wait for num_mutations_to_index to become zero to handle the pure
+            # updates scenario - where doc count remains unchanged
+            if item_count == None:
+                while True:
+                    num_mutations_to_index = index.get_num_mutations_to_index()
+                    if num_mutations_to_index > 0:
+                        self.sleep(5, "num_mutations_to_index: {0} > 0".format(num_mutations_to_index))
+                    else:
+                        break
 
     def construct_plan_params(self):
         plan_params = {}
