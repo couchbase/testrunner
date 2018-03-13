@@ -809,11 +809,9 @@ class RemoteMachineShellConnection:
             log.info("\nThis OS version %s" % self.info.distribution_version.lower())
             if "centos 7" in self.info.distribution_version.lower():
                 os_version = "centos 7"
-                log.info("Check ntpd service in centos 7.x server")
                 output, e = self.execute_command("systemctl status ntpd")
                 for line in output:
                     if "Active: active (running)" in line:
-                        log.info("ntp was installed in this server {0}".format(self.ip))
                         ntp_installed = True
                 if not ntp_installed:
                     log.info("ntp not installed yet or not run.\n"\
@@ -828,12 +826,10 @@ class RemoteMachineShellConnection:
                     do_install = True
                 timezone, _ = self.execute_command("date")
                 if "PST" not in timezone[0]:
-                    log.info("Set time zone in centos 7 to America/Los_Angeles (PST)")
                     self.execute_command("timedatectl set-timezone America/Los_Angeles",
                                                                             debug=False)
             elif "centos release 6" in self.info.distribution_version.lower():
                 os_version = "centos 6"
-                log.info("Check ntpd service in centos 6")
                 output, e = self.execute_command("/etc/init.d/ntpd status")
                 if not output:
                     log.info("ntp was not installed on {0} server yet.  "\
@@ -854,10 +850,8 @@ class RemoteMachineShellConnection:
                     do_install = True
                 elif output and "is running..." in output[0]:
                     ntp_installed = True
-                    log.info("ntp was installed in this server {0}".format(self.ip))
                 timezone, _ = self.execute_command("date")
                 if "PST" not in timezone[0]:
-                    log.info("Set time zone in centos 6 to America/Los_Angeles (PST)")
                     self.execute_command("cp /etc/localtime /root/old.timezone",
                                                                     debug=False)
                     self.execute_command("rm -rf /etc/localtime", debug=False)
@@ -867,7 +861,6 @@ class RemoteMachineShellConnection:
                 log.info("will add install in other os later, no set do install")
 
         if do_install:
-            log.info("Check ntpd service after installed")
             if os_version == "centos 7":
                 output, e = self.execute_command("systemctl status ntpd")
                 for line in output:
@@ -881,9 +874,8 @@ class RemoteMachineShellConnection:
                     log.info("ntp is installed and running on this server %s" % self.ip)
                     ntp_installed = True
 
-        log.info("Date and time on this server {0}".format(self.ip))
-        output, _ = self.execute_command("date")
-        log.info("\n{0}".format(output))
+        output, _ = self.execute_command("date", debug=False)
+        log.info("\n{0} IP: {1}".format(output, self.ip))
         if not ntp_installed and "centos" in os_version:
             mesg = "\n===============\n"\
                    "        This server {0} \n"\
