@@ -272,7 +272,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             curl_output = self.shell.execute_command("%s -u Administrator:password -X POST -d 'auditdEnabled=%s;disabledUsers=%s' %s"
                                                     % (self.curl_path, 'true', 'no_select/local', self.audit_url))
         else:
-            curl_output = self.shell.execute_command("%s -u Administrator:password -X POST -d 'auditdEnabled=%s' %s"
+            curl_output = self.shell.execute_command("%s -u Administrator:password -X POST -d 'auditdEnabled=%s;disabled=' %s"
                                                     % (self.curl_path, 'true', self.audit_url))
         if "errors" in str(curl_output):
             self.log.error("Auditing settings were not set correctly")
