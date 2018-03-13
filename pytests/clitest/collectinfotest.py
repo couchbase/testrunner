@@ -155,9 +155,9 @@ class CollectinfoTests(CliBaseTest):
                                     "fts_diag.json" not in LOG_FILE_NAMES:
                             LOG_FILE_NAMES.append("fts_diag.json")
                         if service.encode("ascii") == "index":
-                            if "indexer_mprof.log" not in LOG_FILE_NAME:
+                            if "indexer_mprof.log" not in LOG_FILE_NAMES:
                                 LOG_FILE_NAMES.append("indexer_mprof.log")
-                            if "indexer_pprof.log" not in LOG_FILE_NAME:
+                            if "indexer_pprof.log" not in LOG_FILE_NAMES:
                                 LOG_FILE_NAMES.append("indexer_pprof.log")
                 if self.debug_logs:
                     self.log.info('\nlog files sample: {0}'.format(LOG_FILE_NAMES))
