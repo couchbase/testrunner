@@ -11,7 +11,9 @@ class compression(XDCRNewBaseTest):
         self.src_master = self.src_cluster.get_master_node()
         self.dest_cluster = self.get_cb_cluster_by_name('C2')
         self.dest_master = self.dest_cluster.get_master_node()
-        if self.__chain_length > 2:
+        self.chain_length = self._input.param("chain_length", "2")
+        self.topology = self._input.param("ctopology", "chain")
+        if self.chain_length > 2:
             self.c3_cluster = self.get_cb_cluster_by_name('C3')
             self.c3_master = self.c3_cluster.get_master_node()
         self.cluster = Cluster()
@@ -97,12 +99,12 @@ class compression(XDCRNewBaseTest):
                                  compr_bucket_name=bucket_prefix + "_1",
                                  uncompr_bucket_name=bucket_prefix + "_2",
                                  compression_type=compression_type)
-        if self.__chain_length > 2 and self.__topology == TOPOLOGY.CHAIN:
+        if self.chain_length > 2 and self.topology == TOPOLOGY.CHAIN:
             self._verify_compression(cluster=self.dest_cluster,
                                      compr_bucket_name=bucket_prefix + "_1",
                                      uncompr_bucket_name=bucket_prefix + "_2",
                                      compression_type=compression_type)
-        if self.__chain_length > 2 and self.__topology == TOPOLOGY.RING:
+        if self.chain_length > 2 and self.topology == TOPOLOGY.RING:
             self._verify_compression(cluster=self.dest_cluster,
                                      compr_bucket_name=bucket_prefix + "_1",
                                      uncompr_bucket_name=bucket_prefix + "_2",
