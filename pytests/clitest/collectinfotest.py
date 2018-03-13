@@ -135,6 +135,7 @@ class CollectinfoTests(CliBaseTest):
             if os == "linux":
                 command = "unzip %s" % (zip_file)
                 output, error = self.shell.execute_command(command)
+                self.sleep(2)
                 if self.debug_logs:
                     self.shell.log_command_output(output, error)
                 if len(error) > 0:
@@ -147,6 +148,10 @@ class CollectinfoTests(CliBaseTest):
                 if len(error) > 0:
                     raise Exception("unable to list the files. Check ls command output for help")
                 missing_logs = False
+                if self.debug_logs:
+                    self.log.info('\nlog files sample: {0}'.format(LOG_FILE_NAMES))
+                    self.log.info('\nlog files in zip: {0}'.format(output))
+
                 for x in LOG_FILE_NAMES:
                     find_log = False
                     for output_line in output:
