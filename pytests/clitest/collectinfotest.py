@@ -148,6 +148,17 @@ class CollectinfoTests(CliBaseTest):
                 if len(error) > 0:
                     raise Exception("unable to list the files. Check ls command output for help")
                 missing_logs = False
+                nodes_services = RestConnection(self.master).get_nodes_services()
+                for node, services in nodes_services.iteritems():
+                    for service in services:
+                        if service.encode("ascii") == "fts" and \
+                                    "fts_diag.json" not in LOG_FILE_NAMES:
+                            LOG_FILE_NAMES.append("fts_diag.json")
+                        if service.encode("ascii") == "index":
+                            if "indexer_mprof.log" not in LOG_FILE_NAME:
+                                LOG_FILE_NAMES.append("indexer_mprof.log")
+                            if "indexer_pprof.log" not in LOG_FILE_NAME:
+                                LOG_FILE_NAMES.append("indexer_pprof.log")
                 if self.debug_logs:
                     self.log.info('\nlog files sample: {0}'.format(LOG_FILE_NAMES))
                     self.log.info('\nlog files in zip: {0}'.format(output))

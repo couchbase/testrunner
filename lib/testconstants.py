@@ -180,8 +180,8 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
                 "ct_run", "curl", "curl-config", "derb", "dialyzer", "dump-guts", "epmd", "erl", "erlc", "escript", "genbrk", \
                 "gencfu", "gencnval", "genctd", "generate_cert", "genrb", "icu-config", "install", "makeconv", "mctimings", \
                 "memcached", "moxi", "reports", "sigar_port", "sqlite3", "to_erl", "tools", "typer", "uconv", "vbmap"]
-LOG_FILE_NAMES = ['cbcollect_info.log', 'couchbase.log', 'couchstore_local.log', 'ddocs.log', 'diag.log', 'fts_diag.json',
-                  'indexer_mprof.log', 'indexer_pprof.log', 'ini.log', 'kv_trace.json', 'master_events.log', 'memcached.log',
+LOG_FILE_NAMES = ['cbcollect_info.log', 'couchbase.log', 'couchstore_local.log', 'ddocs.log', 'diag.log',
+                  'ini.log', 'kv_trace.json', 'master_events.log', 'memcached.log',
                   'ns_server.analytics.log', 'ns_server.analytics_cbas.log', 'ns_server.analytics_shutdown.log',
                   'ns_server.analytics_trace.json', 'ns_server.babysitter.log', 'ns_server.couchdb.log', 'ns_server.debug.log',
                   'ns_server.error.log', 'ns_server.eventing.log', 'ns_server.fts.log', 'ns_server.goxdcr.log',
