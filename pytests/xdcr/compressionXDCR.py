@@ -88,7 +88,7 @@ class compression(XDCRNewBaseTest):
         self.setup_xdcr()
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
-        self._set_compression_type(self.src_cluster, bucket_prefix + "_1", compression_type)
+        self._set_compression_type(self.src_cluster, bucket_prefix + "1", compression_type)
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
@@ -96,22 +96,22 @@ class compression(XDCRNewBaseTest):
         self.perform_update_delete()
 
         self._verify_compression(cluster=self.src_cluster,
-                                 compr_bucket_name=bucket_prefix + "_1",
-                                 uncompr_bucket_name=bucket_prefix + "_2",
+                                 compr_bucket_name=bucket_prefix + "1",
+                                 uncompr_bucket_name=bucket_prefix + "2",
                                  compression_type=compression_type)
         if self.chain_length > 2 and self.topology == TOPOLOGY.CHAIN:
             self._verify_compression(cluster=self.dest_cluster,
-                                     compr_bucket_name=bucket_prefix + "_1",
-                                     uncompr_bucket_name=bucket_prefix + "_2",
+                                     compr_bucket_name=bucket_prefix + "1",
+                                     uncompr_bucket_name=bucket_prefix + "2",
                                      compression_type=compression_type)
         if self.chain_length > 2 and self.topology == TOPOLOGY.RING:
             self._verify_compression(cluster=self.dest_cluster,
-                                     compr_bucket_name=bucket_prefix + "_1",
-                                     uncompr_bucket_name=bucket_prefix + "_2",
+                                     compr_bucket_name=bucket_prefix + "1",
+                                     uncompr_bucket_name=bucket_prefix + "2",
                                      compression_type=compression_type)
             self._verify_compression(cluster=self.c3_cluster,
-                                     compr_bucket_name=bucket_prefix + "_1",
-                                     uncompr_bucket_name=bucket_prefix + "_2",
+                                     compr_bucket_name=bucket_prefix + "1",
+                                     uncompr_bucket_name=bucket_prefix + "2",
                                      compression_type=compression_type)
         self.verify_results()
 
