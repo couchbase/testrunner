@@ -6,6 +6,7 @@ from base_2i import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 import random
 from lib import testconstants
+from lib.couchbase_helper.tuq_generators import TuqGenerators
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from threading import Thread
@@ -19,7 +20,7 @@ from lib.membase.helper.cluster_helper import ClusterOperationHelper
 class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
     def setUp(self):
         super(GSIIndexPartitioningTests, self).setUp()
-        self.num_items = self.input.param("items",5000)
+        self.num_items = self.input.param("items", 5000)
         self.log.info("No. of items: {0}".format(str(self.num_items)))
         self.index_servers = self.get_nodes_from_services_map(
             service_type="index", get_all_nodes=True)
@@ -33,7 +34,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.recover_failed_node = self.input.param("recover_failed_node",
                                                     False)
         self.op_type = self.input.param("op_type", "create")
-        self.node_operation = self.input.param("node_op","reboot")
+        self.node_operation = self.input.param("node_op", "reboot")
 
     def tearDown(self):
         super(GSIIndexPartitioningTests, self).tearDown()
@@ -135,6 +136,50 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         if not validated:
             self.fail("Looks like index was not created.")
+
+    def test_replica_partition_index_with_excluded_nodes(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Setting to exclude a node for planner
+        self.rest.set_index_planner_settings("excludeNode=in")
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}}}".format(
+            self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        index_names = []
+        index_names.append("idx1")
+        for i in range(1, self.num_index_replicas + 1):
+            index_names.append("idx1 (replica {0})".format(str(i)))
+
+        # Need to see if the indexes get created in the first place
+
+        # Validate index created and check the hosts on which partitions are hosted.
+        expected_hosts = self.node_list[1:]
+        expected_hosts.sort()
+        validated = False
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata :::")
+        self.log.info(index_metadata)
+
+        index_validated = 0
+        for index_name in index_names:
+            for index in index_metadata["status"]:
+                if index["name"] == index_name:
+                    self.log.info("Expected Hosts : {0}".format(expected_hosts))
+                    self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
+                    self.assertEqual(index["hosts"], expected_hosts,
+                                     "Planner did not ignore excluded node during index creation for {0}".format(
+                                         index_name))
+                    index_validated += 1
+
+        self.assertEqual(index_validated, (self.num_index_replicas + 1),
+                         "All index replicas not created")
 
     def test_partition_index_by_non_indexed_field(self):
         self._load_emp_dataset(end=self.num_items)
@@ -276,19 +321,20 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             {"indexer.numPartitions": 8})
 
         numpartition_values_str = ["abc", "2018-03-04 18:02:37"]
-        numpartition_values_num = [0,-5,46.6789]
+        numpartition_values_num = [0, -5, 46.6789]
 
         for value in numpartition_values_str:
 
-            indexname = "index_" + str(random.randint(1,100))
+            indexname = "index_" + str(random.randint(1, 100))
             try:
                 self.rest.set_index_settings(
                     {"indexer.numPartitions": '{0}'.format(value)})
 
-                create_index_statement = "CREATE INDEX {0} on default(name,dept) partition by hash(salary) USING GSI".format(indexname)
+                create_index_statement = "CREATE INDEX {0} on default(name,dept) partition by hash(salary) USING GSI".format(
+                    indexname)
 
                 self.n1ql_helper.run_cbq_query(query=create_index_statement,
-                                           server=self.n1ql_node)
+                                               server=self.n1ql_node)
             except Exception, ex:
                 self.log.info(str(ex))
 
@@ -353,10 +399,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         except Exception, ex:
             self.log.info(str(ex))
 
-        numpartition_values_str = ["abc","2018-03-04 18:02:37"]
+        numpartition_values_str = ["abc", "2018-03-04 18:02:37"]
         for value in numpartition_values_str:
-        # Create partitioned index
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':'{0}'}}".format(value)
+            # Create partitioned index
+            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':'{0}'}}".format(
+                value)
             try:
                 self.n1ql_helper.run_cbq_query(
                     query=create_index_statement,
@@ -364,7 +411,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             except Exception, ex:
                 self.log.info(str(ex))
             else:
-                self.fail("Index got created with an invalid num_partition value : {0}".format(value))
+                self.fail(
+                    "Index got created with an invalid num_partition value : {0}".format(
+                        value))
 
         numpartition_values_num = [0, -5, 47.6789]
         for value in numpartition_values_num:
@@ -908,12 +957,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             "Deferred Partitioned index created not as expected")
 
         node_out = self.servers[self.node_out]
-        failover_task = self.cluster.async_failover(
-            self.servers[:self.nodes_init],
-            [node_out],
-            self.graceful, wait_for_pending=180)
-
-        failover_task.result()
+        self.start_firewall_on_node(node_out)
 
         build_index_query = "BUILD INDEX on `default`(" + index_name_prefix + ")"
 
@@ -1187,12 +1231,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             "Partitioned index created not as expected")
 
         node_out = self.servers[self.node_out]
-        failover_task = self.cluster.async_failover(
-            self.servers[:self.nodes_init],
-            [node_out],
-            self.graceful, wait_for_pending=180)
-
-        failover_task.result()
+        self.start_firewall_on_node(node_out)
 
         drop_index_query = "DROP INDEX `default`." + index_name_prefix
 
@@ -2051,7 +2090,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         self.assertTrue(agg_pushdown, "Operators not pushed down to indexer")
 
-    def test_aggregate_indexer_pushdowns_groupby_trailing_keys_partition_keys(self):
+    def test_aggregate_indexer_pushdowns_groupby_trailing_keys_partition_keys(
+            self):
         self._load_emp_dataset(end=self.num_items)
 
         # Create Partitioned indexes
@@ -2202,8 +2242,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
     def test_rebalance_out_with_partitioned_indexes_with_concurrent_querying_stop_and_resume(
             self):
-        resume = self.input.param("resume_stopped_rebalance",False)
-        resume_delay = self.input.param("resume_delay",0)
+        resume = self.input.param("resume_stopped_rebalance", False)
+        resume_delay = self.input.param("resume_delay", 0)
 
         self._load_emp_dataset(end=self.num_items)
 
@@ -2267,13 +2307,15 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         if resume:
             if resume_delay > 0:
-                self.sleep(resume_delay,"Sleep for some time before resume stopped rebalance")
+                self.sleep(resume_delay,
+                           "Sleep for some time before resume stopped rebalance")
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
                 [], [node_out])
 
             reached = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            self.assertTrue(reached,
+                            "rebalance failed, stuck or did not complete")
             rebalance.result()
 
         t1.join()
@@ -2858,7 +2900,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
     def test_node_failure_during_rebalance_out_partitioned_indexes(
             self):
-        fail_node = self.input.param("fail_node",None)
+        fail_node = self.input.param("fail_node", None)
         if fail_node:
             node_to_fail = self.servers[fail_node]
         self._load_emp_dataset(end=self.num_items)
@@ -2886,6 +2928,16 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         self.log.info(index_names)
 
+        # Get Stats and index partition map before rebalance
+        index_data_before = {}
+        for index in index_names:
+            _, total_item_count_before, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index)
+            index_data_before[index] = {}
+            index_data_before[index]["item_count"] = total_item_count_before
+            index_data_before[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
         # rebalance out an indexer node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [node_out])
@@ -2903,11 +2955,51 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # disable firewall on these nodes
         self.stop_firewall_on_node(node_to_fail)
         # wait till node is ready after warmup
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail], self,
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
+                                                             self,
                                                              wait_if_warmup=True)
 
+        try:
+            rebalance.result()
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        # Rerun rebalance
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+
+        self.sleep(10)
+
+        # Get Stats and index partition map after rebalance
+        node_list = copy.deepcopy(self.node_list)
+        node_list.remove(node_out_str)
+        self.log.info(node_list)
+
+        index_data_after = {}
+        for index in index_names:
+            _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index, node_list=node_list)
+            index_data_after[index] = {}
+            index_data_after[index]["item_count"] = total_item_count_after
+            index_data_after[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        for index in index_names:
+            # Validate index item count before and after
+            self.assertEqual(index_data_before[index]["item_count"],
+                             index_data_after[index]["item_count"],
+                             "Item count in index do not match after cluster ops.")
+
+            # Validate host list, partition count and partition distribution
+            self.assertTrue(
+                self.validate_partition_distribution_after_cluster_ops(
+                    index, index_data_before[index]["index_metadata"],
+                    index_data_after[index]["index_metadata"], [],
+                    [node_out]),
+                "Partition distribution post cluster ops has some issues")
 
     def test_node_failure_during_rebalance_in_partitioned_indexes(
             self):
@@ -2941,6 +3033,16 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         self.log.info(index_names)
 
+        # Get Stats and index partition map before rebalance
+        index_data_before = {}
+        for index in index_names:
+            _, total_item_count_before, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index)
+            index_data_before[index] = {}
+            index_data_before[index]["item_count"] = total_item_count_before
+            index_data_before[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
         # rebalance out an indexer node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [node_in], [],
@@ -2959,11 +3061,673 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # disable firewall on these nodes
         self.stop_firewall_on_node(node_to_fail)
         # wait till node is ready after warmup
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail], self,
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
+                                                             self,
                                                              wait_if_warmup=True)
 
+        try:
+            rebalance.result()
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        # Rerun Rebalance
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [node_in], [],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+
+        self.sleep(10)
+
+        # Get Stats and index partition map after rebalance
+        node_list = copy.deepcopy(self.node_list)
+        node_list.append(node_in_str)
+        self.log.info(node_list)
+
+        index_data_after = {}
+        for index in index_names:
+            _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index, node_list=node_list)
+            index_data_after[index] = {}
+            index_data_after[index]["item_count"] = total_item_count_after
+            index_data_after[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        for index in index_names:
+            # Validate index item count before and after
+            self.assertEqual(index_data_before[index]["item_count"],
+                             index_data_after[index]["item_count"],
+                             "Item count in index do not match after cluster ops.")
+
+            # Validate host list, partition count and partition distribution
+            self.assertTrue(
+                self.validate_partition_distribution_after_cluster_ops(
+                    index, index_data_before[index]["index_metadata"],
+                    index_data_after[index]["index_metadata"], [node_in],
+                    []),
+                "Partition distribution post cluster ops has some issues")
+
+    def test_replica_partition_index_with_excluded_nodes_failover(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Setting to exclude a node for planner
+        self.rest.set_index_planner_settings("excludeNode=in")
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}}}".format(
+            self.num_index_replicas)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata :::")
+        self.log.info(index_metadata)
+
+        self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
+                                                    self.num_index_replicas,
+                                                    self.num_index_partitions),
+                        "Partition map validation failed")
+
+        # Validate index created and check the hosts on which partitions are hosted.
+        expected_hosts = self.node_list[1:]
+        expected_hosts.sort()
+        validated = False
+        index_names = []
+        index_names.append("idx1")
+        for i in range(1, self.num_index_replicas + 1):
+            index_names.append("idx1 (replica {0})".format(str(i)))
+
+        # Need to see if the indexes get created in the first place
+
+        # Validate index created and check the hosts on which partitions are hosted.
+        expected_hosts = self.node_list[1:]
+        expected_hosts.sort()
+        validated = False
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata :::")
+        self.log.info(index_metadata)
+
+        index_validated = 0
+        for index_name in index_names:
+            for index in index_metadata["status"]:
+                if index["name"] == index_name:
+                    self.log.info("Expected Hosts : {0}".format(expected_hosts))
+                    self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
+                    self.assertEqual(index["hosts"], expected_hosts,
+                                     "Planner did not ignore excluded node during index creation for {0}".format(
+                                         index_name))
+                    index_validated += 1
+
+        self.assertEqual(index_validated, (self.num_index_replicas + 1),
+                         "All index replicas not created")
+
+        node_out = self.servers[self.node_out]
+        node_out_str = node_out.ip + ":" + str(node_out.port)
+
+        # failover and rebalance out a indexer node
+        failover_task = self.cluster.async_failover(
+            self.servers[:self.nodes_init],
+            [node_out],
+            self.graceful, wait_for_pending=180)
+
+        failover_task.result()
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        self.sleep(30)
+
+        node_list = copy.deepcopy(self.node_list[1:])
+        node_list.remove(node_out_str)
+        self.log.info(node_list)
+
+        index_data_after = {}
+        total_index_item_count = 0
+        bucket_item_count = 0
+        total_partition_count = 0
+        for index in index_names:
+            bucket_item_count, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index, node_list=node_list)
+            index_data_after[index] = {}
+            index_data_after[index]["item_count"] = total_item_count_after
+            index_data_after[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+            total_index_item_count += total_item_count_after
+            total_partition_count += self.get_num_partitions_for_index(
+                self.rest.get_indexer_metadata(), index)
+
+        self.assertEqual(total_index_item_count, bucket_item_count,
+                         "Item count in index do not match after cluster ops.")
+
+        self.assertEqual(self.num_index_partitions, total_partition_count,
+                         "Some partitions are not available after rebalance")
+
+    def test_replica_partition_index_with_excluded_nodes_failover_addback(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Setting to exclude a node for planner
+        self.rest.set_index_planner_settings("excludeNode=in")
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}}}".format(
+            self.num_index_replicas)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata :::")
+        self.log.info(index_metadata)
+
+        self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
+                                                    self.num_index_replicas,
+                                                    self.num_index_partitions),
+                        "Partition map validation failed")
+
+        # Validate index created and check the hosts on which partitions are hosted.
+        expected_hosts = self.node_list[1:]
+        expected_hosts.sort()
+        index_names = []
+        index_names.append("idx1")
+        for i in range(1, self.num_index_replicas + 1):
+            index_names.append("idx1 (replica {0})".format(str(i)))
+
+        # Need to see if the indexes get created in the first place
+
+        # Validate index created and check the hosts on which partitions are hosted.
+        expected_hosts = self.node_list[1:]
+        expected_hosts.sort()
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata :::")
+        self.log.info(index_metadata)
+
+        index_validated = 0
+        for index_name in index_names:
+            for index in index_metadata["status"]:
+                if index["name"] == index_name:
+                    self.log.info("Expected Hosts : {0}".format(expected_hosts))
+                    self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
+                    self.assertEqual(index["hosts"], expected_hosts,
+                                     "Planner did not ignore excluded node during index creation for {0}".format(
+                                         index_name))
+                    index_validated += 1
+
+        self.assertEqual(index_validated, (self.num_index_replicas + 1),
+                         "All index replicas not created")
+
+        node_out = self.servers[self.node_out]
+        node_out_str = node_out.ip + ":" + str(node_out.port)
+
+        # failover and rebalance out a indexer node
+        nodes_all = self.rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == node_out.ip:
+                break
+
+        failover_task = self.cluster.async_failover(
+            self.servers[:self.nodes_init],
+            [node_out],
+            self.graceful, wait_for_pending=180)
+
+        failover_task.result()
+
+        self.rest.set_recovery_type(node.id, self.recovery_type)
+        self.rest.add_back_node(node.id)
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [])
+
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        self.sleep(30)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata :::")
+        self.log.info(index_metadata)
+
+        self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
+                                                    self.num_index_replicas,
+                                                    self.num_index_partitions),
+                        "Partition map validation failed")
+
+    def test_partition_placement_one_node_in_paused_state(self):
+        index_server = self.index_servers[0]
+        create_index_query1 = "CREATE PRIMARY INDEX ON default USING GSI"
+        create_index_query2 = "CREATE INDEX idx_job_title ON default(job_title) USING GSI"
+        create_index_query3 = "CREATE INDEX idx_join_yr ON default(join_yr) USING GSI"
+        create_index_query4 = "CREATE INDEX idx_job_title_join_yr ON default(job_title,join_yr) USING GSI"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query1,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query2,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query3,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query4,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                          memoryQuota=256)
+
+        # Ensure indexer reaches to paused state
+        self._saturate_indexer_memory(index_server)
+
+        services_in = ["index"]
+        # rebalance in a node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[
+                                                      self.nodes_init]], [],
+                                                 services=services_in)
+        rebalance.result()
+
+        create_index_query = "CREATE INDEX pidx1 ON default(name,mutated) partition by hash(BASE64(meta().id)) USING GSI"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = "pidx1"
+        index_details["num_partitions"] = self.num_index_partitions
+        index_details["defer_build"] = False
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Partitioned index created not as expected")
+
+        index_node_list = self.node_list
+        index_node_list.append(
+            self.servers[self.nodes_init].ip + ":" + self.servers[
+                self.nodes_init].port)
+        index_node_list.remove(index_server.ip + ":" + index_server.port)
+        index_node_list.sort()
+        validated = False
+
+        for index in index_metadata["status"]:
+            if index["name"] == "pidx1":
+                self.log.info("Expected Hosts : {0}".format(index_node_list))
+                self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
+                self.assertEqual(index["hosts"], index_node_list,
+                                 "Planner did not exclude node in Paused state during index creation")
+                validated = True
+
+        if not validated:
+            self.fail("Looks like index was not created.")
+
+    def test_index_scans_one_node_memory_saturated(self):
+        index_server = self.index_servers[0]
+        index_server_str = index_server.ip + ":" + index_server.port
+        create_index_query1 = "CREATE PRIMARY INDEX ON default USING GSI with {{'nodes':['{0}']}}".format(
+            index_server_str)
+        create_index_query2 = "CREATE INDEX idx_job_title ON default(job_title) USING GSI with {{'nodes':['{0}']}}".format(
+            index_server_str)
+        create_index_query3 = "CREATE INDEX idx_join_yr ON default(join_yr) USING GSI with {{'nodes':['{0}']}}".format(
+            index_server_str)
+        create_index_query4 = "CREATE INDEX idx_job_title_join_yr ON default(job_title,join_yr) USING GSI with {{'nodes':['{0}']}}".format(
+            index_server_str)
+        create_index_query5 = "CREATE INDEX pidx1 ON default(name,mutated) partition by hash(BASE64(meta().id)) USING GSI"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query1,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query2,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query3,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query4,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query5,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        query = "select name,mutated from default where name is not null order by name limit 1000"
+        results = self.n1ql_helper.run_cbq_query(query=query,
+                                                 server=self.n1ql_node)
+        self.assertIsNotNone(results["results"], "No results")
+        num_results_before = results["metrics"]["resultCount"]
+        self.log.info("num_results_before : {0}".format(num_results_before))
+
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                          memoryQuota=256)
+
+        # Ensure indexer reaches to paused state
+        self._saturate_indexer_memory(index_server)
+
+        query = "select name,mutated from default where name is not null order by name limit 1000"
+        results = self.n1ql_helper.run_cbq_query(query=query,
+                                                 server=self.n1ql_node)
+        self.assertIsNotNone(results["results"], "No results")
+        num_results_after = results["metrics"]["resultCount"]
+        self.log.info("num_results_after : {0}".format(str(num_results_after)))
+
+    def test_rebalance_out_concurrent_querying_one_node_nw_partitioned(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
+            self.num_index_replicas, self.num_index_partitions)
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
+            self.num_index_replicas, self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(
+                query=create_primary_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        self.sleep(30)
+
+        # Get Index Names
+        index_names = ["idx1", "pidx1"]
+        if self.num_index_replicas > 0:
+            for i in range(1, self.num_index_replicas + 1):
+                index_names.append("idx1 (replica {0})".format(str(i)))
+                index_names.append("pidx1 (replica {0})".format(str(i)))
+
+        self.log.info(index_names)
+
+        # Get Stats and index partition map before rebalance
+        index_data_before = {}
+        for index in index_names:
+            _, total_item_count_before, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index)
+            index_data_before[index] = {}
+            index_data_before[index]["item_count"] = total_item_count_before
+            index_data_before[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        node_out = self.servers[self.node_out]
+        node_out_str = node_out.ip + ":" + str(node_out.port)
+
+        node_nw_partition_out = self.servers[self.node_out - 1]
+        self.start_firewall_on_node(node_nw_partition_out)
+
+        # start querying
+        query = "select name,dept,salary from default where name is not missing and dept='HR' and salary > 120000;"
+        t1 = Thread(target=self._run_queries, args=(query, 30,))
+        t1.start()
+        # rebalance out a indexer node when querying is in progress
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        t1.join()
+
+        self.sleep(30)
+
+        self.stop_firewall_on_node(node_nw_partition_out)
+
+        # Get Stats and index partition map after rebalance
+        node_list = copy.deepcopy(self.node_list)
+        node_list.remove(node_out_str)
+        self.log.info(node_list)
+
+        index_data_after = {}
+        for index in index_names:
+            _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index, node_list=node_list)
+            index_data_after[index] = {}
+            index_data_after[index]["item_count"] = total_item_count_after
+            index_data_after[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        for index in index_names:
+            # Validate index item count before and after
+            self.assertEqual(index_data_before[index]["item_count"],
+                             index_data_after[index]["item_count"],
+                             "Item count in index do not match after cluster ops.")
+
+            # Validate host list, partition count and partition distribution
+            self.assertTrue(
+                self.validate_partition_distribution_after_cluster_ops(
+                    index, index_data_before[index]["index_metadata"],
+                    index_data_after[index]["index_metadata"], [],
+                    [node_out]),
+                "Partition distribution post cluster ops has some issues")
+
+    def test_rebalance_out_concurrent_querying_server_group_nw_partitioned(
+            self):
+        self._load_emp_dataset(end=self.num_items)
+        self._create_server_groups()
+
+        # Create partitioned index
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
+            self.num_index_replicas, self.num_index_partitions)
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
+            self.num_index_replicas, self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(
+                query=create_primary_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+
+        self.sleep(30)
+
+        # Get Index Names
+        index_names = ["idx1", "pidx1"]
+        if self.num_index_replicas > 0:
+            for i in range(1, self.num_index_replicas + 1):
+                index_names.append("idx1 (replica {0})".format(str(i)))
+                index_names.append("pidx1 (replica {0})".format(str(i)))
+
+        self.log.info(index_names)
+
+        # Get Stats and index partition map before rebalance
+        index_data_before = {}
+        for index in index_names:
+            _, total_item_count_before, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index)
+            index_data_before[index] = {}
+            index_data_before[index]["item_count"] = total_item_count_before
+            index_data_before[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        node_out = self.servers[self.node_out]
+        node_out_str = node_out.ip + ":" + str(node_out.port)
+
+        # Network partition out Server Group
+        server_group_out = self.input.param("server_group_out", None)
+        server_group_nodes = []
+        if server_group_out:
+            server_group_nodes = server_group_out.split(":")
+
+            for node in server_group_nodes:
+                self.start_firewall_on_node(node)
+
+        # start querying
+        query = "select name,dept,salary from default where name is not missing and dept='HR' and salary > 120000;"
+        t1 = Thread(target=self._run_queries, args=(query, 30,))
+        t1.start()
+        # rebalance out a indexer node when querying is in progress
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        t1.join()
+
+        self.sleep(30)
+
+        if server_group_nodes:
+            for node in server_group_nodes:
+                self.stop_firewall_on_node(node)
+
+        # Get Stats and index partition map after rebalance
+        node_list = copy.deepcopy(self.node_list)
+        node_list.remove(node_out_str)
+        self.log.info(node_list)
+
+        index_data_after = {}
+        for index in index_names:
+            _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
+                index_name=index, node_list=node_list)
+            index_data_after[index] = {}
+            index_data_after[index]["item_count"] = total_item_count_after
+            index_data_after[index][
+                "index_metadata"] = self.rest.get_indexer_metadata()
+
+        for index in index_names:
+            # Validate index item count before and after
+            self.assertEqual(index_data_before[index]["item_count"],
+                             index_data_after[index]["item_count"],
+                             "Item count in index do not match after cluster ops.")
+
+            # Validate host list, partition count and partition distribution
+            self.assertTrue(
+                self.validate_partition_distribution_after_cluster_ops(
+                    index, index_data_before[index]["index_metadata"],
+                    index_data_after[index]["index_metadata"], [],
+                    [node_out]),
+                "Partition distribution post cluster ops has some issues")
+
+    def test_backup_restore_partitioned_index(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        index_details = []
+        index_detail = {}
+
+        index_detail["index_name"] = "idx1"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx2"
+        index_detail["num_partitions"] = 64
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx2 on default(name,dept) partition by hash(salary) USING GSI with {'num_partition':64}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx3"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx3 on default(name,dept) partition by hash(salary) USING GSI with {'num_replica':1}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx4"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = True
+        index_detail[
+            "definition"] = "CREATE INDEX idx4 on default(name,dept) partition by hash(salary) USING GSI with {'defer_build':true}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        try:
+            for index in index_details:
+                self.n1ql_helper.run_cbq_query(query=index["definition"],
+                                               server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        for index_detail in index_details:
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_detail, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+
+        self._create_backup(kv_node)
+
+        # Drop and recreate bucket
+        self.cluster.bucket_delete(kv_node, bucket="default")
+        default_params = self._create_bucket_params(server=self.master,
+                                                    size=self.bucket_size,
+                                                    replicas=self.num_replicas)
+
+        self.cluster.create_default_bucket(default_params)
+
+        if self.node_out > 0:
+            node_out = self.servers[self.node_out]
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [], [node_out])
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached,
+                            "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+        # Restore backup
+        self._create_restore(kv_node)
+
+        self.sleep(60)
+
+        # Validate all indexes restored correctly
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata After Build:")
+        self.log.info(index_metadata)
+
+        for index_detail in index_details:
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_detail, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
 
     def get_stats_for_partitioned_indexes(self, bucket_name="default",
                                           index_name=None, node_list=None):
@@ -3065,6 +3829,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 self.log.info(
                     "Partitions on {0} for all replicas are not correct".format(
                         host))
+                self.log.info(
+                    "Len(partitions on {0}) : {1}, Num Partitions : {2}".format(
+                        len(set(pmap_host)), host, num_partitions))
 
         partitions_distributed_for_index = True
         for idx_name in index_names:
@@ -3141,7 +3908,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         return is_num_partitions_equal & is_node_list_correct & is_partitions_distributed
 
-    def get_num_partitions_for_index(self,index_map,index_name):
+    def get_num_partitions_for_index(self, index_map, index_name):
         num_partitions = 0
         for index_map_item in index_map["status"]:
             if index_map_item["name"] == index_name:
@@ -3151,8 +3918,6 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.log.info("Index not found, or some other issue")
         else:
             return num_partitions
-
-
 
     # Description : Returns a list of create index statements generated randomly for emp dataset.
     #               The create index statements are generated by randomizing various parts of the statements like list of
@@ -3436,7 +4201,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
                 if index_order_list:
                     if "index_order" in plan_index_section:
-                        if plan_index_section["index_order"] != index_order_list:
+                        if plan_index_section[
+                            "index_order"] != index_order_list:
 
                             self.log.info(
                                 "Sorting not correctly pushed down to indexer")
@@ -3470,3 +4236,56 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 self.log.info(str(ex))
                 raise Exception("query failed")
             self.sleep(1)
+
+    def _saturate_indexer_memory(self, index_server=None):
+        cnt = 0
+        step = 100000
+        docs = 100000
+        while cnt < 50:
+            if self.gsi_type == "memory_optimized":
+                if self._validate_indexer_status_oom(index_server):
+                    self.log.info("OOM on index server is achieved")
+                    return True
+            elif self.gsi_type == "plasma":
+                if self._validate_indexer_in_dgm(index_server):
+                    self.log.info("DGM on index server is achieved")
+                    return True
+
+            for task in self.kv_mutations(docs, start=docs - step):
+                task.result()
+            self.sleep(5)
+            cnt += 1
+            docs += step
+        return False
+
+    def _validate_indexer_status_oom(self, index_server=None):
+        if not index_server:
+            index_server = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=False)
+        rest = RestConnection(index_server)
+        index_stats = rest.get_indexer_stats()
+        self.log.info(index_stats["indexer_state"])
+        if index_stats["indexer_state"].lower() == "paused":
+            return True
+        else:
+            return False
+
+    def _validate_indexer_in_dgm(self, index_server=None):
+        indexer_rest = RestConnection(index_server)
+        content = indexer_rest.get_index_storage_stats()
+        for index in content.values():
+            for stats in index.values():
+                if stats["MainStore"]["resident_ratio"] >= 1.00:
+                    return False
+            return True
+
+    def kv_mutations(self, docs=1, start=0):
+        self.log.info("Inside kv_mutations")
+        if not docs:
+            docs = self.docs_per_day
+        gens_load = self.generate_docs(docs, start=start)
+        self.full_docs_list = self.generate_full_docs_list(gens_load)
+        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+        tasks = self.async_load(generators_load=gens_load, op_type="create",
+                                batch_size=1000)
+        return tasks

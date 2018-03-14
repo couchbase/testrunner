@@ -3403,13 +3403,16 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
 
-        command = "rm -rf /tmp/backups"
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
-
         if error and not filter(lambda x: 'Restore completed successfully' in x,
                                 output):
             self.fail("cbbackupmgr restore failed")
+        elif not filter(lambda x: 'Restore completed successfully' in x,
+                                output):
+            self.fail("cbbackupmgr restore failed")
+        else:
+            command = "rm -rf /tmp/backups"
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
 
     def _run_use_index(self, index, count=10):
         select_query = "SELECT count(age) from default USE INDEX ({0} USING GSI) where age > 10".format(index)
