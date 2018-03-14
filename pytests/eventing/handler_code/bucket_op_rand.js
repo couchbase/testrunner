@@ -2,10 +2,10 @@ function OnUpdate(doc, meta) {
     log('document', doc);
     try {
         var time_rand = random_gen();
-        dst[meta.id + time_rand] = doc;
+        dst_bucket[meta.id + time_rand] = doc;
     } catch(e) {
         var time_rand = random_gen();
-        dst[meta.id + time_rand] = doc;
+        dst_bucket[meta.id + time_rand] = doc;
     }
 }
 function random_gen(){
