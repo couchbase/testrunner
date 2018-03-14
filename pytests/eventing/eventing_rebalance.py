@@ -857,7 +857,7 @@ class EventingRebalance(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_function_deploy_when_a_node_is_rebalanced_in(self):
-        services_in = self.input.param("services_in","eventing")
+        services_in = self.input.param("services_in", "eventing")
         body = self.create_save_function_body(self.function_name, self.handler_code)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -874,9 +874,6 @@ class EventingRebalance(EventingBaseTest):
                 self.deploy_function(body)
             else:
                 self.fail("Rebalance completed before we could start deployment of function")
-            reached = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-            rebalance.result()
         except Exception as ex:
             log.info("{0}".format(str(ex)))
             if "Rebalance ongoing on some/all Eventing nodes, creating new apps or changing settings for existing " \
@@ -884,10 +881,14 @@ class EventingRebalance(EventingBaseTest):
                 self.fail("Function deployment did not fail with expected error message : {0}".format(str(ex)))
         else:
             self.fail("Deployment of function succeeded during rebalance...")
+        finally:
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
         self.undeploy_and_delete_function(body)
 
     def test_function_rebalance_when_lifecycle_operation_is_going_on(self):
-        services_in = self.input.param("services_in","eventing")
+        services_in = self.input.param("services_in", "eventing")
         # worker_count_count is intentionally set to smaller value so that bootstrap takes more time completed
         # and we get enough time
         body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=1)
@@ -903,12 +904,75 @@ class EventingRebalance(EventingBaseTest):
             self.sleep(timeout=5)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-            rebalance.result()
-            self.wait_for_bootstrap_to_complete(self.function_name)
         except Exception as ex:
             log.info("{0}".format(str(ex)))
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("Rebalance failed with wrong error message : {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded when lifecycle operation is going on...")
+        self.wait_for_bootstrap_to_complete(name=self.function_name)
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # Retry failed rebalance
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1], [], [])
+        self.sleep(60)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        # delete json documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_kv_eventing_rebalance_with_multiple_functions_deployed(self):
+        self.services_in = self.input.param("services_in", "eventing")
+        self.server_out = self.input.param("server_out")
+        self.num_functions = self.input.param("num_functions", 10)
+        self.skip_validation = self.input.param("skip_validation", False)
+        handler_code = self.input.param('handler_code', 'bucket_op_with_rand')
+        if handler_code == 'bucket_op_with_doc_timer_rand':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_DOC_TIMER_RAND
+        elif handler_code == 'bucket_op_with_cron_timer_rand':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_CRON_TIMER_RAND
+        elif handler_code == 'bucket_op_with_rand':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_RAND
+        else:
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_RAND
+        body_array = []
+        # deploy multiple functions
+        for i in range(self.num_functions):
+            body = self.create_save_function_body(self.function_name + str(i), self.handler_code)
+            body_array.append(body)
+            self.deploy_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create')
+        nodes_out_list = self.servers[self.server_out]
+        # do a swap rebalance while multiple functions are deployed
+        self.rest.add_node(self.master.rest_username, self.master.rest_password,
+                           self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
+                           services=[self.services_in])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        task.result()
+        # This needs to be skipped in case of doc timers as multiple doc timers can't process same doc
+        if not self.skip_validation:
+            # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * self.num_functions,
+                                         skip_stats_validation=True)
+        else:
+            self.sleep(300)
+            eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+            for eventing_node in eventing_nodes:
+                rest_conn = RestConnection(eventing_node)
+                out = rest_conn.get_all_eventing_stats()
+                log.info("Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(out, sort_keys=True,
+                                                                                            indent=4)))
+        # delete all the functions
+        for body in body_array:
+            self.undeploy_and_delete_function(body)

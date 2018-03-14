@@ -39,6 +39,9 @@ class HANDLER_CODE:
     N1QL_ITERATORS = 'handler_code/n1ql_iterators.js'
     SRC_AND_DST_BUCKET_ARE_SAME = 'handler_code/src_and_dst_bucket_are_same.js'
     BUCKET_OP_READ_SOURCE_BUCKET = 'handler_code/bucket_op_read_source_bucket.js'
+    BUCKET_OP_WITH_RAND = 'handler_code/bucket_op_rand.js'
+    BUCKET_OP_WITH_DOC_TIMER_RAND = 'handler_code/bucket_op_with_doc_timer_rand.js'
+    BUCKET_OP_WITH_CRON_TIMER_RAND = 'handler_code/bucket_op_with_cron_timer_rand.js'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
