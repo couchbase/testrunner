@@ -1676,7 +1676,11 @@ class QueryHelper(object):
                     new_sql = new_sql + token.replace("PRIMARY_KEY", "primary_key_id ")
             else:
                 if string_check:
-                    if token == "IS":
+                    if token in ['0','1','2','3','4','5','6','7','8','9']:
+                        add_token = False
+                        new_sql += token+space
+                        string_check = False
+                    elif token == "IS":
                         string_check = False
                         add_token = True
                     elif "LIST" in token:
