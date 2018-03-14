@@ -1057,6 +1057,9 @@ class CouchbaseCluster:
     def get_remote_clusters(self):
         return self.__remote_clusters
 
+    def clear_all_remote_clusters(self):
+        self.__remote_clusters = []
+
     def get_nodes(self):
         return self.__nodes
 

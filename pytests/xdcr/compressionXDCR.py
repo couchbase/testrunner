@@ -414,10 +414,15 @@ class compression(XDCRNewBaseTest):
 
         self.async_perform_update_delete()
 
-        self.src_cluster.__remove_all_replications()
-        self.src_cluster.__remove_all_remote_clusters()
+        rest_conn = RestConnection(self.src_master)
+        rest_conn.remove_all_replications()
+        rest_conn.remove_all_remote_clusters()
+
+        self.src_cluster.get_remote_clusters()[0].clear_all_replications()
+        self.src_cluster.clear_all_remote_clusters()
 
         self.setup_xdcr()
+
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
 
@@ -463,7 +468,7 @@ class compression(XDCRNewBaseTest):
 
         self.verify_results()
 
-    def test_compression_with_disbling_later(self):
+    def test_compression_with_disabling_later(self):
         self.setup_xdcr()
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
