@@ -2627,7 +2627,7 @@ class RemoteMachineShellConnection:
         elif self.info.distribution_type.lower() == 'mac':
             self.stop_server(os='mac')
             """ close Safari browser before uninstall """
-            self.terminate_process(self.info, "Safari")
+            self.terminate_process(self.info, "/Applications/Safari.app/Contents/MacOS/Safari")
             self.terminate_processes(self.info, terminate_process_list)
             output, error = self.execute_command("rm -rf /Applications/Couchbase\ Server.app")
             self.log_command_output(output, error)
