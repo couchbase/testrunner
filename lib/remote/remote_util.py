@@ -1993,12 +1993,8 @@ class RemoteMachineShellConnection:
                     success &= self.log_command_output(output, error, track_words, debug=False)
         elif self.info.deliverable_type in ["zip"]:
             """ close Safari browser before install """
-            self.terminate_process(self.info, "Safari")
+            self.terminate_process(self.info, "/Applications/Safari.app/Contents/MacOS/Safari")
             o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
-            o, r = self.execute_command("ps aux | \
-                grep '/Applications/Couchbase Server.app/Contents/MacOS/Couchbase Server' \
-                                                      | awk '{print $2}' | xargs kill -9 ")
-            self.log_command_output(o, r)
             self.sleep(20)
             output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
             self.log_command_output(output, error)
