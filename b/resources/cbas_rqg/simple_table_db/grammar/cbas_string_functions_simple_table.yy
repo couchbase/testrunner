@@ -105,7 +105,7 @@ string_values:
 	STRING_VALUES |  string_function( STRING_VALUES ) | SUBSTR( STRING_VALUES, SUBSTR_INDEX ) | CONCAT( STRING_VALUES , characters ) | REPLACE( STRING_VALUES , characters , characters  ) ;
 
 string_function:
-	UPPER | LOWER | LTRIM |  RTRIM | TRIM  | INITCAP ;
+	UPPER | LOWER | LTRIM |  RTRIM | TRIM ;
 
 characters:
 	"a" | "b" | "c" | "c" | "d" ;
