@@ -2000,12 +2000,12 @@ class RemoteMachineShellConnection:
                                                       | awk '{print $2}' | xargs kill -9 ")
             self.log_command_output(o, r)
             self.sleep(20)
-            output, error = self.execute_command("cd ~/Downloads ;sudo open couchbase-server*.zip")
+            output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
             self.log_command_output(output, error)
             self.sleep(20)
-            cmd1 = "sudo mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/"
+            cmd1 = "mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/"
             cmd2 = "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app"
-            cmd3 = "sudo open /Applications/Couchbase\ Server.app"
+            cmd3 = "open /Applications/Couchbase\ Server.app"
             output, error = self.execute_command(cmd1)
             self.log_command_output(output, error)
             output, error = self.execute_command(cmd2)
