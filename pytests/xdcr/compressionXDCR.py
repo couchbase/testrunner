@@ -2,7 +2,7 @@ from xdcrnewbasetests import XDCRNewBaseTest, TOPOLOGY
 from remote.remote_util import RemoteMachineShellConnection, RestConnection
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.cluster import Cluster
-import json
+import json, time
 
 class compression(XDCRNewBaseTest):
     def setUp(self):
@@ -35,7 +35,8 @@ class compression(XDCRNewBaseTest):
         shell.disconnect()
         return output, error
 
-    def _verify_compression(self, cluster, compr_bucket_name="", uncompr_bucket_name="", compression_type="None"):
+    def _verify_compression(self, cluster, compr_bucket_name="", uncompr_bucket_name="",
+                            compression_type="None", repl_time=0):
         repls = cluster.get_remote_clusters()[0].get_replications()
         for repl in repls:
             if compr_bucket_name in str(repl):
@@ -56,25 +57,29 @@ class compression(XDCRNewBaseTest):
         self.log.info("Compression Type for replication " + compr_repl_id + " is Snappy")
 
         base_url = "http://" + cluster.get_master_node().ip + ":8091/pools/default/buckets/" + compr_bucket_name + \
-                   "/stats/replications%2F" + compr_repl_id + "%2Fdata_replicated"
+                   "/stats/replications%2F" + compr_repl_id + "%2Fdata_replicated?haveTStamp=" + str(repl_time)
         command = "curl -u Administrator:password " + base_url
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
         output = json.loads(output[0])
         compressed_data_replicated = 0
         for node in cluster.get_nodes():
-            compressed_data_replicated += output["nodeStats"]["{0}:8091".format(node.ip)][-1]
+            items = output["nodeStats"]["{0}:8091".format(node.ip)]
+            for item in items:
+                compressed_data_replicated += item
         self.log.info("Compressed data for replication {0} is {1}".format(compr_repl_id, compressed_data_replicated))
 
         base_url = "http://" + cluster.get_master_node().ip + ":8091/pools/default/buckets/" + uncompr_bucket_name + \
-                   "/stats/replications%2F" + uncompr_repl_id + "%2Fdata_replicated"
+                   "/stats/replications%2F" + uncompr_repl_id + "%2Fdata_replicated?haveTStamp=" + str(repl_time)
         command = "curl -u Administrator:password " + base_url
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
         output = json.loads(output[0])
         uncompressed_data_replicated = 0
         for node in cluster.get_nodes():
-            uncompressed_data_replicated += output["nodeStats"]['{0}:8091'.format(node.ip)][-1]
+            items = output["nodeStats"]["{0}:8091".format(node.ip)]
+            for item in items:
+                uncompressed_data_replicated += item
         self.log.info("Uncompressed data for replication {0} is {1}".format(uncompr_repl_id, uncompressed_data_replicated))
 
         self.assertTrue(uncompressed_data_replicated > compressed_data_replicated,
@@ -86,6 +91,7 @@ class compression(XDCRNewBaseTest):
     def test_compression_with_unixdcr_incr_load(self):
         bucket_prefix = self._input.param("bucket_prefix", "standard_bucket_")
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, bucket_prefix + "1", compression_type)
@@ -95,28 +101,35 @@ class compression(XDCRNewBaseTest):
 
         self.perform_update_delete()
 
+        self._wait_for_replication_to_catchup()
+
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name=bucket_prefix + "1",
                                  uncompr_bucket_name=bucket_prefix + "2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         if self.chain_length > 2 and self.topology == TOPOLOGY.CHAIN:
             self._verify_compression(cluster=self.dest_cluster,
                                      compr_bucket_name=bucket_prefix + "1",
                                      uncompr_bucket_name=bucket_prefix + "2",
-                                     compression_type=compression_type)
+                                     compression_type=compression_type,
+                                     repl_time=repl_time)
         if self.chain_length > 2 and self.topology == TOPOLOGY.RING:
             self._verify_compression(cluster=self.dest_cluster,
                                      compr_bucket_name=bucket_prefix + "1",
                                      uncompr_bucket_name=bucket_prefix + "2",
-                                     compression_type=compression_type)
+                                     compression_type=compression_type,
+                                     repl_time=repl_time)
             self._verify_compression(cluster=self.c3_cluster,
                                      compr_bucket_name=bucket_prefix + "1",
                                      uncompr_bucket_name=bucket_prefix + "2",
-                                     compression_type=compression_type)
+                                     compression_type=compression_type,
+                                     repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_unixdcr_backfill_load(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -130,14 +143,18 @@ class compression(XDCRNewBaseTest):
 
         self.perform_update_delete()
 
+        self._wait_for_replication_to_catchup()
+
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_bixdcr_incr_load(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -150,18 +167,23 @@ class compression(XDCRNewBaseTest):
 
         self.perform_update_delete()
 
+        self._wait_for_replication_to_catchup()
+
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self._verify_compression(cluster=self.dest_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_bixdcr_backfill_load(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -180,19 +202,24 @@ class compression(XDCRNewBaseTest):
 
         self.perform_update_delete()
 
+        self._wait_for_replication_to_catchup()
+
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self._verify_compression(cluster=self.dest_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_pause_resume(self):
         repeat = self._input.param("repeat", 5)
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -212,11 +239,13 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_optimistic_threshold_change(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -241,7 +270,8 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_advanced_settings(self):
@@ -251,6 +281,7 @@ class compression(XDCRNewBaseTest):
         target_nozzle = self._input.param("target_nozzle", 2)
 
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -279,7 +310,8 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_capi(self):
@@ -292,6 +324,7 @@ class compression(XDCRNewBaseTest):
 
     def test_compression_with_rebalance_in(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -312,11 +345,13 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_rebalance_out(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -337,11 +372,13 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_swap_rebalance(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -362,11 +399,13 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_failover(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
@@ -402,11 +441,13 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_replication_delete_and_create(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
@@ -431,7 +472,8 @@ class compression(XDCRNewBaseTest):
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name="standard_bucket_1",
                                  uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type)
+                                 compression_type=compression_type,
+                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_bixdcr_and_compression_one_way(self):
