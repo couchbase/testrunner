@@ -1,5 +1,5 @@
 import copy
-
+import json
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -867,7 +867,7 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [], services=[services_in])
             self.sleep(timeout=5)
-            expected_progress = 10
+            expected_progress = 35
             reached = RestHelper(self.rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(expected_progress))
             if not RestHelper(self.rest).is_cluster_rebalanced():
