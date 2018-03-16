@@ -29,12 +29,13 @@ class QueryTests(BaseTestCase):
         indexer_rest = RestConnection(indexer_node[0])
         doc = {"indexer.settings.storage_mode": self.gsi_type}
         indexer_rest.set_index_settings_internal(doc)
+        doc = {"indexer.settings.enableTestServer": True}
+        self.rest.set_index_settings_internal(doc)
         self.indexer_scanTimeout = self.input.param("indexer_scanTimeout", None)
         if self.indexer_scanTimeout is not None:
             for server in indexer_node:
                 rest = RestConnection(server)
                 rest.set_index_settings({"indexer.settings.scan_timeout": self.indexer_scanTimeout})
-
         if self.input.tuq_client and "client" in self.input.tuq_client:
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
