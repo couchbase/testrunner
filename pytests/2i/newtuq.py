@@ -30,7 +30,7 @@ class QueryTests(BaseTestCase):
         doc = {"indexer.settings.storage_mode": self.gsi_type}
         indexer_rest.set_index_settings_internal(doc)
         doc = {"indexer.settings.enableTestServer": True}
-        self.rest.set_index_settings_internal(doc)
+        indexer_rest.set_index_settings_internal(doc)
         self.indexer_scanTimeout = self.input.param("indexer_scanTimeout", None)
         if self.indexer_scanTimeout is not None:
             for server in indexer_node:
