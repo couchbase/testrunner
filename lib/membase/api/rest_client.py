@@ -2096,7 +2096,7 @@ class RestConnection(object):
         try:
             return status, json_parsed[bucket_name+':'+index_name+':'+stat_name]
         except:
-            self.log.error("ERROR: Stat {0} not found for {1} on bucket {2}".
+            log.error("ERROR: Stat {0} not found for {1} on bucket {2}".
                            format(stat_name, index_name, bucket_name))
 
     def get_bucket_status(self, bucket):
