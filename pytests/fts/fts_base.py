@@ -589,6 +589,13 @@ class FTSIndex:
         if self.index_storage_type :
             self.index_definition['params']['store']['indexType'] =  self.index_storage_type
 
+        if TestInputSingleton.input.param("num_snapshots_to_keep", None):
+            self.index_definition['params']['store']['numSnapshotsToKeep'] = int(
+                    TestInputSingleton.input.param(
+                        "num_snapshots_to_keep",
+                        None)
+                    )
+
         if TestInputSingleton.input.param("level_compaction", None):
             self.index_definition['params']['store']['mossStoreOptions']= {
                 "CompactionLevelMaxSegments": 9,
