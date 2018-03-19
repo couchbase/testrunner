@@ -2347,7 +2347,7 @@ class RemoteMachineShellConnection:
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase", "/data/*"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
-                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang"]
+                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang", "eventing"]
         self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
@@ -2698,6 +2698,11 @@ class RemoteMachineShellConnection:
 
             """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
             output, error = self.kill_erlang(os="windows")
+            self.log_command_output(output, error)
+            """ end remove code """
+
+            """ the code below need to removed when bug MB-28775 is fixed """
+            output, error = self.kill_eventing_process(name="eventing-consumer")
             self.log_command_output(output, error)
             """ end remove code """
 
