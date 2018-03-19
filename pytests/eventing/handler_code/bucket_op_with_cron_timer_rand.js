@@ -7,8 +7,8 @@ function NDtimerCallback(docid, expiry) {
     try {
         dst_bucket[docid] = 'from NDtimerCallback';
     } catch(e) {
-        var time_rand = random_gen();
-        dst_bucket[time_rand] = 'from NDtimerCallback';
+        //var time_rand = random_gen();
+        //dst_bucket[time_rand] = 'from NDtimerCallback';
     }
 }
 function random_gen(){

@@ -7,8 +7,8 @@ function DocTimerCallback(docid, expiry) {
     try {
         dst_bucket[docid] = 'from DocTimerCallback';
     } catch(e) {
-        var time_rand = random_gen();
-        dst_bucket[time_rand] = 'from DocTimerCallback';
+        //var time_rand = random_gen();
+        //dst_bucket[time_rand] = 'from DocTimerCallback';
     }
 }
 function random_gen(){
