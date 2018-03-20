@@ -689,7 +689,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
         output, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes,
                                            expect_failure=True, alter_index=self.alter_index)
-        if "Cannot Process Move Index - Rebalance/MoveIndex In Progress" not in error:
+        if "Error occured Cannot Process Move Index - Rebalance/MoveIndex In Progress" not in error:
             self.fail("cbindex move succeeded during a rebalance")
         else:
             self.log.info("Index alteration failed as expected")
@@ -1385,7 +1385,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # validate the results
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
-                                                      [self.servers[self.nodes_init]], [], swap_rebalance=True)
+                                                      [self.servers[self.nodes_init]], [], swap_rebalance=False)
         # do a rebalance
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init + 1], [], [])
         reached = RestHelper(self.rest).rebalance_reached()
@@ -1442,7 +1442,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                            expect_failure=True,
                                            alter_index=self.alter_index)
 
-        if "Unable to find Index service for destination" not in error:
+        if "Error occured Unable to find Index service for destination" not in error:
             self.fail(
                 "cbindex move did not fail with expected error message")
         else:

@@ -281,7 +281,7 @@ class RbacN1QL(QueryTests):
             self.log.info("Alter Query executed successfully")
             self.sleep(120,"Allowing alter index to complete in the background before test cleanup")
         else:
-            self.assertTrue(any("success" in line for line in output),
+            self.assertFalse(any("success" in line for line in output),
                             "Able to alter index on {0} as user {1}".
                             format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Alter Query failed as expected")
