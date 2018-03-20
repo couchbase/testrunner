@@ -132,7 +132,7 @@ class EventingNegative(EventingBaseTest):
             # Try undeploying the function when it is still bootstrapping
             self.undeploy_function(body)
         except Exception as ex:
-            if "not bootstrapped, discarding request to undeploy it" not in str(ex):
+            if "not bootstrapped. Operation not permitted. Edit function instead" not in str(ex):
                 self.fail("Function undeploy succeeded even when function was in bootstrapping state")
         # Wait for eventing to catch up with all the create mutations and verify results
         self.wait_for_bootstrap_to_complete(body['appname'])

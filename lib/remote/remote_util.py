@@ -2467,6 +2467,11 @@ class RemoteMachineShellConnection:
                                     'schedule uninstall on {0}'.format(self.ip))
                 """ End remove this workaround when bug MB-14504 is fixed """
 
+                """ Remove this workaround when bug MB-28775 is fixed """
+                log.info("Kill any eventing-consumer.exe in vulcan")
+                self.execute_command('taskkill /F /T /IM eventing*')
+                """ End remove this workaround when bug MB-28775 is fixed """
+
                 self.stop_couchbase()
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
