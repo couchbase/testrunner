@@ -3501,6 +3501,15 @@ class RestConnection(object):
             log.error("There is not zone with name: {0} in cluster.".format(zone_name))
             return False
 
+    def get_items_info(self, keys, bucket='default'):
+        items_info = {}
+        for key in keys:
+            api = '{0}{1}{2}/docs/{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket, key)
+            status, content, header = self._http_request(api)
+            if status:
+                items_info[key] = json.loads(content)
+        return items_info
+
     def start_cluster_logs_collection(self, nodes="*", upload=False, \
                                       uploadHost=None, customer="", ticket=""):
         if not upload:

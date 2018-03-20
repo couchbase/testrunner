@@ -147,6 +147,7 @@ WIN_COUCHBASE_SAMPLE_PATH_C = "c:/Program\ Files/Couchbase/Server/samples/"
 WIN_COUCHBASE_BIN_PATH_RAW = 'C:/Program\ Files/Couchbase/Server/bin/'
 WIN_COUCHBASE_PORT_CONFIG_PATH = "/cygdrive/c/Program\ Files/couchbase/Server/etc/couchbase"
 WIN_COUCHBASE_OLD_CONFIG_PATH = "/cygdrive/c/Program\ Files/couchbase/Server/var/lib/couchbase/config"
+WIN_CYGWIN_BIN_PATH = "/cygdrive/c/cygwin64/bin/"
 WIN_TMP_PATH = '/cygdrive/c/tmp/'
 WIN_TMP_PATH_RAW = 'C:/tmp/'
 WIN_BACKUP_C_PATH = "c:/tmp/backup/"

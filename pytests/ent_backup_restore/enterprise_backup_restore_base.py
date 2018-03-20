@@ -18,7 +18,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH_RAW,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_COUCHBASE_BIN_PATH, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
-                          WIN_TMP_PATH, STANDARD_BUCKET_PORT
+                          WIN_TMP_PATH, STANDARD_BUCKET_PORT, WIN_CYGWIN_BIN_PATH
 from testconstants import INDEX_QUOTA, FTS_QUOTA
 from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
@@ -79,6 +79,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.ex_logs_path = self.input.param("ex-logs-path", None)
         self.backupset.overwrite_user_env = self.input.param("overwrite-user-env", False)
         self.backupset.overwrite_passwd_env = self.input.param("overwrite-passwd-env", False)
+        self.replace_ttl_with = self.input.param("replace-ttl-with", None)
+        self.bk_with_ttl = self.input.param("bk-with-ttl", None)
         self.backupset.user_env_with_prompt = \
                         self.input.param("user-env-with-prompt", False)
         self.backupset.passwd_env_with_prompt = \
@@ -91,6 +93,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.tmp_path = "/tmp/"
         self.long_help_flag = "--help"
         self.short_help_flag = "-h"
+        self.cygwin_bin_path = ""
+        self.rfc3339_date = "date +%s --date='{0} seconds' | ".format(self.replace_ttl_with) + \
+                                "xargs -I {} date --date='@{}' --rfc-3339=seconds | "\
+                                "sed 's/ /T/'"
+        self.seconds_with_ttl = "date +%s --date='{0} seconds'".format(self.replace_ttl_with)
         if info == 'linux':
             if self.nonroot:
                 base_path = "/home/%s" % self.master.ssh_username
@@ -105,6 +112,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.tmp_path = WIN_TMP_PATH
             self.long_help_flag = "help"
             self.short_help_flag = "h"
+            self.cygwin_bin_path = WIN_CYGWIN_BIN_PATH
+            self.rfc3339_date = "date +%s --date='{0} seconds' | ".format(self.replace_ttl_with) + \
+                            "{0}xargs -I {{}} date --date=\"@'{{}}'\" --rfc-3339=seconds | "\
+                                                            .format(self.cygwin_bin_path) + \
+                                                                               "sed 's/ /T/'"
             win_format = "C:/Program Files"
             cygwin_format = "/cygdrive/c/Program\ Files"
             if win_format in self.cli_command_location:
@@ -133,8 +145,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.new_replicas = self.input.param("new-replicas", None)
         self.restore_only = self.input.param("restore-only", False)
         self.replace_ttl = self.input.param("replace-ttl", None)
-        self.replace_ttl_with = self.input.param("replace-ttl-with", None)
-        self.verify_before_expired = self.input.param("verify-before-expired", False)
         self.vbucket_filter = self.input.param("vbucket-filter", None)
         self.force_version_upgrade = self.input.param("force-version-upgrade", None)
         if self.non_master_host:
@@ -587,32 +597,25 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.passwd_env_with_prompt:
             self.log.info("set password env to prompt")
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+
         if self.replace_ttl:
-            if self.replace_ttl != "none":
-                if self.replace_ttl == "all" or self.replace_ttl == "expired":
-                    if self.replace_ttl_with is None:
-                        self.fail("Need to include param 'replace-ttl-with' value")
-                    if self.replace_ttl_with:
-                        if str(self.replace_ttl_with).startswith("epoch"):
-                            time_extend = self.replace_ttl_with[5:]
-                            cmd = "date +%s --date='{0} seconds'".format(time_extend)
-                            epoch_time, error = remote_client.execute_command(cmd)
-                            if epoch_time:
-                                self.replace_ttl_with = epoch_time[0]
-                                args += " --replace-ttl {0} --replace-ttl-with {1}"\
-                                         .format(self.replace_ttl, epoch_time[0])
-                        else:
-                            args += " --replace-ttl {0} --replace-ttl-with {1}"\
-                                     .format(self.replace_ttl, self.replace_ttl_with)
-                elif self.replace_ttl == "add-none":
-                    args += " --replace-ttl none"
-                elif self.replace_ttl == "empty-flag":
-                    args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
-                else:
-                    args += " --replace-ttl {0}".format(self.replace_ttl)
-            elif self.replace_ttl == "none":
-                args += " --replace-ttl"
+            if self.replace_ttl == "all" or self.replace_ttl == "expired":
+                if self.replace_ttl_with is None:
+                    self.fail("Need to include param 'replace-ttl-with' value")
+                if self.replace_ttl_with:
+                    ttl_date, _ = shell.execute_command(self.rfc3339_date)
+                    self.seconds_with_ttl, _ = shell.execute_command(self.seconds_with_ttl)
+                    args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                                 .format(self.replace_ttl, ttl_date[0])
+            elif self.replace_ttl == "add-none":
+                args += " --replace-ttl none"
+            elif self.replace_ttl == "empty-flag":
+                args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
+            else:
+                args += " --replace-ttl {0}".format(self.replace_ttl)
+        else:
+            args += " --replace-ttl none"
         if self.vbucket_filter:
             if self.vbucket_filter == "empty":
                 args += " --vbucket-filter "
@@ -626,8 +629,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                    password_env, user_env)
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        output, error = shell.execute_command(command)
+        shell.log_command_output(output, error)
         errors_check = ["Unable to process value for", "Error restoring cluster",
                         "Expected argument for option"]
         if "Error restoring cluster" in output[0] or "Unable to process value" in output[0] \
@@ -643,12 +646,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if error_str in res:
             command = "cat " + self.backupset.directory + \
                       "/logs/backup.log | grep '" + error_str + "' -A 10 -B 100"
-            output, error = remote_client.execute_command(command)
-            remote_client.log_command_output(output, error)
+            output, error = shell.execute_command(command)
+            shell.log_command_output(output, error)
         if 'Required Flags:' in res:
             if not self.should_fail:
                 self.fail("Command line failed. Please check test params.")
-        remote_client.disconnect()
+        shell.disconnect()
         return output, error
 
     def backup_restore_validate(self, compare_uuid=False,
@@ -692,20 +695,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                  self.skip_consistency, self.per_node)
         self.log.info("*** Start to validate the restore ")
         if self.replace_ttl_with:
-            if self.verify_before_expired:
-                if int(self.replace_tll_with) < 180:
-                    self.fail("Need more than 3 minutes to run with verify before expired")
-                else:
-                    sleep_time = int(self.replace_ttl_with)/3
-                    self.sleep(int(sleep_time), " wait to check items before it expired")
-            else:
-                if int(self.replace_ttl_with) > 14400:
-                    self.log.info("Time is set more than 4 hours.  No need to sleep")
-                else:
-                    sleep_time = int(self.replace_ttl_with) + 10
-                    self.sleep(int(sleep_time), " wait for items to be expired")
+            if int(self.replace_ttl_with) < 120 and int(self.replace_ttl_with) != 0:
+                self.fail("Need more than 3 minutes to run with verify before expired")
+            if int(self.replace_ttl_with) > 14400 or int(self.replace_ttl_with) == 0:
+                self.log.info("Time is set more than 4 hours.  No need to sleep")
         if self.vbucket_filter and self.vbucket_filter != "empty":
             self._validate_restore_vbucket_filter()
+        elif self.replace_ttl == "all" or self.replace_ttl == "expired":
+            self._validate_restore_replace_ttl_with(self.seconds_with_ttl[0])
         else:
             status, msg = self.validation_helper.validate_restore(self.backupset.end,
                                                   self.vbucket_seqno, current_vseqno,
@@ -1341,6 +1338,59 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.log.info("No keys with vbucket filter {0} restored".format(vbucket_filter))
             else:
                 raise Exception("file shard_0.fdb did not created ")
+
+    def _validate_restore_replace_ttl_with(self, ttl_set):
+        data_collector = DataCollector()
+        bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(self.backupset.backup_host,
+                                      self.cli_command_location, self.cmd_ext,
+                                      self.backupset.directory, "ent-backup",
+                                      self.buckets)
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        rest = RestConnection(self.backupset.restore_cluster_host)
+        restore_buckets_items = rest.get_buckets_itemCount()
+        buckets = rest.get_buckets()
+        keys_fail = {}
+        for bucket in buckets:
+            keys_fail[bucket.name] = {}
+            if len(bk_file_data[bucket.name].keys()) != \
+                                    int(restore_buckets_items[bucket.name]):
+                self.fail("Total keys do not match")
+            items_info, _ = rest.get_items_info(bk_file_data[bucket.name].keys(),
+                                                              bucket.name)
+            ttl_matched = True
+            for key in bk_file_data[bucket.name].keys():
+                if items_info[key]['meta']['expiration'] != int(ttl_set):
+                    ttl_matched = False
+                    keys_fail[bucket.name][key] = []
+                    keys_fail[bucket.name][key].append(items_info[key]['meta']['expiration'])
+                    keys_fail[bucket.name][key].append(int(ttl_set))
+                    if self.debug_logs:
+                        print("ttl time set: ", ttl_set)
+                        print("key {0} failed to set ttl with {1}".format(key,
+                                   items_info[key]['meta']['expiration']))
+
+            if not ttl_matched:
+                self.fail("ttl value did not set correctly")
+            if int(self.replace_ttl_with) == 0:
+                if len(bk_file_data[bucket.name].keys()) != \
+                                int(restore_buckets_items[bucket.name]):
+                    self.fail("Keys do not restore with ttl set to 0")
+            elif int(self.replace_ttl_with) > 0:
+                output, _ = shell.execute_command("date +%s")
+                sleep_time = int(ttl_set) - int(output[0])
+                if sleep_time > 0:
+                    self.sleep(sleep_time + 10, "wait for items to expire")
+                else:
+                    self.log.info("time expired.  No need to wait")
+
+                BucketOperationHelper.verify_data(self.backupset.restore_cluster_host,
+                                                  bk_file_data[bucket.name].keys(),
+                                                  False, False, self, bucket=bucket.name)
+                self.sleep(10, "wait for bucket update new stats")
+                restore_buckets_items = rest.get_buckets_itemCount()
+                if int(restore_buckets_items[bucket.name]) > 0:
+                    self.fail("Key did not expire after wait more than 10 seconds of ttl")
+
 
 class Backupset:
     def __init__(self):

@@ -3487,9 +3487,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if "5.5" > self.cb_version[:3]:
             self.fail("This test is only for cb version 5.5 and later. ")
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, gen, "create", 0)
+        if self.replace_ttl == "expired":
+            if self.bk_with_ttl:
+                self._load_all_buckets(self.master, gen, "create", int(self.bk_with_ttl))
+            else:
+                self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster_validate()
+        if self.bk_with_ttl:
+            self.sleep(int(self.bk_with_ttl) + 10, "wait items to be expired in backup")
         compare_function = "=="
         if self.replace_ttl_with:
             compare_function = "<="
