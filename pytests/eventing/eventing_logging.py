@@ -1,4 +1,5 @@
 from pytests.eventing.eventing_base import EventingBaseTest
+from logredaction.log_redaction_base import LogRedactionBase
 from pytests.security.auditmain import audit
 from lib.testconstants import STANDARD_BUCKET_PORT
 import logging
@@ -14,7 +15,7 @@ from pytests.eventing.eventing_constants import HANDLER_CODE
 log = logging.getLogger()
 
 
-class EventingLogging(EventingBaseTest):
+class EventingLogging(EventingBaseTest, LogRedactionBase):
     def setUp(self):
         super(EventingLogging, self).setUp()
         if self.create_functions_buckets:
@@ -77,3 +78,35 @@ class EventingLogging(EventingBaseTest):
         self.sleep(60)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_eventing_with_log_redaction(self):
+        self.log_redaction_level = self.input.param("redaction_level", "partial")
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        log.info("eventing_node : {0}".format(eventing_node))
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.undeploy_and_delete_function(body)
+        self.set_redaction_level()
+        self.start_logs_collection()
+        result = self.monitor_logs_collection()
+        node = "ns_1@"+eventing_node.ip
+        logs_path = result["perNode"][node]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/') + 1]
+        log.info("redactFileName : {0}".format(redactFileName))
+        log.info("nonredactFileName : {0}".format(nonredactFileName))
+        log.info("remotepath : {0}".format(remotepath))
+        self.sleep(120)
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+        self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.eventing.log")
+
+
