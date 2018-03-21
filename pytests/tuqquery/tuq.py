@@ -2481,11 +2481,11 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             if query_temp.find('%s') > 0:
                 query_temp = query_temp % bucket.name
-            query = 'EXPLAIN %s' % query_temp
-            res = self.run_cbq_query(query=query)
-            plan = self.ExplainPlanHelper(res)
             self.log.info('-'*100)
+            query = 'EXPLAIN %s' % query_temp
             if query.find("CREATE INDEX") < 0:
+                res = self.run_cbq_query(query=query)
+                plan = self.ExplainPlanHelper(res)
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] else plan["~children"][0]
                 if result['scans'][0]['#operator'] !='DistinctScan':
                     if result["#operator"] != 'UnionScan':
@@ -2504,9 +2504,7 @@ class QueryTests(BaseTestCase):
                     self.log.info('compared against "{0}"'.format(indexes_names))
                     self.assertTrue(set(actual_indexes) == set(indexes_names), "Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
             else:
-                result = plan
-                self.assertTrue(result['#operator'] == 'CreateIndex',
-                                "Operator is not create index and is %s" % (result))
+                result = ""
             self.log.info('-'*100)
 
     def _delete_indexes(self, indexes):

@@ -984,6 +984,8 @@ class QueriesViewsTests(QuerySanityTests):
                     self.query = 'EXPLAIN SELECT name, join_day, join_yr FROM %s WHERE join_yr>3' % (bucket.name)
                     res = self.run_cbq_query()
                     plan = self.ExplainPlanHelper(res)
+                    print plan
+                    print plan['~children'][0]
                     self.assertTrue(plan["~children"][0]["index"] != '%s_%s' % (index_name_prefix, attr),
                                     "Index should be %s_%s, but is: %s" % (index_name_prefix, attr, plan))
             finally:
