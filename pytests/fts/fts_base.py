@@ -3090,7 +3090,8 @@ class FTSBaseTest(unittest.TestCase):
         if self.consistency_vectors != {}:
             self.consistency_vectors = eval(self.consistency_vectors)
             if self.consistency_vectors is not None and self.consistency_vectors != '':
-                self.consistency_vectors = json.loads(self.consistency_vectors)
+                if type(self.consistency_vectors) != dict:
+                    self.consistency_vectors = json.loads(self.consistency_vectors)
 
     def __initialize_error_count_dict(self):
         """
