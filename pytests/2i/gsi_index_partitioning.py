@@ -348,7 +348,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             index_details = {}
             index_details["index_name"] = indexname
-            index_details["num_partitions"] = 8
+            if int(value) > 0:
+                index_details["num_partitions"] = int(value)
+            else:
+                index_details["num_partitions"] = 8
             index_details["defer_build"] = False
 
             self.assertTrue(
@@ -415,7 +418,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     "Index got created with an invalid num_partition value : {0}".format(
                         value))
 
-        numpartition_values_num = [0, -5, 47.6789]
+        numpartition_values_num = [0, -5]
         for value in numpartition_values_num:
             # Create partitioned index
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}}}".format(
@@ -430,6 +433,19 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 self.fail(
                     "Index got created with an invalid num_partition value : {0}".format(
                         value))
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':47.6789}}"
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query=create_index_statement,
+                server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "Index did not get created with an double value for num_partition value : 47.6789")
+        else:
+            self.log.info("Index got created successfully with num_partition being a double value : 47.6789")
+
 
     def test_partitioned_index_with_replica(self):
         self._load_emp_dataset(end=self.num_items)
@@ -532,6 +548,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         node_out = self.servers[self.node_out]
         self.start_firewall_on_node(node_out)
+        self.sleep(10)
 
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name)"
@@ -543,12 +560,15 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         except Exception, ex:
             self.log.info(str(ex))
             self.fail("Failed to create index with one node failed")
+        finally:
+            # Heal network partition and wait for some time to allow indexes
+            # to get built automatically on that node
+            self.stop_firewall_on_node(node_out)
+            self.sleep(120)
 
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info("Indexer Metadata :::")
         self.log.info(index_metadata)
-
-        self.stop_firewall_on_node(node_out)
 
         hosts = index_metadata["status"][0]["hosts"]
         self.log.info("Actual nodes : {0}".format(hosts))
@@ -829,11 +849,13 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_details["defer_build"] = False
 
+        # At this point, since one node is in a failed state, all partitions would not be built.
         self.assertTrue(
             self.validate_partitioned_indexes(index_details, index_map,
-                                              index_metadata),
+                                              index_metadata, skip_numpartitions_check=True),
             "Deferred Partitioned index created not as expected")
 
+        # Recover the failed node and check if after recovery, all partitions are built.
         if self.recover_failed_node:
             nodes_all = self.rest.node_statuses()
             for node in nodes_all:
@@ -918,9 +940,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_details["defer_build"] = False
 
+        # At this point, since one node is in a failed state, all partitions would not be built.
         self.assertTrue(
             self.validate_partitioned_indexes(index_details, index_map,
-                                              index_metadata),
+                                              index_metadata, skip_numpartitions_check=True),
             "Deferred Partitioned index created not as expected")
 
     def test_build_partitioned_index_with_network_partitioning(self):
@@ -957,8 +980,6 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             "Deferred Partitioned index created not as expected")
 
         node_out = self.servers[self.node_out]
-        self.start_firewall_on_node(node_out)
-
         build_index_query = "BUILD INDEX on `default`(" + index_name_prefix + ")"
 
         try:
@@ -968,7 +989,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
         except Exception, ex:
             self.log.info(str(ex))
-            self.fail("index building failed with error : {0}".format(str(ex)))
+            if not "Index build will be retried in background" in str(ex):
+                self.fail("index building failed with error : {0}".format(str(ex)))
+            else:
+                self.log.info("Index build failed with expected error")
 
         finally:
             # Heal network partition and wait for some time to allow indexes
@@ -1242,8 +1266,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
         except Exception, ex:
             self.log.info(str(ex))
-            self.fail(
-                "index drop failed with error : {0}".format(str(ex)))
+            if not "the operation will automaticaly retry after cluster is back to normal" in str(ex):
+                self.fail(
+                    "index drop failed with error : {0}".format(str(ex)))
+            else:
+                self.log.info("Index drop failed with expected error")
 
         finally:
             # Heal network partition and wait for some time to allow indexes
@@ -1287,7 +1314,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         index_details = {}
         index_details["index_name"] = index_name_prefix
         index_details["num_partitions"] = self.num_index_partitions
-        index_details["defer_build"] = False
+        index_details["defer_build"] = self.defer_build
 
         self.assertTrue(
             self.validate_partitioned_indexes(index_details, index_map,
@@ -3762,7 +3789,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
     # Description : Validate index metadata : num_partitions, index status, index existence
     def validate_partitioned_indexes(self, index_details, index_map,
-                                     index_metadata):
+                                     index_metadata, skip_numpartitions_check=False):
 
         isIndexPresent = False
         isNumPartitionsCorrect = False
@@ -3801,7 +3828,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         if not isIndexPresent:
             self.log.info("Index not listed in /getIndexStatus")
 
-        return isIndexPresent and isNumPartitionsCorrect and isDeferBuildCorrect
+        if skip_numpartitions_check:
+            return isIndexPresent and isDeferBuildCorrect
+        else:
+            return isIndexPresent and isNumPartitionsCorrect and isDeferBuildCorrect
 
     # Description : Checks if same host contains same partitions from different replica, and also if for each replica, if the partitions are distributed across nodes
     def validate_partition_map(self, index_metadata, index_name, num_replica,
@@ -4026,8 +4056,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 if partition_key_type == partition_key_type_list[4]:
                     key = "SUBSTR(meta().id, POSITION(meta().id, '__')+2)"
 
-                if key is not None and key not in partition_keys:
+                if ((key is not None) or (key != "")) and (key not in partition_keys):
                     partition_keys.append(key)
+                    self.log.info("Partition Keys : {0}, Partition Key Type : {1}".format(key,partition_key_type))
 
             # 6. Choose other variation in queries from the list.
             num_index_variations = random.randint(0, len(
@@ -4114,7 +4145,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             index_detail["index_definition"] = create_index_statement
             index_detail["nodes"] = nodes
 
-            if partition_keys is not None:
+            if key is not None or key != "":
                 index_details.append(index_detail)
             else:
                 self.log.info(
