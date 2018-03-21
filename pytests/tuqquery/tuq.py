@@ -1068,7 +1068,7 @@ class QueryTests(BaseTestCase):
                     self.log.error(item)
                     continue
                 bucket_name = ""
-                if type(bucket) is str:
+                if isinstance(bucket, str) or isinstance(bucket, unicode):
                     bucket_name = bucket
                 else:
                     bucket_name = bucket.name
