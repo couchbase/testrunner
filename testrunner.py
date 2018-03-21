@@ -373,7 +373,7 @@ def main():
         create_log_file(log_config_filename, test_log_file, options.loglevel)
         logging.config.fileConfig(log_config_filename)
         print "Logs will be stored at {0}".format(logs_folder)
-        print "\n.{3}testrunner -i {0} {1} -t {2}\n"\
+        print "\n.{3}testrunner -i {0} -p {1} -t {2}\n"\
               .format(arg_i or "", arg_p or "", name, os.sep)
         name = name.split(",")[0]
 
