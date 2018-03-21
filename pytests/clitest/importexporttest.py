@@ -126,7 +126,7 @@ class ImportExportTests(CliBaseTest):
         for bucket in self.buckets:
             doc_create_gen = copy.deepcopy(self.json_create_gen)
             self.cluster.load_gen_docs(self.master, bucket.name,
-                                               doc_create_gen, bucket.kvs[1], "create")
+                                               doc_create_gen, bucket.kvs[1], "create", compression=self.sdk_compression)
             self.verify_cluster_stats(self.servers[:self.nodes_init], max_verify=total_items)
             if delete_percent is not None:
                 self.log.info("Start to delete %s %% total keys" % delete_percent)
@@ -134,13 +134,13 @@ class ImportExportTests(CliBaseTest):
                 doc_delete_gen.end = int(self.num_items) * int(delete_percent) / 100
                 total_items -= doc_delete_gen.end
                 self.cluster.load_gen_docs(self.master, bucket.name, doc_delete_gen,
-                                                            bucket.kvs[1], "delete")
+                                                            bucket.kvs[1], "delete", compression=self.sdk_compression)
             if updated and update_field is not None:
                 self.log.info("Start update data")
                 doc_updated_gen = copy.deepcopy(self.json_create_gen)
                 doc_updated_gen.update(fields_to_update=update_field)
                 self.cluster.load_gen_docs(self.master, bucket.name, doc_updated_gen,
-                                                             bucket.kvs[1], "update")
+                                                             bucket.kvs[1], "update", compression=self.sdk_compression)
             self.verify_cluster_stats(self.servers[:self.nodes_init], max_verify=total_items)
             """ remove previous export directory at tmp dir and re-create it
                 in linux:   /tmp/export

@@ -219,7 +219,7 @@ class EventingBucket(EventingBaseTest):
         # load some data on metadata bucket while eventing is processing mutations
         # metadata bucket can be used for other purposes as well
         task = self.cluster.async_load_gen_docs(self.master, self.metadata_bucket_name, gen_load_copy,
-                                                self.buckets[0].kvs[1], "create")
+                                                self.buckets[0].kvs[1], "create", compression=self.sdk_compression)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         task.result()
@@ -239,7 +239,7 @@ class EventingBucket(EventingBaseTest):
         gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=2016 * self.docs_per_day)
         gen_load_non_json_del = copy.deepcopy(gen_load_non_json)
         self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
-                                   'create')
+                                   'create', compression=self.sdk_compression)
         # deploy the first function
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
                                               worker_count=3)
@@ -261,7 +261,7 @@ class EventingBucket(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
-                                   'delete')
+                                   'delete', compression=self.sdk_compression)
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.verify_eventing_results(self.function_name + "_1", 0, skip_stats_validation=True,
                                      bucket=self.src_bucket_name)

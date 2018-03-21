@@ -263,14 +263,14 @@ class EventingN1QL(EventingBaseTest):
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         # load the data
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
-                                   'create')
+                                   'create', compression=self.sdk_compression)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATORS, execution_timeout=60)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, 100)
         # delete all the docs
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
-                                   'delete')
+                                   'delete', compression=self.sdk_compression)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         # undeploy and delete the function

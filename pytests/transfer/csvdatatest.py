@@ -20,7 +20,8 @@ class CsvDataTest(BaseTestCase):
                 bucket_to_load = bucket
                 break
         self.assertNotEqual(bucket_to_load, None, msg="Could not find default bucket on node {0}".format(self.master.ip))
-        self.cluster.load_gen_docs(self.master, bucket_to_load.name, self.gen_load, bucket_to_load.kvs[1], 'create')
+        self.cluster.load_gen_docs(self.master, bucket_to_load.name, self.gen_load, bucket_to_load.kvs[1], 'create',
+                                   compression=self.sdk_compression)
 
     '''The below function loads some data to bucket and then creates a csv
        file of that data on localhost. Then it restore that csv file to another

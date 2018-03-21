@@ -781,7 +781,8 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         cluster = Cluster()
         gen_load = BlobGenerator('binary', 'binary-', self.value_size, end=100)
         rc = cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
-                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000)
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000,
+                                   compression=self.sdk_compression)
         for bucket in self.buckets:
             if not id_map:
                 id_map = self.create_index_using_rest(bucket, query_definition2)

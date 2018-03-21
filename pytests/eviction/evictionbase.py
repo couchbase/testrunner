@@ -68,7 +68,8 @@ class EvictionBase(BaseTestCase):
     def ops_on_ejected_set(self, action, start = 0, end = 100,  ttl = 0):
         kv_store = self.get_kv_store()
         gen_reader = BlobGenerator('ejected', 'ejected-', 128, start=start, end=end)
-        self.cluster.load_gen_docs(self.master, 'default', gen_reader, kv_store, action, exp = ttl)
+        self.cluster.load_gen_docs(self.master, 'default', gen_reader, kv_store, action, exp = ttl,
+                                   compression=self.sdk_compression)
 
     def run_expiry_pager(self, ts = 15):
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", ts)

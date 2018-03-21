@@ -991,7 +991,7 @@ class XDCReplication:
 
 class CouchbaseCluster:
 
-    def __init__(self, name, nodes, log, use_hostname=False):
+    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -1013,6 +1013,7 @@ class CouchbaseCluster:
         self.__remote_clusters = []
         self.__clusterop = Cluster()
         self.__kv_gen = {}
+        self.sdk_compression = sdk_compression
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -1417,7 +1418,7 @@ class CouchbaseCluster:
         task = self.__clusterop.async_load_gen_docs(
             self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
             OPS.CREATE, exp, flag, only_store_hash, batch_size, pause_secs,
-            timeout_secs)
+            timeout_secs, compression=self.sdk_compression)
         return task
 
     def load_bucket(self, bucket, num_items, value_size=512, exp=0,
@@ -1472,7 +1473,7 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
-                    pause_secs, timeout_secs)
+                    pause_secs, timeout_secs, compression=self.sdk_compression)
             )
         return tasks
 
@@ -1523,7 +1524,8 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
                     bucket.kvs[kv_store], ops, exp, flag,
-                    only_store_hash, batch_size, pause_secs, timeout_secs)
+                    only_store_hash, batch_size, pause_secs, timeout_secs,
+                    compression=self.sdk_compression)
             )
         for task in tasks:
             task.result()
@@ -1554,7 +1556,7 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
                     bucket.kvs[kv_store], ops, exp, flag,
-                    only_store_hash, batch_size, pause_secs, timeout_secs)
+                    only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
             )
         return tasks
 
@@ -1604,7 +1606,7 @@ class CouchbaseCluster:
                 tasks.append(self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
-                    pause_secs, timeout_secs))
+                    pause_secs, timeout_secs, compression=self.sdk_compression))
 
                 for task in tasks:
                     task.result()
@@ -1691,7 +1693,8 @@ class CouchbaseCluster:
                     bucket.kvs[kv_store],
                     op_type,
                     expiration,
-                    batch_size=1000)
+                    batch_size=1000,
+                    compression=self.sdk_compression)
             )
         return tasks
 
@@ -2362,7 +2365,8 @@ class CouchbaseCluster:
                                 max_verify,
                                 only_store_hash,
                                 batch_size,
-                                timeout_sec=60))
+                                timeout_sec=60,
+                                compression=self.sdk_compression))
         for task in tasks:
             task.result(timeout)
 
@@ -2577,6 +2581,7 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
+        sdk_compression = self._input.param("sdk_compression", True)
         counter = 1
         for _, nodes in self._input.clusters.iteritems():
             cluster_nodes = copy.deepcopy(nodes)
@@ -2585,7 +2590,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__cb_clusters.append(
                 CouchbaseCluster(
                     "C%s" % counter, cluster_nodes,
-                    self.log, use_hostanames))
+                    self.log, use_hostanames, sdk_compression=sdk_compression))
             counter += 1
 
         self.__cleanup_previous()
@@ -2692,6 +2697,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self._input.param("active_resident_threshold", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
+        self._sdk_compression = self._input.param("sdk_compression", True)
         self._evict_with_compactor = self._input.param("evict_with_compactor", False)
         self._replicator_role = self._input.param("replicator_role",False)
         self._replicator_all_buckets = self._input.param("replicator_all_buckets",False)
@@ -3234,7 +3240,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                         repl.get_src_bucket(),
                         repl.get_src_bucket().kvs[kv_store],
                         repl.get_dest_bucket().kvs[kv_store],
-                        max_verify=self._max_verify)
+                        max_verify=self._max_verify,
+                        compression=self._sdk_compression)
                 tasks.append(task_info)
         for task in tasks:
             if self._dgm_run:

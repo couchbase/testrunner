@@ -64,7 +64,7 @@ class DocsTests(BaseTestCase):
         gen_load = BlobGenerator('mike', 'mike-', self.value_size, start=num_items,
                                  end=new_num_items + num_items)
         load = self.cluster.async_load_gen_docs(self.master, bucket_to_load.name, gen_load,
-                                 bucket_to_load.kvs[1], 'create')
+                                 bucket_to_load.kvs[1], 'create', compression=self.sdk_compression)
         load.result()
         end_time = time.time() + 60*60*3
         while time.time() < end_time:
@@ -89,11 +89,12 @@ class DocsTests(BaseTestCase):
                                       end=current_num + 7000)
                 tasks = []
                 tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
-                                     gen_update, bucket_to_load.kvs[1], 'update'))
+                                     gen_update, bucket_to_load.kvs[1], 'update', compression=self.sdk_compression))
                 tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
-                                     gen_expire, bucket_to_load.kvs[1], 'update', exp=1))
+                                     gen_expire, bucket_to_load.kvs[1], 'update', exp=1,
+                                                              compression=self.sdk_compression))
                 tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
-                                     gen_delete, bucket_to_load.kvs[1], 'delete'))
+                                     gen_delete, bucket_to_load.kvs[1], 'delete', compression=self.sdk_compression))
                 for task in tasks:
                     task.result()
                 current_num += 7000
@@ -103,7 +104,7 @@ class DocsTests(BaseTestCase):
         gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=0,
                                   end=last_key_to_expire)
         load = self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
-                                 gen_expire, bucket_to_load.kvs[1], 'update', exp=1)
+                                 gen_expire, bucket_to_load.kvs[1], 'update', exp=1, compression=self.sdk_compression)
         load.result()
         self.log.info("Insert new items or update existing items across buckets")
         gen_load = BlobGenerator('mike', 'mike-', self.value_size, start=new_num_items + num_items,

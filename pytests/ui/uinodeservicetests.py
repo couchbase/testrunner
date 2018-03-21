@@ -18,6 +18,7 @@ class  NodeServiceTests(BaseUITestCase):
         super(NodeServiceTests, self).setUp()
         self.helper = ServerHelper(self)
         num_buckets = self.input.param("num_buckets", 1)
+        compression = self.input.param("sdk_compression", True)
         for i in xrange(num_buckets):
             RestConnection(self.servers[0]).create_bucket(bucket='bucket%s' % i, ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + i + 1)
             gen_load = BlobGenerator('ui', 'ui-', 256, start=0, end=10)
@@ -26,7 +27,7 @@ class  NodeServiceTests(BaseUITestCase):
                 gen = copy.deepcopy(gen_load)
                 task = cluster.async_load_gen_docs(self.servers[0], 'bucket%s' % i, gen,
                                                    Bucket().kvs[1], 'create',
-                                                   0, 0, True, 1, 1, 30)
+                                                   0, 0, True, 1, 1, 30, compression=compression)
                 task.result()
             finally:
                 cluster.shutdown()

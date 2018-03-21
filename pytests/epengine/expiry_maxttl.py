@@ -21,7 +21,7 @@ class ExpiryMaxTTL(BaseTestCase):
                                              gen,
                                              bucket.kvs[1],
                                              "create",
-                                             exp)
+                                             exp, compression=self.sdk_compression)
         task.result()
         while RestConnection(self.master).get_active_key_count(bucket) != num_items:
             self.sleep(2, "waiting for docs to get loaded")

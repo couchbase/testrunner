@@ -176,6 +176,7 @@ class BaseTestCase(unittest.TestCase):
                                         False)  # only applies to LWW but is here because the bucket is created here
             self.maxttl = self.input.param("maxttl", None)
             self.compression_mode = self.input.param("compression_mode", 'passive')
+            self.sdk_compression = self.input.param("sdk_compression", True)
             self.sasl_bucket_name = "bucket"
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
@@ -857,7 +858,7 @@ class BaseTestCase(unittest.TestCase):
                                                               bucket.kvs[kv_store],
                                                               op_type, exp, flag, only_store_hash,
                                                               batch_size, pause_secs, timeout_secs,
-                                                              proxy_client))
+                                                              proxy_client, compression=self.sdk_compression))
             else:
                 self._load_memcached_bucket(server, gen, bucket.name)
         return tasks
@@ -933,7 +934,8 @@ class BaseTestCase(unittest.TestCase):
         task = self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                 bucket.kvs[kv_store], op_type,
                                                 exp, flag, only_store_hash,
-                                                batch_size, pause_secs, timeout_secs)
+                                                batch_size, pause_secs, timeout_secs,
+                                                compression=self.sdk_compression)
         return task
 
     def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True,
@@ -1061,7 +1063,8 @@ class BaseTestCase(unittest.TestCase):
             if bucket.type == 'memcached':
                 continue
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
-                                                        only_store_hash, batch_size, replica_to_read))
+                                                        only_store_hash, batch_size, replica_to_read,
+                                                        compression=self.sdk_compression))
         for task in tasks:
             task.result(timeout)
 
@@ -1614,7 +1617,8 @@ class BaseTestCase(unittest.TestCase):
         data_map = {}
         for bucket in self.buckets:
             self.log.info(" Collect data for bucket {0}".format(bucket.name))
-            task = self.cluster.async_get_meta_data(dest_server, bucket, bucket.kvs[kv_store])
+            task = self.cluster.async_get_meta_data(dest_server, bucket, bucket.kvs[kv_store],
+                                                    compression=self.sdk_compression)
             task.result()
             data_map[bucket.name] = task.get_meta_data_store()
         return data_map
@@ -1661,7 +1665,8 @@ class BaseTestCase(unittest.TestCase):
 
     def data_active_and_replica_analysis(self, server, max_verify=None, only_store_hash=True, kv_store=1):
         for bucket in self.buckets:
-            task = self.cluster.async_verify_active_replica_data(server, bucket, bucket.kvs[kv_store], max_verify)
+            task = self.cluster.async_verify_active_replica_data(server, bucket, bucket.kvs[kv_store], max_verify,
+                                                                 self.sdk_compression)
             task.result()
 
     def data_meta_data_analysis(self, dest_server, meta_data_store, kv_store=1):
@@ -2372,7 +2377,7 @@ class BaseTestCase(unittest.TestCase):
                                                           gens_load[bucket],
                                                           bucket.kvs[kv_store], op_type, exp, flag,
                                                           only_store_hash, batch_size, pause_secs,
-                                                          timeout_secs))
+                                                          timeout_secs, compression=self.sdk_compression))
         for task in tasks:
             task.result()
         self.num_items = items + start_items
@@ -2400,7 +2405,7 @@ class BaseTestCase(unittest.TestCase):
                                                           gens_load[bucket],
                                                           bucket.kvs[kv_store], op_type, exp, flag,
                                                           only_store_hash, batch_size, pause_secs,
-                                                          timeout_secs))
+                                                          timeout_secs, compression=self.sdk_compression))
         self.num_items = items + start_items
         return tasks
 

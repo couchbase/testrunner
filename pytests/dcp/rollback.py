@@ -57,7 +57,8 @@ class DCPRollBack(DCPBase):
                                      end=NUMBER_OF_DOCS)
 
         rc = self.cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
-                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000)
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000,
+                                        compression=self.sdk_compression)
 
         # store the KVs which were modified and active on node 1
         modified_kvs_active_on_node1 = {}
@@ -90,7 +91,8 @@ class DCPRollBack(DCPBase):
         gen_load = DocumentGenerator('keyname', template, vals, start=0,
                                      end=NUMBER_OF_DOCS/100)
         rc = self.cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
-                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000)
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000,
+                                        compression=self.sdk_compression)
 
         # kill memcached, when it comes back because persistence is disabled it will have lost the second set of mutations
         shell = RemoteMachineShellConnection(self.servers[0])

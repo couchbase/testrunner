@@ -312,6 +312,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._use_hostanames = self._input.param("use_hostnames", False)
         self.print_stats = self._input.param("print_stats", False)
         self._wait_for_expiration = self._input.param("wait_for_expiration", False)
+        self.sdk_compression = self.input.param("sdk_compression", True)
         self.collect_data_files = False
         if self._warmup is not None:
             self._warmup = self._warmup.split("-")
@@ -966,7 +967,8 @@ class XDCRBaseTest(unittest.TestCase):
         task = self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                 bucket.kvs[kv_store], op_type,
                                                 exp, flag, only_store_hash,
-                                                batch_size, pause_secs, timeout_secs)
+                                                batch_size, pause_secs, timeout_secs,
+                                                compression=self.sdk_compression)
         return task
 
     def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
@@ -977,7 +979,8 @@ class XDCRBaseTest(unittest.TestCase):
             tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
                                                           op_type, exp, flag, only_store_hash,
-                                                          batch_size, pause_secs, timeout_secs))
+                                                          batch_size, pause_secs, timeout_secs,
+                                                          compression=self.sdk_compression))
         return tasks
 
     def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
@@ -1373,7 +1376,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                                                         dest_server,
                                                         src_bucket,
                                                         src_bucket.kvs[kv_store],
-                                                        dest_bucket.kvs[kv_store])
+                                                        dest_bucket.kvs[kv_store],
+                                                        compression=self.sdk_compression)
                     tasks.append(task_info)
         for task in tasks:
             task.result(timeout)
@@ -1405,7 +1409,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         buckets = self._get_cluster_buckets(server)
         self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(server.ip))
         for bucket in buckets:
-            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size, timeout_sec=60))
+            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
+                                                        only_store_hash, batch_size, timeout_sec=60,
+                                                        compression=self.sdk_compression))
         for task in tasks:
             task.result(timeout)
 

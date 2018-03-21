@@ -134,34 +134,38 @@ class Cluster(object):
         return _task
 
     def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, flag=0, only_store_hash=True,
-                            batch_size=1, pause_secs=1, timeout_secs=5, proxy_client=None):
+                            batch_size=1, pause_secs=1, timeout_secs=5, proxy_client=None, compression=True):
 
         if isinstance(generator, list):
-                _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash, batch_size)
+                _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag,
+                                                    only_store_hash, batch_size, compression=compression)
         else:
-                _task = LoadDocumentsGeneratorsTask(server, bucket, [generator], kv_store, op_type, exp, flag, only_store_hash, batch_size)
+                _task = LoadDocumentsGeneratorsTask(server, bucket, [generator], kv_store, op_type, exp, flag,
+                                                    only_store_hash, batch_size, compression=compression)
 
         self.task_manager.schedule(_task)
         return _task
 
     def async_workload(self, server, bucket, kv_store, num_ops, create, read, update,
-                       delete, exp):
+                       delete, exp, compression=True):
         _task = WorkloadTask(server, bucket, kv_store, num_ops, create, read, update,
-                             delete, exp)
+                             delete, exp, compression=compression)
         self.task_manager.schedule(_task)
         return _task
 
     def async_verify_data(self, server, bucket, kv_store, max_verify=None,
-                          only_store_hash=True, batch_size=1, replica_to_read=None, timeout_sec=5):
+                          only_store_hash=True, batch_size=1, replica_to_read=None, timeout_sec=5, compression=True):
         if batch_size > 1:
-            _task = BatchedValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, batch_size, timeout_sec)
+            _task = BatchedValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, batch_size,
+                                            timeout_sec, compression=compression)
         else:
-            _task = ValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, replica_to_read)
+            _task = ValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, replica_to_read,
+                                     compression=compression)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_verify_active_replica_data(self, server, bucket, kv_store, max_verify=None):
-        _task = ValidateDataWithActiveAndReplicaTask(server, bucket, kv_store, max_verify)
+    def async_verify_active_replica_data(self, server, bucket, kv_store, max_verify=None, compression=True):
+        _task = ValidateDataWithActiveAndReplicaTask(server, bucket, kv_store, max_verify, compression=compression)
         self.task_manager.schedule(_task)
         return _task
 
@@ -170,13 +174,15 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_get_meta_data(self, dest_server, bucket, kv_store):
-        _task = GetMetaDataTask(dest_server, bucket, kv_store)
+    def async_get_meta_data(self, dest_server, bucket, kv_store, compression=True):
+        _task = GetMetaDataTask(dest_server, bucket, kv_store, compression=compression)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_verify_revid(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=None):
-        _task = VerifyRevIdTask(src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=max_verify)
+    def async_verify_revid(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=None,
+                           compression=True):
+        _task = VerifyRevIdTask(src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=max_verify,
+                                compression=compression)
         self.task_manager.schedule(_task)
         return _task
 
@@ -327,25 +333,27 @@ class Cluster(object):
         return _task.result(timeout)
 
     def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None,
-                      flag=0, only_store_hash=True, batch_size=1, proxy_client=None):
+                      flag=0, only_store_hash=True, batch_size=1, proxy_client=None, compression=True):
         _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp, flag,
-                                         only_store_hash=only_store_hash, batch_size=batch_size, proxy_client=proxy_client)
+                                         only_store_hash=only_store_hash, batch_size=batch_size,
+                                         proxy_client=proxy_client, compression=compression)
         return _task.result(timeout)
 
-    def workload(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp, timeout=None):
+    def workload(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp, timeout=None,
+                 compression=True):
         _task = self.async_workload(server, bucket, kv_store, num_ops, create, read, update,
-                                    delete, exp)
+                                    delete, exp, compression=compression)
         return _task.result(timeout)
 
-    def verify_data(self, server, bucket, kv_store, timeout=None):
-        _task = self.async_verify_data(server, bucket, kv_store)
+    def verify_data(self, server, bucket, kv_store, timeout=None, compression=True):
+        _task = self.async_verify_data(server, bucket, kv_store, compression=compression)
         return _task.result(timeout)
 
     def wait_for_stats(self, servers, bucket, param, stat, comparison, value, timeout=None):
         """Synchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
-        couchbase.stats_tool.StatsCommon.build_stat_check(...) for a description of
+        couchbase.stats_tool.StatsCommon.build_stat_check(...) for a description o
         the stats structure and how it can be built.
 
         Parameters:

@@ -383,7 +383,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             total_items += batch_items
             try:
                 self.cluster.load_gen_docs(self.master, bucket, gen_create, self.buckets[0].kvs[1],
-                                           'create', exp=0, flag=0, batch_size=1000)
+                                           'create', exp=0, flag=0, batch_size=1000, compression=self.sdk_compression)
             except:
                 pass
             curr_active = self.bucket_stat('vb_active_perc_mem_resident', bucket)

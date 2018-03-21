@@ -174,7 +174,8 @@ class GetrTests(BaseTestCase):
             task_verify = self.cluster.async_verify_data(self.master, bucket_read,
                                                          bucket_read.kvs[1],
                                                          only_store_hash=False,
-                                                         replica_to_read=self.replica_to_read)
+                                                         replica_to_read=self.replica_to_read,
+                                                         compression=self.sdk_compression)
             task_delete_bucket = self.cluster.async_bucket_delete(self.master, bucket_delete.name)
             task_verify.result()
             task_delete_bucket.result()

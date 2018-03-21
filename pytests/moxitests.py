@@ -70,10 +70,12 @@ class MoxiTests(BaseTestCase):
                                                                            moxi_port=self.moxi_port)
                 self.sleep(30)
                 self.cluster.load_gen_docs(self.master, bucket.name, self.gen_load,
-                                           bucket.kvs[1],"create", proxy_client=moxi_client)
+                                           bucket.kvs[1],"create", proxy_client=moxi_client,
+                                           compression=self.sdk_compression)
                 if self.ops in ['update', 'delete', 'read']:
                     self.cluster.load_gen_docs(self.master, bucket.name, self.gen_load,
-                                           bucket.kvs[1], self.ops, proxy_client=moxi_client)
+                                           bucket.kvs[1], self.ops, proxy_client=moxi_client,
+                                               compression=self.sdk_compression)
             finally:
                 self._stop_moxi()
         for task in tasks:

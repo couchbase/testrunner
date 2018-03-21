@@ -1487,7 +1487,7 @@ class FTSIndex:
 
 
 class CouchbaseCluster:
-    def __init__(self, name, nodes, log, use_hostname=False):
+    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -1516,6 +1516,7 @@ class CouchbaseCluster:
         self.__bypass_fts_nodes = []
         self.__separate_nodes_on_services()
         self.__set_fts_ram_quota()
+        self.sdk_compression = sdk_compression
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -2084,7 +2085,7 @@ class CouchbaseCluster:
         task = self.__clusterop.async_load_gen_docs(
             self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
             OPS.CREATE, exp, flag, only_store_hash, batch_size, pause_secs,
-            timeout_secs)
+            timeout_secs, compression=self.sdk_compression)
         return task
 
     def load_bucket(self, bucket, num_items, value_size=512, exp=0,
@@ -2136,7 +2137,7 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
-                    pause_secs, timeout_secs)
+                    pause_secs, timeout_secs, compression=self.sdk_compression)
             )
         return tasks
 
@@ -2205,7 +2206,7 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
                     bucket.kvs[kv_store], ops, exp, flag,
-                    only_store_hash, batch_size, pause_secs, timeout_secs)
+                    only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
             )
         return tasks
 
@@ -2231,7 +2232,7 @@ class CouchbaseCluster:
             self.__clusterop.async_load_gen_docs(
                 self.__master_node, bucket.name, kv_gen,
                 bucket.kvs[kv_store], ops, exp, flag,
-                only_store_hash, batch_size, pause_secs, timeout_secs)
+                only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
         )
         return task
 
@@ -2279,7 +2280,7 @@ class CouchbaseCluster:
                 tasks.append(self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
-                    pause_secs, timeout_secs))
+                    pause_secs, timeout_secs, compression=self.sdk_compression))
 
                 if es:
                     tasks.append(es.async_bulk_load_ES(index_name='default_es_index',
@@ -2360,7 +2361,7 @@ class CouchbaseCluster:
         task = self.__clusterop.async_load_gen_docs(
             self.__master_node, bucket.name, self._kv_gen[OPS.UPDATE],
             bucket.kvs[kv_store], OPS.UPDATE, exp, flag, only_store_hash,
-            batch_size, pause_secs, timeout_secs)
+            batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
         return task
 
     def update_delete_data(
@@ -2430,7 +2431,8 @@ class CouchbaseCluster:
                     bucket.kvs[kv_store],
                     op_type,
                     expiration,
-                    batch_size=1000)
+                    batch_size=1000,
+                    compression=self.sdk_compression)
             )
         return tasks
 
@@ -2938,12 +2940,14 @@ class FTSBaseTest(unittest.TestCase):
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
         no_buckets = self._input.param("no_buckets", False)
+        sdk_compression = self._input.param("sdk_compression", True)
         master = self._input.servers[0]
         first_node = copy.deepcopy(master)
         self._cb_cluster = CouchbaseCluster("C1",
                                             [first_node],
                                             self.log,
-                                            use_hostanames)
+                                            use_hostanames,
+                                            sdk_compression=sdk_compression)
         self.__cleanup_previous()
         if self.compare_es:
             self.setup_es()

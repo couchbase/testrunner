@@ -147,7 +147,7 @@ class EventingNegative(EventingBaseTest):
         # create 10 non json docs on source bucket
         gen_load_non_json = JSONNonDocGenerator('non_json_docs', values, start=0, end=num_docs)
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json, self.buckets[0].kvs[1],
-                                   'create')
+                                   'create', compression=self.sdk_compression)
         # create a function which sleeps for 5 secs and set execution_timeout to 1s
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EXECUTION_TIME_MORE_THAN_TIMEOUT,
                                               execution_timeout=1)
@@ -186,9 +186,9 @@ class EventingNegative(EventingBaseTest):
         gen_load_json = JsonDocGenerator('binary', op_type="create", end=2016 * self.docs_per_day)
         # load binary data on dst bucket and non json on src bucket with identical keys so that we can read them
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_json, self.buckets[0].kvs[1], "create",
-                                   exp=0, flag=0, batch_size=1000)
+                                   exp=0, flag=0, batch_size=1000, compression=self.sdk_compression)
         self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_binary, self.buckets[0].kvs[1], "create",
-                                   exp=0, flag=0, batch_size=1000)
+                                   exp=0, flag=0, batch_size=1000, compression=self.sdk_compression)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.READ_BUCKET_OP_ON_DST)
         self.deploy_function(body)
         # wait for some time so that exception_count increases

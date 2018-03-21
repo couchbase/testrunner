@@ -168,7 +168,7 @@ class EventingRecovery(EventingBaseTest):
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create')
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         # reboot eventing node when it is processing mutations
         self.reboot_server(eventing_node)
         task.result()
@@ -176,7 +176,7 @@ class EventingRecovery(EventingBaseTest):
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del,
-                                                self.buckets[0].kvs[1], 'delete')
+                                                self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         # reboot eventing node when it is processing mutations
         self.reboot_server(eventing_node)
         task.result()
@@ -224,7 +224,7 @@ class EventingRecovery(EventingBaseTest):
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create')
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         # reboot eventing node when it is processing mutations
         self.reboot_server(n1ql_node)
         task.result()
@@ -248,7 +248,7 @@ class EventingRecovery(EventingBaseTest):
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create')
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         # reboot eventing node when it is processing mutations
         self.kill_erlang_service(n1ql_node)
         task.result()
@@ -366,7 +366,7 @@ class EventingRecovery(EventingBaseTest):
                                               worker_count=3)
         try:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create')
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         except Exception as e:
             log.info("error while loading data")
         self.deploy_function(body,wait_for_bootstrap=False)

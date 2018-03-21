@@ -1981,7 +1981,7 @@ class ViewQueryTests(BaseTestCase):
             task = self.cluster.async_load_gen_docs(data_set.server, bucket.name, gens_load,
                                                  bucket.kvs[kv_store], op_type, exp, flag,
                                                  only_store_hash, batch_size, pause_secs,
-                                                 timeout_secs)
+                                                 timeout_secs, compression=self.sdk_compression)
             if 'stop' in dir(threading.currentThread()) and\
                 isinstance(threading.currentThread(), StoppableThread):
                 threading.currentThread().tasks.append(task)

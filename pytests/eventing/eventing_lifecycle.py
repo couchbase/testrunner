@@ -84,7 +84,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create')
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function
@@ -101,7 +101,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create')
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function
@@ -118,7 +118,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create')
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         for i in xrange(1, 10):
             self.pause_function(body)
             # This sleep in intentionally put in a function

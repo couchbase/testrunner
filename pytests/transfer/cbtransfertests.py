@@ -27,9 +27,11 @@ class CBTransferTests(TransferBaseTest):
         for bucket in self.buckets:
             bucket.kvs[2] = KVStore()
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load,
-                                       self.buckets[0].kvs[2], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                       self.buckets[0].kvs[2], "create", exp=0, flag=0, only_store_hash=True,
+                                       batch_size=1000, compression=self.sdk_compression)
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load2,
-                                       self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                       self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True,
+                                       batch_size=1000, compression=self.sdk_compression)
         transfer_source = 'http://%s:%s' % (self.server_origin.ip, self.server_origin.port)
         transfer_destination = 'http://%s:%s' % (self.server_recovery.ip, self.server_recovery.port)
         self._run_cbtransfer_all_buckets(transfer_source, transfer_destination,
@@ -40,7 +42,8 @@ class CBTransferTests(TransferBaseTest):
     def test_dry_run(self):
         gen_load = BlobGenerator('load_by_id_test-', 'load_by_id_test-', self.value_size, end=self.num_items)
         self.cluster.load_gen_docs(self.server_origin, self.buckets[0].name, gen_load,
-                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True,
+                                   batch_size=1000, compression=self.sdk_compression)
         transfer_source = 'http://%s:%s' % (self.server_origin.ip, self.server_origin.port)
         transfer_destination = 'http://%s:%s' % (self.server_recovery.ip, self.server_recovery.port)
         output = self.shell.execute_cbtransfer(transfer_source, transfer_destination,
@@ -86,7 +89,8 @@ class CBTransferTests(TransferBaseTest):
         verify_gen = copy.deepcopy(gen_load)
         for bucket in self.buckets:
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load,
-                                       bucket.kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                       bucket.kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000,
+                                       compression=self.sdk_compression)
         transfer_source = 'http://%s:%s' % (self.server_origin.ip, self.server_origin.port)
         transfer_destination = 'http://%s:%s' % (self.server_recovery.ip, self.server_recovery.port)
         self._run_cbtransfer_all_buckets(transfer_source, transfer_destination,
@@ -104,9 +108,11 @@ class CBTransferTests(TransferBaseTest):
         gen_load2 = DocumentGenerator('cbtransfer', template, range(5), ['helena', 'karen'], start=0, end=self.num_items)
         verify_gen = copy.deepcopy((gen_load2, gen_load)[dest_op == 'set'])
         self.cluster.load_gen_docs(self.server_origin, self.buckets[0].name, gen_load,
-                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True,
+                                   batch_size=1000, compression=self.sdk_compression)
         self.cluster.load_gen_docs(self.server_recovery, self.buckets[0].name, gen_load2,
-                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True,
+                                   batch_size=1000, compression=self.sdk_compression)
         transfer_source = 'http://%s:%s' % (self.server_origin.ip, self.server_origin.port)
         transfer_destination = 'http://%s:%s' % (self.server_recovery.ip, self.server_recovery.port)
         self.buckets = list(self.buckets[:1])
