@@ -53,6 +53,9 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+        force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
+        if force_disable_new_orchestration:
+            self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
 
     def tearDown(self):
         try:
