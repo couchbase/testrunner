@@ -268,13 +268,16 @@ class RemoteMachineShellConnection:
         self.cmd_ext = ""
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
         self.msi = False
-        if self.nonroot:
-            self.bin_path = self.nr_home_path + self.bin_path
         self.extract_remote_info()
-        os_type = self.info.type.lower()
+        os_type = self.info.distribution_type.lower()
         if os_type == "windows":
             self.cmd_ext = ".exe"
             self.bin_path = WIN_COUCHBASE_BIN_PATH
+        elif os_type == "mac":
+            self.nonroot = False
+
+        if self.nonroot:
+            self.bin_path = self.nr_home_path + self.bin_path
 
     """
         In case of non root user, we need to switch to root to
@@ -455,7 +458,7 @@ class RemoteMachineShellConnection:
 
     def stop_server(self, os="unix"):
         self.extract_remote_info()
-        os = self.info.type.lower()
+        os = self.info.distribution_type.lower()
         if not os:
             os = "unix"
         if os == "windows":
@@ -482,8 +485,9 @@ class RemoteMachineShellConnection:
             else:
                 log.info("No Couchbase Server installed yet!")
         elif os == "mac":
-            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}'\
-                                                                   | xargs kill -9")
+            cb_process = '/Applications/Couchbase\ Server.app/Contents/MacOS/Couchbase\ Server'
+            cmd = "ps aux | grep {0} | awk '{{print $2}}' | xargs kill -9 ".format(cb_process)
+            o, r = self.execute_command(cmd)
             self.log_command_output(o, r)
             o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
@@ -3466,8 +3470,9 @@ class RemoteMachineShellConnection:
                                                          self.info, use_channel=True)
                     self.log_command_output(o, r)
         if self.info.distribution_type.lower() == "mac":
-            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}'\
-                                                                   | xargs kill -9")
+            cb_process = '/Applications/Couchbase\ Server.app/Contents/MacOS/Couchbase\ Server'
+            cmd = "ps aux | grep {0} | awk '{{print $2}}' | xargs kill -9 ".format(cb_process)
+            o, r = self.execute_command(cmd)
             self.log_command_output(o, r)
             o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
@@ -4451,6 +4456,9 @@ class RemoteMachineShellConnection:
                 else:
                     log.info("couchbase server at {0} may not installed yet"
                                                            .format(self.ip))
+            elif os_name == "mac":
+                if self.file_exists(MAC_CB_PATH, VERSION_FILE):
+                    output = self.read_remote_file(MAC_CB_PATH, VERSION_FILE)
             else:
                 if self.file_exists(LINUX_CB_PATH, VERSION_FILE):
                     output = self.read_remote_file(LINUX_CB_PATH, VERSION_FILE)
