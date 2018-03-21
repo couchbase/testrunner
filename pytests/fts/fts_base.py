@@ -3807,7 +3807,7 @@ class FTSBaseTest(unittest.TestCase):
         self.dataset = "earthquakes"
         self.log.info("Loading earthquakes.json ...")
         self.async_load_data()
-
+        self.sleep(10, "Waiting to load earthquakes.json ...")
         self.wait_for_indexing_complete()
         return geo_index
 
