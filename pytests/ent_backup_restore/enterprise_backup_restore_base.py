@@ -1130,20 +1130,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         gsi_type = "memory_optimized"
         self.gsi_names = ["num1", "num2"]
         rest = RestConnection(self.backupset.cluster_host)
+        username = self.master.rest_username
+        password = self.master.rest_password
         if "5" <= rest.get_nodes_version()[:1]:
             gsi_type = "plasma"
-        cmd = "cbindex -type create -bucket default -using %s -index " \
-              "%s -fields=Num1" % (gsi_type, self.gsi_names[0])
+        gsi_type += " -auth {0}:{1} ".format(username, password)
+        cmd = "cbindex -type create -bucket default -using {0} -index ".format(gsi_type)
+        cmd += "{0} -fields=Num1".format(self.gsi_names[0])
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         self.log.info("Create gsi indexes")
         output, error = shell.execute_command(command)
+        self.sleep(5)
+
         if self.debug_logs:
-            self.log.info("\noutput gsi:   %s" % output)
-        cmd = "cbindex -type create -bucket default -using %s -index " \
-              "%s -fields=Num2" % (gsi_type, self.gsi_names[1])
+            self.log.info("\noutput gsi: {0}".format(output))
+        cmd = "cbindex -type create -bucket default -using {0} -index ".format(gsi_type)
+        cmd += "{0} -fields=Num2".format(self.gsi_names[1])
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         shell.execute_command(command)
+        self.sleep(5)
         shell.disconnect()
 
     def verify_gsi(self):

@@ -1539,6 +1539,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
                             end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
+        if self.create_gsi:
+            self.create_indexes()
         self.backup_create()
         self.backup_cluster()
         status, output, message = self.backup_list()
