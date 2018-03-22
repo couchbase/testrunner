@@ -32,6 +32,7 @@ class RQGTests(BaseTestCase):
         self.check_covering_index = self.input.param("check_covering_index", True)
         self.skip_setup_cleanup = True
         self.ansi_joins = self.input.param("ansi_joins", False)
+        self.hash_joins = self.input.param("hash_joins", False)
         self.create_secondary_meta_indexes = self.input.param("create_secondary_meta_indexes", False)
         self.aggregate_pushdown = self.input.param("aggregate_pushdown", False)
         self.create_secondary_ansi_join_indexes = self.input.param("create_secondary_ansi_join_indexes", False)
@@ -647,6 +648,10 @@ class RQGTests(BaseTestCase):
             if "sum" in n1ql_query or "min" in n1ql_query or "max" in n1ql_query or "count" in n1ql_query:
                 aggregate = True
 
+        if self.ansi_joins and self.hash_joins:
+            hash_join_template_list = ["HASH(build)", "HASH(probe)"]
+            n1ql_query.replace(" ON ", "{0} ON ".random.choice(hash_join_template_list))
+
         indexes = data["indexes"]
         expected_result = data["expected_result"]
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
@@ -696,6 +701,9 @@ class RQGTests(BaseTestCase):
             for index_name in indexes.keys():
                 result_run["aggregate_explain_check::"+str(index_name)] = self._run_query_with_pushdown_check(n1ql_query, indexes[index_name])
 
+        if self.ansi_joins and self.hash_joins:
+            self._verify_query_with_hash_joins(n1ql_query)
+                   
         result_queue.put(result_run)
         self._check_and_push_failure_record_queue(result_run, data, failure_record_queue)
         self.query_count += 1
@@ -712,6 +720,26 @@ class RQGTests(BaseTestCase):
                 explain_check = True
             if not explain_check:
                 message = "aggregate query {0} with index {1} failed explain result, index_group_aggs not found".format(n1ql_query, index)
+                self.log.info(message)
+                self.log.info(str(actual_result))
+        except Exception, ex:
+            self.log.info(ex)
+            message = ex
+            explain_check = False
+        finally:
+            return {"success": explain_check, "result": message}
+
+    def _verify_query_with_hash_joins(self, n1ql_query):
+        message = "Pass"
+        explain_check = True
+        explain_n1ql = "EXPLAIN " + n1ql_query
+        hash_query_count = n1ql_query.count("HASH")
+        try:
+            actual_result = self.n1ql_helper.run_cbq_query(query=explain_n1ql, server=self.n1ql_server)
+            hash_explain_count = str(actual_result).count("HashJoin")
+            explain_check = (hash_query_count == hash_explain_count)
+            if not explain_check:
+                message = "Join query {0} with failed explain result, HashJoins not found".format(n1ql_query)
                 self.log.info(message)
                 self.log.info(str(actual_result))
         except Exception, ex:
@@ -1887,5 +1915,3 @@ class RQGTests(BaseTestCase):
                                       char_value, orderid1, qty1, price1, primary_key_value, orderid2, qty2,
                                       price2, primary_key_value)
             self.n1ql_helper.run_cbq_query(query=n1ql_insert_template, server=self.n1ql_server)
-
-
