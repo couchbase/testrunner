@@ -454,7 +454,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
         else:
-            self.log.error("don't know operating system or product version")
+            log.error("don't know operating system or product version")
 
     def stop_server(self, os="unix"):
         self.extract_remote_info()
@@ -492,7 +492,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
         else:
-            self.log.error("don't know operating system or product version")
+            log.error("don't know operating system or product version")
 
     def restart_couchbase(self):
         """
@@ -753,9 +753,9 @@ class RemoteMachineShellConnection:
     def is_moxi_installed(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            self.log.error('Not implemented')
+            log.error('Not implemented')
         elif self.info.distribution_type.lower() == 'mac':
-            self.log.error('Not implemented')
+            log.error('Not implemented')
         elif self.info.type.lower() == "linux":
             if self.file_exists(testconstants.LINUX_MOXI_PATH, 'moxi'):
                 return True
@@ -2228,7 +2228,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
-            self.log.error('Not implemented')
+            log.error('Not implemented')
         elif self.info.deliverable_type in ["rpm"]:
             output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
             if error and ' '.join(error).find("ERROR") != -1:
@@ -2832,7 +2832,7 @@ class RemoteMachineShellConnection:
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         if type == 'windows':
-            self.log.error("Not implemented")
+            log.error("Not implemented")
         elif type == "ubuntu":
             uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("moxi-server", "moxi-server")
             output, error = self.execute_command(uninstall_cmd)
