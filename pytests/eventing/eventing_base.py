@@ -46,7 +46,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 1)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
         random.seed(datetime.time)
-        self.function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
+        function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
+        # See MB-28447, From now function name can only be max of 100 chars
+        self.function_name = function_name[0:90]
 
     def tearDown(self):
         # catch panics and print it in the test log
