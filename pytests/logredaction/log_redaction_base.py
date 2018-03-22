@@ -103,42 +103,44 @@ class LogRedactionBase(BaseTestCase):
 
         command = "zipgrep -n -o \"<ud>.+</ud>\" " + remotepath + nonredactFileName +  " " + log_file_name + " | cut -f2 -d:"
         ln_output, _ = shell.execute_command(command=command)
-        command = "zipgrep -n -o \"<ud>.+</ud>\" " + remotepath + nonredactFileName + " " + log_file_name + " | cut -f3 -d:"
+        command = "zipgrep -h -o \"<ud>.+</ud>\" " + remotepath + nonredactFileName + " " + log_file_name
         match_output, _ = shell.execute_command(command=command)
         if len(ln_output) == 0 and len(match_output) == 0:
             self.fail("No user data tags found in " + remotepath + nonredactFileName)
         nonredact_dict = dict(zip(ln_output, match_output))
-        nonredact_dict_unique = {}
-        for key, value in nonredact_dict.items():
-            if value not in nonredact_dict_unique.values():
-                nonredact_dict_unique[key] = value
-        self.log.info("Line numbers and unique non-redacted tags: " + str(nonredact_dict_unique))
 
         command = "zipgrep -n -o \"<ud>.+</ud>\" " + remotepath + redactFileName + " " + log_file_name + " | cut -f2 -d:"
         ln_output, _ = shell.execute_command(command=command)
-        command = "zipgrep -n -o \"<ud>.+</ud>\" " + remotepath + redactFileName + " " + log_file_name + " | cut -f3 -d:"
+        command = "zipgrep -h -o \"<ud>.+</ud>\" " + remotepath + redactFileName + " " + log_file_name
         match_output, _ = shell.execute_command(command=command)
         if len(ln_output) == 0 and len(match_output) == 0:
             self.fail("No user data tags found in " + remotepath + redactFileName)
         redact_dict = dict(zip(ln_output, match_output))
-        redact_dict_unique = {}
-        for key, value in redact_dict.items():
-            if value not in redact_dict_unique.values():
-                redact_dict_unique[key] = value
-        self.log.info("Line numbers and unique redacted tags: " + str(redact_dict_unique))
+
+        self.log.info("Number of tagged items in non-redacted log: " + str(len(nonredact_dict.items())))
+        self.log.info("Number of tagged items in redacted log: " + str(len(redact_dict.items())))
+        if len(nonredact_dict.items()) != len(redact_dict.items()):
+            self.fail("User tags count mismatch between redacted and non-redacted files")
 
         #TODO For now, we are just validating the redacted tag contents with a regex for SHA1 --> [a-f0-9]{40}
         #TODO Should replace it with hashlib function
-        for key, value in nonredact_dict_unique.items():
-            if key not in redact_dict_unique.keys():
+        for key, value in nonredact_dict.items():
+            if key not in redact_dict.keys():
                 self.fail("Line: " + key + " Value: " + value + " not found in redacted file")
             else:
-                redact_value = redact_dict_unique[key]
-                non_redact_content = re.search("<ud>.+</ud>", value).group(0)
-                redact_content = re.search("<ud>.+</ud>", redact_value).group(0)
+                redact_value = redact_dict[key]
+                non_redact_match = re.search("<ud>.+</ud>", value)
+                if non_redact_match:
+                    non_redact_content = non_redact_match.group(0)
+                else:
+                    self.fail("Line: " + key + " Value: " + value + " did not match <ud>.+</ud> regex")
+                redact_match = re.search("<ud>.+</ud>", redact_value)
+                if redact_match:
+                    redact_content = redact_match.group(0)
+                else:
+                    self.fail("Line: " + key + "Value: " + redact_value + " did not match <ud>.+</ud> regex")
                 if non_redact_content != redact_content and re.search("[a-f0-9]{40}", redact_content):
-                    self.log.info("Line: " + key + " Non-redacted content: " + non_redact_content +
-                                  " hashed correctly as " + redact_content)
+                    continue
                 else:
                     self.fail("Hashing failed for Line: " + key + " Non-redacted content: " + non_redact_content)
 
