@@ -28,7 +28,7 @@ agg_expression:
     numerical_agg_exp ;
 
 string_agg_exp:
-    string_agg( PRIMARY_KEY ) |
+    string_agg( PRIMARY_KEY_VAL ) |
     string_agg( string_func_1 ) |
     string_agg( string_func_2 ) |
     string_agg( string_func_3 ) ;
@@ -39,29 +39,29 @@ string_agg:
     COUNT ;
 
 string_func_1:
-    REVERSE( PRIMARY_KEY ) |
-    UPPER( PRIMARY_KEY ) |
-    LOWER( PRIMARY_KEY ) ;
+    REVERSE( PRIMARY_KEY_VAL ) |
+    UPPER( PRIMARY_KEY_VAL ) |
+    LOWER( PRIMARY_KEY_VAL ) ;
 
 string_func_2:
-    REPEAT( PRIMARY_KEY, n ) ;
+    REPEAT( PRIMARY_KEY_VAL, n ) ;
 
 string_func_3:
-    REPLACE( PRIMARY_KEY, sample_string, sample_string ) ;
-    SUBSTR( PRIMARY_KEY, lower_n, upper_n) ;
+    REPLACE( PRIMARY_KEY_VAL, sample_string, sample_string ) ;
+    SUBSTR( PRIMARY_KEY_VAL, lower_n, upper_n) ;
 
 numerical_agg_exp:
     numerical_agg( extra_expression_a numerical_func_1 extra_expression_b ) |
     numerical_agg( extra_expression_a numerical_func_11 extra_expression_b ) ;
 
 numerical_func_1:
-    LENGTH( PRIMARY_KEY ) |
+    LENGTH( PRIMARY_KEY_VAL ) |
     LENGTH( string_func_1 ) |
     LENGTH( string_func_2 ) ;
     LENGTH( string_func_3 ) ;
 
 numerical_func_11:
-    LENGTH( PRIMARY_KEY ) |
+    LENGTH( PRIMARY_KEY_VAL ) |
     LENGTH( string_func_1 ) |
     LENGTH( string_func_2 ) |
     LENGTH( string_func_3 ) |
@@ -73,7 +73,7 @@ primary_group_by_expression:
     group_by_field, group_by_field, group_by_field ;
 
 group_by_field:
-    PRIMARY_KEY |
+    PRIMARY_KEY_VAL |
     string_func_1 |
     string_func_2 |
     string_func_3 |
@@ -144,10 +144,10 @@ sample_string:
     "n" ;
 
 primary_condition:
-	PRIMARY_KEY < string_values |
-	PRIMARY_KEY > string_values |
-	PRIMARY_KEY  >= string_values |
-	PRIMARY_KEY  <= string_values |
+	PRIMARY_KEY_VAL < string_values |
+	PRIMARY_KEY_VAL > string_values |
+	PRIMARY_KEY_VAL  >= string_values |
+	PRIMARY_KEY_VAL  <= string_values |
 	(primary_condition) AND (primary_condition) |
 	(primary_condition) OR (primary_condition) |
 	string_between_condition |
@@ -162,46 +162,46 @@ primary_condition:
 	string_equals_condition ;
 
 string_equals_condition:
-	PRIMARY_KEY = string_values;
+	PRIMARY_KEY_VAL = string_values;
 
 string_not_equals_condition:
-	PRIMARY_KEY != string_values | PRIMARY_KEY <> string_values ;
+	PRIMARY_KEY_VAL != string_values | PRIMARY_KEY_VAL <> string_values ;
 
 string_between_condition:
-	PRIMARY_KEY BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
+	PRIMARY_KEY_VAL BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
 
 string_not_between_condition:
-	PRIMARY_KEY NOT BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
+	PRIMARY_KEY_VAL NOT BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
 
 string_is_not_null:
-	PRIMARY_KEY IS NOT NULL;
+	PRIMARY_KEY_VAL IS NOT NULL;
 
 string_in_condition:
-	PRIMARY_KEY IN ( string_field_list );
+	PRIMARY_KEY_VAL IN ( string_field_list );
 
 string_is_null:
-	PRIMARY_KEY IS NULL;
+	PRIMARY_KEY_VAL IS NULL;
 
 string_like_condition:
-	PRIMARY_KEY LIKE 'STRING_VALUES%' | PRIMARY_KEY LIKE '%STRING_VALUES' | PRIMARY_KEY LIKE STRING_VALUES | PRIMARY_KEY LIKE '%STRING_VALUES%';
+	PRIMARY_KEY_VAL LIKE 'STRING_VALUES%' | PRIMARY_KEY_VAL LIKE '%STRING_VALUES' | PRIMARY_KEY_VAL LIKE STRING_VALUES | PRIMARY_KEY_VAL LIKE '%STRING_VALUES%';
 
 string_not_like_condition:
-	PRIMARY_KEY NOT LIKE 'STRING_VALUES%' | PRIMARY_KEY NOT LIKE '%STRING_VALUES' | PRIMARY_KEY NOT LIKE STRING_VALUES |  PRIMARY_KEY NOT LIKE '%STRING_VALUES%';
+	PRIMARY_KEY_VAL NOT LIKE 'STRING_VALUES%' | PRIMARY_KEY_VAL NOT LIKE '%STRING_VALUES' | PRIMARY_KEY_VAL NOT LIKE STRING_VALUES |  PRIMARY_KEY_VAL NOT LIKE '%STRING_VALUES%';
 
 string_field_list:
 	LIST;
 
 string_is_missing:
-	PRIMARY_KEY IS MISSING;
+	PRIMARY_KEY_VAL IS MISSING;
 
 string_is_not_missing:
-	PRIMARY_KEY IS NOT MISSING;
+	PRIMARY_KEY_VAL IS NOT MISSING;
 
 string_is_valued:
-	PRIMARY_KEY IS VALUED;
+	PRIMARY_KEY_VAL IS VALUED;
 
 string_is_not_valued:
-	PRIMARY_KEY IS NOT VALUED;
+	PRIMARY_KEY_VAL IS NOT VALUED;
 
 string_values:
 	STRING_VALUES;

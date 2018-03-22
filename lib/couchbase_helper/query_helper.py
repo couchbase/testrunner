@@ -951,8 +951,8 @@ class QueryHelper(object):
         bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
         all_field_names = string_field_names + numeric_field_names + datetime_field_names + bool_field_names
         new_sql = sql
-        if "PRIMARY_KEY" in sql:
-            new_sql = new_sql.replace("PRIMARY_KEY", "primary_key_id")
+        if "PRIMARY_KEY_VAL" in sql:
+            new_sql = new_sql.replace("PRIMARY_KEY_VAL", "primary_key_id")
         if "BOOL_FIELD_LIST" in sql:
             new_list = self._generate_random_range(bool_field_names)
             new_sql = new_sql.replace("BOOL_FIELD_LIST", self._convert_list(new_list, "numeric"))
@@ -1568,8 +1568,8 @@ class QueryHelper(object):
         bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
         all_field_names = string_field_names + numeric_field_names + datetime_field_names + bool_field_names
         new_sql = sql
-        if "PRIMARY_KEY" in sql:
-            new_sql = new_sql.replace("PRIMARY_KEY", "primary_key_id ")
+        if "PRIMARY_KEY_VAL" in sql:
+            new_sql = new_sql.replace("PRIMARY_KEY_VAL", "primary_key_id ")
         if "SAME_FIELD" in sql:
             where_field_names_list = self.extract_field_names(sql_map['where_condition'], all_field_names)
             new_sql = re.sub(r'SAME_FIELD', self.random_field_choice(where_field_names_list), new_sql)
@@ -1669,11 +1669,11 @@ class QueryHelper(object):
                     field_name, values = self._search_field(["int", "mediumint", "double", "float", "decimal"], table_map)
                     new_sql += token.replace("NUMERIC_FIELD", field_name)+space
                     numeric_check = True
-                elif "PRIMARY_KEY" in token:
+                elif "PRIMARY_KEY_VAL" in token:
                     string_check = True
                     add_token = False
                     field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
-                    new_sql = new_sql + token.replace("PRIMARY_KEY", "primary_key_id ")
+                    new_sql = new_sql + token.replace("PRIMARY_KEY_VAL", "primary_key_id ")
             else:
                 if string_check:
                     if token in ['0','1','2','3','4','5','6','7','8','9']:
