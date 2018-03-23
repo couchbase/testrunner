@@ -1641,6 +1641,7 @@ class CouchbaseCluster:
                 else:
                     count = int(count)
                 self.__log.info(count)
+                time.sleep(2)
                 retry += 1
                 if retry > 5:
                     files, err = shell.execute_command(
