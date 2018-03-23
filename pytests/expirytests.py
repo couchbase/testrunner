@@ -35,12 +35,6 @@ class ExpiryTests(unittest.TestCase):
 
         serverInfo = self.master
 
-        if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
-            self.client = SDKSmartClient(serverInfo, self._bucket_name, compression=TestInputSingleton.input.param(
-                "sdk_compression", True))
-        else:
-            self.client = MemcachedClientHelper.direct_client(serverInfo, self._bucket_name)
-
         rest = RestConnection(serverInfo)
         info = rest.get_nodes_self()
         self._bucket_port = info.moxi
@@ -62,7 +56,15 @@ class ExpiryTests(unittest.TestCase):
         rest.create_bucket(bucket=self._bucket_name,
                            ramQuotaMB=bucket_ram,
                            proxyPort=info.memcached)
+        
         msg = 'create_bucket succeeded but bucket "default" does not exist'
+        
+        if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
+            self.client = SDKSmartClient(serverInfo, self._bucket_name, compression=TestInputSingleton.input.param(
+                "sdk_compression", True))
+        else:
+            self.client = MemcachedClientHelper.direct_client(serverInfo, self._bucket_name)
+            
         self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest), msg=msg)
         ready = BucketOperationHelper.wait_for_memcached(serverInfo, self._bucket_name)
         self.assertTrue(ready, "wait_for_memcached failed")
