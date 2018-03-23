@@ -1694,10 +1694,6 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
         index_map = self.get_index_map()
         self.log.info(index_map)
-        if not self.expected_err_msg:
-            self.n1ql_helper.verify_replica_indexes([index_name_prefix],
-                                                    index_map,
-                                                    self.num_index_replicas)
 
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info("Indexer Metadata Before Build:")
@@ -1712,6 +1708,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.validate_partitioned_indexes(index_details, index_map,
                                               index_metadata),
             "Partitioned index created not as expected")
+
+        self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
+                                                    self.num_index_replicas,
+                                                    self.num_index_partitions),
+                        "Partition map validation failed")
 
         # Run select query 100 times
         for i in range(0, 100):
@@ -2525,18 +2526,21 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             index_data_before[index][
                 "index_metadata"] = self.rest.get_indexer_metadata()
 
-        # start querying
-        query = "select name,dept,salary from default where name is not missing and dept='HR' and salary > 120000;"
-        t1 = Thread(target=self._run_queries, args=(query, 30,))
-        t1.start()
-        # rebalance out a indexer node when querying is in progress
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [node_in], [node_out],
-                                                 services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
-        t1.join()
+        try:
+            # start querying
+            query = "select name,dept,salary from default where name is not missing and dept='HR' and salary > 120000;"
+            t1 = Thread(target=self._run_queries, args=(query, 30,))
+            t1.start()
+            # rebalance out a indexer node when querying is in progress
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     [node_in], [node_out],
+                                                     services=services_in)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            t1.join()
+        except Exception, ex:
+            self.log.info(str(ex))
 
         self.sleep(30)
 
@@ -2965,28 +2969,25 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             index_data_before[index][
                 "index_metadata"] = self.rest.get_indexer_metadata()
 
-        # rebalance out an indexer node
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [], [node_out])
-
-        reached = RestHelper(self.rest).rebalance_reached()
-
-        remote_client = RemoteMachineShellConnection(node_to_fail)
-        if self.node_operation == "kill_indexer":
-            remote_client.kill_indexer()
-        else:
-            remote_client.reboot_node()
-        remote_client.disconnect()
-        # wait for restart and warmup on all node
-        self.sleep(self.wait_timeout * 3)
-        # disable firewall on these nodes
-        self.stop_firewall_on_node(node_to_fail)
-        # wait till node is ready after warmup
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
-                                                             self,
-                                                             wait_if_warmup=True)
-
         try:
+            # rebalance out an indexer node
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     [], [node_out])
+
+            reached = RestHelper(self.rest).rebalance_reached()
+
+            remote_client = RemoteMachineShellConnection(node_to_fail)
+            if self.node_operation == "kill_indexer":
+                remote_client.kill_indexer()
+            else:
+                remote_client.reboot_node()
+            remote_client.disconnect()
+            # wait for restart and warmup on all node
+            self.sleep(self.wait_timeout * 3)
+            # wait till node is ready after warmup
+            ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
+                                                                 self,
+                                                                 wait_if_warmup=True)
             rebalance.result()
         except Exception, ex:
             self.log.info(str(ex))
