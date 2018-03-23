@@ -1,6 +1,7 @@
 from logredaction.log_redaction_base import LogRedactionBase
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.rest_client import RestConnection, RestHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 import logging
 
 log = logging.getLogger()
@@ -108,4 +109,78 @@ class LogRedactionTests(LogRedactionBase):
                                   nonredactFileName=nonredactFileName,
                                   logFileName="ns_server.debug.log")
 
+    def test_cbcollect_with_redaction_enabled_with_views(self):
+        self.set_redaction_level()
+        self._create_views()
+        """ start collect logs """
+        self.start_logs_collection()
+        result = self.monitor_logs_collection()
+        logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/')+1]
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+
+    def test_cbcollect_with_redaction_enabled_with_xdcr(self):
+        rest_src = RestConnection(self.master)
+        rest_src.remove_all_replications()
+        rest_src.remove_all_remote_clusters()
+
+        rest_dest = RestConnection(self.servers[1])
+        rest_dest_helper = RestHelper(rest_dest)
+
+        try:
+            rest_src.remove_all_replications()
+            rest_src.remove_all_remote_clusters()
+            self.set_redaction_level()
+            rest_src.add_remote_cluster(self.servers[1].ip, self.servers[1].port,
+                                        self.servers[1].rest_username,
+                                        self.servers[1].rest_password, "C2")
+
+            """ at dest cluster """
+            self.add_built_in_server_user(node=self.servers[1])
+            rest_dest.create_bucket(bucket='default', ramQuotaMB=512)
+            bucket_ready = rest_dest_helper.vbucket_map_ready('default')
+            if not bucket_ready:
+                self.fail("Bucket default at dest not created after 120 seconds.")
+            repl_id = rest_src.start_replication('continuous', 'default', "C2")
+            if repl_id is not None:
+                self.log.info("Replication created successfully")
+            gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+            tasks = self._async_load_all_buckets(self.master, gen, "create", 0)
+            for task in tasks:
+                task.result()
+            self.sleep(10)
+
+            """ enable firewall """
+            if self.interrupt_replication:
+                RemoteUtilHelper.enable_firewall(self.master, xdcr=True)
+
+            """ start collect logs """
+            self.start_logs_collection()
+            result = self.monitor_logs_collection()
+            """ verify logs """
+            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            redactFileName = logs_path.split('/')[-1]
+            nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+            remotepath = logs_path[0:logs_path.rfind('/')+1]
+            self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+            self.log.info("Verify on log {0}".format(xdcr_log))
+            self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.goxdcr.log")
+        finally:
+            """ clean up xdcr """
+            rest_dest.delete_bucket()
+            rest_src.remove_all_replications()
+            rest_src.remove_all_remote_clusters()
+            if self.interrupt_replication:
+                shell = RemoteMachineShellConnection(self.master)
+                shell.disable_firewall()
+                shell.disconnect()
 

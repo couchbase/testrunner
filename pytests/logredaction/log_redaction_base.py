@@ -1,6 +1,7 @@
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from couchbase_helper.document import View
 import json, re
 
 
@@ -8,6 +9,7 @@ class LogRedactionBase(BaseTestCase):
     def setUp(self):
         super(LogRedactionBase, self).setUp()
         self.log_redaction_level = self.input.param("redaction_level", "none")
+        self.interrupt_replicaion = self.input.param("interrupt-replication", False)
 
     def tearDown(self):
         super(LogRedactionBase, self).tearDown()
@@ -42,7 +44,8 @@ class LogRedactionBase(BaseTestCase):
         :return: final json that contains path to collected log file
         '''
         shell = RemoteMachineShellConnection(self.master)
-        command = "curl -X GET -u Administrator:password http://" + self.master.ip + ":8091/pools/default/tasks"
+        command = "curl -X GET -u Administrator:password http://" \
+                          + self.master.ip + ":8091/pools/default/tasks"
         progress = 0
         status = ""
         while progress != 100 or status == "running":
@@ -56,8 +59,7 @@ class LogRedactionBase(BaseTestCase):
                     break
             progress = content["progress"]
             status = content["status"]
-            self.log.info("waiting for collection to complete..")
-            self.sleep(10)
+            self.sleep(40, "collection is running ..")
         self.log.info("Collection completed successfully")
         shell.disconnect()
         return content
@@ -99,7 +101,10 @@ class LogRedactionBase(BaseTestCase):
         command = "zipinfo " + remotepath + nonredactFileName + " | grep " + logFileName + " | awk '{print $9}'"
         output, error = shell.execute_command(command=command)
         shell.log_command_output(output, error)
-        log_file_name = output[0]
+        if output and output[0]:
+            log_file_name = output[0]
+        else:
+            self.fail("There is no file {0} in log dir".format(logFileName))
 
         command = "zipgrep -n -o \"<ud>.+</ud>\" " + remotepath + nonredactFileName +  " " + log_file_name + " | cut -f2 -d:"
         ln_output, _ = shell.execute_command(command=command)
@@ -145,3 +150,13 @@ class LogRedactionBase(BaseTestCase):
                     self.fail("Hashing failed for Line: " + key + " Non-redacted content: " + non_redact_content)
 
         shell.disconnect()
+
+    def _create_views(self):
+        default_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
+        default_view_name = "test"
+        default_ddoc_name = "ddoc_test"
+        prefix = "dev_"
+        query = {"full_set": "true", "stale": "false", "connection_timeout": 60000}
+        view = View(default_view_name, default_map_func)
+        task = self.cluster.async_create_view(self.master, default_ddoc_name, view, "default")
+        task.result()
