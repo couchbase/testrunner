@@ -63,7 +63,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
-                                  data_chan_size=10000, worker_queue_cap=100000,
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=6
                                   ):
         body = {}
         body['appname'] = appname
@@ -103,6 +103,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['worker_queue_cap'] = worker_queue_cap
         # See MB-27967, the reason for adding this config
         body['settings']['use_memory_manager'] = self.use_memory_manager
+        # since deadline_timeout has to always greater than execution_timeout
+        if execution_timeout != 3:
+            deadline_timeout = execution_timeout + 1
+        body['settings']['deadline_timeout'] = deadline_timeout
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):
