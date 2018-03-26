@@ -312,7 +312,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._use_hostanames = self._input.param("use_hostnames", False)
         self.print_stats = self._input.param("print_stats", False)
         self._wait_for_expiration = self._input.param("wait_for_expiration", False)
-        self.sdk_compression = self.input.param("sdk_compression", True)
+        self.sdk_compression = self._input.param("sdk_compression", True)
         self.collect_data_files = False
         if self._warmup is not None:
             self._warmup = self._warmup.split("-")
