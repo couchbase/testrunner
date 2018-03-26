@@ -2,6 +2,7 @@ from logredaction.log_redaction_base import LogRedactionBase
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+import json
 import logging
 
 log = logging.getLogger()
@@ -9,6 +10,7 @@ log = logging.getLogger()
 class LogRedactionTests(LogRedactionBase):
     def setUp(self):
         super(LogRedactionTests, self).setUp()
+        self.n1ql_port = self.input.param("n1ql_port", 8093)
 
     def tearDown(self):
         super(LogRedactionTests, self).tearDown()
@@ -183,4 +185,70 @@ class LogRedactionTests(LogRedactionBase):
                 shell = RemoteMachineShellConnection(self.master)
                 shell.disable_firewall()
                 shell.disconnect()
+
+##############################################################################################
+#
+#   N1QL
+##############################################################################################
+
+    def test_n1ql_through_rest_with_redaction_enabled(self):
+        gen_create = BlobGenerator('logredac', 'logredac-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen_create, "create", 0)
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        curl_path = "curl"
+        if type.lower() == 'windows':
+            self.curl_path = "%scurl" % self.path
+
+        shell.execute_command("%s -u Administrator:password http://%s:%s/query/service -d 'statement=create primary index on default'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+        shell.execute_command("%s -u Administrator:password http://%s:%s/query/service -d 'statement=create index idx on default(fake)'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+        shell.execute_command("%s -u Administr:pasword http://%s:%s/query/service -d 'statement=select * from default'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+        shell.execute_command("%s http://Administrator:password@%s:%s/query/service -d 'statement=select * from default'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+        shell.execute_command("%s -u Administrator:password http://%s:%s/query/service -d 'statement=select * from default'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+        # Get the CAS mismatch error by double inserting a document, second one will throw desired error
+        shell.execute_command("%s -u Administrator:password http://%s:%s/query/service -d 'statement=insert into default (KEY,VALUE) VALUES(\"test\",{\"field1\":\"test\"})'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+        shell.execute_command("%s -u Administrator:password http://%s:%s/query/service -d 'statement=insert into default (KEY,VALUE) VALUES(\"test\",{\"field1\":\"test\"})'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+        # Delete a document that does not exist
+        shell.execute_command("%s -u Administrator:password http://%s:%s/query/service -d 'statement=DELETE FROM default USE KEYS \"fakekey\"})'"
+                              % (curl_path, self.master.ip, self.n1ql_port))
+
+
+        #set log redaction level, collect logs, verify log files exist and verify them for redaction
+        self.set_redaction_level()
+        self.start_logs_collection()
+        result = self.monitor_logs_collection()
+        logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/')+1]
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+        self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.query.log")
+        shell.disconnect()
+
+    '''Convert output of remote_util.execute_command to json
+       (stripping all white space to match execute_command_inside output)'''
+    def convert_list_to_json(self,output_of_curl):
+        new_list = [string.replace(" ", "") for string in output_of_curl]
+        concat_string = ''.join(new_list)
+        json_output=json.loads(concat_string)
+        return json_output
 
