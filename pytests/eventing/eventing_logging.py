@@ -52,7 +52,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
-        expected_results_deploy = {"real_userid:source": "ns_server", "real_userid:user": "Administrator",
+        expected_results_deploy = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
                                    "context": self.function_name, "id": 32768, "name": "Create Function",
                                    "description": "Eventing function definition was created or updated"}
         # check audit log if the deploy operation is present in audit log
@@ -60,13 +60,13 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
-        expected_results_undeploy = {"real_userid:source": "ns_server", "real_userid:user": "Administrator",
+        expected_results_undeploy = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
                                      "context": self.function_name, "id": 32779, "name": "Set Settings",
                                      "description": "Save settings for a given app"}
-        expected_results_delete_draft = {"real_userid:source": "ns_server", "real_userid:user": "Administrator",
+        expected_results_delete_draft = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
                                          "context": self.function_name, "id": 32773, "name": "Delete Drafts",
                                          "description": "Eventing function draft definitions were deleted"}
-        expected_results_delete = {"real_userid:source": "ns_server", "real_userid:user": "Administrator",
+        expected_results_delete = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
                                    "context": self.function_name, "id": 32769, "name": "Delete Function",
                                    "description": "Eventing function definition was deleted"}
         # check audit log if the un deploy operation is present in audit log
