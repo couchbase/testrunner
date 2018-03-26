@@ -24,6 +24,36 @@ class QueryHelper(object):
                 hints.append(data_point.split(".*").replace(" ",""))
         return hints
 
+    def find_all(self, a_str, sub):
+        start = 0
+        while True:
+            start = a_str.find(sub, start)
+            if start == -1:
+                return
+            yield start
+            start += len(sub)
+
+    def find_char_field(self, a_str):
+        char_occurences = list(self.find_all(a_str, "char"))
+        rchar_occurences = list(self.find_all(a_str, "rchar"))
+        for i in range(len(char_occurences)):
+            if i + 1 > len(rchar_occurences) or char_occurences[i] != rchar_occurences[i] + 1:
+                return char_occurences[i]
+        return -1
+
+    def extract_field_names(self, sql_string, field_list):
+        present_fields = []
+        for field in field_list:
+            if field.find('char') == 0:
+                idx = self.find_char_field(sql_string)
+                if idx > -1:
+                    present_fields.append(field)
+            else:
+                idx = sql_string.find(field)
+                if idx > -1:
+                    present_fields.append(field)
+        return list(set(present_fields))
+
     def _divide_sql(self, sql):
         sql = sql.replace(";","")
         sql = sql.replace("\n","")
@@ -904,11 +934,12 @@ class QueryHelper(object):
             return "{0} = '{1}'".format(field_name, value)
         return "{0} = '{1}'".format(alias+"."+field_name, value)
 
-    def _covert_fields_template_to_value(self, sql = "", table_map = {}):
+    def _covert_fields_template_to_value(self, sql = "", table_map = {}, sql_map=None):
         string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
         numeric_field_names = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], table_map)
         datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
         bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
+        all_field_names = string_field_names + numeric_field_names + datetime_field_names + bool_field_names
         new_sql = sql
         if "BOOL_FIELD_LIST" in sql:
             new_list = self._generate_random_range(bool_field_names)
@@ -933,6 +964,9 @@ class QueryHelper(object):
         if "OUTER_BUCKET_NAME.*" in new_sql:
             projection = " "+table_map[table_map.keys()[0]]["alias_name"]+".* "
             new_sql = new_sql.replace("OUTER_BUCKET_NAME.*",projection)
+        if "ORDER_BY_SEL_VAL" in sql:
+            select_field_names_list = self.extract_field_names(sql_map['select_from'], all_field_names)
+            new_sql = new_sql.replace("ORDER_BY_SEL_VAL", self._convert_list(select_field_names_list, "numeric"))
         return new_sql
 
     def _convert_sql_template_to_value_nested_subqueries(self, n1ql_template =""):
@@ -1186,6 +1220,7 @@ class QueryHelper(object):
         group_by = sql_map["group_by"]
         having = sql_map["having"]
         from_fields, table_map = self._gen_select_tables_info(from_fields, table_map)
+        converted = dict()
         new_sql = "SELECT "
         if "(SELECT" in sql or "( SELECT" in sql:
             new_sql = "(SELECT "
@@ -1198,7 +1233,8 @@ class QueryHelper(object):
                     select_sql, aggregate_function_list = self._gen_aggregate_method_subsitution(select_from, groupby_fields)
                     new_sql += select_sql + " FROM "
             else:
-                new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
+                converted['select_from'] = self._covert_fields_template_to_value(select_from, table_map)
+                new_sql += converted['select_from'] + " FROM "
         if from_fields:
             new_sql += from_fields+ " "
         if where_condition:
@@ -1215,7 +1251,7 @@ class QueryHelper(object):
             else:
                 new_sql += " HAVING "+self._convert_condition_template_to_value_with_aggregate_method(having, groupby_table_map, aggregate_function_list)
         if order_by:
-            new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
+            new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map, converted)+" "
         return new_sql, table_map
 
     def _gen_aggregate_method_subsitution(self, sql, fields):

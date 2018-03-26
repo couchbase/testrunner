@@ -2,8 +2,10 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field limit NUMERIC_VALUE1 offset NUMERIC_VALUE2 |
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition  ORDER BY field limit 10 offset 4 ;
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY ORDER_BY_SEL_VAL limit NUMERIC_VALUE1 offset NUMERIC_VALUE2 |
+    SELECT select_from FROM BUCKET_NAME WHERE complex_condition  ORDER BY ORDER_BY_SEL_VAL limit 10 offset 4 |
+    SELECT * FROM BUCKET_NAME WHERE complex_condition ORDER BY field limit NUMERIC_VALUE1 offset NUMERIC_VALUE2 |
+    SELECT * FROM BUCKET_NAME WHERE complex_condition  ORDER BY field limit 10 offset 4 ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
@@ -14,7 +16,7 @@ direction:
 	ASC | DESC;
 
 select_from:
-	*  | field_list | DISTINCT(field);
+	NUMERIC_FIELD_LIST | STRING_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST, BOOL_FIELD_LIST | DISTINCT(NUMERIC_FIELD) | DISTINCT(STRING_FIELD);
 
 complex_condition:
 	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | (condition) AND (condition) OR (condition) AND (condition) | condition;
