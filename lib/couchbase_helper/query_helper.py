@@ -944,7 +944,7 @@ class QueryHelper(object):
             return "{0} = '{1}'".format(field_name, value)
         return "{0} = '{1}'".format(alias+"."+field_name, value)
 
-    def _covert_fields_template_to_value(self, sql="", table_map={}):
+    def _covert_fields_template_to_value(self, sql="", table_map={}, sql_map=None):
         string_field_names = self._search_fields_of_given_type(["varchar", "text", "tinytext", "char"], table_map)
         numeric_field_names = self._search_fields_of_given_type(["int", "mediumint", "double", "float", "decimal"], table_map)
         datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
@@ -976,6 +976,10 @@ class QueryHelper(object):
         if "OUTER_BUCKET_NAME.*" in new_sql:
             projection = " "+table_map[table_map.keys()[0]]["alias_name"]+".* "
             new_sql = new_sql.replace("OUTER_BUCKET_NAME.*", projection)
+        if "ORDER_BY_SEL_VAL" in sql:
+            select_field_names_list = self.extract_field_names(sql_map['select_from'], all_field_names)
+            new_sql = new_sql.replace("ORDER_BY_SEL_VAL", self._convert_list(select_field_names_list, "numeric"))
+
         return new_sql
 
     def _convert_sql_template_to_value_nested_subqueries(self, n1ql_template=""):
@@ -1456,6 +1460,7 @@ class QueryHelper(object):
         order_by = sql_map["order_by"]
         group_by = sql_map["group_by"]
         having = sql_map["having"]
+        converted = dict()
 
         if isinstance(select_from, (list)):
             i = 0
@@ -1510,7 +1515,8 @@ class QueryHelper(object):
                             group_by = sql_map["group_by"]
                         new_sql += self._covert_fields_template_to_random_value("select_from", sql_map, table_map) + " FROM "
                     else:
-                        new_sql += self._covert_fields_template_to_value(select_from, table_map) + " FROM "
+                        converted['select_from'] = self._covert_fields_template_to_value(select_from, table_map)
+                        new_sql += converted['select_from'] + " FROM "
             if from_fields:
                 new_sql += from_fields + " "
             if where_condition:
@@ -1533,7 +1539,7 @@ class QueryHelper(object):
                 if aggregate_pushdown:
                     new_sql += " ORDER BY "+aggregate_groupby_orderby_fields+" "
                 else:
-                    new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
+                    new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map, converted)+" "
         return new_sql, table_map
 
     def random_field_choice(self, field_names):
