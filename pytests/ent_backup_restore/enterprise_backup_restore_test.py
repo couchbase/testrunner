@@ -3494,6 +3494,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self._load_all_buckets(self.master, gen, "create", int(self.bk_with_ttl))
             else:
                 self._load_all_buckets(self.master, gen, "create", 0)
+        else:
+            self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster_validate()
         if self.bk_with_ttl:

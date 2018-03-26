@@ -606,8 +606,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if self.replace_ttl_with:
                     ttl_date, _ = shell.execute_command(self.rfc3339_date)
                     self.seconds_with_ttl, _ = shell.execute_command(self.seconds_with_ttl)
-                    args += " --replace-ttl {0} --replace-ttl-with {1}"\
-                                 .format(self.replace_ttl, ttl_date[0])
+                    if ttl_date and ttl_date[0]:
+                        args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                                     .format(self.replace_ttl, ttl_date[0])
+                    elif isinstance(self.replace_ttl_with, str):
+                        args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                                     .format(self.replace_ttl, self.replace_ttl_with)
             elif self.replace_ttl == "add-none":
                 args += " --replace-ttl none"
             elif self.replace_ttl == "empty-flag":
@@ -1196,7 +1200,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def _collect_logs(self):
         """
            CB_ARCHIVE_PATH env: param log-archive-env=False
-           syntax: cbbackupmgr collect-logs -a /tmp/backup -o /tmp/logs
+           syntax: cbbackupmgr collect-logs -a /tmp/backup -o /tmp/envlogs
         """
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         info = shell.extract_remote_info().type.lower()
@@ -1231,7 +1235,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         log_archive_env = ""
         if self.backupset.log_archive_env:
             self.log.info("set log arvhive env to /tmp/envlogs")
-            log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH=/tmp/logs; "
+            log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH=/tmp/envlogs; "
             if self.backupset.ex_logs_path:
                 self.log.info("overwrite env log path with flag -o")
         if "-o" in args and self.backupset.no_log_output_flag:
@@ -1361,8 +1365,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if len(bk_file_data[bucket.name].keys()) != \
                                     int(restore_buckets_items[bucket.name]):
                 self.fail("Total keys do not match")
-            items_info, _ = rest.get_items_info(bk_file_data[bucket.name].keys(),
-                                                              bucket.name)
+            items_info = rest.get_items_info(bk_file_data[bucket.name].keys(),
+                                                                    bucket.name)
             ttl_matched = True
             for key in bk_file_data[bucket.name].keys():
                 if items_info[key]['meta']['expiration'] != int(ttl_set):
