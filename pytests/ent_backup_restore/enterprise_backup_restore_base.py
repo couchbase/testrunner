@@ -1370,7 +1370,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             ttl_matched = True
             for key in bk_file_data[bucket.name].keys():
                 if items_info[key]['meta']['expiration'] != int(ttl_set):
-                    ttl_matched = False
+                    if self.replace_ttl == "all":
+                        ttl_matched = False
+                    if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
+                        ttl_matched = False
                     keys_fail[bucket.name][key] = []
                     keys_fail[bucket.name][key].append(items_info[key]['meta']['expiration'])
                     keys_fail[bucket.name][key].append(int(ttl_set))
@@ -1381,6 +1384,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
             if not ttl_matched:
                 self.fail("ttl value did not set correctly")
+            else:
+                self.log.info("all ttl value set matched")
             if int(self.replace_ttl_with) == 0:
                 if len(bk_file_data[bucket.name].keys()) != \
                                 int(restore_buckets_items[bucket.name]):
@@ -1389,7 +1394,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 output, _ = shell.execute_command("date +%s")
                 sleep_time = int(ttl_set) - int(output[0])
                 if sleep_time > 0:
-                    self.sleep(sleep_time + 10, "wait for items to expire")
+                    if self.replace_ttl == "expired" and self.bk_with_ttl is None:
+                        self.log.info("No need to wait.  No expired items in backup ")
+                    elif sleep_time < 600:
+                        self.sleep(sleep_time + 10, "wait for items to expire")
+                    else:
+                        self.log.info("No need to wait.  Expired time set > 5 mins")
                 else:
                     self.log.info("time expired.  No need to wait")
 
@@ -1399,7 +1409,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.sleep(10, "wait for bucket update new stats")
                 restore_buckets_items = rest.get_buckets_itemCount()
                 if int(restore_buckets_items[bucket.name]) > 0:
-                    self.fail("Key did not expire after wait more than 10 seconds of ttl")
+                    if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
+                        if sleep_time < 600:
+                            self.fail("Key did not expire after wait more than 10 seconds of ttl")
 
 
 class Backupset:
