@@ -554,6 +554,7 @@ class XDCRRemoteClusterRef:
         self.__encryption = encryption
         self.__rest_info = {}
         self.__replicator_target_role = replicator_target_role
+        self.__use_scramsha = TestInputSingleton.input.param("use_scramsha", False)
 
         # List of XDCReplication objects
         self.__replications = []
@@ -621,12 +622,22 @@ class XDCRRemoteClusterRef:
             self.dest_user = dest_master.rest_username
             self.dest_pass = dest_master.rest_password
 
-        self.__rest_info = rest_conn_src.add_remote_cluster(
-            dest_master.ip, dest_master.port,
-            self.dest_user,
-            self.dest_pass, self.__name,
-            demandEncryption=self.__encryption,
-            certificate=certificate)
+        if not self.__use_scramsha:
+            self.__rest_info = rest_conn_src.add_remote_cluster(
+                dest_master.ip, dest_master.port,
+                self.dest_user,
+                self.dest_pass, self.__name,
+                demandEncryption=self.__encryption,
+                certificate=certificate)
+        else:
+            print "Using scram-sha authentication"
+            self.__rest_info = rest_conn_src.add_remote_cluster(
+                dest_master.ip, dest_master.port,
+                self.dest_user,
+                self.dest_pass, self.__name,
+                demandEncryption=self.__encryption,
+                encryptionType="half"
+            )
 
         self.__validate_create_event()
 
@@ -636,6 +647,10 @@ class XDCRRemoteClusterRef:
             self.__src_cluster.get_master_node(),
             self.__get_event_expected_results())
 
+    def use_scram_sha_auth(self):
+        self.__use_scramsha = True
+        self.__encryption = True
+        self.modify()
 
     def modify(self, encryption=True):
         """Modify cluster reference to enable SSL encryption
@@ -645,15 +660,23 @@ class XDCRRemoteClusterRef:
         certificate = ""
         if encryption:
             rest_conn_dest = RestConnection(dest_master)
-            certificate = rest_conn_dest.get_cluster_ceritificate()
-            self.__rest_info = rest_conn_src.modify_remote_cluster(
-                dest_master.ip, dest_master.port,
-                self.dest_user,
-                self.dest_pass, self.__name,
-                demandEncryption=encryption,
-                certificate=certificate)
+            if not self.__use_scramsha:
+                certificate = rest_conn_dest.get_cluster_ceritificate()
+                self.__rest_info = rest_conn_src.modify_remote_cluster(
+                    dest_master.ip, dest_master.port,
+                    self.dest_user,
+                    self.dest_pass, self.__name,
+                    demandEncryption=encryption,
+                    certificate=certificate)
+            else:
+                print "Using scram-sha authentication"
+                self.__rest_info = rest_conn_src.modify_remote_cluster(
+                    dest_master.ip, dest_master.port,
+                    self.dest_user,
+                    self.dest_pass, self.__name,
+                    demandEncryption=encryption,
+                    encryptionType="half")
         self.__encryption = encryption
-
         self.__validate_modify_event()
 
     def __validate_remove_event(self):

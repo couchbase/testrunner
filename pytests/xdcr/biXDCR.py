@@ -497,3 +497,38 @@ class bidirectional(XDCRNewBaseTest):
                         goxdcr_log)
         self.assertGreater(count, 0, "rollback did not happen as expected")
         self.log.info("rollback happened as expected")
+
+    def test_scramsha(self):
+        """
+        Creates a new bi-xdcr replication with scram-sha
+        Make sure to pass use-scramsha=True
+        from command line
+        """
+        self.setup_xdcr()
+        self.sleep(60, "wait before checking logs")
+        for node in [self.src_cluster.get_master_node()]+[self.dest_cluster.get_master_node()]:
+            count = NodeHelper.check_goxdcr_log(node,
+                        "HttpAuthMech=ScramSha for remote cluster reference remote_cluster")
+            if count <= 0:
+                self.fail("Node {0} does not use SCRAM-SHA authentication".format(node.ip))
+            else:
+                self.log.info("SCRAM-SHA auth successful on node {0}".format(node.ip))
+
+    def test_update_to_scramsha_auth(self):
+        """
+        Start with ordinary replication, then switch to use scram_sha_auth
+        Search for success log stmtsS
+        """
+        old_count = NodeHelper.check_goxdcr_log(self.src_cluster.get_master_node(),
+                                                "HttpAuthMech=ScramSha for remote cluster reference remote_cluster")
+        self.setup_xdcr()
+        # modify remote cluster ref to use scramsha
+        for remote_cluster in self.src_cluster.get_remote_clusters()+self.dest_cluster.get_remote_clusters():
+            remote_cluster.use_scram_sha_auth()
+        self.sleep(60, "wait before checking the logs for using scram-sha")
+        for node in [self.src_cluster.get_master_node()]+[self.dest_cluster.get_master_node()]:
+            count = NodeHelper.check_goxdcr_log(node, "HttpAuthMech=ScramSha for remote cluster reference remote_cluster")
+            if count <= old_count:
+                self.fail("Node {0} does not use SCRAM-SHA authentication".format(node.ip))
+            else:
+                self.log.info("SCRAM-SHA auth successful on node {0}".format(node.ip))
