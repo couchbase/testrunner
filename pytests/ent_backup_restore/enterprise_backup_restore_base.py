@@ -599,7 +599,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
 
-        if self.replace_ttl:
+        if self.replace_ttl is not None:
             if self.replace_ttl == "all" or self.replace_ttl == "expired":
                 if self.replace_ttl_with is None:
                     self.fail("Need to include param 'replace-ttl-with' value")
@@ -618,8 +618,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
-        else:
-            args += " --replace-ttl none"
         if self.vbucket_filter:
             if self.vbucket_filter == "empty":
                 args += " --vbucket-filter "
