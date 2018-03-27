@@ -58,16 +58,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             except Exception, ex:
                 self.log.info(str(ex))
 
-            self.sleep(10)
+            self.sleep(2)
 
             index_metadata = self.rest.get_indexer_metadata()
-
-            self.log.info("output from /getIndexStatus")
-            self.log.info(index_metadata)
-
-            self.log.info("Index Map")
             index_map = self.get_index_map()
-            self.log.info(index_map)
 
             if index_metadata:
                 status = self.validate_partitioned_indexes(create_index_query,
@@ -84,6 +78,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 self.log.info(
                     "** Following index did not get created : {0}".format(
                         create_index_query["index_definition"]))
+                self.log.info("output from /getIndexStatus")
+                self.log.info(index_metadata)
+                self.log.info("Index Map")
+                self.log.info(index_map)
 
             drop_index_query = "DROP INDEX default.{0}".format(
                 create_index_query["index_name"])
@@ -93,8 +91,6 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     server=self.n1ql_node)
             except Exception, ex:
                 self.log.info(str(ex))
-
-            self.sleep(5)
 
         self.log.info(
             "Total Create Index Statements Run: {0}, Passed : {1}, Failed : {2}".format(
@@ -348,7 +344,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             index_details = {}
             index_details["index_name"] = indexname
-            if int(value) > 0:
+            if (not isinstance(value,str)) and int(value) > 0:
                 index_details["num_partitions"] = int(value)
             else:
                 index_details["num_partitions"] = 8
@@ -434,7 +430,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     "Index got created with an invalid num_partition value : {0}".format(
                         value))
 
-        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':47.6789}}"
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {'num_partition':47.6789}"
         try:
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
@@ -1677,8 +1673,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
     def test_load_balancing_amongst_partitioned_index_replicas(self):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
-        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) partition by hash (meta().id) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) partition by hash (meta().id) USING GSI  WITH {{'num_replica': {0},'num_partition':{1}}};".format(
+            self.num_index_replicas, self.num_index_partitions)
         select_query = "SELECT count(age) from default"
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -2983,7 +2979,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 remote_client.reboot_node()
             remote_client.disconnect()
             # wait for restart and warmup on all node
-            self.sleep(self.wait_timeout * 3)
+            self.sleep(self.wait_timeout)
             # wait till node is ready after warmup
             ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
                                                                  self,
@@ -2995,8 +2991,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # Rerun rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [node_out])
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        self.sleep(30)
+        reached_rerun = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached_rerun,
+                        "retry of the failed rebalance failed, stuck or did not complete")
         rebalance.result()
 
         self.sleep(10)
@@ -3014,6 +3012,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
                 "index_metadata"] = self.rest.get_indexer_metadata()
+            self.log.info(index_data_after[index]["index_metadata"])
 
         for index in index_names:
             # Validate index item count before and after
@@ -3072,28 +3071,25 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 "index_metadata"] = self.rest.get_indexer_metadata()
 
         # rebalance out an indexer node
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [node_in], [],
-                                                 services=services_in)
-
-        reached = RestHelper(self.rest).rebalance_reached()
-
-        remote_client = RemoteMachineShellConnection(node_to_fail)
-        if self.node_operation == "kill_indexer":
-            remote_client.kill_indexer()
-        else:
-            remote_client.reboot_node()
-        remote_client.disconnect()
-        # wait for restart and warmup on all node
-        self.sleep(self.wait_timeout * 3)
-        # disable firewall on these nodes
-        self.stop_firewall_on_node(node_to_fail)
-        # wait till node is ready after warmup
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
-                                                             self,
-                                                             wait_if_warmup=True)
-
         try:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     [node_in], [],
+                                                     services=services_in)
+
+            reached = RestHelper(self.rest).rebalance_reached()
+
+            remote_client = RemoteMachineShellConnection(node_to_fail)
+            if self.node_operation == "kill_indexer":
+                remote_client.kill_indexer()
+            else:
+                remote_client.reboot_node()
+            remote_client.disconnect()
+            # wait for restart and warmup on all node
+            self.sleep(self.wait_timeout)
+            # wait till node is ready after warmup
+            ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
+                                                                 self,
+                                                                 wait_if_warmup=True)
             rebalance.result()
         except Exception, ex:
             self.log.info(str(ex))
@@ -3102,8 +3098,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [node_in], [],
                                                  services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        self.sleep(30)
+        reached_rerun = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached_rerun, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
         self.sleep(10)
@@ -3164,18 +3161,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # Validate index created and check the hosts on which partitions are hosted.
         expected_hosts = self.node_list[1:]
         expected_hosts.sort()
-        validated = False
         index_names = []
         index_names.append("idx1")
         for i in range(1, self.num_index_replicas + 1):
             index_names.append("idx1 (replica {0})".format(str(i)))
 
-        # Need to see if the indexes get created in the first place
-
-        # Validate index created and check the hosts on which partitions are hosted.
-        expected_hosts = self.node_list[1:]
-        expected_hosts.sort()
-        validated = False
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info("Indexer Metadata :::")
         self.log.info(index_metadata)
@@ -3662,7 +3652,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_detail["index_name"] = "idx1"
         index_detail["num_partitions"] = self.num_index_partitions
-        index_detail["defer_build"] = False
+        index_detail["defer_build"] = True
         index_detail[
             "definition"] = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
         index_details.append(index_detail)
@@ -3670,7 +3660,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_detail["index_name"] = "idx2"
         index_detail["num_partitions"] = 64
-        index_detail["defer_build"] = False
+        index_detail["defer_build"] = True
         index_detail[
             "definition"] = "CREATE INDEX idx2 on default(name,dept) partition by hash(salary) USING GSI with {'num_partition':64}"
         index_details.append(index_detail)
@@ -3678,7 +3668,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_detail["index_name"] = "idx3"
         index_detail["num_partitions"] = self.num_index_partitions
-        index_detail["defer_build"] = False
+        index_detail["defer_build"] = True
         index_detail[
             "definition"] = "CREATE INDEX idx3 on default(name,dept) partition by hash(salary) USING GSI with {'num_replica':1}"
         index_details.append(index_detail)
@@ -4031,8 +4021,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
                 if partition_key_type == partition_key_type_list[1]:
                     if len(index_fields) > 1:
-                        randval = random.randint(1, len(index_fields) - 1)
+                        randval = random.randint(1, len(index_fields)-1)
                         key = index_fields[randval]
+                    else:
+                        key = index_fields[0]
 
                 if partition_key_type == partition_key_type_list[2]:
                     idx_key = index_fields[
