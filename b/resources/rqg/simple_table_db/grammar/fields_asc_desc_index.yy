@@ -2,7 +2,8 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field direction ;
+	SELECT * FROM BUCKET_NAME WHERE complex_condition ORDER BY field direction |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY ORDER_BY_SEL_VAL direction ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(field direction) WHERE complex_condition ;
@@ -11,7 +12,7 @@ direction:
 	ASC | DESC;
 
 select_from:
-	*  | field | DISTINCT( field );
+	field | DISTINCT( field );
 
 complex_condition:
 	NOT ( condition ) | ( condition ) AND ( condition ) |
