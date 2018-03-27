@@ -4,5 +4,5 @@ function OnUpdate(doc,meta) {
 }
 function NDtimerCallback(docid, expiry) {
     var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback');
-//    query.execQuery();
+    query.execQuery();
 }
