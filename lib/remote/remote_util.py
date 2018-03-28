@@ -427,7 +427,7 @@ class RemoteMachineShellConnection:
     def start_server(self, os="unix"):
         self.extract_remote_info()
         os = self.info.type.lower()
-        if not os:
+        if not os or os == "centos":
             os = "unix"
         if os == "windows":
             o, r = self.execute_command("net start couchbaseserver")
@@ -459,7 +459,7 @@ class RemoteMachineShellConnection:
     def stop_server(self, os="unix"):
         self.extract_remote_info()
         os = self.info.distribution_type.lower()
-        if not os:
+        if not os or os == "centos":
             os = "unix"
         if os == "windows":
             o, r = self.execute_command("net stop couchbaseserver")
