@@ -2494,8 +2494,25 @@ class RemoteMachineShellConnection:
                 deleted = self.wait_till_file_deleted(version_path, \
                                             VERSION_FILE, timeout_in_seconds=600)
                 if not deleted:
-                    log.error("Uninstall was failed at node {0}".format(self.ip))
-                    sys.exit()
+                    if windows_msi:
+                        log.info("******** repair via msi method ***********")
+                        output, error = \
+                            self.execute_command("cd /cygdrive/c/tmp; msiexec /fa %s /norestart"\
+                                                 % build_name)
+                        self.log_command_output(output, error)
+                        log.info("******** uninstall via msi method ***********")
+                        output, error = \
+                            self.execute_command("cd /cygdrive/c/tmp; msiexec /x %s /qn" \
+                                                 % build_name)
+                        self.log_command_output(output, error)
+                        deleted = self.wait_till_file_deleted(version_path, \
+                                                              VERSION_FILE, timeout_in_seconds=300)
+                        if not deleted:
+                            log.error("Uninstall was failed at node {0}".format(self.ip))
+                            sys.exit()
+                    else:
+                        log.error("Uninstall was failed at node {0}".format(self.ip))
+                        sys.exit()
                 if full_version[:3] != "2.5":
                     uninstall_process = full_version[:10]
                     if not windows_msi:
