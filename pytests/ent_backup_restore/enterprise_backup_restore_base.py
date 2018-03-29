@@ -207,6 +207,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
         self.backupset.map_buckets = self.input.param("map-buckets", None)
+        self.backupset.delete_old_bucket = self.input.param("delete-old-bucket", False)
         self.add_node_services = self.input.param("add-node-services", "kv")
         self.backupset.backup_compressed = \
                                       self.input.param("backup-conpressed", False)
@@ -539,9 +540,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if "fts" in self.master_services[0]:
                 ram_size = int(ram_size) - FTS_QUOTA
             bucket_size = self._get_bucket_size(ram_size, self.total_buckets)
+            if self.dgm_run:
+                bucket_size = 256
 
             count = 0
             buckets = []
+            replicas = self.num_replicas
+            if self.new_replicas:
+                replicas = self.new_replicas
             for bucket in self.buckets:
                 bucket_name = bucket.name
                 if not rest_helper.bucket_exists(bucket_name):
@@ -560,9 +566,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.test_storage_mode = "memory_optimized"
                         self._reset_storage_mode(rest_conn, self.test_storage_mode)
 
-                    replicas = self.num_replicas
-                    if self.new_replicas:
-                        replicas = self.new_replicas
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=int(bucket_size) - 1,
@@ -574,10 +577,27 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                     lww=self.lww_new)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
-                        self.fail("Bucket %s not created after 120 seconds."
-                                                              % bucket_name)
+                        self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
                     if has_index_node:
                         self.sleep(5, "wait for index service ready")
+                elif self.backupset.map_buckets and self.same_cluster:
+                    bucket_maps = ""
+                    bucket_name = bucket.name + "_" + str(count)
+                    self.log.info("replica in bucket {0} is {1}".format(bucket_name, replicas))
+                    if self.backupset.delete_old_bucket:
+                        BucketOperationHelper.delete_bucket_or_assert(\
+                                       self.backupset.restore_cluster_host, bucket.name, self)
+                    rest_conn.create_bucket(bucket=bucket_name,
+                                    ramQuotaMB=int(bucket_size) - 1,
+                                    replicaNumber=replicas,
+                                    authType=bucket.authType if bucket.authType else 'none',
+                                    bucketType=self.bucket_type,
+                                    proxyPort=bucket.port,
+                                    evictionPolicy=self.eviction_policy,
+                                    lww=self.lww_new)
+                    bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
+                    if not bucket_ready:
+                        self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
                 buckets.append("%s=%s" % (bucket.name, bucket_name))
                 count +=1
             bucket_maps = ",".join(buckets)
@@ -1155,26 +1175,30 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def verify_gsi(self):
-        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+        rest = RestConnection(self.backupset.cluster_host)
+        buckets = rest.get_buckets()
+        if "5" <= rest.get_nodes_version()[:1]:
             self.add_built_in_server_user(node=self.backupset.cluster_host)
         cmd = "cbindex -type list"
-        if "5" <= RestConnection(self.backupset.cluster_host).get_nodes_version()[:1]:
+        if "5" <= rest.get_nodes_version()[:1]:
             cmd += " -auth %s:%s" % (self.backupset.cluster_host.rest_username,
                                      self.backupset.cluster_host.rest_password)
         shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
-        index_found = 0
-        if len(output) > 1:
-            for name in self.gsi_names:
-                for x in output:
-                    if "Index:default/%s" % name in x:
-                        index_found += 1
-                        self.log.info("GSI index name %s created in restore cluster "
-                                      "as expected" % name)
-        if index_found < len(self.gsi_names):
-            self.fail("Some GSI index is not created in restore cluster.")
+
+        for bucket in buckets:
+            index_found = 0
+            if len(output) > 1:
+                for name in self.gsi_names:
+                    mesg = "GSI index {0} created in restore cluster as expected".format(name)
+                    for x in output:
+                        if "Index:{0}/{1}".format(bucket.name, name) in x:
+                            index_found += 1
+                            self.log.info(mesg)
+            if index_found < len(self.gsi_names):
+                self.fail("GSI indexes are not restored in bucket {0}".format(bucket.name))
 
     def _check_output(self, word_check, output):
         found = False
@@ -1453,6 +1477,7 @@ class Backupset:
         self.bucket_backup = ''
         self.backup_to_compact = ''
         self.map_buckets = None
+        self.delete_old_bucket = False
         self.backup_compressed = False
         self.user_env = False
         self.log_archive_env = False

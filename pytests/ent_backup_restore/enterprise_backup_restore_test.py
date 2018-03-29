@@ -1551,6 +1551,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Memcached bucket found in backup list output after backup")
         self.log.info("Memcached bucket not found in backup list output after backup as expected")
         self.backup_restore()
+        self.verify_gsi()
 
     def test_backup_with_erlang_crash_and_restart(self):
         """
