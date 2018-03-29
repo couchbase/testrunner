@@ -10,5 +10,5 @@ function NDtimerCallback(docid, expiry) {
 
 function NDtimerCallback1(docid, expiry) {
     var query = UPSERT INTO dst_bucket1 ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback1');
-    query.execQuery();
+//    query.execQuery();
 }

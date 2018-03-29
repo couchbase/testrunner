@@ -3,7 +3,7 @@ function OnUpdate(doc,meta) {
         var docId = new Date();
         sleep(1000);
         var insert_ = INSERT INTO `src_bucket` ( KEY, VALUE ) VALUES ( $docId , $docId);
-        insert_.execQuery();
+//        insert_.execQuery();
         dst_bucket[docId]=new Date();
     } catch (e) {
         log(e);

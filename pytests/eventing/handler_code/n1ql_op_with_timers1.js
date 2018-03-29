@@ -8,9 +8,9 @@ function OnDelete(meta) {
 }
 function NDtimerCallback(docid, expiry) {
     var query = DELETE FROM dst_bucket2 where meta().id = $docid;
-    query.execQuery();
+//    query.execQuery();
 }
 function timerCallback(docid, expiry) {
     var query = INSERT INTO dst_bucket2 ( KEY, VALUE ) VALUES ( $docid ,'timerCallback');
-    query.execQuery();
+//    query.execQuery();
 }
