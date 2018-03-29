@@ -1,5 +1,8 @@
 from logredaction.log_redaction_base import LogRedactionBase
 from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.query_definitions import SQLDefinitionGenerator
+from couchbase_helper.tuq_generators import JsonGenerator
+from couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 import json
@@ -10,6 +13,7 @@ log = logging.getLogger()
 class LogRedactionTests(LogRedactionBase):
     def setUp(self):
         super(LogRedactionTests, self).setUp()
+        self.doc_per_day = self.input.param("doc-per-day", 100)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
 
     def tearDown(self):
@@ -110,6 +114,228 @@ class LogRedactionTests(LogRedactionBase):
                                   redactFileName=redactFileName,
                                   nonredactFileName=nonredactFileName,
                                   logFileName="ns_server.debug.log")
+
+##############################################################################################
+#
+#   GSI
+##############################################################################################
+
+    def test_gsi_with_crud_with_redaction_enabled(self):
+        # load bucket and do some ops
+        self.set_indexer_logLevel("trace")
+        json_generator = JsonGenerator()
+        gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
+        full_docs_list = self.generate_full_docs_list(gen_docs)
+        n1ql_helper = N1QLHelper(use_rest=True, buckets=self.buckets, full_docs_list=full_docs_list,
+                                      log=log, input=self.input, master=self.master)
+        self.load(gen_docs)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query_definition_generator = SQLDefinitionGenerator()
+        query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        # set log redaction level, collect logs, verify log files exist and verify them for redaction
+        self.set_redaction_level()
+        self.start_logs_collection()
+        # Create partial Index
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                create_query = query_definition.generate_index_create_query(bucket.name)
+                n1ql_helper.run_cbq_query(query=create_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                scan_query = query_definition.generate_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
+        result = self.monitor_logs_collection()
+        log.info(result)
+        logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/') + 1]
+        log_file = self.input.param("log_file_name", "indexer.log")
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+        self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.{0}".format(log_file))
+
+    def test_gsi_with_flush_bucket_redaction_enabled(self):
+        # load bucket and do some ops
+        self.set_indexer_logLevel("trace")
+        json_generator = JsonGenerator()
+        gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
+        full_docs_list = self.generate_full_docs_list(gen_docs)
+        n1ql_helper = N1QLHelper(use_rest=True, buckets=self.buckets, full_docs_list=full_docs_list,
+                                      log=log, input=self.input, master=self.master)
+        self.load(gen_docs)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query_definition_generator = SQLDefinitionGenerator()
+        query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        # set log redaction level, collect logs, verify log files exist and verify them for redaction
+        self.set_redaction_level()
+        self.start_logs_collection()
+        # Create partial Index
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                create_query = query_definition.generate_index_create_query(bucket.name)
+                n1ql_helper.run_cbq_query(query=create_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                scan_query = query_definition.generate_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
+
+        rest = RestConnection(self.master)
+        rest.flush_bucket(self.buckets[0].name)
+
+        self.sleep(10)
+        self.load(gen_docs, buckets=[self.buckets[0]])
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                scan_query = query_definition.generate_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
+        result = self.monitor_logs_collection()
+        log.info(result)
+        logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/') + 1]
+        log_file = self.input.param("log_file_name", "indexer.log")
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+        self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.{0}".format(log_file))
+
+    def test_gsi_with_index_restart_redaction_enabled(self):
+        # load bucket and do some ops
+        self.set_indexer_logLevel("trace")
+        json_generator = JsonGenerator()
+        gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
+        full_docs_list = self.generate_full_docs_list(gen_docs)
+        n1ql_helper = N1QLHelper(use_rest=True, buckets=self.buckets, full_docs_list=full_docs_list,
+                                      log=log, input=self.input, master=self.master)
+        self.load(gen_docs)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query_definition_generator = SQLDefinitionGenerator()
+        query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        # set log redaction level, collect logs, verify log files exist and verify them for redaction
+        self.set_redaction_level()
+        self.start_logs_collection()
+        # Create partial Index
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                create_query = query_definition.generate_index_create_query(bucket.name)
+                n1ql_helper.run_cbq_query(query=create_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                scan_query = query_definition.generate_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
+
+        index_node = n1ql_node = self.get_nodes_from_services_map(service_type="index")
+        remote = RemoteMachineShellConnection(index_node)
+        remote.stop_server()
+        self.sleep(30)
+        remote.start_server()
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                scan_query = query_definition.generate_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
+        result = self.monitor_logs_collection()
+        log.info(result)
+        logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/') + 1]
+        log_file = self.input.param("log_file_name", "indexer.log")
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+        self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.{0}".format(log_file))
+
+    def test_gsi_with_index_rebalance_redaction_enabled(self):
+        # load bucket and do some ops
+        self.set_indexer_logLevel("trace")
+        json_generator = JsonGenerator()
+        gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
+        full_docs_list = self.generate_full_docs_list(gen_docs)
+        n1ql_helper = N1QLHelper(use_rest=True, buckets=self.buckets, full_docs_list=full_docs_list,
+                                 log=log, input=self.input, master=self.master)
+        self.load(gen_docs)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query_definition_generator = SQLDefinitionGenerator()
+        query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
+        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        # set log redaction level, collect logs, verify log files exist and verify them for redaction
+        self.set_redaction_level()
+        self.start_logs_collection()
+        # Create partial Index
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                create_query = query_definition.generate_index_create_query(bucket.name)
+                n1ql_helper.run_cbq_query(query=create_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                scan_query = query_definition.generate_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], self.nodes_in_list,
+                                                 [], services=self.services_in)
+
+        rebalance.result()
+        self.sleep(30)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                scan_query = query_definition.generate_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
+
+        for query_definition in query_definitions:
+            for bucket in self.buckets:
+                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
+        result = self.monitor_logs_collection()
+        log.info(result)
+        logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/') + 1]
+        log_file = self.input.param("log_file_name", "indexer.log")
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+        self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.{0}".format(log_file))
 
     def test_cbcollect_with_redaction_enabled_with_views(self):
         self.set_redaction_level()
@@ -251,4 +477,3 @@ class LogRedactionTests(LogRedactionBase):
         concat_string = ''.join(new_list)
         json_output=json.loads(concat_string)
         return json_output
-
