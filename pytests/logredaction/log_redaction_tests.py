@@ -477,3 +477,38 @@ class LogRedactionTests(LogRedactionBase):
         concat_string = ''.join(new_list)
         json_output=json.loads(concat_string)
         return json_output
+
+    def test_fts_log_redaction(self):
+        gen_create = BlobGenerator('logredac', 'logredac-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen_create, "create", 0)
+        index_definition = {
+            "type": "fulltext-index",
+            "name": "index1",
+            "sourceType": "couchbase",
+            "sourceName": "default"
+        }
+        rest = RestConnection(self.master)
+        status = rest.create_fts_index("index1", index_definition)
+        if status:
+            log.info("Index 'index1' created")
+        else:
+            log.info("Error creating index, status = {0}".format(status))
+        self.sleep(60, "waiting for docs to get indexed")
+        query_json = {"query": {"field": "type", "match": "emp"}}
+        hits, _, _, _ = rest.run_fts_query(index_name="index1",
+                           query_json=query_json)
+        log.info("Hits from query {0}: {1}".format(query_json, hits))
+        self.set_redaction_level()
+        self.start_logs_collection()
+        result = self.monitor_logs_collection()
+        logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+        redactFileName = logs_path.split('/')[-1]
+        nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
+        remotepath = logs_path[0:logs_path.rfind('/') + 1]
+        self.verify_log_files_exist(remotepath=remotepath,
+                                    redactFileName=redactFileName,
+                                    nonredactFileName=nonredactFileName)
+        self.verify_log_redaction(remotepath=remotepath,
+                                  redactFileName=redactFileName,
+                                  nonredactFileName=nonredactFileName,
+                                  logFileName="ns_server.fts.log")
