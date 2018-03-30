@@ -146,6 +146,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.restore_only = self.input.param("restore-only", False)
         self.replace_ttl = self.input.param("replace-ttl", None)
         self.vbucket_filter = self.input.param("vbucket-filter", None)
+        self.restore_compression_mode = self.input.param("restore-compression-mode", None)
         self.force_version_upgrade = self.input.param("force-version-upgrade", None)
         if self.non_master_host:
             self.backupset.cluster_host = self.servers[1]
@@ -548,6 +549,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             replicas = self.num_replicas
             if self.new_replicas:
                 replicas = self.new_replicas
+            bucket_compression_mode = self.compression_mode
+            if self.restore_compression_mode is not None:
+                bucket_compression_mode = self.restore_compression_mode
             for bucket in self.buckets:
                 bucket_name = bucket.name
                 if not rest_helper.bucket_exists(bucket_name):
@@ -574,7 +578,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                     bucketType=self.bucket_type,
                                     proxyPort=bucket.port,
                                     evictionPolicy=self.eviction_policy,
-                                    lww=self.lww_new)
+                                    lww=self.lww_new,
+                                    compressionMode=bucket_compression_mode)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
@@ -594,7 +599,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                     bucketType=self.bucket_type,
                                     proxyPort=bucket.port,
                                     evictionPolicy=self.eviction_policy,
-                                    lww=self.lww_new)
+                                    lww=self.lww_new,
+                                    compressionMode=bucket_compression_mode)
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
@@ -653,6 +659,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                    password_env, user_env)
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
+        self._verify_bucket_compression_mode(bucket_compression_mode)
         errors_check = ["Unable to process value for", "Error restoring cluster",
                         "Expected argument for option"]
         if "Error restoring cluster" in output[0] or "Unable to process value" in output[0] \
@@ -1434,6 +1441,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
                         if sleep_time < 600:
                             self.fail("Key did not expire after wait more than 10 seconds of ttl")
+
+    def _verify_bucket_compression_mode(self, restore_bucket_compression_mode):
+        rest = rest = RestConnection(self.backupset.restore_cluster_host)
+        buckets = rest.get_buckets()
+        bucket_compression_mode = []
+        for bucket in buckets:
+            compressionMode = rest.get_bucket_compressionMode(bucket=bucket.name)
+            bucket_compression_mode.append(compressionMode)
+        for compressionMode in bucket_compression_mode:
+            if compressionMode != restore_bucket_compression_mode:
+                self.fail("cbbackupmgr modified bucket pre-config.")
 
 
 class Backupset:
