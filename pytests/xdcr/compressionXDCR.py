@@ -95,6 +95,11 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, bucket_prefix + "1", compression_type)
+        if self.chain_length > 2 and self.topology == TOPOLOGY.CHAIN:
+            self._set_compression_type(self.dest_cluster, bucket_prefix + "1", compression_type)
+        if self.chain_length > 2 and self.topology == TOPOLOGY.RING:
+            self._set_compression_type(self.dest_cluster, bucket_prefix + "1", compression_type)
+            self._set_compression_type(self.c3_cluster, bucket_prefix + "1", compression_type)
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
