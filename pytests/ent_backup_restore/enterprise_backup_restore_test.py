@@ -2358,15 +2358,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                  [servers[int(self.nodes_init) - 1]], [])
         rebalance.result()
         self.sleep(15)
-        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
-        self.buckets = RestConnection(self.master).get_buckets()
+        rest = RestConnection(self.master)
+        rest.create_bucket(bucket='default', ramQuotaMB=512)
+        self.buckets = rest.get_buckets()
         self._load_all_buckets(self.master, gen, "create", 0)
-        if RestConnection(self.master).get_nodes_version()[:5] in COUCHBASE_FROM_4DOT6:
+        cb_version = rest.get_nodes_version()
+        if cb_version[:5] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
 
         """ create index """
+        if 5.5 > float(cb_version[:3]):
+            self.compression_mode= "off"
         if self.create_gsi:
-            rest = RestConnection(self.master)
             if "5" > rest.get_nodes_version()[:1]:
                 if self.gsi_type == "forestdb":
                     self.fail("Need to set param self.gsi_type=memory_optimized")

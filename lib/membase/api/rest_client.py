@@ -2152,6 +2152,9 @@ class RestConnection(object):
 
     def get_bucket_compressionMode(self, bucket='default'):
         bucket_info = self.get_bucket_json(bucket=bucket)
+        info = self.get_nodes_self()
+        if 5.5 > float(info.version[:3]):
+            bucket_info['compressionMode'] = "off"
         return bucket_info['compressionMode']
 
     def is_lww_enabled(self, bucket='default'):

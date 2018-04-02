@@ -1443,7 +1443,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             self.fail("Key did not expire after wait more than 10 seconds of ttl")
 
     def _verify_bucket_compression_mode(self, restore_bucket_compression_mode):
-        rest = rest = RestConnection(self.backupset.restore_cluster_host)
+        rest = RestConnection(self.backupset.restore_cluster_host)
+        cb_version = rest.get_nodes_version()
+        if 5.5 > float(cb_version[:3]):
+            self.log.info("This version is pre vulcan.  No need to verify compression mode.")
+            return
         buckets = rest.get_buckets()
         bucket_compression_mode = []
         for bucket in buckets:
