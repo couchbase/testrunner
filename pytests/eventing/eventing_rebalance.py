@@ -361,7 +361,8 @@ class EventingRebalance(EventingBaseTest):
         # This is required to ensure eventing works after rebalance goes through successfully
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         try:
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+                                         timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -375,7 +376,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -412,7 +413,8 @@ class EventingRebalance(EventingBaseTest):
         self.sleep(60)
         try:
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+                                         timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -426,7 +428,7 @@ class EventingRebalance(EventingBaseTest):
         try :
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -460,7 +462,8 @@ class EventingRebalance(EventingBaseTest):
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+                                         timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -474,7 +477,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -882,7 +885,8 @@ class EventingRebalance(EventingBaseTest):
         try:
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
             # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+                                         timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -896,7 +900,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
