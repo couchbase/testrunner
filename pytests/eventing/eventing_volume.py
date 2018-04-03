@@ -17,11 +17,11 @@ class EventingVolume(EventingBaseTest):
         self.dst_bucket_name2 = self.input.param('dst_bucket_name2', 'dst_bucket2')
         self.worker_count = self.input.param('worker_count', 3)
         self.cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 3)
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=3000)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=2800)
         if self.create_functions_buckets:
-            # self.bucket_size = 500
+            self.bucket_size = 300
             # self.meta_bucket_size = 500
-            self.bucket_size = 600
+            # self.bucket_size = 600
             self.meta_bucket_size = 100
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)

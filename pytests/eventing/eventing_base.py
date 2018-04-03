@@ -257,6 +257,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
 
     def undeploy_and_delete_function(self, body):
         self.undeploy_function(body)
+        self.sleep(5)
         self.delete_function(body)
 
     def undeploy_function(self, body):

@@ -335,13 +335,16 @@ class EventingRebalance(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_autofailover_with_eventing_rebalance(self):
+        # enable auto-failover
+        status = RestConnection(self.master).update_autofailover_settings(True, 60)
+        if not status:
+            self.fail('failed to change autofailover_settings! See MB-7282')
         gen_load_del = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
         self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                          self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
-        RestConnection(self.master).update_autofailover_settings(True, 30)
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         remote = RemoteMachineShellConnection(kv_node[1])
@@ -687,7 +690,7 @@ class EventingRebalance(EventingBaseTest):
             rebalance.result()
             task.result()
         except Exception, ex:
-            self.fail("Rebalance failed after memcached crash")
+            self.fail("Rebalance failed or hung after memcached crash")
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -864,19 +867,23 @@ class EventingRebalance(EventingBaseTest):
             # load some data
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
-            # failover a node
-            fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[server_failed_over], graceful=False)
-            fail_over_task.result()
-            self.sleep(120)
-            # do a swap rebalance
-            server_out = self.servers[self.server_out]
-            self.rest.add_node(self.master.rest_username, self.master.rest_password,
-                               self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
-                               services=[self.services_in])
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [server_out])
-            reached = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-            rebalance.result()
+        except:
+            pass
+        # failover a node
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[server_failed_over],
+                                                     graceful=False)
+        fail_over_task.result()
+        self.sleep(120)
+        # do a swap rebalance
+        server_out = self.servers[self.server_out]
+        self.rest.add_node(self.master.rest_username, self.master.rest_password,
+                           self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
+                           services=[self.services_in])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [server_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        try:
             task.result()
         except:
             # data load might fail because of hard failover
