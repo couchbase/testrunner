@@ -2363,12 +2363,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.buckets = rest.get_buckets()
         self._load_all_buckets(self.master, gen, "create", 0)
         cb_version = rest.get_nodes_version()
+        initial_compression_mode = "off"
         if cb_version[:5] in COUCHBASE_FROM_4DOT6:
             self.cluster_flag = "--cluster"
 
         """ create index """
         if 5.5 > float(cb_version[:3]):
-            self.compression_mode= "off"
+            self.compression_mode = initial_compression_mode
         if self.create_gsi:
             if "5" > rest.get_nodes_version()[:1]:
                 if self.gsi_type == "forestdb":
@@ -2482,7 +2483,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                            "default", self)
                 """ Re-create default bucket on upgrade cluster """
                 RestConnection(servers[2]).create_bucket(bucket='default',
-                                                         ramQuotaMB=512)
+                                                         ramQuotaMB=512,
+                                                         compressionMode=initial_compression_mode)
             self.sleep(5)
             self.total_buckets = len(self.buckets)
 
