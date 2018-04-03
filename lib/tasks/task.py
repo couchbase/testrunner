@@ -500,7 +500,7 @@ class RebalanceTask(Task):
                             self.log.error("Old vbuckets: %s, new vbuckets %s" % (self.old_vbuckets, new_vbuckets))
                             raise Exception(msg)
             (status, progress) = self.rest._rebalance_status_and_progress()
-            self.log.info("Rebalance - status: %s, progress: %s", status, progress)
+            self.log.info("Rebalance - status: {}, progress: {:.02f}%".format(status, progress))
             # if ServerUnavailableException
             if progress == -100:
                 self.retry_get_progress += 1

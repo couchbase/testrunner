@@ -1537,7 +1537,7 @@ class RestConnection(object):
                 sleep = 10
             else:
                 sleep = duration
-            log.info('rebalance progress took {0} seconds '.format(duration))
+            log.info('rebalance progress took {:.02f} seconds '.format(duration))
             log.info("sleep for {0} seconds after rebalance...".format(sleep))
             time.sleep(sleep)
             return True
