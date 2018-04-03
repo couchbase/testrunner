@@ -529,6 +529,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --force-updates"
         if self.no_progress_bar:
             args += " --no-progress-bar"
+        bucket_compression_mode = self.compression_mode
+        if self.restore_compression_mode is not None:
+            bucket_compression_mode = self.restore_compression_mode
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             rest_helper = RestHelper(rest_conn)
@@ -549,9 +552,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             replicas = self.num_replicas
             if self.new_replicas:
                 replicas = self.new_replicas
-            bucket_compression_mode = self.compression_mode
-            if self.restore_compression_mode is not None:
-                bucket_compression_mode = self.restore_compression_mode
             for bucket in self.buckets:
                 bucket_name = bucket.name
                 if not rest_helper.bucket_exists(bucket_name):
