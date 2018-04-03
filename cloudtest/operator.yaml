@@ -1,0 +1,34 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: couchbase-operator
+  namespace: default
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: couchbase-operator
+    spec:
+      containers:
+      - name: couchbase-operator
+        image: couchbase/couchbase-operator:v1
+        env:
+        - name: MY_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+          - name: readiness-port
+            containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: readiness-port
+          initialDelaySeconds: 3
+          periodSeconds: 3
+          failureThreshold: 19
