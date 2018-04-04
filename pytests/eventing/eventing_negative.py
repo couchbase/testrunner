@@ -200,3 +200,23 @@ class EventingNegative(EventingBaseTest):
         log.info("stats : {0}".format(json.dumps(stats, sort_keys=True, indent=4)))
         if bucket_op_exception_count == 0:
             self.fail("Reading binary data succeeded from handler code")
+
+    def test_deploy_function_name_with_more_than_100_chars(self):
+        # create a string of more than 100 chars
+        function_name = "a" * 101
+        body = self.create_save_function_body(function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        try:
+            self.deploy_function(body, deployment_fail=True)
+        except Exception as e:
+            if "Function name length must be less than 100" not in str(e):
+                self.fail("Deployment is expected to be failed but succeeded with function name more than 100 chars")
+
+    def test_deploy_function_name_with_special_chars(self):
+        # create a string with space and other special chars
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        body['appname'] = "a b c @ # $ % ^ & * ( ) + ="
+        try:
+            content = self.rest.create_function("abc", body)
+        except Exception as e:
+            if "Function name can only contain characters in range A-Z, a-z, 0-9 and underscore, hyphen" not in str(e):
+                self.fail("Deployment is expected to be failed when space is present in function name")
