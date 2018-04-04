@@ -32,6 +32,7 @@ class HANDLER_CODE:
     ANONYMOUS = 'handler_code/anonymous.js'
     RECURSION_FUNCTION = 'handler_code/recursion.js'
     N1QL_TEMP = 'handler_code/n1ql_temp.js'
+    N1QL_TEMP_WITHOUT_EXEC = 'handler_code/n1ql_temp_without_exec.js'
     N1QL = 'rqg_handler_code/n1ql.js'
     N1QL_TEMP_PATH = 'handler_code/rqg_handler_code/'
     N1QL_UPDATE_DELETE = 'handler_code/n1ql_update_delete.js'

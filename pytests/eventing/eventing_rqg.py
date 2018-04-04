@@ -170,13 +170,18 @@ class EventingRQG(EventingBaseTest):
         return n1ql
 
     def generate_eventing_file(self, query):
+        h_code = self.input.param('handler_code', 'n1ql_with_exec')
+        if h_code == "n1ql_with_exec":
+            handler_code = HANDLER_CODE.N1QL_TEMP
+        else:
+            handler_code = HANDLER_CODE.N1QL_TEMP_WITHOUT_EXEC
         try:
             if not os.path.exists(HANDLER_CODE.N1QL_TEMP_PATH):
                 os.makedirs(HANDLER_CODE.N1QL_TEMP_PATH)
         except OSError as err:
             print(err)
         script_dir = os.path.dirname(__file__)
-        abs_file_path = os.path.join(script_dir, HANDLER_CODE.N1QL_TEMP)
+        abs_file_path = os.path.join(script_dir, handler_code)
         fh = open(abs_file_path, "r")
         code = Template(fh.read()).substitute(n1ql=query)
         fh.close()
