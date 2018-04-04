@@ -45,5 +45,6 @@ mv ${nodeConfigName}.ini.$numOfNodes ${nodeConfigName}.ini
 # Start Testrunner code #
 python ./testrunner.py -i ./${nodeConfigName}.ini -c ./${nodeConfigName}.conf
 
+echo "Testrunner: command completed"
 while true; do sleep 1000; done
 
