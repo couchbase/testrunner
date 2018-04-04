@@ -51,7 +51,7 @@ class RestHelper(object):
             except ServerUnavailableException:
                 log.error("server {0}:{1} is unavailable"\
                                            .format(self.rest.ip, self.rest.port))
-            time.sleep(2)
+            time.sleep(5)
         msg = 'unable to connect to the node {0} even after waiting {1} seconds'
         log.error(msg.format(self.rest.ip, timeout_in_seconds))
         return False

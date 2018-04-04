@@ -71,7 +71,11 @@ class CollectinfoTests(CliBaseTest):
         """ This is the folder generated after unzip the log package """
         self.shell.delete_files("cbcollect_info*")
 
+        cb_server_started = False
         if self.node_down:
+            """ set autofailover to off """
+            rest = RestConnection(self.master)
+            rest.update_autofailover_settings(False, 60)
             if self.os == 'linux':
                 output, error = self.shell.execute_command(
                                     "killall -9 memcached & killall -9 beam.smp")
@@ -81,26 +85,30 @@ class CollectinfoTests(CliBaseTest):
 
         if self.os != "windows":
             if len(error) > 0:
-                """ Restart cb server if test node down """
-                if self.node_down:
-                    self.shell.start_server()
                 raise Exception("Command throw out error: %s " % error)
 
             for output_line in output:
                 if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
                     if "from http endpoint" in output_line.lower():
                         continue
-                    if self.node_down:
-                        self.shell.start_server()
                     raise Exception("Command throw out error: %s " % output_line)
         try:
-            self.verify_results(self, self.log_filename)
-        finally:
             if self.node_down:
                 if self.os == 'linux':
                     self.shell.start_server()
                     rest = RestConnection(self.master)
-                    RestHelper(rest).is_ns_server_running(timeout_in_seconds=60)
+                    if RestHelper(rest).is_ns_server_running(timeout_in_seconds=60):
+                        cb_server_started = True
+                    else:
+                        self.fail("CB server failed to start")
+            self.verify_results(self, self.log_filename)
+        finally:
+            if self.node_down and not cb_server_started:
+                if self.os == 'linux':
+                    self.shell.start_server()
+                    rest = RestConnection(self.master)
+                    if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=60):
+                        self.fail("CB server failed to start")
 
     def test_cbcollectinfo_detect_container(self):
         """ this test only runs inside docker host and
