@@ -1,5 +1,6 @@
 from tuq import QueryTests
 import os
+from membase.api.rest_client import RestHelper
 from membase.api.exception import CBQError
 import json
 import threading
@@ -136,9 +137,60 @@ class QueryN1QLBackfillTests(QueryTests):
         else:
             self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
 
+    def test_setting_propogation_rebalance_in(self):
+        expected_curl = self.set_tmpspace()
+        self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
+        expected_dir = self.set_directory()
+        self.assertEqual(expected_dir['queryTmpSpaceDir'], self.directory_path)
+        services_in = ["n1ql","index","data"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        curl_url = self.curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
+        curl_output = self.shell.execute_command("%s -u Administrator:password %s"
+                                                 % (self.curl_path, curl_url))
+        expected_curl = self.convert_list_to_json(curl_output[0])
+        self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
+        self.assertEqual(expected_curl['queryTmpSpaceDir'], self.directory_path)
+
+    def test_setting_propogation_swap_rebalance(self):
+        expected_curl = self.set_tmpspace()
+        self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
+        expected_dir = self.set_directory()
+        self.assertEqual(expected_dir['queryTmpSpaceDir'], self.directory_path)
+        nodes_out_list = self.servers[1]
+        to_add_nodes = [self.servers[self.nodes_init]]
+        to_remove_nodes = [nodes_out_list]
+        services_in = ["index", "n1ql", "data"]
+        # do a swap rebalance
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        for i in xrange(20):
+            output = self.rest.list_indexer_rebalance_tokens(server=index_server)
+            if "rebalancetoken" in output:
+                self.log.info(output)
+                break
+            self.sleep(2)
+        if i == 19 and "rebalancetoken" not in output:
+            self.log.warn("rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        curl_url = self.curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
+        curl_output = self.shell.execute_command("%s -u Administrator:password %s"
+                                                 % (self.curl_path, curl_url))
+        expected_curl = self.convert_list_to_json(curl_output[0])
+        self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
+        self.assertEqual(expected_curl['queryTmpSpaceDir'], self.directory_path)
+
+
+
     '''Helper method to send a curl request to couchbase server to set directory path'''
     def set_directory(self):
-
         # Try to create directory if it doesn't exist because backfill directories have to be created manually
         if self.create_directory:
             self.shell.create_directory(self.directory_path)
