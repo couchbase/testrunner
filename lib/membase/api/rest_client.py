@@ -2106,13 +2106,18 @@ class RestConnection(object):
         :return:
         """
         api = "{0}{1}".format(self.fts_baseUrl, 'api/nsstats')
-        status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
-        try:
-            return status, json_parsed[bucket_name+':'+index_name+':'+stat_name]
-        except Exception as e:
-            log.error("ERROR: Stat {0} error on {1} on bucket {2}: {3}".
-                           format(stat_name, index_name, bucket_name, e))
+        attempts = 0
+        while attempts < 5:
+            status, content, header = self._http_request(api)
+            json_parsed = json.loads(content)
+            key = bucket_name+':'+index_name+':'+stat_name
+            if key in json_parsed:
+                return status, json_parsed[key]
+            attempts += 1
+            log.info("Stat {0} not available yet".format(stat_name))
+            time.sleep(1)
+        log.error("ERROR: Stat {0} error on {1} on bucket {2}: {3}".
+                  format(stat_name, index_name, bucket_name, e))
 
     def get_bucket_status(self, bucket):
         if not bucket:
