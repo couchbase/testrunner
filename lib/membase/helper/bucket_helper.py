@@ -241,7 +241,7 @@ class BucketOperationHelper():
             if not helper.bucket_exists(bucket):
                 return True
             else:
-                time.sleep(2)
+                time.sleep(0.1)
         return False
 
     @staticmethod
@@ -256,7 +256,7 @@ class BucketOperationHelper():
             if helper.bucket_exists(bucket):
                 return True
             else:
-                time.sleep(2)
+                time.sleep(0.1)
         return False
 
     @staticmethod
