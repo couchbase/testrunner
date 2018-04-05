@@ -139,34 +139,35 @@ class BucketOperationHelper():
                 log.error('15 seconds sleep before calling get_buckets again...')
                 time.sleep(15)
                 buckets = rest.get_buckets()
-            log.info('deleting existing buckets {0} on {1}'.format([b.name for b in buckets], serverInfo.ip))
-            for bucket in buckets:
-                log.info("remove bucket {0} ...".format(bucket.name))
-                try:
-                    status = rest.delete_bucket(bucket.name)
-                except ServerUnavailableException as e:
-                    log.error(e)
-                    log.error('5 seconds sleep before calling delete_bucket again...')
-                    time.sleep(5)
-                    status = rest.delete_bucket(bucket.name)
-                if not status:
+            if len(buckets) > 0:
+                log.info('deleting existing buckets {0} on {1}'.format([b.name for b in buckets], serverInfo.ip))
+                for bucket in buckets:
+                    log.info("remove bucket {0} ...".format(bucket.name))
                     try:
-                        BucketOperationHelper.print_dataStorage_content(servers)
-                        log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
-                    except:
-                        log.error("Unable to get timings for bucket")
-                log.info('deleted bucket : {0} from {1}'.format(bucket.name, serverInfo.ip))
-                msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
-                if test_case:
-                    if not BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200):
+                        status = rest.delete_bucket(bucket.name)
+                    except ServerUnavailableException as e:
+                        log.error(e)
+                        log.error('5 seconds sleep before calling delete_bucket again...')
+                        time.sleep(5)
+                        status = rest.delete_bucket(bucket.name)
+                    if not status:
                         try:
                             BucketOperationHelper.print_dataStorage_content(servers)
                             log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
                         except:
                             log.error("Unable to get timings for bucket")
-                        test_case.fail(msg)
-            log.info("sleep 2 seconds to make sure all buckets were deleted completely.")
-            time.sleep(2)
+                    log.info('deleted bucket : {0} from {1}'.format(bucket.name, serverInfo.ip))
+                    msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
+                    if test_case:
+                        if not BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200):
+                            try:
+                                BucketOperationHelper.print_dataStorage_content(servers)
+                                log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
+                            except:
+                                log.error("Unable to get timings for bucket")
+                            test_case.fail(msg)
+                log.info("sleep 2 seconds to make sure all buckets ({}) were deleted completely.".format([b.name for b in buckets]))
+                time.sleep(2)
 
     @staticmethod
     def delete_bucket_or_assert(serverInfo, bucket='default', test_case=None):
