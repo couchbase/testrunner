@@ -8,6 +8,7 @@ function showHelp() {
     echo "  --cbversion [string]      Couchbase server version to use"
     echo "  --dockerhub [string]      Dockerhub account to use. Default is 'couchbase'"
     echo "  --targetCluster [string]  Select cluster type kubernetes / openshift"
+    echo "  --cbOperatorVersion [string]  Couchbase operator version to use"
     echo ""
     exit 1
 }
@@ -85,15 +86,15 @@ function editClusterYamlFiles() {
 
 function clearK8SCluster() {
     echo "Using name space '$KUBENAMESPACE'"
-    kubectl delete deployment --namespace=$KUBENAMESPACE --all
-    kubectl delete replicaset --namespace=$KUBENAMESPACE --all
-    kubectl delete service -l app=couchbase --namespace=$KUBENAMESPACE
-    kubectl delete job --all --namespace=$KUBENAMESPACE
-    kubectl delete pods --namespace=$KUBENAMESPACE -l name=couchbase-operator
-    kubectl delete pods --namespace=$KUBENAMESPACE -l name=testrunner
-    kubectl delete pods --namespace=$KUBENAMESPACE -l app=couchbase
-    kubectl delete --all couchbaseclusters --namespace=$KUBENAMESPACE
-    kubectl delete secrets basic-test-secret --namespace=$KUBENAMESPACE
+    kubectl --namespace=$KUBENAMESPACE delete deployment --all
+    kubectl --namespace=$KUBENAMESPACE delete replicaset --all
+    kubectl --namespace=$KUBENAMESPACE delete service -l app=couchbase
+    kubectl --namespace=$KUBENAMESPACE delete jobs/testrunner
+    kubectl --namespace=$KUBENAMESPACE delete pods -l name=couchbase-operator
+    kubectl --namespace=$KUBENAMESPACE delete pods -l name=testrunner
+    kubectl --namespace=$KUBENAMESPACE delete pods -l app=couchbase
+    kubectl --namespace=$KUBENAMESPACE delete --all couchbaseclusters
+    kubectl --namespace=$KUBENAMESPACE delete secrets basic-test-secret
 
     echo "Waiting for all pods to be cleaned up.."
     while [ true ]
@@ -291,12 +292,16 @@ function buildCbServerDockerImage() {
     dockerFileString="${dockerFileString}RUN apt install openssh-client openssh-server -y\n"
     dockerFileString="${dockerFileString}RUN mkdir /var/run/sshd\n"
     dockerFileString="${dockerFileString}RUN echo 'root:couchbase' | chpasswd\n"
-    dockerFileString="${dockerFileString}RUN sed -i 's/PermitRootLogin without-password/PermitRootLogin yes/' /etc/ssh/sshd_config\n"
-    dockerFileString="${dockerFileString}# SSH login fix. Otherwise user is kicked off after login\n"
+    dockerFileString="${dockerFileString}RUN sed -i 's/PermitRootLogin .*\$/PermitRootLogin yes/' /etc/ssh/sshd_config\n"
     dockerFileString="${dockerFileString}RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd\n"
     dockerFileString="${dockerFileString}RUN echo 'export VISIBLE=now' >> /etc/profile\n"
-    dockerFileString="${dockerFileString}RUN /usr/sbin/sshd -D &\n"
     dockerFileString="${dockerFileString}EXPOSE 8091 8092 8093 8094 9100 9101 9102 9103 9104 9105 9998 9999 11207 11210 11211 18091 18092 22\n"
+
+    dockerFileString="${dockerFileString}RUN echo '#!/bin/bash' > myentrypoint.sh\n"
+    dockerFileString="${dockerFileString}RUN echo 'service ssh start' >> myentrypoint.sh\n"
+    dockerFileString="${dockerFileString}RUN echo '/entrypoint.sh couchbase-server' >> myentrypoint.sh\n"
+    dockerFileString="${dockerFileString}RUN chmod +x myentrypoint.sh\n"
+    dockerFileString="${dockerFileString}ENTRYPOINT [\"/myentrypoint.sh\"]\n"
 
     printf "$dockerFileString" > Dockerfile
     docker build . -t $cbServerDockerImageName
@@ -413,6 +418,10 @@ do
             ;;
         "--targetCluster")
             targetCluster=$2
+            shift ; shift
+            ;;
+        "--cbOperatorVersion")
+            cbOperatorVersion=$2
             shift ; shift
             ;;
         *)
