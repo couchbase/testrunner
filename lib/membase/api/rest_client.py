@@ -1081,14 +1081,20 @@ class RestConnection(object):
                         'username': username,
                         'password': password,
                         'name':name}
+        from TestInput import TestInputServer
+        remote = TestInputServer()
+        remote.ip = remoteIp
+        remote.rest_username = username
+        remote.rest_password = password
+        remote.port = remotePort
         if demandEncryption:
             param_map ['demandEncryption'] = 'on'
             if certificate != '':
                 param_map['certificate'] = certificate
-            if self.check_node_versions("5.5"):
+            if self.check_node_versions("5.5") and RestConnection(remote).check_node_versions("5.5"):
                 # 5.5.0 and above
                 param_map['secureType'] = encryptionType
-            elif self.check_node_versions("5.0"):
+            elif self.check_node_versions("5.0") and RestConnection(remote).check_node_versions("5.0"):
                 param_map['encryptionType'] = encryptionType
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
