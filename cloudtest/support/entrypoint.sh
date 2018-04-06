@@ -5,6 +5,11 @@ currentNamespace=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
 nodeConfigName="${numOfNodes}node"
 declare -a podIpArray
 
+if [ "$numOfNodes" == "" ]; then
+    echo "Exiting: Number of nodes missing"
+    exit 1
+fi
+
 # Install Python libraries for Kubernetes #
 git clone --recursive https://github.com/kubernetes-client/python.git
 cd python
@@ -43,7 +48,7 @@ done
 mv ${nodeConfigName}.ini.$numOfNodes ${nodeConfigName}.ini
 
 # Start Testrunner code #
-python ./testrunner.py -i ./${nodeConfigName}.ini -c ./${nodeConfigName}.conf
+python ./testrunner.py -i ./${nodeConfigName}.ini -c ./testcases.conf
 
 echo "Testrunner: command completed"
 while true; do sleep 1000; done

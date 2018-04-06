@@ -107,15 +107,32 @@ function clearK8SCluster() {
     done
 }
 
-function checkForPodsReady () {
+function waitForPodToStartRunning() {
+    echo "Initializing pod '$1'"
+    for i in {1..300}
+    do
+        podRunning=$(kubectl --namespace=$KUBENAMESPACE describe pod $1 | grep "State:" | grep "Running" | wc -l | xargs )
+        if [ $podRunning -eq 1 ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ $podRunning -ne 1 ]; then
+        exitOnError 1 "Pod '$1' not started running even after 5mins"
+    fi
+    unset podRunning
+}
+
+function checkForCbClusterPodsReady () {
     reqPodNum=$1
     clusterPrefix=$2
     podsReady=false
 
-    echo "Waiting for all pods to be up and running.."
+    echo "Waiting for all cb cluster pods to be up and running.."
     for i in {1..60}
     do
-        currPodNum=$(kubectl --namespace=$KUBENAMESPACE get pods | grep "$clusterName" | grep Running | wc -l)
+        currPodNum=$(kubectl --namespace=$KUBENAMESPACE get pods -l app=couchbase | grep Running | wc -l)
         if [ $currPodNum -eq $reqPodNum ]
         then
             podsReady=true
@@ -154,29 +171,31 @@ function pushDockerImage() {
 
 function createTestrunnerDockerfile() {
     dockerFileString=""
-    dockerFileString="${dockerFileString}FROM ubuntu:15.04\n"
-    dockerFileString="${dockerFileString}RUN apt-get update\n"
-    dockerFileString="${dockerFileString}RUN apt-get install -y gcc g++ make cmake git-core libevent-dev libev-dev libssl-dev libffi-dev psmisc iptables zip unzip python-dev python-pip vim curl\n"
-    dockerFileString="${dockerFileString}# build libcouchbase\n"
-    dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/libcouchbase.git && mkdir libcouchbase/build\n"
-    dockerFileString="${dockerFileString}\n"
-    dockerFileString="${dockerFileString}WORKDIR libcouchbase/build\n"
-    dockerFileString="${dockerFileString}RUN ../cmake/configure --prefix=/usr && make && make install\n"
-    dockerFileString="${dockerFileString}\n"
-    dockerFileString="${dockerFileString}WORKDIR /\n"
-    dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/testrunner.git\n"
-    dockerFileString="${dockerFileString}WORKDIR testrunner\n"
-    dockerFileString="${dockerFileString}ARG BRANCH=master\n"
-    dockerFileString="${dockerFileString}RUN git checkout \$BRANCH\n"
-    dockerFileString="${dockerFileString}\n"
-    dockerFileString="${dockerFileString}# install python deps\n"
-    dockerFileString="${dockerFileString}RUN pip2 install --upgrade packaging appdirs\n"
-    dockerFileString="${dockerFileString}RUN pip install -U pip setuptools\n"
-    dockerFileString="${dockerFileString}RUN pip install paramiko && pip install gevent && pip install boto && pip install httplib2 && pip install pyyaml && pip install couchbase\n"
-    dockerFileString="${dockerFileString}\n"
-    dockerFileString="${dockerFileString}COPY getNodeIps.py getNodeIps.py\n"
-    dockerFileString="${dockerFileString}COPY entrypoint.sh entrypoint.sh\n"
-    dockerFileString="${dockerFileString}COPY 4node.ini 4node.ini\n"
+    #dockerFileString="${dockerFileString}FROM ubuntu:15.04\n"
+    #dockerFileString="${dockerFileString}RUN apt-get update\n"
+    #dockerFileString="${dockerFileString}RUN apt-get install -y gcc g++ make cmake git-core libevent-dev libev-dev libssl-dev libffi-dev psmisc iptables zip unzip python-dev python-pip vim curl\n"
+    #dockerFileString="${dockerFileString}# build libcouchbase\n"
+    #dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/libcouchbase.git && mkdir libcouchbase/build\n"
+    #dockerFileString="${dockerFileString}\n"
+    #dockerFileString="${dockerFileString}WORKDIR libcouchbase/build\n"
+    #dockerFileString="${dockerFileString}RUN ../cmake/configure --prefix=/usr && make && make install\n"
+    #dockerFileString="${dockerFileString}\n"
+    #dockerFileString="${dockerFileString}WORKDIR /\n"
+    #dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/testrunner.git\n"
+    #dockerFileString="${dockerFileString}WORKDIR testrunner\n"
+    #dockerFileString="${dockerFileString}ARG BRANCH=master\n"
+    #dockerFileString="${dockerFileString}RUN git checkout \$BRANCH\n"
+    #dockerFileString="${dockerFileString}\n"
+    #dockerFileString="${dockerFileString}# install python deps\n"
+    #dockerFileString="${dockerFileString}RUN pip2 install --upgrade packaging appdirs\n"
+    #dockerFileString="${dockerFileString}RUN pip install -U pip setuptools\n"
+    #dockerFileString="${dockerFileString}RUN pip install paramiko && pip install gevent && pip install boto && pip install httplib2 && pip install pyyaml && pip install couchbase\n"
+    #dockerFileString="${dockerFileString}\n"
+    #dockerFileString="${dockerFileString}COPY getNodeIps.py getNodeIps.py\n"
+
+    dockerFileString="${dockerFileString}FROM ashwin2002/testrunner-cloud:baseimage\n"
+    #dockerFileString="${dockerFileString}COPY entrypoint.sh entrypoint.sh\n"
+    dockerFileString="${dockerFileString}COPY ${numOfNodes}node.ini ${numOfNodes}node.ini\n"
     dockerFileString="${dockerFileString}COPY testcases.conf testcases.conf\n"
     dockerFileString="${dockerFileString}RUN chmod +x ./entrypoint.sh\n"
     dockerFileString="${dockerFileString}ENTRYPOINT [\"./entrypoint.sh\", \"$numOfNodes\"]\n"
@@ -186,8 +205,6 @@ function createTestrunnerDockerfile() {
 
 function createTestCaseFile() {
     testCaseFileString=""
-    #testCaseFileString="${testCaseFileString}ui.simple_requeststests.SimpleRequests.test_simple_ui_request,default_bucket=False\n"
-    #testCaseFileString="${testCaseFileString}ui.simple_requeststests.SimpleRequests.test_simple_ui_request,nodes_init=2\n"
     testCaseFileString="${testCaseFileString}recreatebuckettests.RecreateMembaseBuckets.test_default_moxi\n"
     testCaseFileString="${testCaseFileString}deletebuckettests.DeleteMembaseBuckets.test_non_default_moxi\n"
     testCaseFileString="${testCaseFileString}createbuckettests.CreateMembaseBucketsTests.test_default_moxi\n"
@@ -199,36 +216,34 @@ function createTestCaseFile() {
     testCaseFileString="${testCaseFileString}expirytests.ExpiryTests.test_expired_keys\n"
     testCaseFileString="${testCaseFileString}memcapable.GetlTests.test_getl_expired_item\n"
     testCaseFileString="${testCaseFileString}memcapable.GetlTests.test_getl_thirty\n"
+
+    testCaseFileString="${testCaseFileString}# memory sanity tests\n"
     testCaseFileString="${testCaseFileString}memorysanitytests.MemorySanity.check_memory_stats,sasl_buckets=1,standard_buckets=1,items=2000\n"
     testCaseFileString="${testCaseFileString}drainratetests.DrainRateTests.test_drain_100k_items\n"
-    testCaseFileString="${testCaseFileString}view.viewquerytests.ViewQueryTests.test_employee_dataset_all_queries,limit=1000,docs-per-day=2,wait_persistence=true,timeout=1200\n"
-    testCaseFileString="${testCaseFileString}view.createdeleteview.CreateDeleteViewTests.test_view_ops,ddoc_ops=update,test_with_view=True,num_ddocs=2,num_views_per_ddoc=3,items=1000,sasl_buckets=1,standard_buckets=1\n"
-    testCaseFileString="${testCaseFileString}rebalance.rebalancein.RebalanceInTests.rebalance_in_with_ops,nodes_in=3,replicas=1,items=1000,doc_ops=create;update;delete\n"
-    testCaseFileString="${testCaseFileString}rebalance.rebalanceout.RebalanceOutTests.rebalance_out_with_ops,nodes_out=3,replicas=1,items=1000\n"
-    #testCaseFileString="${testCaseFileString}swaprebalance.SwapRebalanceBasicTests.do_test,replica=1,num-buckets=1,num-swap=1,items=1000\n"
-    testCaseFileString="${testCaseFileString}failover.failovertests.FailoverTests.test_failover_normal,replica=1,load_ratio=1,num_failed_nodes=1,withMutationOps=True\n"
+    testCaseFileString="${testCaseFileString}view.viewquerytests.ViewQueryTests.test_employee_dataset_all_queries,limit=1000,docs-per-day=2,wait_persistence=true,timeout=1200,nodes_init=1\n"
+
     testCaseFileString="${testCaseFileString}CCCP.CCCP.test_get_config_client,standard_buckets=1,sasl_buckets=1\n"
     testCaseFileString="${testCaseFileString}CCCP.CCCP.test_not_my_vbucket_config\n"
     testCaseFileString="${testCaseFileString}flush.bucketflush.BucketFlushTests.bucketflush_with_data_ops_moxi,items=5000,data_op=create,use_ascii=False\n"
+
+    testCaseFileString="${testCaseFileString}### Security - Audit + LDAP - LDAP will run separately in sanity tests ####\n"
     testCaseFileString="${testCaseFileString}security.audittest.auditTest.test_bucketEvents,default_bucket=false,id=8201,ops=create\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_precedence.PrecedenceTests.test_case_and_like,primary_indx_type=GSI,doc-per-day=1,force_clean=True,reload_data=True\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_precedence.PrecedenceTests.test_case_and_like,doc-per-day=1,force_clean=True,reload_data=True\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_index.QueriesViewsTests.test_primary_create_delete_index,doc-per-day=3,force_clean=True,reload_data=False,nodes_init=1,services_init=kv;n1ql;index\n"
+
+    testCaseFileString="${testCaseFileString}### N1ql ####\n"
+    testCaseFileString="${testCaseFileString}tuqquery.tuq_index.QueriesViewsTests.test_primary_create_delete_index,doc-per-day=3,force_clean=True,reload_data=False,nodes_init=1\n"
     testCaseFileString="${testCaseFileString}tuqquery.tuq_index.QueriesViewsTests.test_primary_create_delete_index,doc-per-day=2,primary_indx_type=GSI,reload_data=False,force_clean=True,nodes_init=1\n"
     testCaseFileString="${testCaseFileString}tuqquery.tuq_index.QueriesViewsTests.test_explain_index_attr,force_clean=True,reload_data=False,doc-per-day=2,nodes_init=1\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_dml.DMLQueryTests.test_sanity,force_clean=True,reload_data=False,nodes_init=1,skip_load=True\n"
-    testCaseFileString="${testCaseFileString}2i.indexscans_2i.SecondaryIndexingScanTests.test_multi_create_query_explain_drop_index,groups=simple,doc-per-day=10,dataset=default,use_gsi_for_primary=true,reset_services=True\n"
-    testCaseFileString="${testCaseFileString}xdcr.uniXDCR.unidirectional.load_with_ops,items=5000,expires=20,ctopology=chain,rdirection=unidirection,update=C1,delete=C1\n"
-    testCaseFileString="${testCaseFileString}xdcr.filterXDCR.XDCRFilterTests.test_xdcr_with_filter,items=1000,rdirection=unidirection,ctopology=chain,default@C1=filter_expression:C1-key-1\n"
-    testCaseFileString="${testCaseFileString}xdcr.biXDCR.bidirectional.load_with_async_ops,replicas=1,items=1000,ctopology=chain,rdirection=bidirection,update=C1-C2,delete=C1-C2\n"
-    testCaseFileString="${testCaseFileString}xdcr.filterXDCR.XDCRFilterTests.test_xdcr_with_filter,items=1000,pause=C1:C2,rdirection=bidirection,ctopology=chain,default@C1=filter_expression:C1-key-1,default@C2=filter_expression:C2-key-1,update=C1,delete=C1,demand_encryption=1\n"
-    testCaseFileString="${testCaseFileString}fts.stable_topology_fts.StableTopFTS.run_default_index_query,items=1000,query=\"{\\\\\"match\\\\\": \\\\\"safiya@mcdiabetes.com\\\\\", \\\\\"field\\\\\":\\\\\"email\\\\\"}\",expected_hits=1000,cluster=D+F,F\n"
-    testCaseFileString="${testCaseFileString}ent_backup_restore.enterprise_backup_restore_test.EnterpriseBackupRestoreTest.test_backup_restore_sanity,items=1000\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_2i_index.QueriesIndexTests.test_covering_index,covering_index=true,doc-per-day=1,skip_index=True,index_type=gsi\n"
-    testCaseFileString="${testCaseFileString}subdoc.subdoc_nested_dataset.SubdocNestedDataset.test_sanity\n"
+    testCaseFileString="${testCaseFileString}tuqquery.tuq_dml.DMLQueryTests.test_sanity,force_clean=True,reload_data=False,nodes_init=1,skip_load=True,nodes_init=1\n"
+
+
+    testCaseFileString="${testCaseFileString}### WATSON FEAUTURES ###\n"
+    testCaseFileString="${testCaseFileString}#Covering Index and CBQ\n"
+    testCaseFileString="${testCaseFileString}tuqquery.tuq_2i_index.QueriesIndexTests.test_covering_index,covering_index=true,doc-per-day=1,skip_index=True,index_type=gsi,force_clean=True,reload_data=True\n"
     testCaseFileString="${testCaseFileString}tuqquery.tuq_advancedcbqshell.AdvancedQueryTests.test_engine_postive\n"
-    testCaseFileString="${testCaseFileString}security.x509tests.x509tests.test_basic_ssl_test,default_bucket=False,SSLtype=openssl\n"
-    testCaseFileString="${testCaseFileString}2i.indexscans_2i.SecondaryIndexingScanTests.test_multi_create_query_explain_drop_index,groups=simple,doc-per-day=10,dataset=default,gsi_type=memory_optimized\n"
+
+    testCaseFileString="${testCaseFileString}#Subdoc\n"
+    testCaseFileString="${testCaseFileString}subdoc.subdoc_nested_dataset.SubdocNestedDataset.test_sanity\n"
+    testCaseFileString="${testCaseFileString}tuqquery.tuq_2i_index.QueriesIndexTests.test_simple_array_index,index_type=GSI,array_indexing=True,force_clean=True,reload_data=True\n"
 
     printf "$testCaseFileString" > ${numOfNodes}node/testcases.conf
     exitOnError $? "Unable to create testcases.conf file"
@@ -268,11 +283,11 @@ function createNodeIniFile() {
 }
 
 function copyFilesForTestRunnerImage() {
-    mkdir ${numOfNodes}node
+    mkdir -p ${numOfNodes}node
 
-    createTestrunnerDockerfile
     createTestCaseFile
     createNodeIniFile
+    createTestrunnerDockerfile
 
     # Create node config files #
     for fileName in $testrunnerDir/Dockerfile $testrunnerDir/entrypoint.sh $testrunnerDir/getNodeIps.py
@@ -283,6 +298,34 @@ function copyFilesForTestRunnerImage() {
         fi
         cp $fileName ${numOfNodes}node
     done
+}
+
+function exportDockerImageToNodes() {
+    dockerImageName=$1
+    imageName=$(echo $dockerImageName | cut -d':' -f 1)
+    tagName=$(echo $dockerImageName | cut -d':' -f 2)
+
+    tarFileName="dockerImage.tar"
+    rm -f $tarFileName
+    echo "Creating docker image tar file '$tarFileName'"
+    docker save -o $tarFileName $dockerImageName
+
+    for nodeIp in 172.23.99.12 172.23.99.13 172.23.99.27 172.23.99.29
+    do
+        echo "Deleting exiting docker image in the server '$nodeIp'"
+        sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$nodeIp docker images | grep $imageName | grep $tagName | awk '{print $3}' | xargs docker rmi -f
+
+        echo "Copying '$tarFileName' to '$nodeIp:/root/' path"
+        sshpass -p "couchbase" scp $tarFileName root@$nodeIp:/root/
+
+        echo "Loading Docker image.."
+        sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$nodeIp docker load -i /root/$tarFileName
+        sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$nodeIp rm -f /root/$tarFileName
+    done
+    
+    echo "Deleting the tar file '$tarFileName'"
+    rm -f $tarFileName
+    unset dockerImageName tarFileName nodeIp imageName tagName
 }
 
 function buildCbServerDockerImage() {
@@ -306,6 +349,7 @@ function buildCbServerDockerImage() {
     printf "$dockerFileString" > Dockerfile
     docker build . -t $cbServerDockerImageName
     exitOnError $? "Unable to create docker image"
+    exportDockerImageToNodes $cbServerDockerImageName
     #pushDockerImage $cbServerDockerImageName
 }
 
@@ -316,6 +360,7 @@ function buildTestRunnerImage() {
     cd ${numOfNodes}node
     docker build . -t $testRunnerDockerImageName
     exitOnError $? "Failed to build testrunner docker image"
+    exportDockerImageToNodes $testRunnerDockerImageName
     #pushDockerImage $testRunnerDockerImageName
     cd ..
 }
@@ -344,10 +389,29 @@ function deployCluster() {
 
     unset imageName tagName
 
-    kubectl --namespace=$KUBENAMESPACE create -f $deploymentFile
     kubectl --namespace=$KUBENAMESPACE create -f $secretFile
+    kubectl --namespace=$KUBENAMESPACE create -f $deploymentFile
+
+    echo "Creating couchbase-operator pod"
+    podReady=false
+    for i in {1..60}
+    do
+        podName=$(kubectl --namespace=$KUBENAMESPACE get pods -l name=couchbase-operator | tail -1 | awk '{print $1}')
+        if [ "$podName" != "" ]; then
+            waitForPodToStartRunning $podName
+            podReady=true
+            break
+        fi
+        sleep 5
+    done
+
+    if ! $podReady
+    then
+        exitOnError 1 "Operator pod not started running even after 5mins"
+    fi
+
     kubectl --namespace=$KUBENAMESPACE create -f $cbClusterFile
-    checkForPodsReady $numOfNodes "$clusterName"
+    checkForCbClusterPodsReady $numOfNodes "$clusterName"
 }
 
 function pauseCbOperator() {
@@ -447,32 +511,29 @@ testRunnerYamlFileName="testrunner.yaml"
 clusterName=$(grep "name:" $cbClusterFile | head -1 | xargs | cut -d' ' -f 2)
 
 cbServerDockerImageName="${dockerHubAccount}/couchbase-server:custom-${serverVersion}"
-#testRunnerDockerImageName="${dockerHubAccount}/testrunner-kubernetes:${numOfNodes}node"
-testRunnerDockerImageName="${dockerHubAccount}/testrunner-k8s:${numOfNodes}node"
+testRunnerDockerImageName="${dockerHubAccount}/testrunner-cloud:customImage"
 
 declare -a podIpArray
 
 # Build required images #
-#buildCbServerDockerImage
+buildCbServerDockerImage
 clearK8SCluster
 deployCluster
 pauseCbOperator
 
-#buildTestRunnerImage
+buildTestRunnerImage
 createTestRunnerYamlFile
 kubectl --namespace=$KUBENAMESPACE create -f $testRunnerYamlFileName
 exitOnError $? "Unable to start testrunner container"
 
 # Wait for testrunner pod to get created
-while [ true ]
+while true
 do
     testrunnerPodName=$(kubectl --namespace=$KUBENAMESPACE get -l job-name=testrunner pods | tail -1 | awk '{print $1}')
     if [ "$testrunnerPodName" != "" ]; then
-        echo "Wait for testrunner pod to initialize"
-        sleep 20
+        waitForPodToStartRunning $testrunnerPodName
         break
     fi
-    sleep 5
 done
 
 # Redirect logs from testrunner pod
@@ -485,9 +546,11 @@ do
     currTestrunnerPod=$(kubectl --namespace=$KUBENAMESPACE get -l job-name=testrunner pods | tail -1 | awk '{print $1}')
     if [ "$currTestrunnerPod" != "$testrunnerPodName" ]; then
         echo "Testrunner pod '$testrunnerPodName' replaced with new pod '$currTestrunnerPod'"
-        kubectl --namespace=$KUBENAMESPACE delete pod $testrunnerPodName
-        testrunnerPodName=$currTestrunnerPod
         kill %1
+        kubectl --namespace=$KUBENAMESPACE delete pod $testrunnerPodName
+
+        testrunnerPodName=$currTestrunnerPod
+        waitForPodToStartRunning $testrunnerPodName
 
         echo "Logs from new testrunner pod '$testrunnerPodName':"
         kubectl --namespace=$KUBENAMESPACE logs --follow=true $testrunnerPodName &
