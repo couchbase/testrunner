@@ -333,6 +333,12 @@ def main():
                     response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
                     print 'response.status', response, content
 
+                    # sometimes there could be a race, before a dispatcher process acquires vms,
+                    # another waiting dispatcher process could grab them, resulting in lesser vms
+                    # for the second dispatcher process
+                    if len(json.loads(content)) != testsToLaunch[i]['serverCount']:
+                        continue
+
                     # get additional pool servers as needed
                     if testsToLaunch[i]['addPoolServerCount']:
                         if options.serverType.lower() == 'docker':
