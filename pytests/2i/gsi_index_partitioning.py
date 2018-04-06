@@ -344,10 +344,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             index_details = {}
             index_details["index_name"] = indexname
-            if (not isinstance(value,str)) and int(value) > 0:
-                index_details["num_partitions"] = int(value)
-            else:
-                index_details["num_partitions"] = 8
+            index_details["num_partitions"] = 8
             index_details["defer_build"] = False
 
             self.assertTrue(
@@ -3176,7 +3173,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 if index["name"] == index_name:
                     self.log.info("Expected Hosts : {0}".format(expected_hosts))
                     self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
-                    self.assertEqual(index["hosts"], expected_hosts,
+                    self.assertEqual(index["hosts"].sort(), expected_hosts.sort(),
                                      "Planner did not ignore excluded node during index creation for {0}".format(
                                          index_name))
                     index_validated += 1
@@ -3652,7 +3649,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_detail["index_name"] = "idx1"
         index_detail["num_partitions"] = self.num_index_partitions
-        index_detail["defer_build"] = True
+        index_detail["defer_build"] = False
         index_detail[
             "definition"] = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
         index_details.append(index_detail)
@@ -3660,7 +3657,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_detail["index_name"] = "idx2"
         index_detail["num_partitions"] = 64
-        index_detail["defer_build"] = True
+        index_detail["defer_build"] = False
         index_detail[
             "definition"] = "CREATE INDEX idx2 on default(name,dept) partition by hash(salary) USING GSI with {'num_partition':64}"
         index_details.append(index_detail)
@@ -3668,7 +3665,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_detail["index_name"] = "idx3"
         index_detail["num_partitions"] = self.num_index_partitions
-        index_detail["defer_build"] = True
+        index_detail["defer_build"] = False
         index_detail[
             "definition"] = "CREATE INDEX idx3 on default(name,dept) partition by hash(salary) USING GSI with {'num_replica':1}"
         index_details.append(index_detail)
@@ -3740,6 +3737,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info("Indexer Metadata After Build:")
         self.log.info(index_metadata)
+
+        # After restore, all indexes are going to be in unbuilt. So change the expected state of indexes.
+        for index in index_details:
+            index["defer_build"] = True
 
         for index_detail in index_details:
             self.assertTrue(
