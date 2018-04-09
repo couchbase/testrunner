@@ -58,7 +58,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             except Exception, ex:
                 self.log.info(str(ex))
 
-            self.sleep(2)
+            self.sleep(10)
 
             index_metadata = self.rest.get_indexer_metadata()
             index_map = self.get_index_map()
@@ -344,7 +344,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             index_details = {}
             index_details["index_name"] = indexname
-            index_details["num_partitions"] = 8
+            if (not isinstance(value, str)) and int(value) > 0:
+                index_details["num_partitions"] = int(value)
+            else:
+                index_details["num_partitions"] = 8
             index_details["defer_build"] = False
 
             self.assertTrue(
@@ -1069,6 +1072,73 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.log.info(str(ex))
             self.fail(
                 "Drop index failed with error : {0}".format(str(ex)))
+
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info("Index map after drop index: %s", index_map)
+        if not index_map == {}:
+            self.fail("Indexes not dropped correctly")
+
+    def test_delete_bucket_cascade_drop_partitioned_index(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+
+        with_clause = "WITH {{'num_partition': {0} ".format(
+            self.num_index_partitions)
+        if self.num_index_replicas > 0:
+            with_clause += ", 'num_replica':{0}".format(self.num_index_replicas)
+        if self.defer_build:
+            with_clause += ", 'defer_build':True"
+        with_clause += " }"
+
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(name,dept,salary) partition by hash(name) USING GSI  {0}".format(
+            with_clause)
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
+                self.num_index_partitions)
+
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_primary_index_statement,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        index_details = {}
+        index_details["index_name"] = index_name_prefix
+        index_details["num_partitions"] = self.num_index_partitions
+        index_details["defer_build"] = self.defer_build
+
+        self.assertTrue(
+            self.validate_partitioned_indexes(index_details, index_map,
+                                              index_metadata),
+            "Deferred Partitioned index created not as expected")
+
+        # Validation for replica indexes
+        if self.num_index_replicas > 0:
+            for i in range(1, self.num_index_replicas + 1):
+                index_details[
+                    "index_name"] = index_name_prefix + " (replica {0})".format(
+                    str(i))
+                self.assertTrue(
+                    self.validate_partitioned_indexes(index_details,
+                                                      index_map,
+                                                      index_metadata),
+                    "Deferred Partitioned index created not as expected")
+
+        self.cluster.bucket_delete(server=self.master, bucket='default')
 
         self.sleep(30)
         index_map = self.get_index_map()
@@ -2173,16 +2243,15 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self):
         self._load_emp_dataset(end=self.num_items)
 
-        # Create partitioned index
+        with_statement = "with {{'num_partition':{0}".format(self.num_index_partitions)
         if self.num_index_replicas > 0:
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-        else:
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}}}".format(
-                self.num_index_partitions)
-            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
+            with_statement += ", num_replica':{0}".format(self.num_index_replicas)
+        if self.defer_build:
+            with_statement += ", 'defer_build': true"
+        with_statement += " }"
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) " + with_statement
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
                 self.num_index_partitions)
 
         try:
@@ -2375,17 +2444,18 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self):
         self._load_emp_dataset(end=self.num_items)
 
-        # Create partitioned index
+        with_statement = "with {{'num_partition':{0}".format(
+            self.num_index_partitions)
         if self.num_index_replicas > 0:
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-        else:
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+            with_statement += ", num_replica':{0}".format(
+                self.num_index_replicas)
+        if self.defer_build:
+            with_statement += ", 'defer_build': true"
+        with_statement += " }"
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) " + with_statement
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
+                self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -2469,17 +2539,18 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self):
         self._load_emp_dataset(end=self.num_items)
 
-        # Create partitioned index
+        with_statement = "with {{'num_partition':{0}".format(
+            self.num_index_partitions)
         if self.num_index_replicas > 0:
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-        else:
-            create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
-            create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+            with_statement += ", num_replica':{0}".format(
+                self.num_index_replicas)
+        if self.defer_build:
+            with_statement += ", 'defer_build': true"
+        with_statement += " }"
+
+        create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) " + with_statement
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
+                self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -2894,7 +2965,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
-        self.sleep(30)
+        #Allow indexer metadata to catch up with the last rebalance
+        self.sleep(60)
 
         # Get Stats and index partition map after rebalance
         node_list = copy.deepcopy(self.node_list)
@@ -4133,6 +4205,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             index_detail = {}
             index_detail["index_name"] = index_name
+            if num_partitions == 0:
+                num_partitions = 16
             index_detail["num_partitions"] = num_partitions
             index_detail["num_replica"] = num_replica
             index_detail["defer_build"] = defer_build
@@ -4243,14 +4317,15 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # Load Emp Dataset
         self.cluster.bucket_flush(self.master)
 
-        self._kv_gen = JsonDocGenerator("emp_",
-                                        encoding="utf-8",
-                                        start=start,
-                                        end=end)
-        gen = copy.deepcopy(self._kv_gen)
+        if end > 0:
+            self._kv_gen = JsonDocGenerator("emp_",
+                                            encoding="utf-8",
+                                            start=start,
+                                            end=end)
+            gen = copy.deepcopy(self._kv_gen)
 
-        self._load_bucket(self.buckets[0], self.servers[0], gen, op_type,
-                          expiration)
+            self._load_bucket(self.buckets[0], self.servers[0], gen, op_type,
+                              expiration)
 
     def _run_queries(self, query, count=10):
         for i in range(0, count):
