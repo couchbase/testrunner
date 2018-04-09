@@ -80,7 +80,7 @@ class QuerySanityTests(QueryTests):
                 concat_string = ''.join(new_list)
                 json_output = json.loads(concat_string)
                 self.log.info(json_output['metrics']['resultCount'])
-                self.assertTrue(json_output['metrics']['resultCount'] == result_count)
+                self.assertEqual(json_output['metrics']['resultCount'], result_count)
         finally:
             self.rest.delete_bucket("beer-sample")
 

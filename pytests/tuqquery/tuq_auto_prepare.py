@@ -148,7 +148,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
 
-            self.run_cbq_query(query="ALTER INDEX default.idx WITH {'action':'move','nodes':['192.168.10.10:8091']}")
+            self.run_cbq_query(query="ALTER INDEX default.idx WITH {'action':'move','nodes':['%s:%s']}" % (self.servers[0].ip, self.servers[0].port))
             self.sleep(5)
 
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])

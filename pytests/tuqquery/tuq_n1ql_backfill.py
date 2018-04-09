@@ -85,7 +85,7 @@ class QueryN1QLBackfillTests(QueryTests):
                     self._wait_for_index_online(bucket, 'join_day')
             self.run_cbq_query(query="select * from default d JOIN standard_bucket0 s on (d.join_day == s.join_day)")
         except CBQError, error:
-            self.assertTrue("Place holder" in str(error),
+            self.assertTrue("Thevaluemustbeinrangefrom-1toinfinity" in str(error),
                             "The error message is incorrect. It should have been %s" % error)
         finally:
             self.run_cbq_query(query="DROP INDEX standard_bucket0.join_day")
@@ -133,7 +133,7 @@ class QueryN1QLBackfillTests(QueryTests):
             self.assertEqual(expected_curl['errors']['queryTmpSpaceSize'], "Thevaluemustbeaninteger")
         # This error message is currently not correct in the current implementation of tmpspacesize
         elif self.out_of_range_size:
-            self.assertEqual(expected_curl['errors']['queryTmpSpaceSize'], "Place holder")
+            self.assertEqual(expected_curl['errors']['queryTmpSpaceSize'], "Thevaluemustbeinrangefrom-1toinfinity")
         else:
             self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
 
@@ -160,7 +160,7 @@ class QueryN1QLBackfillTests(QueryTests):
         expected_dir = self.set_directory()
         self.assertEqual(expected_dir['queryTmpSpaceDir'], self.directory_path)
         nodes_out_list = self.servers[1]
-        to_add_nodes = [self.servers[self.nodes_init]]
+        to_add_nodes = [self.servers[self.nodes_init+1]]
         to_remove_nodes = [nodes_out_list]
         services_in = ["index", "n1ql", "data"]
         # do a swap rebalance

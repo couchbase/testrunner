@@ -1,4 +1,4 @@
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestHelper
 from security.rbac_base import RbacBase
 from security.audittest import auditTest
 from tuq import QueryTests
@@ -60,18 +60,29 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'CREATE INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'CREATE INDEX idx on default(join_day)',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
                                'description': 'A N1QL CREATE INDEX statement was executed'}
+
+        elif(query_type =='alter_index'):
+            if self.filter:
+                self.execute_filtered_query()
+            self.run_cbq_query(query="CREATE INDEX idx4 on default(join_day)")
+            self.run_cbq_query(query="ALTER INDEX default.idx4 WITH {'action':'move','nodes':['%s:%s']}" % (self.servers[1].ip, self.servers[1].port))
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
+                               'name': 'ALTER INDEX statement', 'real_userid': {'source': source, 'user': user},
+                               'statement': "ALTER INDEX default.idx4 WITH {'action':'move','nodes':['%s:%s']}" % (self.servers[1].ip, self.servers[1].port),
+                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'description': 'A N1QL ALTER INDEX statement was executed'}
 
         elif (query_type =='build_index'):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="CREATE INDEX idx3 on default(join_yr) WITH {'defer_build':true}")
             self.run_cbq_query(query="BUILD INDEX on default(idx3)")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'BUILD INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'BUILD INDEX on default(idx3)',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -82,7 +93,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                 self.execute_filtered_query()
             self.run_cbq_query(query='CREATE INDEX idx2 on default(fake1)')
             self.run_cbq_query(query='DROP INDEX default.idx2')
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'DROP INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'DROP INDEX default.idx2',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -96,7 +107,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             self.run_cbq_query(query="CREATE PRIMARY INDEX on default")
             if self.filter:
                 self.run_cbq_query(query="delete from default limit 1")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'CREATE PRIMARY INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'CREATE PRIMARY INDEX on default',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -106,7 +117,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="SELECT * FROM default LIMIT 100")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'SELECT * FROM default LIMIT 100',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -116,7 +127,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="EXPLAIN SELECT * FROM default")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'EXPLAIN statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'EXPLAIN SELECT * FROM default',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -126,7 +137,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="prepare a1 from select * from default")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'PREPARE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'prepare a1 from select * from default',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -137,10 +148,10 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                 self.execute_filtered_query()
             self.run_cbq_query(query="prepare a1 from select * from default")
             self.run_cbq_query(query="execute a1")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': False,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': False,
                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
-                               'statement': 'execute a1',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'statement': 'prepare a1 from select * from default',
+                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID, 'preparedId': 'a1',
                                'description': 'A N1QL SELECT statement was executed'}
 
         elif(query_type == 'unrecognized'):
@@ -149,7 +160,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             try:
                 self.run_cbq_query(query="selec * fro default")
             except CBQError:
-                expectedResults = {'node': '127.0.0.1:8091', 'status': 'fatal', 'isAdHoc': True,
+                expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'isAdHoc': True,
                                    'name': 'UNRECOGNIZED statement', 'real_userid': {'source': source, 'user': user},
                                    'statement': 'selec * fro default', 'userAgent': 'Python-httplib2/$Rev: 259 $',
                                    'id': self.eventID, 'description': 'An unrecognized statement was received by the N1QL query engine'}
@@ -160,7 +171,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             self.run_cbq_query(query='INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                        '[ "11", "12", "13" ] })')
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'INSERT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
@@ -174,7 +185,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             self.run_cbq_query(query='UPSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                        '[ "11", "12", "13" ] })')
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'UPSERT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'UPSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
@@ -191,7 +202,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                 except CBQError:
                     self.log.info("Query is unrecognized (expected)")
             self.run_cbq_query(query='DELETE FROM `travel-sample` WHERE type = "hotel"')
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.servers[1].ip, self.servers[1].port), 'status': 'success', 'isAdHoc': True,
                                'name': 'DELETE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'DELETE FROM `travel-sample` WHERE type = "hotel"',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -201,7 +212,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query='UPDATE `travel-sample` SET foo = 5')
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'UPDATE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'UPDATE `travel-sample` SET foo = 5',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -213,7 +224,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             self.run_cbq_query(query='MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source '
                                      'ON KEY "hotel_"|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy'
                                      ', t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy')
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'MERGE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source '
                                      'ON KEY "hotel_"|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy'
@@ -225,7 +236,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="GRANT query_external_access TO query")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'GRANT ROLE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'GRANT query_external_access TO query',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -235,7 +246,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="REVOKE query_system_catalog FROM query")
-            expectedResults = {'node': '127.0.0.1:8091', 'status': 'success', 'isAdHoc': True,
+            expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'REVOKE ROLE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'REVOKE query_system_catalog FROM query',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
@@ -245,16 +256,22 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_select' -p 'password' -q " % (self.master.ip, self.n1ql_port)
             query = 'select * from default limit 100'
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expectedResults ={'node': '127.0.0.1:8091', 'status': 'fatal', 'isAdHoc': True,
+            expectedResults ={'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'stopped', 'isAdHoc': True,
                               'statement': 'select * from default limit 100;',
-                              'description': 'An unrecognized statement was received by the N1QL query engine',
+                              'description': 'A N1QL SELECT statement was executed',
                               'real_userid': {'source': 'local', 'user': 'no_select'},
                               'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
-                              'id': self.eventID, 'name': 'UNRECOGNIZED statement'}
+                              'id': self.eventID, 'name': 'SELECT statement'}
+        
+        if query_type == 'delete':
+            self.checkConfig(self.eventID,self.servers[1], expectedResults, n1ql_audit=True)
+            if self.filter:
+                self.checkFilter(self.unauditedID, self.servers[1])
+        else:
+            self.checkConfig(self.eventID, self.master, expectedResults, n1ql_audit=True)
+            if self.filter:
+                self.checkFilter(self.unauditedID, self.servers[1])
 
-        self.checkConfig(self.eventID, self.master, expectedResults, n1ql_audit=True)
-        if self.filter:
-            self.checkFilter(self.unauditedID, self.master)
 
     def test_user_filter(self):
         self.set_audit(disable_user=True)
@@ -263,6 +280,12 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
         self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
         self.checkFilter(self.unauditedID, self.master)
 
+    def test_setting_propagation(self):
+        self.set_audit(set_disabled=True)
+        audit_url = "http://%s:%s/settings/audit" % (self.servers[1].ip,self.servers[1].port)
+        curl_output = self.shell.execute_command("%s -u Administrator:password %s" % (self.curl_path, audit_url))
+        expected_curl = self.convert_list_to_json(curl_output[0])
+        self.assertEqual(expected_curl['disabled'], self.audit_codes)
 
     def set_audit(self, set_disabled=False, disable_user=False):
         if set_disabled:
@@ -276,6 +299,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                                     % (self.curl_path, 'true', self.audit_url))
         if "errors" in str(curl_output):
             self.log.error("Auditing settings were not set correctly")
+        self.sleep(10)
 
     def execute_filtered_query(self):
         self.audit_codes.remove(self.eventID)
