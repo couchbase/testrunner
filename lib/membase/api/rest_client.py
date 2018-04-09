@@ -1108,7 +1108,7 @@ class RestConnection(object):
         return remoteCluster
 
     def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate='',
-                           encryptionType="half"):
+                           encryptionType="full"):
         # example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
         msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6}"
         log.info(msg.format(remoteIp, remotePort, username, password, name, self.ip, self.port))

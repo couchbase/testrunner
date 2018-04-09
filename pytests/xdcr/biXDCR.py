@@ -513,6 +513,7 @@ class bidirectional(XDCRNewBaseTest):
                 self.fail("Node {0} does not use SCRAM-SHA authentication".format(node.ip))
             else:
                 self.log.info("SCRAM-SHA auth successful on node {0}".format(node.ip))
+        self.verify_results()
 
     def test_update_to_scramsha_auth(self):
         """
@@ -532,3 +533,4 @@ class bidirectional(XDCRNewBaseTest):
                 self.fail("Node {0} does not use SCRAM-SHA authentication".format(node.ip))
             else:
                 self.log.info("SCRAM-SHA auth successful on node {0}".format(node.ip))
+        self.verify_results()
