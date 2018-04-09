@@ -38,7 +38,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
         # self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
-        self.eventing_log_level = self.input.param('eventing_log_level', 'TRACE')
+        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
         self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')

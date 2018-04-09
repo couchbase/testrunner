@@ -2505,6 +2505,8 @@ class RemoteMachineShellConnection:
                             self.execute_command("cd /cygdrive/c/tmp; msiexec /x %s /qn" \
                                                  % build_name)
                         self.log_command_output(output, error)
+                        var_dir = "/cygdrive/c/Program\ Files/Couchbase/"
+                        self.execute_command("rm -rf %s" % var_dir)
                         deleted = self.wait_till_file_deleted(version_path, \
                                                               VERSION_FILE, timeout_in_seconds=300)
                         if not deleted:
