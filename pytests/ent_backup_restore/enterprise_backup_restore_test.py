@@ -1110,15 +1110,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rolelist = [{"id": "%s" % self.cluster_new_user,
                      "name": "%s" % self.cluster_new_user,
                      "roles": "%s" % self.cluster_new_role}]
-        users_can_backup_all = ["admin", "cluster_admin", "bucket_full_access[*]",
-                                "bucket_admin[*]",
+        users_can_backup_all = ["admin", "bucket_full_access[*]",
                                 "data_backup[*]"]
         users_can_not_backup_all = ["views_admin[*]", "replication_admin",
                                     "replication_target[*]", "data_monitoring[*]",
                                     "data_writer[*]", "data_reader[*]",
                                     "data_dcp_reader[*]", "fts_searcher[*]",
                                     "fts_admin[*]", "query_manage_index[*]",
-                                    "ro_admin"]
+                                    "ro_admin", "bucket_admin[*]", "cluster_admin"]
 
         try:
             status = self.add_built_in_server_user(testuser, rolelist)
