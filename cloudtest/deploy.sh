@@ -15,15 +15,15 @@ function showHelp() {
 
 function validateArgs() {
     errCondition=false
-    if [[ -z "$KUBENAMESPACE" ]]
-    then
+
+    if [[ -z "$KUBENAMESPACE" ]] ; then
         echo "Exiting: KUBENAMESPACE not defined"
         errCondition=true
     fi
 
-    if [ "$targetCluster" == "kubernetes" ]; then
+    if [ "$targetCluster" == "kubernetes" ] ; then
         export KUBECONFIG=/root/.kube/kubernetes-config
-    elif [ "$targetCluster" == "openshift" ]; then
+    elif [ "$targetCluster" == "openshift" ] ; then
         export KUBECONFIG=/root/.kube/openshift-config
         oc login -u system -p admin -n default
     else
@@ -31,19 +31,47 @@ function validateArgs() {
         errCondition=true
     fi
 
-    if $errCondition
-    then
+    if [[ -z "$numOfNodes" ]] ; then
+        echo "Exiting: Invalid number of nodes"
+        errCondition=true
+    elif ! [[ $numOfNodes =~ '^[0-9]+$' ]] ; then
+        echo "Exiting: Number of nodes should be an integer"
+        errCondition=true
+    elif [ $numOfNodes -lt 1 ] ; then
+        echo "Exiting: Invalid number of nodes"
+        errCondition=true
+    fi
+
+    if [[ -z "$cbOperatorVersion" ]] ; then
+        echo "Exiting: Cb-operator version is null"
+        errCondition=true
+    fi
+
+    if $errCondition ; then
         showHelp
     fi
 }
 
 function exitOnError() {
-    if [ $1 -ne 0 ]
-    then
+    if [ $1 -ne 0 ] ; then
         echo "Exiting: $2"
         cleanupFiles
         exit $1
     fi
+}
+
+function createTestPropertyFile() {
+    # Create test.properties file contents
+    echo "" > ${WORKSPACE}/test.properties
+    echo "cbVersion=$cbVersion" >> ${WORKSPACE}/test.properties
+    echo "cbOperatorVersion=$cbOperatorVersion" >> ${WORKSPACE}/test.properties
+    echo "dockerHub=$dockerHub" >> ${WORKSPACE}/test.properties
+    echo "targetCluster=$targetCluster" >> ${WORKSPACE}/test.properties
+    echo "testRunnerBranch=$testRunnerBranch" >> ${WORKSPACE}/test.properties
+    echo "cloudClusterIpList=$cloudClusterIpList" >> ${WORKSPACE}/test.properties
+
+    echo "test.properties file contents:"
+    cat ${WORKSPACE}/test.properties
 }
 
 function cleanupFiles() {
@@ -65,8 +93,7 @@ function downloadClusterYamlFiles() {
 function checkForClusterYamlFileExists() {
     for fileName in $deploymentFile $secretFile $cbClusterFile
     do
-        if [ ! -f "$fileName" ]
-        then
+        if [ ! -f "$fileName" ] ; then
             exitOnError 1 "File '$fileName' not found!"
         fi
     done
@@ -80,30 +107,40 @@ function editClusterYamlFiles() {
 
     sed -i "/name: couchbase-operator/{a\
         \ \ namespace: $KUBENAMESPACE
-        }" operator.yaml
+        }" $deploymentFile
     exitOnError $? "Unable to append namespace string in cbcluster yaml"
 }
 
 function clearK8SCluster() {
+    declare -a labelCmdArr
+    labelCmdArr+=("-l name=couchbase-operator")
+    labelCmdArr+=("-l name=testrunner")
+    labelCmdArr+=("-l name=couchbase")
+    labelCmdArrNum=${#labelCmdArr[@]}
+    labelCmdArrNum=$(expr $labelCmdArrNum - 1)
+
     echo "Using name space '$KUBENAMESPACE'"
     kubectl --namespace=$KUBENAMESPACE delete deployment --all
     kubectl --namespace=$KUBENAMESPACE delete replicaset --all
     kubectl --namespace=$KUBENAMESPACE delete service -l app=couchbase
     kubectl --namespace=$KUBENAMESPACE delete jobs/testrunner
-    kubectl --namespace=$KUBENAMESPACE delete pods -l name=couchbase-operator
-    kubectl --namespace=$KUBENAMESPACE delete pods -l name=testrunner
-    kubectl --namespace=$KUBENAMESPACE delete pods -l app=couchbase
     kubectl --namespace=$KUBENAMESPACE delete --all couchbaseclusters
     kubectl --namespace=$KUBENAMESPACE delete secrets basic-test-secret
+    for index in $(seq 0 $labelCmdArrNum)
+    do
+        kubectl --namespace=$KUBENAMESPACE delete pods ${labelCmdArr[$index]}
+    done
 
     echo "Waiting for all pods to be cleaned up.."
-    while [ true ]
+    for index in $(seq 0 $labelCmdArrNum)
     do
-        if [ $(kubectl --namespace=$KUBENAMESPACE get pods | grep "NAME" | wc -l | awk '{print $1}') -eq 0 ]
-        then
-            break
-        fi
-        sleep 5
+        while true
+        do
+            if [ $(kubectl --namespace=$KUBENAMESPACE get pods ${labelCmdArr[$index]} | grep "NAME" | wc -l | awk '{print $1}') -eq 0 ] ; then
+                break
+            fi
+            sleep 5
+        done
     done
 }
 
@@ -112,13 +149,13 @@ function waitForPodToStartRunning() {
     for i in {1..300}
     do
         podRunning=$(kubectl --namespace=$KUBENAMESPACE describe pod $1 | grep "State:" | grep "Running" | wc -l | xargs )
-        if [ $podRunning -eq 1 ]; then
+        if [ $podRunning -eq 1 ] ; then
             break
         fi
         sleep 1
     done
 
-    if [ $podRunning -ne 1 ]; then
+    if [ $podRunning -ne 1 ] ; then
         exitOnError 1 "Pod '$1' not started running even after 5mins"
     fi
     unset podRunning
@@ -133,16 +170,14 @@ function checkForCbClusterPodsReady () {
     for i in {1..60}
     do
         currPodNum=$(kubectl --namespace=$KUBENAMESPACE get pods -l app=couchbase | grep Running | wc -l)
-        if [ $currPodNum -eq $reqPodNum ]
-        then
+        if [ $currPodNum -eq $reqPodNum ] ; then
             podsReady=true
             break
         fi
         sleep 5
     done
 
-    if [ "$podsReady" == "false" ]
-    then
+    if [ "$podsReady" == "false" ] ; then
         exitOnError 1 "Pods not ready even after 5 mins wait time"
     fi
 }
@@ -160,8 +195,7 @@ function pushDockerImage() {
     docker push $dockerImageName
     exitOnError $? "Unable to push docker image '$baseName:$tagName' '$dockerImageId' to dockerhub"
 
-    if [ "$tarFileName" != "" ]
-    then
+    if [ "$tarFileName" != "" ] ; then
         docker save -o ./$tarFileName $dockerImageName
         exitOnError $? "Unable to save docker image '$baseName:$tagName' '$dockerImageId' to '$tarFileName' locally"
     fi
@@ -193,10 +227,10 @@ function createTestrunnerDockerfile() {
     #dockerFileString="${dockerFileString}\n"
     #dockerFileString="${dockerFileString}COPY getNodeIps.py getNodeIps.py\n"
 
-    dockerFileString="${dockerFileString}FROM ashwin2002/testrunner-cloud:baseimage\n"
-    #dockerFileString="${dockerFileString}COPY entrypoint.sh entrypoint.sh\n"
+    dockerFileString="${dockerFileString}FROM ${dockerHubAccount}/testrunner-cloud:baseimage\n"
     dockerFileString="${dockerFileString}COPY ${numOfNodes}node.ini ${numOfNodes}node.ini\n"
     dockerFileString="${dockerFileString}COPY testcases.conf testcases.conf\n"
+    dockerFileString="${dockerFileString}COPY entrypoint.sh entrypoint.sh\n"
     dockerFileString="${dockerFileString}RUN chmod +x ./entrypoint.sh\n"
     dockerFileString="${dockerFileString}ENTRYPOINT [\"./entrypoint.sh\", \"$numOfNodes\"]\n"
 
@@ -204,47 +238,6 @@ function createTestrunnerDockerfile() {
 }
 
 function createTestCaseFile() {
-    testCaseFileString=""
-    testCaseFileString="${testCaseFileString}recreatebuckettests.RecreateMembaseBuckets.test_default_moxi\n"
-    testCaseFileString="${testCaseFileString}deletebuckettests.DeleteMembaseBuckets.test_non_default_moxi\n"
-    testCaseFileString="${testCaseFileString}createbuckettests.CreateMembaseBucketsTests.test_default_moxi\n"
-    testCaseFileString="${testCaseFileString}createbuckettests.CreateMembaseBucketsTests.test_default_on_non_default_port\n"
-    testCaseFileString="${testCaseFileString}createbuckettests.CreateMembaseBucketsTests.test_non_default_case_sensitive_different_port\n"
-    testCaseFileString="${testCaseFileString}createbuckettests.CreateMembaseBucketsTests.test_two_replica\n"
-    testCaseFileString="${testCaseFileString}createbuckettests.CreateMembaseBucketsTests.test_valid_length,name_length=100\n"
-    testCaseFileString="${testCaseFileString}setgettests.MembaseBucket.test_value_100b\n"
-    testCaseFileString="${testCaseFileString}expirytests.ExpiryTests.test_expired_keys\n"
-    testCaseFileString="${testCaseFileString}memcapable.GetlTests.test_getl_expired_item\n"
-    testCaseFileString="${testCaseFileString}memcapable.GetlTests.test_getl_thirty\n"
-
-    testCaseFileString="${testCaseFileString}# memory sanity tests\n"
-    testCaseFileString="${testCaseFileString}memorysanitytests.MemorySanity.check_memory_stats,sasl_buckets=1,standard_buckets=1,items=2000\n"
-    testCaseFileString="${testCaseFileString}drainratetests.DrainRateTests.test_drain_100k_items\n"
-    testCaseFileString="${testCaseFileString}view.viewquerytests.ViewQueryTests.test_employee_dataset_all_queries,limit=1000,docs-per-day=2,wait_persistence=true,timeout=1200,nodes_init=1\n"
-
-    testCaseFileString="${testCaseFileString}CCCP.CCCP.test_get_config_client,standard_buckets=1,sasl_buckets=1\n"
-    testCaseFileString="${testCaseFileString}CCCP.CCCP.test_not_my_vbucket_config\n"
-    testCaseFileString="${testCaseFileString}flush.bucketflush.BucketFlushTests.bucketflush_with_data_ops_moxi,items=5000,data_op=create,use_ascii=False\n"
-
-    testCaseFileString="${testCaseFileString}### Security - Audit + LDAP - LDAP will run separately in sanity tests ####\n"
-    testCaseFileString="${testCaseFileString}security.audittest.auditTest.test_bucketEvents,default_bucket=false,id=8201,ops=create\n"
-
-    testCaseFileString="${testCaseFileString}### N1ql ####\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_index.QueriesViewsTests.test_primary_create_delete_index,doc-per-day=3,force_clean=True,reload_data=False,nodes_init=1\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_index.QueriesViewsTests.test_primary_create_delete_index,doc-per-day=2,primary_indx_type=GSI,reload_data=False,force_clean=True,nodes_init=1\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_index.QueriesViewsTests.test_explain_index_attr,force_clean=True,reload_data=False,doc-per-day=2,nodes_init=1\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_dml.DMLQueryTests.test_sanity,force_clean=True,reload_data=False,nodes_init=1,skip_load=True,nodes_init=1\n"
-
-
-    testCaseFileString="${testCaseFileString}### WATSON FEAUTURES ###\n"
-    testCaseFileString="${testCaseFileString}#Covering Index and CBQ\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_2i_index.QueriesIndexTests.test_covering_index,covering_index=true,doc-per-day=1,skip_index=True,index_type=gsi,force_clean=True,reload_data=True\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_advancedcbqshell.AdvancedQueryTests.test_engine_postive\n"
-
-    testCaseFileString="${testCaseFileString}#Subdoc\n"
-    testCaseFileString="${testCaseFileString}subdoc.subdoc_nested_dataset.SubdocNestedDataset.test_sanity\n"
-    testCaseFileString="${testCaseFileString}tuqquery.tuq_2i_index.QueriesIndexTests.test_simple_array_index,index_type=GSI,array_indexing=True,force_clean=True,reload_data=True\n"
-
     printf "$testCaseFileString" > ${numOfNodes}node/testcases.conf
     exitOnError $? "Unable to create testcases.conf file"
 }
@@ -292,7 +285,7 @@ function copyFilesForTestRunnerImage() {
     # Create node config files #
     for fileName in $testrunnerDir/Dockerfile $testrunnerDir/entrypoint.sh $testrunnerDir/getNodeIps.py
     do
-        if [ ! -f "$fileName" ]; then
+        if [ ! -f "$fileName" ] ; then
             cd ..
             exitOnError 1 "File '$fileName' not found!"
         fi
@@ -310,7 +303,7 @@ function exportDockerImageToNodes() {
     echo "Creating docker image tar file '$tarFileName'"
     docker save -o $tarFileName $dockerImageName
 
-    for nodeIp in 172.23.99.12 172.23.99.13 172.23.99.27 172.23.99.29
+    for nodeIp in $cloudClusterIpList
     do
         echo "Deleting exiting docker image in the server '$nodeIp'"
         sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$nodeIp docker images | grep $imageName | grep $tagName | awk '{print $3}' | xargs docker rmi -f
@@ -321,8 +314,10 @@ function exportDockerImageToNodes() {
         echo "Loading Docker image.."
         sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$nodeIp docker load -i /root/$tarFileName
         sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$nodeIp rm -f /root/$tarFileName
+
+        sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$nodeIp docker rmi \$\(docker images --filter "dangling=true" -q --no-trunc\)
     done
-    
+
     echo "Deleting the tar file '$tarFileName'"
     rm -f $tarFileName
     unset dockerImageName tarFileName nodeIp imageName tagName
@@ -369,8 +364,8 @@ function deployCluster() {
     imageName=$(echo $cbServerDockerImageName | cut -d':' -f 1)
     tagName=$(echo $cbServerDockerImageName | cut -d':' -f 2)
 
-    echo "Using operator image '$cbOperatorImage'"
-    sed -i -e "s#image: couchbase\/couchbase-operator:v1#image: $cbOperatorImage#" $deploymentFile
+    echo "Using operator image '$cbOperatorDockerImageName'"
+    sed -i -e "s#image: couchbase\/couchbase-operator:v1#image: $cbOperatorDockerImageName#" $deploymentFile
 
     sed -i "s/paused: true/paused: false/" $cbClusterFile
     exitOnError $? "Unable to replace pause string in cbcluster yaml"
@@ -397,7 +392,7 @@ function deployCluster() {
     for i in {1..60}
     do
         podName=$(kubectl --namespace=$KUBENAMESPACE get pods -l name=couchbase-operator | tail -1 | awk '{print $1}')
-        if [ "$podName" != "" ]; then
+        if [ "$podName" != "" ] ; then
             waitForPodToStartRunning $podName
             podReady=true
             break
@@ -405,8 +400,7 @@ function deployCluster() {
         sleep 5
     done
 
-    if ! $podReady
-    then
+    if ! $podReady ; then
         exitOnError 1 "Operator pod not started running even after 5mins"
     fi
 
@@ -450,10 +444,9 @@ cd cloudtest
 # Variable declaration and parsing argument#
 KUBENAMESPACE="default"
 numOfNodes=$numOfNodes
-serverVersion=$cbversion
-dockerHubAccount=$dockerhub
+serverVersion=$cbVersion
+dockerHubAccount=$dockerHub
 targetCluster=$targetCluster
-cbOperatorVersion=1.0.0-162
 testrunnerPodName=""
 
 while [ $# -ne 0 ]
@@ -465,15 +458,14 @@ do
             ;;
         "--nodes")
             numOfNodes=$2
-            re='^[0-9]+$'
-            if ! [[ $numOfNodes =~ $re ]] ; then
-               echo "Exiting: Invalid '$1' value. Should be an integer"
-               showHelp
-            fi
             shift ; shift
             ;;
         "--cbversion")
             serverVersion=$2
+            shift ; shift
+            ;;
+        "--cbOperatorVersion")
+            cbOperatorVersion=$2
             shift ; shift
             ;;
         "--dockerhub")
@@ -484,24 +476,24 @@ do
             targetCluster=$2
             shift ; shift
             ;;
-        "--cbOperatorVersion")
-            cbOperatorVersion=$2
-            shift ; shift
-            ;;
         *)
             echo "Exiting: Invalid argument '$1'"
             showHelp
     esac
 done
 
-validateArgs
+echo "----------------------------------"
+echo "KUBENAMESPACE=$KUBENAMESPACE"
+echo "numOfNodes=$numOfNodes"
+echo "serverVersion=$cbVersion"
+echo "dockerHubAccount=$dockerHub"
+echo "targetCluster=$targetCluster"
+echo "cbOperatorVersion=$cbOperatorVersion"
+echo "cloudClusterIpList=$cloudClusterIpList"
+echo "----------------------------------"
 
-if [ ! -z $cbOperatorVersion ]
-then
-    cbOperatorImage="couchbase/couchbase-operator-internal:$cbOperatorVersion"
-else
-    cbOperatorImage=$(sh /root/latest-docker-tag.sh)
-fi
+validateArgs
+createTestPropertyFile
 
 deploymentFile="operator.yaml"
 secretFile="secret.yaml"
@@ -510,10 +502,9 @@ testrunnerDir="support"
 testRunnerYamlFileName="testrunner.yaml"
 clusterName=$(grep "name:" $cbClusterFile | head -1 | xargs | cut -d' ' -f 2)
 
+cbOperatorDockerImageName="couchbase/couchbase-operator-internal:$cbOperatorVersion"
 cbServerDockerImageName="${dockerHubAccount}/couchbase-server:custom-${serverVersion}"
 testRunnerDockerImageName="${dockerHubAccount}/testrunner-cloud:customImage"
-
-declare -a podIpArray
 
 # Build required images #
 buildCbServerDockerImage
@@ -530,7 +521,7 @@ exitOnError $? "Unable to start testrunner container"
 while true
 do
     testrunnerPodName=$(kubectl --namespace=$KUBENAMESPACE get -l job-name=testrunner pods | tail -1 | awk '{print $1}')
-    if [ "$testrunnerPodName" != "" ]; then
+    if [ "$testrunnerPodName" != "" ] ; then
         waitForPodToStartRunning $testrunnerPodName
         break
     fi
@@ -541,10 +532,10 @@ echo "Logs from testrunner pod '$testrunnerPodName':"
 kubectl --namespace=$KUBENAMESPACE logs --follow=true $testrunnerPodName &
 
 # Wait for testrunner job to complete
-while [ true ]
+while true
 do
     currTestrunnerPod=$(kubectl --namespace=$KUBENAMESPACE get -l job-name=testrunner pods | tail -1 | awk '{print $1}')
-    if [ "$currTestrunnerPod" != "$testrunnerPodName" ]; then
+    if [ "$currTestrunnerPod" != "$testrunnerPodName" ] ; then
         echo "Testrunner pod '$testrunnerPodName' replaced with new pod '$currTestrunnerPod'"
         kill %1
         kubectl --namespace=$KUBENAMESPACE delete pod $testrunnerPodName
@@ -557,7 +548,7 @@ do
     fi
 
     isJobCompleted=$(kubectl --namespace=$KUBENAMESPACE logs $testrunnerPodName --tail=10 | grep "Testrunner: command completed" | wc -l)
-    if [ $isJobCompleted -eq 1 ]; then
+    if [ $isJobCompleted -eq 1 ] ; then
         kill %1
         break
     fi
