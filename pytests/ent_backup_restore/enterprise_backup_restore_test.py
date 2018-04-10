@@ -1384,6 +1384,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self.log.info("Enabling firewall on cluster host before backup")
         RemoteUtilHelper.enable_firewall(self.backupset.cluster_host)
+        self.enable_firewall = True
         try:
             output, error = self.backup_cluster()
             self.assertTrue(self._check_output("getsockopt: connection refused", output),
@@ -1392,19 +1393,25 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("Disabling firewall on cluster host to take backup")
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.disable_firewall()
+            self.enable_firewall = False
         self.log.info("Trying backup now")
         self.backup_cluster_validate()
         self.log.info("Enabling firewall on restore host before restore")
         RemoteUtilHelper.enable_firewall(self.backupset.restore_cluster_host)
+        self.enable_firewall = True
         """ reset restore cluster to same services as backup cluster """
         try:
             output, error = self.backup_restore()
-            self.assertTrue(self._check_output("getsockopt: connection refused", output),
+            mesg = "getsockopt: connection refused"
+            if self.skip_buckets:
+                mesg = "Error restoring cluster:"
+            self.assertTrue(self._check_output(mesg, output),
                             "Expected error not thrown by backup restore when firewall enabled")
         finally:
             self.log.info("Disabling firewall on restore host to restore")
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.disable_firewall()
+            self.enable_firewall = False
         self.log.info("Trying restore now")
         self.skip_buckets = False
         """ Need to reset restore node with services the same as in backup cluster """
@@ -1551,7 +1558,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Memcached bucket found in backup list output after backup")
         self.log.info("Memcached bucket not found in backup list output after backup as expected")
         self.backup_restore()
-        self.verify_gsi()
+        if self.create_gsi:
+            self.verify_gsi()
 
     def test_backup_with_erlang_crash_and_restart(self):
         """

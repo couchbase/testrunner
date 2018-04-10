@@ -94,6 +94,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.long_help_flag = "--help"
         self.short_help_flag = "-h"
         self.cygwin_bin_path = ""
+        self.enable_firewal = False
         self.rfc3339_date = "date +%s --date='{0} seconds' | ".format(self.replace_ttl_with) + \
                                 "xargs -I {} date --date='@{}' --rfc-3339=seconds | "\
                                 "sed 's/ /T/'"
@@ -136,6 +137,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.expire_time = self.input.param('expire_time', 0)
         self.after_upgrade_merged = self.input.param("after-upgrade-merged", False)
         self.create_gsi = self.input.param("create-gsi", False)
+        self.gsi_names = ["num1", "num2"]
+        self.enable_firewall = False
         self.do_restore = self.input.param("do-restore", False)
         self.do_verify = self.input.param("do-verify", False)
         self.create_views = self.input.param("create-views", False)
@@ -1157,7 +1160,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def create_indexes(self):
         gsi_type = "memory_optimized"
-        self.gsi_names = ["num1", "num2"]
         rest = RestConnection(self.backupset.cluster_host)
         username = self.master.rest_username
         password = self.master.rest_password
@@ -1182,6 +1184,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def verify_gsi(self):
+        if not self.create_gsi:
+            self.log.info("No GSI created.  Skip verify")
+            return
         rest = RestConnection(self.backupset.cluster_host)
         buckets = rest.get_buckets()
         if "5" <= rest.get_nodes_version()[:1]:
@@ -1443,6 +1448,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             self.fail("Key did not expire after wait more than 10 seconds of ttl")
 
     def _verify_bucket_compression_mode(self, restore_bucket_compression_mode):
+        if self.enable_firewall:
+            self.sleep(10)
         rest = RestConnection(self.backupset.restore_cluster_host)
         cb_version = rest.get_nodes_version()
         if 5.5 > float(cb_version[:3]):
