@@ -4410,6 +4410,16 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    def get_eventing_go_routine_dumps(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "debug/pprof/goroutine?debug=1"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

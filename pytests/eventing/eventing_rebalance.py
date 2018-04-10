@@ -59,6 +59,17 @@ class EventingRebalance(EventingBaseTest):
 
     def tearDown(self):
         try:
+            eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+            for eventing_node in eventing_nodes:
+                rest_conn = RestConnection(eventing_node)
+                out = rest_conn.get_eventing_go_routine_dumps()
+                log.info("Go routine dumps for Node {0} is \n{1} ======================================================"
+                         "============================================================================================="
+                         "\n\n".format(eventing_node.ip, out))
+        except:
+            # This is just a cleanup API. Ignore the exceptions.
+            pass
+        try:
             self.cleanup_eventing()
         except:
             # This is just a cleanup API. Ignore the exceptions.
@@ -336,7 +347,7 @@ class EventingRebalance(EventingBaseTest):
 
     def test_autofailover_with_eventing_rebalance(self):
         # enable auto-failover
-        status = RestConnection(self.master).update_autofailover_settings(True, 60)
+        status = RestConnection(self.master).update_autofailover_settings(True, 10)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
         gen_load_del = copy.deepcopy(self.gens_load)
