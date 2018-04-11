@@ -75,6 +75,13 @@ function showFileContent() {
     echo "-End of $1 file-"
 }
 
+function getWorkerNodeIp() {
+    nodeNumRegexp="worker-node([0-9]+)"
+    if [[ $1 =~ $nodeNumRegexp ]] ; then
+        echo ${BASH_REMATCH[1]}
+    fi
+}
+
 function createTestPropertyFile() {
     # Create test.properties file contents
     echo "KUBENAMESPACE=$KUBENAMESPACE" > ${WORKSPACE}/test.properties
@@ -569,6 +576,16 @@ do
     fi
     sleep 10
 done
+
+testrunnerNodeIp=$(sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$masterNodeIp kubectl get pods -o wide \| grep "$testrunnerPodName" \| awk \'\{print \$6\}\')
+workerNodeName=$(sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$masterNodeIp kubectl get pods -o wide \| grep "$testrunnerPodName" \| awk \'\{print \$7\}\')
+workerNodeIpIndex=$(expr $(getWorkerNodeIp $workerNodeName) + 1)
+masterNodeIp=$(echo $cloudClusterIpList | cut -d" " -f 1)
+targetWorkerIp=$(echo $cloudClusterIpList | cut -d" " -f $workerNodeIpIndex)
+
+sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@targetWorkerIp "sshpass -p 'couchbase' scp -o StrictHostKeyChecking=no -r root@$testrunnerNodeIp:/testrunner/logs /root/testrunnerLogs"
+sshpass -p "couchbase" scp -o StrictHostKeyChecking=no -r root@targetWorkerIp:/root/testrunnerLogs $\{WORKSPACE\}/logs
+sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@targetWorkerIp "rm -rf /root/testrunnerLogs"
 
 cleanupCluster
 cleanupFiles
