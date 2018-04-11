@@ -58,7 +58,7 @@ def main():
           if options.os == 'windows':
               if 'root' in data[i]:
                   data[i] = string.replace(data[i], 'root', 'Administrator')
-              if 'couchbase' in data[i]:
+              if 'password:couchbase' in data[i]:
                   data[i] = string.replace(data[i], 'couchbase', 'Membase123')
 
     for d in data:
