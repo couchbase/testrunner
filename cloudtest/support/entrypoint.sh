@@ -47,8 +47,17 @@ do
 done
 mv ${nodeConfigName}.ini.$numOfNodes ${nodeConfigName}.ini
 
+# Print current testrunner branch
+echo "Git Branch details:"
+git branch
+echo ""
+
+echo "Git head info"
+git log -n 1
+echo ""
+
 # Start Testrunner code #
-python ./testrunner.py -i ./${nodeConfigName}.ini -c ./testcases.conf
+python ./testrunner.py -i ./${nodeConfigName}.ini -c ./testcases.conf -p get-logs=true,get-cbcollect-info=true
 
 echo "Testrunner: command completed"
 while true; do sleep 1000; done

@@ -3,18 +3,22 @@
 function showHelp() {
     echo ""
     echo " Arguments:"
-    echo "  --namespace [string]      Kubernetes namespace to use"
-    echo "  --nodes [n]               Number of nodes to run"
-    echo "  --cbversion [string]      Couchbase server version to use"
-    echo "  --dockerhub [string]      Dockerhub account to use. Default is 'couchbase'"
-    echo "  --targetCluster [string]  Select cluster type kubernetes / openshift"
+    echo "  --namespace [string]          Kubernetes namespace to use"
+    echo "  --nodes [n]                   Number of nodes to run"
+    echo "  --cbversion [string]          Couchbase server version to use"
     echo "  --cbOperatorVersion [string]  Couchbase operator version to use"
+    echo "  --testrunnerBranch [string]   Testrunner branch to run. Default is 'master'"
+    echo "  --dockerhub [string]          Dockerhub account to use. Default is 'couchbase'"
+    echo "  --targetCluster [string]      Select cluster type kubernetes / openshift"
     echo ""
     exit 1
 }
 
 function validateArgs() {
     errCondition=false
+    intRegexp='^[0-9]+$'
+
+    echo "Validating arguments.."
 
     if [[ -z "$KUBENAMESPACE" ]] ; then
         echo "Exiting: KUBENAMESPACE not defined"
@@ -34,7 +38,7 @@ function validateArgs() {
     if [[ -z "$numOfNodes" ]] ; then
         echo "Exiting: Invalid number of nodes"
         errCondition=true
-    elif ! [[ $numOfNodes =~ '^[0-9]+$' ]] ; then
+    elif ! [[ $numOfNodes =~ $intRegexp ]] ; then
         echo "Exiting: Number of nodes should be an integer"
         errCondition=true
     elif [ $numOfNodes -lt 1 ] ; then
@@ -45,6 +49,11 @@ function validateArgs() {
     if [[ -z "$cbOperatorVersion" ]] ; then
         echo "Exiting: Cb-operator version is null"
         errCondition=true
+    fi
+
+    if [ "$testRunnerBranch" == "" ] ; then
+        testRunnerBranch="master"
+        echo "Using testrunner branch '$testRunnerBranch'"
     fi
 
     if $errCondition ; then
@@ -60,9 +69,15 @@ function exitOnError() {
     fi
 }
 
+function showFileContent() {
+    echo "-File contents of $1-"
+    cat $1
+    echo "-End of $1 file-"
+}
+
 function createTestPropertyFile() {
     # Create test.properties file contents
-    echo "" > ${WORKSPACE}/test.properties
+    echo "KUBENAMESPACE=$KUBENAMESPACE" > ${WORKSPACE}/test.properties
     echo "cbVersion=$cbVersion" >> ${WORKSPACE}/test.properties
     echo "cbOperatorVersion=$cbOperatorVersion" >> ${WORKSPACE}/test.properties
     echo "dockerHub=$dockerHub" >> ${WORKSPACE}/test.properties
@@ -70,8 +85,7 @@ function createTestPropertyFile() {
     echo "testRunnerBranch=$testRunnerBranch" >> ${WORKSPACE}/test.properties
     echo "cloudClusterIpList=$cloudClusterIpList" >> ${WORKSPACE}/test.properties
 
-    echo "test.properties file contents:"
-    cat ${WORKSPACE}/test.properties
+    showFileContent "${WORKSPACE}/test.properties"
 }
 
 function cleanupFiles() {
@@ -208,38 +222,42 @@ function createTestrunnerDockerfile() {
     #dockerFileString="${dockerFileString}FROM ubuntu:15.04\n"
     #dockerFileString="${dockerFileString}RUN apt-get update\n"
     #dockerFileString="${dockerFileString}RUN apt-get install -y gcc g++ make cmake git-core libevent-dev libev-dev libssl-dev libffi-dev psmisc iptables zip unzip python-dev python-pip vim curl\n"
-    #dockerFileString="${dockerFileString}# build libcouchbase\n"
-    #dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/libcouchbase.git && mkdir libcouchbase/build\n"
-    #dockerFileString="${dockerFileString}\n"
-    #dockerFileString="${dockerFileString}WORKDIR libcouchbase/build\n"
-    #dockerFileString="${dockerFileString}RUN ../cmake/configure --prefix=/usr && make && make install\n"
-    #dockerFileString="${dockerFileString}\n"
-    #dockerFileString="${dockerFileString}WORKDIR /\n"
-    #dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/testrunner.git\n"
-    #dockerFileString="${dockerFileString}WORKDIR testrunner\n"
-    #dockerFileString="${dockerFileString}ARG BRANCH=master\n"
-    #dockerFileString="${dockerFileString}RUN git checkout \$BRANCH\n"
-    #dockerFileString="${dockerFileString}\n"
-    #dockerFileString="${dockerFileString}# install python deps\n"
-    #dockerFileString="${dockerFileString}RUN pip2 install --upgrade packaging appdirs\n"
-    #dockerFileString="${dockerFileString}RUN pip install -U pip setuptools\n"
-    #dockerFileString="${dockerFileString}RUN pip install paramiko && pip install gevent && pip install boto && pip install httplib2 && pip install pyyaml && pip install couchbase\n"
-    #dockerFileString="${dockerFileString}\n"
-    #dockerFileString="${dockerFileString}COPY getNodeIps.py getNodeIps.py\n"
 
     dockerFileString="${dockerFileString}FROM ${dockerHubAccount}/testrunner-cloud:baseimage\n"
+    dockerFileString="${dockerFileString}WORKDIR /\n"
+    dockerFileString="${dockerFileString}RUN rm -rf testrunner libcouchbase\n"
+
+    dockerFileString="${dockerFileString}# install python deps\n"
+    dockerFileString="${dockerFileString}RUN pip2 install --upgrade packaging appdirs\n"
+    dockerFileString="${dockerFileString}RUN pip install -U pip setuptools\n"
+    dockerFileString="${dockerFileString}RUN pip install paramiko && pip install gevent && pip install boto && pip install httplib2 && pip install pyyaml && pip install couchbase\n"
+
+    dockerFileString="${dockerFileString}# build libcouchbase\n"
+    dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/libcouchbase.git && mkdir libcouchbase/build\n"
+
+    dockerFileString="${dockerFileString}WORKDIR libcouchbase/build\n"
+    dockerFileString="${dockerFileString}RUN ../cmake/configure --prefix=/usr && make && make install\n"
+
+    dockerFileString="${dockerFileString}WORKDIR /\n"
+    dockerFileString="${dockerFileString}RUN git clone git://github.com/couchbase/testrunner.git --branch $testRunnerBranch\n"
+    dockerFileString="${dockerFileString}WORKDIR testrunner\n"
+
     dockerFileString="${dockerFileString}COPY ${numOfNodes}node.ini ${numOfNodes}node.ini\n"
     dockerFileString="${dockerFileString}COPY testcases.conf testcases.conf\n"
+    dockerFileString="${dockerFileString}COPY getNodeIps.py getNodeIps.py\n"
     dockerFileString="${dockerFileString}COPY entrypoint.sh entrypoint.sh\n"
     dockerFileString="${dockerFileString}RUN chmod +x ./entrypoint.sh\n"
     dockerFileString="${dockerFileString}ENTRYPOINT [\"./entrypoint.sh\", \"$numOfNodes\"]\n"
 
     printf "$dockerFileString" > $testrunnerDir/Dockerfile
+    exitOnError $? "Unable to create Dockerfile for testrunner"
+    showFileContent "$testrunnerDir/Dockerfile"
 }
 
 function createTestCaseFile() {
     printf "$testCaseFileString" > ${numOfNodes}node/testcases.conf
     exitOnError $? "Unable to create testcases.conf file"
+    showFileContent "${numOfNodes}node/testcases.conf"
 }
 
 function createNodeIniFile() {
@@ -273,6 +291,7 @@ function createNodeIniFile() {
 
     printf "$nodeIniFileString" > ${numOfNodes}node/${numOfNodes}node.ini
     exitOnError $? "Unable to create node.ini file"
+    showFileContent "${numOfNodes}node/${numOfNodes}node.ini"
 }
 
 function copyFilesForTestRunnerImage() {
@@ -342,6 +361,9 @@ function buildCbServerDockerImage() {
     dockerFileString="${dockerFileString}ENTRYPOINT [\"/myentrypoint.sh\"]\n"
 
     printf "$dockerFileString" > Dockerfile
+    exitOnError $? "Unable to create Dockerfile for cb server"
+    showFileContent "Dockerfile"
+
     docker build . -t $cbServerDockerImageName
     exitOnError $? "Unable to create docker image"
     exportDockerImageToNodes $cbServerDockerImageName
@@ -379,8 +401,7 @@ function deployCluster() {
     sed -i "s/size:.*$/size: $numOfNodes/" $cbClusterFile
     exitOnError $? "Unable to replace size in cbcluster yaml"
 
-    echo "Cat '$cbClusterFile':"
-    cat $cbClusterFile
+    showFileContent "$cbClusterFile"
 
     unset imageName tagName
 
@@ -433,20 +454,13 @@ function createTestRunnerYamlFile() {
     fileString="${fileString}        image: $testRunnerDockerImageName\n"
     fileString="${fileString}      restartPolicy: Never\n"
     echo "---" > $testRunnerYamlFileName
-    printf "$fileString" >> $testRunnerYamlFileName
 
-    echo "$testRunnerYamlFileName file content:"
-    cat $testRunnerYamlFileName
+    printf "$fileString" >> $testRunnerYamlFileName
+    exitOnError $? "Unable to create $testRunnerYamlFileName file"
+    showFileContent "$testRunnerYamlFileName"
 }
 
-cd cloudtest
-
 # Variable declaration and parsing argument#
-KUBENAMESPACE="default"
-numOfNodes=$numOfNodes
-serverVersion=$cbVersion
-dockerHubAccount=$dockerHub
-targetCluster=$targetCluster
 testrunnerPodName=""
 
 while [ $# -ne 0 ]
@@ -468,6 +482,10 @@ do
             cbOperatorVersion=$2
             shift ; shift
             ;;
+        "--testrunnerBranch")
+            testRunnerBranch=$2
+            shift ; shift
+            ;;
         "--dockerhub")
             dockerHubAccount=$2
             shift ; shift
@@ -482,15 +500,12 @@ do
     esac
 done
 
-echo "----------------------------------"
-echo "KUBENAMESPACE=$KUBENAMESPACE"
-echo "numOfNodes=$numOfNodes"
-echo "serverVersion=$cbVersion"
-echo "dockerHubAccount=$dockerHub"
-echo "targetCluster=$targetCluster"
-echo "cbOperatorVersion=$cbOperatorVersion"
-echo "cloudClusterIpList=$cloudClusterIpList"
-echo "----------------------------------"
+echo "Using cloud space from '$targetCluster', namespace '$KUBENAMESPACE'"
+echo "Cloud node IPs '$cloudClusterIpList'"
+echo "Couchbase-server version '$cbVersion'"
+echo "Couchbase-opeartor version '$cbOperatorVersion'"
+echo "Using testrunner branch '$testRunnerBranch' for testing '$numOfNodes' node cluster"
+echo "Using docker hub account '$dockerHub'"
 
 validateArgs
 createTestPropertyFile
