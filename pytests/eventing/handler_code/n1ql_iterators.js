@@ -14,9 +14,45 @@ function OnUpdate(doc, meta) {
 
                                                        LIMIT 10;
     res1 = test_continue(query_result);
-    res2 = test_break(query_result);
-    res3 = test_labelled_continue(query_result);
-    res4 = test_labelled_break(query_result);
+    var query_result1 = SELECT
+
+            *
+
+
+
+                       FROM src_bucket
+
+
+
+
+                                                       LIMIT 10;
+    res2 = test_break(query_result1);
+    var query_result2 = SELECT
+
+            *
+
+
+
+                       FROM src_bucket
+
+
+
+
+                                                       LIMIT 10;
+    res3 = test_labelled_continue(query_result2);
+    var query_result3 = SELECT
+
+            *
+
+
+
+                       FROM src_bucket
+
+
+
+
+                                                       LIMIT 10;
+    res4 = test_labelled_break(query_result3);
     if (res1 && res2 && res3 && res4){
         dst_bucket[meta.id] = doc;
     }
