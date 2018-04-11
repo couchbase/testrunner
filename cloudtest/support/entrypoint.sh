@@ -42,7 +42,6 @@ fi
 sed -i "s/ip:.*$/ip:/" ${nodeConfigName}.ini
 for index in ${!podIpArray[@]}
 do
-    ntp -p ${podIpArray[$index]}
     occurence=$(expr $index + 1)
     if [ $index -eq 0 ]
     then
