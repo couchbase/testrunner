@@ -3424,7 +3424,7 @@ class FTSBaseTest(unittest.TestCase):
         """
         retry = self._input.param("index_retry", 20)
         for index in self._cb_cluster.get_indexes():
-            if index.index_type == "alias":
+            if index.index_type == "fulltext-alias":
                 continue
             retry_count = retry
             prev_count = 0
