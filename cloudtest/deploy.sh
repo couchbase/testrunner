@@ -539,6 +539,9 @@ createTestRunnerYamlFile
 kubectl --namespace=$KUBENAMESPACE create -f $testRunnerYamlFileName
 exitOnError $? "Unable to start testrunner container"
 
+# Clear local dangling images in docker #
+docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
+
 # Wait for testrunner pod to get created
 while true
 do
@@ -583,9 +586,9 @@ workerNodeIpIndex=$(expr $(getWorkerNodeIp $workerNodeName) + 1)
 masterNodeIp=$(echo $cloudClusterIpList | cut -d" " -f 1)
 targetWorkerIp=$(echo $cloudClusterIpList | cut -d" " -f $workerNodeIpIndex)
 
-sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@targetWorkerIp "sshpass -p 'couchbase' scp -o StrictHostKeyChecking=no -r root@$testrunnerNodeIp:/testrunner/logs /root/testrunnerLogs"
-sshpass -p "couchbase" scp -o StrictHostKeyChecking=no -r root@targetWorkerIp:/root/testrunnerLogs $\{WORKSPACE\}/logs
-sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@targetWorkerIp "rm -rf /root/testrunnerLogs"
+sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$targetWorkerIp "sshpass -p 'couchbase' scp -o StrictHostKeyChecking=no -r root@$testrunnerNodeIp:/testrunner/logs /root/testrunnerLogs"
+sshpass -p "couchbase" scp -o StrictHostKeyChecking=no -r root@$targetWorkerIp:/root/testrunnerLogs $\{WORKSPACE\}/logs
+sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$targetWorkerIp "rm -rf /root/testrunnerLogs"
 
 cleanupCluster
 cleanupFiles

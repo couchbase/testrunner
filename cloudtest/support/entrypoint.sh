@@ -10,6 +10,13 @@ if [ "$numOfNodes" == "" ]; then
     exit 1
 fi
 
+# Start required services #
+echo 'root:couchbase' | chpasswd
+sed -i 's/PermitRootLogin .*\$/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+service ssh stop
+service ssh start
+
 # Install Python libraries for Kubernetes #
 git clone --recursive https://github.com/kubernetes-client/python.git
 cd python
@@ -35,6 +42,7 @@ fi
 sed -i "s/ip:.*$/ip:/" ${nodeConfigName}.ini
 for index in ${!podIpArray[@]}
 do
+    ntp -p ${podIpArray[$index]}
     occurence=$(expr $index + 1)
     if [ $index -eq 0 ]
     then
