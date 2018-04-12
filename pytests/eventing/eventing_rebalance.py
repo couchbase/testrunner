@@ -59,15 +59,14 @@ class EventingRebalance(EventingBaseTest):
 
     def tearDown(self):
         try:
-            eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
-            for eventing_node in eventing_nodes:
-                rest_conn = RestConnection(eventing_node)
-                out = rest_conn.get_eventing_go_routine_dumps()
-                log.info("Go routine dumps for Node {0} is \n{1} ======================================================"
-                         "============================================================================================="
-                         "\n\n".format(eventing_node.ip, out))
+            self.print_go_routine_dump_from_all_eventing_nodes()
         except:
-            # This is just a cleanup API. Ignore the exceptions.
+            # This is just a go routine dump API. Ignore the exceptions.
+            pass
+        try:
+            self.print_eventing_stats_from_all_eventing_nodes()
+        except:
+            # This is just a stats API. Ignore the exceptions.
             pass
         try:
             self.cleanup_eventing()

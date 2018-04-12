@@ -475,3 +475,20 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def generate_docs_bigdata(self, docs_per_day, start=0, document_size=1024000):
         json_generator = JsonGenerator()
         return json_generator.generate_docs_bigdata(end=(2016 * docs_per_day), start=start, value_size=document_size)
+
+    def print_eventing_stats_from_all_eventing_nodes(self):
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        for eventing_node in eventing_nodes:
+            rest_conn = RestConnection(eventing_node)
+            out = rest_conn.get_all_eventing_stats()
+            log.info("Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(out, sort_keys=True,
+                                                                                      indent=4)))
+
+    def print_go_routine_dump_from_all_eventing_nodes(self):
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        for eventing_node in eventing_nodes:
+            rest_conn = RestConnection(eventing_node)
+            out = rest_conn.get_eventing_go_routine_dumps()
+            log.info("Go routine dumps for Node {0} is \n{1} ======================================================"
+                     "============================================================================================="
+                     "\n\n".format(eventing_node.ip, out))
