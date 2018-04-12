@@ -198,10 +198,10 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                 self.audit_codes.remove(self.eventID)
                 self.set_audit(set_disabled=True)
                 try:
-                    self.run_cbq_query(query="selec * fro default")
+                    self.run_cbq_query(query="selec * fro default",server=self.servers[1])
                 except CBQError:
                     self.log.info("Query is unrecognized (expected)")
-            self.run_cbq_query(query='DELETE FROM `travel-sample` WHERE type = "hotel"')
+            self.run_cbq_query(query='DELETE FROM `travel-sample` WHERE type = "hotel"', server=self.servers[1])
             expectedResults = {'node': '%s:%s' % (self.servers[1].ip, self.servers[1].port), 'status': 'success', 'isAdHoc': True,
                                'name': 'DELETE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'DELETE FROM `travel-sample` WHERE type = "hotel"',
@@ -264,13 +264,13 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                               'id': self.eventID, 'name': 'SELECT statement'}
         
         if query_type == 'delete':
-            self.checkConfig(self.eventID,self.servers[1], expectedResults, n1ql_audit=True)
+            self.checkConfig(self.eventID, self.servers[1], expectedResults, n1ql_audit=True)
             if self.filter:
                 self.checkFilter(self.unauditedID, self.servers[1])
         else:
             self.checkConfig(self.eventID, self.master, expectedResults, n1ql_audit=True)
             if self.filter:
-                self.checkFilter(self.unauditedID, self.servers[1])
+                self.checkFilter(self.unauditedID, self.master)
 
 
     def test_user_filter(self):

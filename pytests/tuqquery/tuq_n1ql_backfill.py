@@ -142,12 +142,13 @@ class QueryN1QLBackfillTests(QueryTests):
         self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
         expected_dir = self.set_directory()
         self.assertEqual(expected_dir['queryTmpSpaceDir'], self.directory_path)
-        services_in = ["n1ql","index","data"]
+        services_in = ["n1ql", "index", "data"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        curl_url = self.curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
+        self.sleep(1)
+        curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
         curl_output = self.shell.execute_command("%s -u Administrator:password %s"
                                                  % (self.curl_path, curl_url))
         expected_curl = self.convert_list_to_json(curl_output[0])
@@ -169,18 +170,10 @@ class QueryN1QLBackfillTests(QueryTests):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
-        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
-        for i in xrange(20):
-            output = self.rest.list_indexer_rebalance_tokens(server=index_server)
-            if "rebalancetoken" in output:
-                self.log.info(output)
-                break
-            self.sleep(2)
-        if i == 19 and "rebalancetoken" not in output:
-            self.log.warn("rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        curl_url = self.curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
+        self.sleep(5)
+        curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init+1].ip, self.servers[self.nodes_init+1].port)
         curl_output = self.shell.execute_command("%s -u Administrator:password %s"
                                                  % (self.curl_path, curl_url))
         expected_curl = self.convert_list_to_json(curl_output[0])
