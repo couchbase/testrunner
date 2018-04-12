@@ -72,18 +72,13 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         fh = open(abs_file_path, "r")
         body['appcode'] = fh.read()
         fh.close()
-        body['version'] = "1.0.0"
-        body['id'] = 0
-        body['bindings'] = []
-        body['bindings'].append({"binding_type": "alias",
-                                 "binding_name": self.dst_bucket_name,
-                                 "binding_value": {"alias": self.dst_bucket_name}})
+        body['depcfg'] = {}
+        body['depcfg']['buckets'] = []
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
         if multi_dst_bucket:
-            body['bindings'].append({"binding_type": "alias",
-                                     "binding_name": self.dst_bucket_name1,
-                                     "binding_value": {"alias": self.dst_bucket_name1}})
-        body['metadata_bucket'] = self.metadata_bucket_name
-        body['source_bucket'] = self.src_bucket_name
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
+        body['depcfg']['source_bucket'] = self.src_bucket_name
         body['settings'] = {}
         body['settings']['checkpoint_interval'] = checkpoint_interval
         body['settings']['cleanup_timers'] = cleanup_timers
