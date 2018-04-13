@@ -230,7 +230,7 @@ function createTestrunnerDockerfile() {
     #dockerFileString="${dockerFileString}RUN apt-get update\n"
     #dockerFileString="${dockerFileString}RUN apt-get install -y gcc g++ make cmake git-core libevent-dev libev-dev libssl-dev libffi-dev psmisc iptables zip unzip python-dev python-pip vim curl\n"
 
-    dockerFileString="${dockerFileString}FROM ${dockerHubAccount}/testrunner-cloud:baseimage\n"
+    dockerFileString="${dockerFileString}FROM ${dockerHub}/testrunner-cloud:baseimage\n"
     dockerFileString="${dockerFileString}WORKDIR /\n"
     dockerFileString="${dockerFileString}RUN rm -rf testrunner libcouchbase\n"
 
@@ -350,7 +350,7 @@ function exportDockerImageToNodes() {
 }
 
 function buildCbServerDockerImage() {
-    dockerFileString="FROM couchbase/server:enterprise-${serverVersion}\n"
+    dockerFileString="FROM couchbase/server:${cbVersion}\n"
     dockerFileString="${dockerFileString}MAINTAINER Couchbase Docker Team <docker@couchbase.com>\n"
     dockerFileString="${dockerFileString}RUN apt update\n"
     dockerFileString="${dockerFileString}RUN apt install openssh-client openssh-server -y\n"
@@ -482,7 +482,7 @@ do
             shift ; shift
             ;;
         "--cbversion")
-            serverVersion=$2
+            cbVersion=$2
             shift ; shift
             ;;
         "--cbOperatorVersion")
@@ -494,7 +494,7 @@ do
             shift ; shift
             ;;
         "--dockerhub")
-            dockerHubAccount=$2
+            dockerHub=$2
             shift ; shift
             ;;
         "--targetCluster")
@@ -525,8 +525,8 @@ testRunnerYamlFileName="testrunner.yaml"
 clusterName=$(grep "name:" $cbClusterFile | head -1 | xargs | cut -d' ' -f 2)
 
 cbOperatorDockerImageName="couchbase/couchbase-operator-internal:$cbOperatorVersion"
-cbServerDockerImageName="${dockerHubAccount}/couchbase-server:custom-${serverVersion}"
-testRunnerDockerImageName="${dockerHubAccount}/testrunner-cloud:customImage"
+cbServerDockerImageName="${dockerHub}/couchbase-server:custom-${cbVersion}"
+testRunnerDockerImageName="${dockerHub}/testrunner-cloud:customImage"
 
 # Build required images #
 buildCbServerDockerImage
@@ -580,11 +580,21 @@ do
     sleep 10
 done
 
+masterNodeIp=$(echo $cloudClusterIpList | cut -d" " -f 1)
 testrunnerNodeIp=$(sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$masterNodeIp kubectl get pods -o wide \| grep "$testrunnerPodName" \| awk \'\{print \$6\}\')
 workerNodeName=$(sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$masterNodeIp kubectl get pods -o wide \| grep "$testrunnerPodName" \| awk \'\{print \$7\}\')
 workerNodeIpIndex=$(expr $(getWorkerNodeIp $workerNodeName) + 1)
-masterNodeIp=$(echo $cloudClusterIpList | cut -d" " -f 1)
 targetWorkerIp=$(echo $cloudClusterIpList | cut -d" " -f $workerNodeIpIndex)
+
+echo "testrunnerNodeIp=$testrunnerNodeIp"
+echo "workerNodeName=$workerNodeName"
+echo "workerNodeIpIndex=$workerNodeIpIndex"
+echo "masterNodeIp=$masterNodeIp"
+echo "targetWorkerIp=$targetWorkerIp"
+
+#Safely remove Ips from Known hosts file
+sed -i "/$targetWorkerIp /d" ~/.ssh/known_hosts
+sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$targetWorkerIp "sed -i '/$testrunnerNodeIp /d' ~/.ssh/known_hosts"
 
 sshpass -p "couchbase" ssh -o StrictHostKeyChecking=no -t root@$targetWorkerIp "sshpass -p 'couchbase' scp -o StrictHostKeyChecking=no -r root@$testrunnerNodeIp:/testrunner/logs /root/testrunnerLogs"
 sshpass -p "couchbase" scp -o StrictHostKeyChecking=no -r root@$targetWorkerIp:/root/testrunnerLogs $\{WORKSPACE\}/logs

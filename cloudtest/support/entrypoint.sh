@@ -10,13 +10,6 @@ if [ "$numOfNodes" == "" ]; then
     exit 1
 fi
 
-# Start required services #
-echo 'root:couchbase' | chpasswd
-sed -i 's/PermitRootLogin .*\$/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
-service ssh stop
-service ssh start
-
 # Install Python libraries for Kubernetes #
 git clone --recursive https://github.com/kubernetes-client/python.git
 cd python
@@ -62,6 +55,13 @@ echo ""
 echo "Git head info"
 git log -n 1
 echo ""
+
+# Start required services #
+echo 'root:couchbase' | chpasswd
+sed -ie 's/PermitRootLogin .*$/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+service ssh stop
+service ssh start
 
 # Start Testrunner code #
 python ./testrunner.py -i ./${nodeConfigName}.ini -c ./testcases.conf -p get-logs=true,get-cbcollect-info=true

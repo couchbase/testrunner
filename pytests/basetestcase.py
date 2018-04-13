@@ -2249,6 +2249,17 @@ class BaseTestCase(unittest.TestCase):
                                       .format(server.ip, hostname))
                         server.ip = hostname
                         shell.disconnect()
+                    elif ip.endswith(".svc"):
+                        from kubernetes import client as kubeClient, config as kubeConfig
+                        currNamespace = ip.split('.')[2]
+                        kubeConfig.load_incluster_config()
+                        v1 = kubeClient.CoreV1Api()
+                        nodeList = v1.list_pod_for_all_namespaces(watch=False)
+
+                        for node in nodeList.items:
+                            if node.metadata.namespace == currNamespace and node.status.pod_ip == server.ip:
+                                ip = node.status.pod_ip
+                                break
                     elif "couchbase.com" in server.ip and "couchbase.com" not in ip:
                         node = TestInputServer()
                         node.ip = ip
