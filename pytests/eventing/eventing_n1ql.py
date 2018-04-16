@@ -48,12 +48,11 @@ class EventingN1QL(EventingBaseTest):
                   batch_size=self.batch_size)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DELETE_UPDATE, worker_count=3)
-        self.deploy_function(body)
-        # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, on_delete=True)
-        self.undeploy_and_delete_function(body)
-        query = "drop primary index on "+ self.src_bucket_name
-        self.n1ql_helper.run_cbq_query(query=query,server=self.n1ql_node)
+        try:
+            self.deploy_function(body)
+        except Exception as ex:
+            if "Can not execute DML query on bucket" not in str(ex):
+                self.fail("recursive mutations are allowed through n1ql")
 
     def test_n1ql_prepare_statement(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
