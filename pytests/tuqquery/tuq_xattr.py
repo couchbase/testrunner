@@ -1,4 +1,5 @@
 from tuq import QueryTests
+from membase.api.rest_client import RestHelper
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
@@ -517,7 +518,7 @@ class QueryXattrTests(QueryTests):
         self.run_xattrs_subquery(query, check_query)
 
     """
-    Tests if 
+    Tests if
         1. Index cannot be created with two system xattr fields
         2. If queries cannot be made on two system xattr fields
     """
@@ -526,7 +527,6 @@ class QueryXattrTests(QueryTests):
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
-        """
         # cannot create index on two system xattr fields
         index_statement = "CREATE INDEX idx1 ON default(meta().xattrs._system1, meta().xattrs._system2, meta().xattrs._system3) USING " + self.index_type
         try:
@@ -535,7 +535,7 @@ class QueryXattrTests(QueryTests):
             pass
         else:
             self.fail()
-        """
+
 
         # cannot query two system xattr fields
         query = "SELECT meta().xattrs._system1, meta().xattrs._system2, meta().xattrs._system3 FROM default"
@@ -604,6 +604,187 @@ class QueryXattrTests(QueryTests):
                 self.assertTrue(query_response['results'][0]['id'] == id['id'])
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx1")
+
+    def test_system_xattr_rebalance_in_indexer(self):
+        self.reload_data()
+        self.fail_if_no_buckets()
+        self.system_xattr_data = self.create_xattr_data(type='system')
+        self.user_xattr_data = self.create_xattr_data(type='user')
+
+        index_statement = "CREATE INDEX idx8 ON default(meta().id, meta().xattrs._system3, join_day) where meta().xattrs._system3.field1.sub_field1a > 0 USING " + self.index_type
+        index_statement2 = "CREATE INDEX idx15 ON default(meta().xattrs.user3.field1.sub_field1a, meta().id, join_day) USING " + self.index_type
+
+        self.run_cbq_query(query=index_statement)
+        self.run_cbq_query(query=index_statement2)
+
+        query = "SELECT meta().xattrs._system3 FROM default where meta().id is not missing and meta().xattrs._system3.field1.sub_field1a > 0"
+        query2 = "SELECT meta().xattrs.user3, meta().xattrs.user3.field1, meta().xattrs.user3.field1.sub_field1a FROM default where meta().xattrs.user3.field1.sub_field1a is not missing"
+
+
+        self.sleep(30)
+
+        try:
+            # rebalance in a node
+            services_in = ["index"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            # Run a system xattr query
+            self.run_xattrs_query(query, '', '_system3', 'idx8', 'default', xattr_data=self.system_xattr_data)
+
+            # Run a virtual xattr query
+            self.run_xattrs_query("SELECT meta().xattrs.`$document` FROM default", "", "$document", "", "default", primary_compare=False, xattr_type='virtual')
+
+            # Run a user xattr query
+            self.run_xattrs_query(query2, '', 'user3', 'idx15', 'default', xattr_data=self.user_xattr_data)
+
+
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        finally:
+            self.run_cbq_query(query="DROP INDEX default.idx8")
+            self.run_cbq_query(query="DROP INDEX default.idx15")
+
+    def test_system_xattr_rebalance_in_query(self):
+        self.reload_data()
+        self.fail_if_no_buckets()
+        self.system_xattr_data = self.create_xattr_data(type='system')
+        self.user_xattr_data = self.create_xattr_data(type='user')
+
+        index_statement = "CREATE INDEX idx8 ON default(meta().id, meta().xattrs._system3, join_day) where meta().xattrs._system3.field1.sub_field1a > 0 USING " + self.index_type
+        index_statement2 = "CREATE INDEX idx15 ON default(meta().xattrs.user3.field1.sub_field1a, meta().id, join_day) USING " + self.index_type
+
+        self.run_cbq_query(query=index_statement)
+        self.run_cbq_query(query=index_statement2)
+
+        query = "SELECT meta().xattrs._system3 FROM default where meta().id is not missing and meta().xattrs._system3.field1.sub_field1a > 0"
+        query2 = "SELECT meta().xattrs.user3, meta().xattrs.user3.field1, meta().xattrs.user3.field1.sub_field1a FROM default where meta().xattrs.user3.field1.sub_field1a is not missing"
+
+        self.sleep(30)
+
+        try:
+            # rebalance in a node
+            services_in = ["n1ql"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            # Run a system xattr query
+            self.run_xattrs_query(query, '', '_system3', 'idx8', 'default', xattr_data=self.system_xattr_data)
+
+            # Run a virtual xattr query
+            self.run_xattrs_query("SELECT meta().xattrs.`$document` FROM default", "", "$document", "", "default",
+                                  primary_compare=False, xattr_type='virtual')
+
+            # Run a user xattr query
+            self.run_xattrs_query(query2, '', 'user3', 'idx15', 'default', xattr_data=self.user_xattr_data)
+
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        finally:
+            self.run_cbq_query(query="DROP INDEX default.idx8")
+            self.run_cbq_query(query="DROP INDEX default.idx15")
+
+    def test_hard_failover_and_full_recovery_and_gsi_rebalance(self):
+        self.reload_data()
+        self.fail_if_no_buckets()
+        self.system_xattr_data = self.create_xattr_data(type='system')
+        self.user_xattr_data = self.create_xattr_data(type='user')
+
+        index_statement = "CREATE INDEX idx8 ON default(meta().id, meta().xattrs._system3, join_day) where meta().xattrs._system3.field1.sub_field1a > 0 USING " + self.index_type
+        index_statement2 = "CREATE INDEX idx15 ON default(meta().xattrs.user3.field1.sub_field1a, meta().id, join_day) USING " + self.index_type
+
+        self.run_cbq_query(query=index_statement)
+        self.run_cbq_query(query=index_statement2)
+
+        query = "SELECT meta().xattrs._system3 FROM default where meta().id is not missing and meta().xattrs._system3.field1.sub_field1a > 0"
+        query2 = "SELECT meta().xattrs.user3, meta().xattrs.user3.field1, meta().xattrs.user3.field1.sub_field1a FROM default where meta().xattrs.user3.field1.sub_field1a is not missing"
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.sleep(30)
+
+        try:
+
+            # failover the indexer node
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=False)
+            failover_task.result()
+            self.sleep(30)
+            # do a full recovery and rebalance
+            self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
+            self.rest.add_back_node('ns_1@' + index_server.ip)
+            reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            if reb1:
+                result = self.rest.monitorRebalance()
+                msg = "successfully rebalanced cluster {0}"
+                self.log.info(msg.format(result))
+            self.sleep(30)
+
+            self.run_xattrs_query(query, '', '_system3', 'idx8', 'default', xattr_data=self.system_xattr_data)
+
+            # Run a virtual xattr query
+            self.run_xattrs_query("SELECT meta().xattrs.`$document` FROM default", "", "$document", "", "default",
+                                  primary_compare=False, xattr_type='virtual')
+
+            # Run a user xattr query
+            self.run_xattrs_query(query2, '', 'user3', 'idx15', 'default', xattr_data=self.user_xattr_data)
+
+        finally:
+            self.run_cbq_query(query="DROP INDEX default.idx8")
+            self.run_cbq_query(query="DROP INDEX default.idx15")
+
+    def test_graceful_failover_and_full_recovery_and_gsi_rebalance(self):
+        self.reload_data()
+        self.fail_if_no_buckets()
+        self.system_xattr_data = self.create_xattr_data(type='system')
+        self.user_xattr_data = self.create_xattr_data(type='user')
+
+        index_statement = "CREATE INDEX idx8 ON default(meta().id, meta().xattrs._system3, join_day) where meta().xattrs._system3.field1.sub_field1a > 0 USING " + self.index_type
+        index_statement2 = "CREATE INDEX idx15 ON default(meta().xattrs.user3.field1.sub_field1a, meta().id, join_day) USING " + self.index_type
+
+        self.run_cbq_query(query=index_statement)
+        self.run_cbq_query(query=index_statement2)
+
+        query = "SELECT meta().xattrs._system3 FROM default where meta().id is not missing and meta().xattrs._system3.field1.sub_field1a > 0"
+        query2 = "SELECT meta().xattrs.user3, meta().xattrs.user3.field1, meta().xattrs.user3.field1.sub_field1a FROM default where meta().xattrs.user3.field1.sub_field1a is not missing"
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+
+        self.sleep(30)
+        try:
+            # failover the indexer node
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
+            self.run_xattrs_query(query, '', '_system3', 'idx8', 'default', xattr_data=self.system_xattr_data)
+
+            # Run a virtual xattr query
+            self.run_xattrs_query("SELECT meta().xattrs.`$document` FROM default", "", "$document", "", "default",
+                                  primary_compare=False, xattr_type='virtual')
+
+            # Run a user xattr query
+            self.run_xattrs_query(query2, '', 'user3', 'idx15', 'default', xattr_data=self.user_xattr_data)
+            failover_task.result()
+            self.sleep(120)
+            # do a full recovery and rebalance
+            self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
+            self.rest.add_back_node('ns_1@' + index_server.ip)
+            reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            self.run_xattrs_query(query, '', '_system3', 'idx8', 'default', xattr_data=self.system_xattr_data)
+
+            # Run a virtual xattr query
+            self.run_xattrs_query("SELECT meta().xattrs.`$document` FROM default", "", "$document", "", "default",
+                                  primary_compare=False, xattr_type='virtual')
+
+            # Run a user xattr query
+            self.run_xattrs_query(query2, '', 'user3', 'idx15', 'default', xattr_data=self.user_xattr_data)
+            if reb1:
+                result = self.rest.monitorRebalance()
+                msg = "successfully rebalanced cluster {0}"
+                self.log.info(msg.format(result))
+
+        finally:
+            self.run_cbq_query(query="DROP INDEX default.idx8")
+            self.run_cbq_query(query="DROP INDEX default.idx15")
+
 
     # Tests to be implemented
 
@@ -1091,7 +1272,7 @@ class QueryXattrTests(QueryTests):
         pass
 
     """
-    Tests if 
+    Tests if
         1. Index cannot be created with two system xattr fields
         2. If queries cannot be made on two system xattr fields
     """
@@ -1100,7 +1281,6 @@ class QueryXattrTests(QueryTests):
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
-        """
         # cannot create index on two user xattr fields
         index_statement = "CREATE INDEX idx1 ON default(meta().xattrs.user1, meta().xattrs.user2, meta().xattrs.user3) USING " + self.index_type
         try:
@@ -1109,7 +1289,6 @@ class QueryXattrTests(QueryTests):
             pass
         else:
             self.fail()
-        """
 
         # cannot query two system xattr fields
         query = "SELECT meta().xattrs.user1, meta().xattrs.user2, meta().xattrs.user3 FROM default"
@@ -1731,3 +1910,8 @@ class QueryXattrTests(QueryTests):
         self.gens_load = self.gen_docs(self.docs_per_day)
         self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
         self.create_primary_index_for_3_0_and_greater()
+
+    def _return_maps(self):
+        index_map = self.get_index_map()
+        stats_map = self.get_index_stats(perNode=False)
+        return index_map, stats_map
