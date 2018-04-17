@@ -1,5 +1,5 @@
-import re, copy
-from random import randrange
+import re, copy, json
+from random import randrange, randint
 from threading import Thread
 
 from couchbase_helper.cluster import Cluster
@@ -8,12 +8,15 @@ from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
+from pytests.query_tests_helper import QueryHelperTests
+#from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
 from security.rbac_base import RbacBase
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
 from couchbase_helper.document import View
+from eventing.eventing_base import EventingBaseTest
 from tasks.future import TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
@@ -49,7 +52,7 @@ INDEX_DEFINITION = {
 }
 
 
-class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
+class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest, EventingBaseTest):
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
         self.users_check_restore = \
@@ -3500,7 +3503,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
            ex: cbbackupmgr restore --replace-ttl all --replace-ttl-with 0
         """
         if "5.5" > self.cb_version[:3]:
-            self.fail("This test is only for cb version 5.5 and later. ")
+            self.fail("This restore with ttl test is only for cb version 5.5 and later. ")
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         if self.replace_ttl == "expired":
             if self.bk_with_ttl:
@@ -3538,3 +3541,79 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.backup_restore()
         else:
             self.backup_restore_validate()
+
+    def test_cbbackupmgr_with_eventing(self):
+        """
+            Create backup cluster with saslbucket (default_bucket=False).
+            Create events
+            Backup cluster
+            Create restore cluster
+            Restore data back to restore cluster
+            Verify events restored back
+        """
+        if "5.5" > self.cb_version[:3]:
+            self.fail("This eventing test is only for cb version 5.5 and later. ")
+        from pytests.eventing.eventing_constants import HANDLER_CODE
+        from lib.testconstants import STANDARD_BUCKET_PORT
+
+        self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
+        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
+        self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
+        self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
+        self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
+        self.create_functions_buckets = self.input.param('create_functions_buckets', True)
+        self.docs_per_day = self.input.param("doc-per-day", 1)
+        self.use_memory_manager = self.input.param('use_memory_manager', True)
+        bucket_params = self._create_bucket_params(server=self.master, size=128,
+                                                       replicas=self.num_replicas)
+        self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.src_bucket = RestConnection(self.master).get_buckets()
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+        self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.gens_load = self.generate_docs(self.docs_per_day)
+        self.expiry = 3
+
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+
+
+        self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        function_name = "Function_{0}_{1}".format(randint(1, 1000000000), self._testMethodName)
+        self.function_name = function_name[0:90]
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+        bk_events_created = False
+        rs_events_created = False
+        try:
+            self.deploy_function(body)
+            bk_events_created = True
+            self.backup_create()
+            self.backup_cluster()
+            rest_src = RestConnection(self.backupset.cluster_host)
+            bk_fxn = rest_src.get_all_functions()
+            if bk_fxn != "":
+                self._verify_backup_events_definition(json.loads(bk_fxn))
+            self.backup_restore()
+            self.rest = RestConnection(self.backupset.restore_cluster_host)
+            self.wait_for_bootstrap_to_complete(body['appname'])
+            rs_events_created = True
+            self._verify_restore_events_definition(bk_fxn)
+        except Exception as e:
+            self.fail(e)
+
+        finally:
+            master_nodes = [self.backupset.cluster_host,
+                            self.backupset.restore_cluster_host]
+            for node in master_nodes:
+                self.rest = RestConnection(node)
+                buckets = self.rest.get_buckets()
+                for bucket in buckets:
+                    items = self.rest.get_active_key_count(bucket)
+                self.undeploy_and_delete_function(body)
+            self.rest = RestConnection(self.master)
+
