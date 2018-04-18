@@ -3393,6 +3393,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if error and not filter(lambda x: 'Backup successfully completed' in x,
                                 output):
             self.fail("cbbackupmgr backup failed")
+        elif not filter(lambda x: 'Restore completed successfully' in x,
+                            output):
+            raise Exception("cbbackupmgr restore failed")
 
     def _create_restore(self, server, username="Administrator",
                         password="password"):

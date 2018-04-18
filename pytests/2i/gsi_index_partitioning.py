@@ -379,7 +379,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             index_details = {}
             index_details["index_name"] = indexname
-            index_details["num_partitions"] = 8
+            index_details["num_partitions"] = int(value)
             index_details["defer_build"] = False
 
             self.assertTrue(
@@ -3043,7 +3043,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             remote_client = RemoteMachineShellConnection(node_to_fail)
             if self.node_operation == "kill_indexer":
-                remote_client.kill_indexer()
+                remote_client.terminate_process(process_name="indexer")
+            elif self.node_operation == "kill_kv":
+                remote_client.kill_memcached()
             else:
                 remote_client.reboot_node()
             remote_client.disconnect()
@@ -3066,7 +3068,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                         "retry of the failed rebalance failed, stuck or did not complete")
         rebalance.result()
 
-        self.sleep(10)
+        self.sleep(30)
 
         # Get Stats and index partition map after rebalance
         node_list = copy.deepcopy(self.node_list)
@@ -3139,7 +3141,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             index_data_before[index][
                 "index_metadata"] = self.rest.get_indexer_metadata()
 
-        # rebalance out an indexer node
+        # rebalance in an indexer node
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [node_in], [],
@@ -3149,7 +3151,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             remote_client = RemoteMachineShellConnection(node_to_fail)
             if self.node_operation == "kill_indexer":
-                remote_client.kill_indexer()
+                remote_client.terminate_process(process_name="indexer")
+            elif self.node_operation == "kill_kv":
+                remote_client.kill_memcached()
             else:
                 remote_client.reboot_node()
             remote_client.disconnect()
@@ -3165,8 +3169,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Rerun Rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [node_in], [],
-                                                 services=services_in)
+                                                 [], [])
         self.sleep(30)
         reached_rerun = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached_rerun, "rebalance failed, stuck or did not complete")
@@ -3713,6 +3716,49 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     [node_out]),
                 "Partition distribution post cluster ops has some issues")
 
+    def test_partitioned_index_recoverability(self):
+        node_out = self.servers[self.node_out]
+        create_index_query = "CREATE INDEX idx1 ON default(name,mutated) partition by hash(meta().id) USING GSI"
+        if self.num_index_replicas:
+            create_index_query += " with {{'num_replica':{0}}};".format(
+                self.num_index_replicas)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        # Allow index to be built completely
+        self.sleep(30)
+
+        # Run query
+        scan_query = "select name,mutated from default where name > 'a' and mutated >=0;"
+        try:
+            result_before = self.n1ql_helper.run_cbq_query(query=scan_query, min_output_size=10000000,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Scan failed")
+
+        # Kill indexer and allow it to recover and rebuild index
+        remote = RemoteMachineShellConnection(node_out)
+        remote.terminate_process(process_name="indexer")
+        self.sleep(30, "Sleep after killing indexer")
+
+        # Run same query again and check if results match from before recovery
+        scan_query = "select name,mutated from default where name > 'a' and mutated >=0;"
+        try:
+            result_after = self.n1ql_helper.run_cbq_query(query=scan_query, min_output_size=10000000,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("Scan failed")
+
+        # Validate if the same count of docs are returned after recovery
+        self.assertEqual(result_before["metrics"]["resultCount"],result_after["metrics"]["resultCount"],"No. of rows returned before recovery and after recovery are different")
+
     def test_backup_restore_partitioned_index(self):
         self._load_emp_dataset(end=self.num_items)
 
@@ -3796,6 +3842,259 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.assertTrue(reached,
                             "rebalance failed, stuck or did not complete")
             rebalance.result()
+
+        # Restore backup
+        self._create_restore(kv_node)
+
+        self.sleep(60)
+
+        # Validate all indexes restored correctly
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata After Build:")
+        self.log.info(index_metadata)
+
+        # After restore, all indexes are going to be in unbuilt. So change the expected state of indexes.
+        for index in index_details:
+            index["defer_build"] = True
+
+        for index_detail in index_details:
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_detail, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
+
+    def test_backup_partitioned_index_with_failed_node(self):
+        self._load_emp_dataset(end=self.num_items)
+        node_out = self.servers[self.node_out]
+
+        index_details = []
+        index_detail = {}
+
+        index_detail["index_name"] = "idx1"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx2"
+        index_detail["num_partitions"] = 64
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx2 on default(name,dept) partition by hash(salary) USING GSI with {'num_partition':64}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx3"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx3 on default(name,dept) partition by hash(salary) USING GSI with {'num_replica':1}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx4"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = True
+        index_detail[
+            "definition"] = "CREATE INDEX idx4 on default(name,dept) partition by hash(salary) USING GSI with {'defer_build':true}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        try:
+            for index in index_details:
+                self.n1ql_helper.run_cbq_query(query=index["definition"],
+                                               server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        for index_detail in index_details:
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_detail, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+
+        try:
+            # Stop couchbase on indexer node before taking backup if test config specifies it
+            remote = RemoteMachineShellConnection(node_out)
+            remote.stop_couchbase()
+            self.sleep(30, "Allow node to be marked as a failed node")
+            self._create_backup(kv_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+        finally:
+            remote = RemoteMachineShellConnection(node_out)
+            remote.start_couchbase()
+
+    def test_restore_partitioned_index_with_failed_node(self):
+        self._load_emp_dataset(end=self.num_items)
+        node_out = self.servers[self.node_out]
+
+        index_details = []
+        index_detail = {}
+
+        index_detail["index_name"] = "idx1"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx2"
+        index_detail["num_partitions"] = 64
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx2 on default(name,dept) partition by hash(salary) USING GSI with {'num_partition':64}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx3"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx3 on default(name,dept) partition by hash(salary) USING GSI with {'num_replica':1}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx4"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = True
+        index_detail[
+            "definition"] = "CREATE INDEX idx4 on default(name,dept) partition by hash(salary) USING GSI with {'defer_build':true}"
+        index_details.append(index_detail)
+        index_detail = {}
+
+        try:
+            for index in index_details:
+                self.n1ql_helper.run_cbq_query(query=index["definition"],
+                                               server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        for index_detail in index_details:
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_detail, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+
+        self._create_backup(kv_node)
+
+        # Drop and recreate bucket
+        self.cluster.bucket_delete(kv_node, bucket="default")
+        default_params = self._create_bucket_params(server=self.master,
+                                                    size=self.bucket_size,
+                                                    replicas=self.num_replicas)
+
+        self.cluster.create_default_bucket(default_params)
+
+        try:
+            # Restore backup
+            # Stop couchbase on indexer node before restoring backup if test config specifies it
+            remote = RemoteMachineShellConnection(node_out)
+            remote.stop_couchbase()
+            self.sleep(30, "Allow node to be marked as a failed node")
+            self._create_restore(kv_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+        finally:
+            remote = RemoteMachineShellConnection(node_out)
+            remote.start_couchbase()
+
+    def test_backup_restore_partitioned_index_default_num_partitions(self):
+        self._load_emp_dataset(end=self.num_items)
+
+        index_details = []
+        index_detail = {}
+
+        index_detail["index_name"] = "idx1"
+        index_detail["num_partitions"] = self.num_index_partitions
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
+        index_detail["num_partitions_post_restore"] = 4
+        index_details.append(index_detail)
+        index_detail = {}
+
+        index_detail["index_name"] = "idx2"
+        index_detail["num_partitions"] = 64
+        index_detail["defer_build"] = False
+        index_detail[
+            "definition"] = "CREATE INDEX idx2 on default(name,dept) partition by hash(salary) USING GSI with {'num_partition':64}"
+        index_detail["num_partitions_post_restore"] = 64
+        index_details.append(index_detail)
+        index_detail = {}
+
+        try:
+            for index in index_details:
+                self.n1ql_helper.run_cbq_query(query=index["definition"],
+                                               server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("index creation failed with error : {0}".format(str(ex)))
+
+        self.sleep(10)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+
+        index_metadata = self.rest.get_indexer_metadata()
+        self.log.info("Indexer Metadata Before Build:")
+        self.log.info(index_metadata)
+
+        for index_detail in index_details:
+            self.assertTrue(
+                self.validate_partitioned_indexes(index_detail, index_map,
+                                                  index_metadata),
+                "Partitioned index created not as expected")
+
+        kv_node = self.get_nodes_from_services_map(service_type="kv",
+                                                   get_all_nodes=False)
+
+        self._create_backup(kv_node)
+
+        # Drop and recreate bucket
+        self.cluster.bucket_delete(kv_node, bucket="default")
+        default_params = self._create_bucket_params(server=self.master,
+                                                    size=self.bucket_size,
+                                                    replicas=self.num_replicas)
+
+        self.cluster.create_default_bucket(default_params)
+
+        # Set default number of partitions
+        self.rest.set_index_settings(
+            {"indexer.numPartitions": 4})
+
+        # Change expected num of partitions
+        for index in index_details:
+            index["num_partitions"] = index["num_partitions_post_restore"]
 
         # Restore backup
         self._create_restore(kv_node)
