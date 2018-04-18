@@ -85,7 +85,9 @@ class QueryWhitelistTests(QueryTests):
 
     '''Test running a curl command with an empty whitelist'''
     def test_empty_whitelist(self):
-        self.rest.create_whitelist(self.master, {})
+        response, content = self.rest.create_whitelist(self.master, {})
+        result = json.loads(content)
+        self.assertEqual(result['errors']['all_access'], 'The value must be supplied')
         n1ql_query = 'select * from default limit 5'
 
         # This is the query that the cbq-engine will execute
@@ -107,7 +109,9 @@ class QueryWhitelistTests(QueryTests):
 
     '''Test running a curl command with whitelists that are invalid'''
     def test_invalid_whitelist(self):
-        self.rest.create_whitelist(self.master, "thisisnotvalid")
+        response, content = self.rest.create_whitelist(self.master, "thisisnotvalid")
+        result = json.loads(content)
+        self.assertEqual(result['errors']['_'], 'Unexpected Json')
         n1ql_query = 'select * from default limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -244,7 +248,9 @@ class QueryWhitelistTests(QueryTests):
     def test_invalid_allowed_url(self):
         self.rest.create_whitelist(self.master, {"all_access": False})
         # Whitelist should not accept this setting and thus leave the above settting of all_access = False intact
-        self.rest.create_whitelist(self.master, {"all_access": False, "allowed_urls": "blahblahblah"})
+        response, content = self.rest.create_whitelist(self.master, {"all_access": False, "allowed_urls": "blahblahblah"})
+        result = json.loads(content)
+        self.assertEqual(result['errors']['allowed_urls'], "Invalid array")
         n1ql_query = 'select * from default limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -362,7 +368,6 @@ class QueryWhitelistTests(QueryTests):
                                                            "allowed_urls":
                                                                ["blahblahblah"],
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
-
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
@@ -372,14 +377,22 @@ class QueryWhitelistTests(QueryTests):
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.google_error_msg))
 
-        self.rest.create_whitelist(self.master, {"all_access": False,
+        response, content = self.rest.create_whitelist(self.master, {"all_access": False,
                                                            "allowed_urls": "blahblahblah",
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
+        result = json.loads(content)
+        self.assertEqual(result['errors']['allowed_urls'], "Invalid array")
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.google_error_msg))
+
+    def test_invalid_disallowed_url_validation(self):
+        response, content = self.rest.create_whitelist(self.master, {"all_access": False,
+                                                           "disallowed_urls":"blahblahblahblahblah"})
+        result = json.loads(content)
+        self.assertEqual(result['errors']['disallowed_urls'], "Invalid array")
 
     '''Should not be able to curl localhost even if you are on the localhost unless whitelisted'''
     def test_localhost(self):
