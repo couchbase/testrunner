@@ -630,18 +630,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
 
+        self.ttl_value = ""
         if self.replace_ttl is not None:
             if self.replace_ttl == "all" or self.replace_ttl == "expired":
                 if self.replace_ttl_with is None:
                     self.fail("Need to include param 'replace-ttl-with' value")
-                if self.replace_ttl_with:
-                    ttl_date, _ = shell.execute_command(self.rfc3339_date)
-                    self.seconds_with_ttl, _ = shell.execute_command(self.seconds_with_ttl)
-                    if ttl_date and ttl_date[0]:
-                        args += " --replace-ttl {0} --replace-ttl-with {1}"\
-                                     .format(self.replace_ttl, ttl_date[0])
-                    elif isinstance(self.replace_ttl_with, str):
-                        args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                else:
+                    if self.replace_ttl_with == 0:
+                        self.ttl_value = "0"
+                        args += " --replace-ttl {0} --replace-ttl-with 0"\
+                                                 .format(self.replace_ttl)
+                    else:
+                        ttl_date, _ = shell.execute_command(self.rfc3339_date)
+                        self.seconds_with_ttl, _ = shell.execute_command(self.seconds_with_ttl)
+                        if self.seconds_with_ttl:
+                            self.ttl_value = self.seconds_with_ttl[0]
+                        if ttl_date and ttl_date[0]:
+                            args += " --replace-ttl {0} --replace-ttl-with {1}"\
+                                         .format(self.replace_ttl, ttl_date[0])
+                        elif isinstance(self.replace_ttl_with, str):
+                            args += " --replace-ttl {0} --replace-ttl-with {1}"\
                                      .format(self.replace_ttl, self.replace_ttl_with)
             elif self.replace_ttl == "add-none":
                 args += " --replace-ttl none"
@@ -736,7 +744,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.vbucket_filter and self.vbucket_filter != "empty":
             self._validate_restore_vbucket_filter()
         elif self.replace_ttl == "all" or self.replace_ttl == "expired":
-            self._validate_restore_replace_ttl_with(self.seconds_with_ttl[0])
+            self._validate_restore_replace_ttl_with(self.ttl_value)
         else:
             status, msg = self.validation_helper.validate_restore(self.backupset.end,
                                                   self.vbucket_seqno, current_vseqno,
@@ -1269,14 +1277,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 ex_logs_path = ex_logs_path.replace("/cygdrive/c", "c:")
             args += " -o {0}".format(ex_logs_path)
         log_archive_env = ""
+        args_env = ""
         if self.backupset.log_archive_env:
             self.log.info("set log arvhive env to /tmp/envlogs")
             log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH=/tmp/envlogs; "
             if self.backupset.ex_logs_path:
                 self.log.info("overwrite env log path with flag -o")
-        if "-o" in args and self.backupset.no_log_output_flag:
-            args = args.replace("-o", " ")
-        command = "{0} {1}/cbbackupmgr {2}"\
+                args_env += " -o {0}".format(ex_logs_path)
+            command = "{0} {1}/cbbackupmgr collect-logs "\
+                                            .format(log_archive_env,
+                                                    self.cli_command_location,
+                                                    args_env)
+        else:
+            if "-o" in args and self.backupset.no_log_output_flag:
+                args = args.replace("-o", " ")
+            command = "{0} {1}/cbbackupmgr {2}"\
                                             .format(log_archive_env,
                                                     self.cli_command_location,
                                                     args)
@@ -1286,10 +1301,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self._verify_cbbackupmgr_logs()
         elif self.backupset.no_log_output_flag and self._check_output("error", output):
             self.log.info("This is negative test")
-        elif "non-exist_dir" in self.backupset.ex_logs_path:
-            self.log.info("This is negative test on non exist output logs dir")
+        elif self.backupset.ex_logs_path:
+            if "non-exist_dir" in self.backupset.ex_logs_path:
+                self.log.info("This is negative test on non exist output logs dir")
+            else:
+                self.fail("Failed to collect logs")
         else:
-            self.fail("Failed to collect logs")
+            self.fail("Failed to collect logs. Output: {0}".format(output))
 
     def _verify_cbbackupmgr_logs(self):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)

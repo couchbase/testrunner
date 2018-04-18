@@ -1265,15 +1265,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                           % (self.cluster_new_user,
                              self.cluster_new_role))
 
-            users_can_restore_all = ["admin", "cluster_admin",
-                                     "bucket_full_access[*]", "bucket_admin[*]",
+            users_can_restore_all = ["admin", "bucket_full_access[*]",
                                      "data_backup[*]"]
             users_can_not_restore_all = ["views_admin[*]", "ro_admin",
                                          "replication_admin", "data_monitoring[*]",
                                          "data_writer[*]", "data_reader[*]",
                                          "data_dcp_reader[*]", "fts_searcher[*]",
                                          "fts_admin[*]", "query_manage_index[*]",
-                                         "replication_target[*]"]
+                                         "replication_target[*]", "cluster_admin",
+                                         "bucket_admin[*]"]
             if self.cluster_new_role in users_can_not_restore_all:
                 self.should_fail = True
             output, error = self.backup_restore()
