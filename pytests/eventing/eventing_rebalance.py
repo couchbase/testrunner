@@ -527,15 +527,16 @@ class EventingRebalance(EventingBaseTest):
                 log.info("Rebalance completed when tried to stop rebalance on {0}%".format(str(30)))
             if rebalance.state != "FINISHED":
                 rebalance.result()
-        task.result()
-        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-        # delete json documents
-        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
-        # Wait for eventing to catch up with all the delete mutations and verify results
-        # This is required to ensure eventing works after rebalance goes through successfully
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if not enable_failover:
+            task.result()
+            # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            # delete json documents
+            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            # Wait for eventing to catch up with all the delete mutations and verify results
+            # This is required to ensure eventing works after rebalance goes through successfully
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_stop_start_kv_rebalance_which_has_eventing_nodes(self):
@@ -547,12 +548,12 @@ class EventingRebalance(EventingBaseTest):
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         # rebalance out a eventing node when eventing is processing mutations
-        nodes_out_ev = self.servers[1]
+        nodes_out_kv = self.servers[1]
         if enable_failover:
-            self.cluster.failover([self.master], failover_nodes=[nodes_out_ev])
+            self.cluster.failover([self.master], failover_nodes=[nodes_out_kv])
         for i in xrange(5):
             # start eventing node rebalance
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_kv])
             # This sleep is intentional, if this is not present, rebalance_reached reports 100% (rebalance completed)
             # before rebalance could even start
             self.sleep(30)
@@ -568,15 +569,16 @@ class EventingRebalance(EventingBaseTest):
                 log.info("Rebalance was completed when tried to stop rebalance on {0}%".format(str(30)))
             if rebalance.state != "FINISHED":
                 rebalance.result()
-        task.result()
-        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-        # delete json documents
-        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
-        # Wait for eventing to catch up with all the delete mutations and verify results
-        # This is required to ensure eventing works after rebalance goes through successfully
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if not enable_failover:
+            task.result()
+            # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            # delete json documents
+            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            # Wait for eventing to catch up with all the delete mutations and verify results
+            # This is required to ensure eventing works after rebalance goes through successfully
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_eventing_rebalance_with_multiple_eventing_nodes(self):
