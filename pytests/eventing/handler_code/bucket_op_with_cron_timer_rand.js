@@ -1,9 +1,9 @@
 function OnUpdate(doc,meta) {
     var expiry = Math.round((new Date()).getTime() / 1000) + 300;
     var time_rand = random_gen();
-    cronTimer(NDtimerCallback, time_rand+'', expiry);
+    cronTimer(NDtimerCallback, expiry, time_rand+'');
 }
-function NDtimerCallback(docid, expiry) {
+function NDtimerCallback(docid) {
     try {
         dst_bucket[docid] = 'from NDtimerCallback';
     } catch(e) {

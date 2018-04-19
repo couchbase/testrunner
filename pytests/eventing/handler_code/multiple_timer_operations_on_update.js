@@ -1,13 +1,13 @@
 function OnUpdate(doc,meta) {
     var expiry = Math.round((new Date()).getTime() / 1000) + 5;
-    docTimer(timerCallback, meta.id, expiry);
-    cronTimer(NDtimerCallback, meta.id, expiry);
+    docTimer(timerCallback,  expiry, meta.id);
+    cronTimer(NDtimerCallback,  expiry, meta.id);
 }
 
-function timerCallback(docid, expiry) {
+function timerCallback(docid) {
     dst_bucket[docid] = 'from docTimerCallback';
 }
 
-function NDtimerCallback(docid, expiry) {
+function NDtimerCallback(docid) {
     dst_bucket1[docid] = 'from cronTimerCallback';
 }

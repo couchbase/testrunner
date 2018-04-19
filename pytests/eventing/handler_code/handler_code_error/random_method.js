@@ -1,3 +1,3 @@
-function test(docid, expiry) {
+function test(docid) {
 log("test");
 }

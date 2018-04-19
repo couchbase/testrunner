@@ -1,9 +1,9 @@
 function OnUpdate(doc,meta) {
     var expiry = Math.round((new Date()).getTime() / 1000) + 180;
     var time_rand = random_gen();
-    docTimer(DocTimerCallback, time_rand+'', expiry);
+    docTimer(DocTimerCallback, expiry, time_rand+'');
 }
-function DocTimerCallback(docid, expiry) {
+function DocTimerCallback(docid) {
     try {
         dst_bucket[docid] = 'from DocTimerCallback';
     } catch(e) {
