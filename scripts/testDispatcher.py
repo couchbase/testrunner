@@ -60,6 +60,8 @@ def main():
     parser.add_option('-u','--url', dest='url', default=None)
     parser.add_option('-j','--jenkins', dest='jenkins', default=None)
     parser.add_option('-b','--branch', dest='branch', default='master')
+    parser.add_option('-f', '--framework', dest='framework', default='testrunner')
+
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
     parser.add_option('-d','--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
@@ -230,6 +232,8 @@ def main():
         launchStringBase = launchStringBase + '-docker'
     if options.test:
         launchStringBase = launchStringBase + '-test'
+    if options.framework.lower() == "jython":
+        launchStringBase = launchStringBase + '-jython'
     elif options.jenkins is not None:
         launchStringBase = launchStringBase + '-' + options.jenkins
 
