@@ -1279,12 +1279,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         log_archive_env = ""
         args_env = ""
         if self.backupset.log_archive_env:
-            self.log.info("set log arvhive env to /tmp/envlogs")
-            log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH=/tmp/envlogs; "
+            self.log.info("set log arvhive env to {0}".format(self.backupset.directory))
+            log_archive_env = "unset CB_ARCHIVE_PATH; export CB_ARCHIVE_PATH={0}; "\
+                                                      .format(self.backupset.directory)
             if self.backupset.ex_logs_path:
                 self.log.info("overwrite env log path with flag -o")
-                args_env += " -o {0}".format(ex_logs_path)
-            command = "{0} {1}/cbbackupmgr collect-logs "\
+                args_env = " -o {0}".format(ex_logs_path)
+            command = "{0} {1}/cbbackupmgr collect-logs {2}"\
                                             .format(log_archive_env,
                                                     self.cli_command_location,
                                                     args_env)
@@ -1318,7 +1319,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         elif self.backupset.ex_logs_path:
             logs_path = self.backupset.ex_logs_path
         if self.backupset.log_archive_env:
-            logs_path = self.backupset.log_archive_env
+            logs_path = self.backupset.directory
             if self.backupset.ex_logs_path:
                 logs_path = self.backupset.ex_logs_path
         output, _ = shell.execute_command("ls {0}".format(logs_path))
@@ -1336,7 +1337,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if self.backupset.ex_logs_path:
                 self.fail("Failed to ")
         output, _ = shell.execute_command("ls {0}".format(logs_path))
-        dir_list =  ["archive_list.txt", "backup", "logs"]
+        dir_list =  ["backup", "logs"]
         for ele in dir_list:
             if ele not in output:
                 self.fail("Missing dir/file {0} in cbbackupmgr logs".format(ele))
