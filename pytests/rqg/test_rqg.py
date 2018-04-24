@@ -32,6 +32,7 @@ class RQGTests(BaseTestCase):
         self.check_covering_index = self.input.param("check_covering_index", True)
         self.skip_setup_cleanup = True
         self.ansi_joins = self.input.param("ansi_joins", False)
+        self.prepared = self.input.param("prepared", False)
         self.hash_joins = self.input.param("hash_joins", False)
         self.create_secondary_meta_indexes = self.input.param("create_secondary_meta_indexes", False)
         self.aggregate_pushdown = self.input.param("aggregate_pushdown", False)
@@ -990,6 +991,8 @@ class RQGTests(BaseTestCase):
     def _run_queries_and_verify(self, aggregate, subquery, n1ql_query=None, sql_query=None, expected_result=None):
         if not self.create_primary_index:
             n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
+        if self.prepared:
+            n1ql_query = "PREPARE " + n1ql_query
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         # Run n1ql query
@@ -1003,6 +1006,11 @@ class RQGTests(BaseTestCase):
             else:
                 query_params={}
             actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+            if self.prepared:
+                name = actual_result["results"][0]['name']
+                prepared_query = "EXECUTE '%s'" % name
+                self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
+                actual_result = self.n1ql_helper.run_cbq_query(query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
 
             # Run SQL Query
