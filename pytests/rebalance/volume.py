@@ -199,7 +199,7 @@ class VolumeTests(BaseTestCase):
             load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b, self.num_items*7)))
         for t in load_thread:
             t.start()
-        new_server_list=list(set(servers_init + servers_in) - set(servers_out))
+        new_server_list=list(set(new_server_list + servers_in))
         self.log.info("==========Rebalance out 4 nodes =========")
         #Rebalance out 4 nodes
         servers_out = list(set(new_server_list) - set([self.master]))[0:4]
@@ -216,13 +216,33 @@ class VolumeTests(BaseTestCase):
             load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b, self.num_items*8)))
         for t in load_thread:
             t.start()
-        new_server_list = list(set(servers_init + servers_in) - set(servers_out))
+        new_server_list = list(set(new_server_list) - set(servers_out))
         self.log.info("======Rebalance in 4 nodes (8 nodes) wait for rebalance to finish and move between server groups=========")
         #Rebalance in 4 nodes (8 nodes) wait for rebalance to finish and move between server groups
         servers_in = list(set(self.servers) - set(new_server_list))[0:4]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, [])
         rebalance.result()
+        for t in load_thread:
+            t.join()
+        for b in bucket:
+         self.check_dataloss(self.master, b,self.num_items*9)
+        self.sleep(30)
+        load_thread = []
+        for b in bucket:
+            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b, self.num_items * 9)))
+        for t in load_thread:
+            t.start()
         self.shuffle_nodes_between_zones_and_rebalance()
+        for t in load_thread:
+            t.join()
+        for b in bucket:
+         self.check_dataloss(self.master, b,self.num_items*10)
+        self.sleep(30)
+        load_thread = []
+        for b in bucket:
+            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b, self.num_items * 10)))
+        for t in load_thread:
+            t.start()
         self.log.info("======Graceful failover 1 KV node and add back(Delta and Full)=========")
         #Graceful failover 1 KV node and add back(Delta and Full)
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
@@ -234,6 +254,11 @@ class VolumeTests(BaseTestCase):
         rest.add_back_node('ns_1@' + kv_server.ip)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         rebalance.result()
+        for t in load_thread:
+            t.join()
+        for b in bucket:
+         self.check_dataloss(self.master, b,self.num_items*11)
+        self.sleep(30)
 
     def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
         """
