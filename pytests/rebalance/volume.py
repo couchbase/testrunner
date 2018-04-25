@@ -56,11 +56,11 @@ class VolumeTests(BaseTestCase):
                         try:
                             bkt.get(key)
                         except NotFoundError:
-                            self.log.info("$$$$ key not found $$$$$$$")
                             vBucketId = VBucketAware._get_vBucket_id(key)
                             errors.append("Missing key: {0}, VBucketId: {1}".
                                           format(key, vBucketId))
             batch_start += batch_size
+        self.log.info(errors)
         return errors
 
 
