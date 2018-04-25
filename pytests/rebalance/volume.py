@@ -10,6 +10,7 @@ class VolumeTests(BaseTestCase):
     def setUp(self):
         super(VolumeTests, self).setUp()
         self.zone = self.input.param("zone", 1)
+        self.recoveryType = self._input.param("recoveryType", "full")
 
     def tearDown(self):
         super(VolumeTests, self).tearDown()
@@ -60,7 +61,7 @@ class VolumeTests(BaseTestCase):
                             errors.append("Missing key: {0}, VBucketId: {1}".
                                           format(key, vBucketId))
             batch_start += batch_size
-        self.log.info("Total missing keys:",len(errors))
+        self.log.info("Total missing keys:{}".format(len(errors)))
         self.log.info(errors)
         return errors
 
@@ -90,7 +91,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.start()
         # #Rebalance in 1 node
-        print("==========rebalance in 1 node=========")
+        self.log.info("==========rebalance in 1 node=========")
         servers_in=self.servers[self.nodes_init:self.nodes_init + 1]
         rebalance = self.cluster.async_rebalance(servers_init,
                                                  servers_in, [])
@@ -108,7 +109,7 @@ class VolumeTests(BaseTestCase):
             t.start()
         #rebalance out 1 node
         new_server_list = self.servers[0:self.nodes_init]+ servers_in
-        print("==========rebalance out 1 node=========")
+        self.log.info("==========rebalance out 1 node=========")
         servers_out=[self.servers[self.nodes_init]]
         rebalance = self.cluster.async_rebalance(servers_init,[],
                                                  servers_out)
@@ -126,7 +127,7 @@ class VolumeTests(BaseTestCase):
             t.start()
         new_server_list=list(set(new_server_list)- set(servers_out))
         #swap rebalance 1 node
-        print("==========swap rebalance 1 node=========")
+        self.log.info("==========swap rebalance 1 node=========")
         servers_in = self.servers[self.nodes_init : self.nodes_init + 1]
         servers_init = self.servers[:self.nodes_init]
         servers_out = self.servers[(self.nodes_init - 1) : self.nodes_init]
@@ -145,7 +146,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.start()
         new_server_list=list(set(new_server_list + servers_in) - set(servers_out))
-        print("==========Rebalance out of 2 nodes and Rebalance In 1 node=========")
+        self.log.info("==========Rebalance out of 2 nodes and Rebalance In 1 node=========")
         # Rebalance out of 2 nodes and Rebalance In 1 node
         servers_in = [list(set(self.servers) - set(new_server_list))[0]]
         servers_out = list(set(new_server_list) - set([self.master]))[-2:]
@@ -163,7 +164,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.start()
         new_server_list=list(set(new_server_list + servers_in) - set(servers_out))
-        print("new server list:", new_server_list)
+        self.log.info("new server list:", new_server_list)
         self.log.info("==========Rebalance out of 1 nodes and Rebalance In 2 nodes=========")
         #Rebalance out of 1 nodes and Rebalance In 2 nodes
         servers_in = list(set(self.servers) - set(new_server_list))[0:2]
@@ -216,18 +217,20 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.start()
         new_server_list = list(set(servers_init + servers_in) - set(servers_out))
+        self.log.info("======Rebalance in 4 nodes (8 nodes) wait for rebalance to finish and move between server groups=========")
         #Rebalance in 4 nodes (8 nodes) wait for rebalance to finish and move between server groups
         servers_in = list(set(self.servers) - set(new_server_list))[0:4]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, [])
         rebalance.result()
         self.shuffle_nodes_between_zones_and_rebalance()
+        self.log.info("======Graceful failover 1 KV node and add back(Delta and Full)=========")
         #Graceful failover 1 KV node and add back(Delta and Full)
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[kv_server], graceful=True)
         fail_over_task.result()
         self.sleep(120)
         # do a recovery and rebalance
-        rest.set_recovery_type('ns_1@' + kv_server.ip, recoveryType="full")
+        rest.set_recovery_type('ns_1@' + kv_server.ip, recoveryType=self.recoveryType)
         rest.add_back_node('ns_1@' + kv_server.ip)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         rebalance.result()
