@@ -1,5 +1,6 @@
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from tuq import QueryTests
+from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import CBQError
 import logger
 
@@ -165,7 +166,7 @@ class QueryAutoPrepareTests(QueryTests):
                                server=self.servers[0])
             self.sleep(2)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-            self.assertEqual(prepared_results['metrics']['resultCount'], 2)
+            self.assertEqual(prepared_results['metrics']['resultCount'], 3)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
@@ -184,3 +185,86 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertEqual(query_results2['metrics']['resultCount'], 0)
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx")
+
+    def test_add_node_no_rebalance(self):
+        services_in = ["index", "n1ql", "kv"]
+        # rebalance in a node
+        rest = RestConnection(self.master)
+        rest.add_node(self.master.rest_username, self.master.rest_password, self.servers[self.nodes_init].ip,
+                      self.servers[self.nodes_init].port, services=services_in)
+        self.sleep(30)
+        self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
+        self.sleep(5)
+        nodes = rest.node_statuses()
+        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+        self.sleep(30)
+        for i in range(self.nodes_init + 1):
+            try:
+                self.run_cbq_query(query="execute p1", server=self.servers[i])
+            except CBQError,ex:
+                self.assertTrue("No such prepared statement: p1" in str(ex), "There error should be no such prepared "
+                                                                             "statement, it really is %s" % ex)
+                self.log.info(ex)
+                self.log.info("node: %s:%s does not have the statement" % (self.servers[i].ip, self.servers[i].port))
+
+    def test_server_drop(self):
+        remote = RemoteMachineShellConnection(self.servers[1])
+        remote.stop_server()
+        self.sleep(30)
+
+        try:
+            self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[1])
+            self.sleep(5)
+        finally:
+            remote.start_server()
+            self.sleep(30)
+
+        for i in range(self.nodes_init + 1):
+            try:
+                self.run_cbq_query(query="execute p1", server=self.servers[i])
+            except CBQError,ex:
+                self.assertTrue("No such prepared statement: p1" in str(ex), "There error should be no such prepared "
+                                                                             "statement, it really is %s" % ex)
+                self.log.info(ex)
+                self.log.info("node: %s:%s does not have the statement" % (self.servers[i].ip, self.servers[i].port))
+
+    def test_rebalance_in_query_node(self):
+        self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
+        self.sleep(5)
+        for i in range(self.nodes_init):
+            self.run_cbq_query(query="execute p1", server=self.servers[i])
+        services_in = ["n1ql", "index", "data"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init + 1]],[],
+                                                 services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        for i in range(self.nodes_init + 2):
+            self.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[0].ip, self.servers[0].port), server=self.servers[i])
+
+    def test_query_swap_rebalance(self):
+        self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
+        self.sleep(5)
+        for i in range(self.nodes_init):
+            if not self.servers[i] == self.servers[1]:
+                self.run_cbq_query(query="execute p1", server=self.servers[i])
+        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        to_add_nodes = [self.servers[self.nodes_init + 2]]
+        to_remove_nodes = [nodes_out_list]
+        services_in = ["index", "n1ql", "data"]
+        self.log.info(self.servers[:self.nodes_init])
+        # do a swap rebalance
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 2], [], to_remove_nodes)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        for i in range(self.nodes_init):
+            if not self.servers[i] == self.servers[1]:
+                self.n1ql_helper.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[2].ip, self.servers[2].port),
+                                               server=self.servers[i])
