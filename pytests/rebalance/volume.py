@@ -60,6 +60,7 @@ class VolumeTests(BaseTestCase):
                             errors.append("Missing key: {0}, VBucketId: {1}".
                                           format(key, vBucketId))
             batch_start += batch_size
+        self.log.info("Total missing keys:",len(errors))
         self.log.info(errors)
         return errors
 
