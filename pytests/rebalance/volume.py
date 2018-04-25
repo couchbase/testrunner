@@ -10,7 +10,7 @@ class VolumeTests(BaseTestCase):
     def setUp(self):
         super(VolumeTests, self).setUp()
         self.zone = self.input.param("zone", 1)
-        self.recoveryType = self._input.param("recoveryType", "full")
+        self.recoveryType = self.input.param("recoveryType", "full")
 
     def tearDown(self):
         super(VolumeTests, self).tearDown()
