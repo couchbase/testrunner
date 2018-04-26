@@ -39,7 +39,7 @@ class VolumeTests(BaseTestCase):
         from couchbase.exceptions import NotFoundError,CouchbaseError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
         self.log.info("########## validating data for bucket : {} ###########".format(bucket))
-        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
+        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name),timeout=5000)
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
@@ -63,7 +63,7 @@ class VolumeTests(BaseTestCase):
                         try:
                             bkt.get(key)
                         except NotFoundError:
-                            vBucketId = VBucketAware._get_vBucket_id(key,timeout=500)
+                            vBucketId = VBucketAware._get_vBucket_id(key)
                             errors.append("Missing key: {0}, VBucketId: {1}".
                                           format(key, vBucketId))
             batch_start += batch_size
@@ -274,6 +274,22 @@ class VolumeTests(BaseTestCase):
             t.join()
         for b in bucket:
          self.check_dataloss(self.master, b,self.num_items*11)
+        self.sleep(30)
+
+    def test_voulme_update(self):
+        self.src_bucket = RestConnection(self.master).get_buckets()
+        rest = RestConnection(self.master)
+        bucket = rest.get_buckets()
+        self.create_ddocs_and_views()
+        load_thread = []
+        for bk in bucket:
+            load_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(self.master,bk,self.num_items)))
+        for t in load_thread:
+            t.start()
+        servers_init = self.servers[:self.nodes_init]
+        new_server_list = self.servers[0:self.nodes_init]
+        for t in load_thread:
+            t.join()
         self.sleep(30)
 
     def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
