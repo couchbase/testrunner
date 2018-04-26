@@ -26,7 +26,7 @@ class QueryHelperTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
-        self.item_flag = self.input.param("item_flag", 4042322160)
+        self.item_flag = self.input.param("item_flag", 0)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.dataset = self.input.param("dataset", "default")
         self.groups = self.input.param("groups", "all").split(":")
