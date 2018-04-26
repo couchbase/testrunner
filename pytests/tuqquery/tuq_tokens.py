@@ -200,8 +200,8 @@ class TokenTests(QueryTests):
 
     #This test is specific to beer-sample bucket
     def test_tokens_simple_syntax(self):
-        #self.rest.load_sample("beer-sample")
-        #self.sleep(20)
+        self.rest.load_sample("beer-sample")
+        self.sleep(20)
         created_indexes = []
         try:
             idx1 = "idx_suffixes"

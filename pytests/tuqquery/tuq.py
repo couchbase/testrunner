@@ -788,7 +788,7 @@ class QueryTests(BaseTestCase):
 
                     output = self.shell.execute_commands_inside(cmd, query, "", "", "", "", "")
                     if not (output[0] == '{'):
-                        output1 = '{' + str(output)
+                        output1 = '{%s' % output
                     else:
                         output1 = output
                     result = json.loads(output1)
