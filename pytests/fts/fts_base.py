@@ -2268,23 +2268,27 @@ class CouchbaseCluster:
         self.__log.info("Now loading extra keys to reach dgm limit")
         seed = "%s-" % self.__name
         end = 0
-        for bucket in self.__buckets:
-            current_active_resident = StatsCommon.get_stats(
-                [self.__master_node],
-                bucket,
-                '',
-                'vb_active_perc_mem_resident')[self.__master_node]
-            start = items
-            while int(current_active_resident) > active_resident_ratio:
+        current_active_resident = StatsCommon.get_stats(
+            [self.__master_node],
+            self.__buckets[0],
+            '',
+            'vb_active_perc_mem_resident')[self.__master_node]
+        start = items
+        while int(current_active_resident) > active_resident_ratio:
+            if int(current_active_resident) - active_resident_ratio > 5:
+                end = start + batch_size * 100
+            else:
                 end = start + batch_size * 10
-                self.__log.info("loading %s keys ..." % (end - start))
+            self.__log.info("loading %s keys ..." % (end - start))
 
-                kv_gen = JsonDocGenerator(seed,
-                                          encoding="utf-8",
-                                          start=start,
-                                          end=end)
+            kv_gen = JsonDocGenerator(seed,
+                                      encoding="utf-8",
+                                      start=start,
+                                      end=end)
 
-                tasks = []
+            tasks = []
+            for bucket in self.__buckets:
+
                 tasks.append(self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
@@ -2297,23 +2301,22 @@ class CouchbaseCluster:
 
                 for task in tasks:
                     task.result()
-                start = end
-                current_active_resident = StatsCommon.get_stats(
-                    [self.__master_node],
-                    bucket,
-                    '',
-                    'vb_active_perc_mem_resident')[self.__master_node]
-                self.__log.info(
-                    "Current resident ratio: %s, desired: %s bucket %s" % (
-                        current_active_resident,
-                        active_resident_ratio,
-                        bucket.name))
-            self.__log.info("Loaded a total of %s keys into bucket %s"
-                            % (end, bucket.name))
-        self._kv_gen[OPS.CREATE] = JsonDocGenerator(seed,
-                                                    encoding="utf-8",
-                                                    start=0,
-                                                    end=end)
+            start = end
+            current_active_resident = StatsCommon.get_stats(
+                [self.__master_node],
+                bucket,
+                '',
+                'vb_active_perc_mem_resident')[self.__master_node]
+            self.__log.info(
+                "Current resident ratio: %s, desired: %s bucket %s" % (
+                    current_active_resident,
+                    active_resident_ratio,
+                    bucket.name))
+            self._kv_gen[OPS.CREATE].gen_docs.update(kv_gen.gen_docs)
+            self._kv_gen[OPS.CREATE].end = kv_gen.end
+        self.__log.info("Loaded a total of %s keys into bucket %s"
+                        % (end, bucket.name))
+
         return self._kv_gen[OPS.CREATE]
 
     def update_bucket(self, bucket, fields_to_update=None, exp=0,
