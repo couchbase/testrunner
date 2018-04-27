@@ -17,6 +17,14 @@ class VolumeTests(BaseTestCase):
         self.ddocs_num = self.input.param("ddocs-num", 0)
         self.view_num = self.input.param("view-per-ddoc", 2)
         self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
+        self.rate_limit = self.input.param("rate_limit", 100000)
+        self.batch_size = self.input.param("batch_size", 1000)
+        self.doc_size = self.input.param("doc_size", 100)
+        self.loader = self.input.param("loader", "pillowfight")
+        self.instances = self.input.param("instances", 1)
+        self.node_out = self.input.param("node_out", 0)
+        self.threads = self.input.param("threads", 5)
+        self.use_replica_to = self.input.param("use_replica_to",False)
 
     def tearDown(self):
         super(VolumeTests, self).tearDown()
@@ -39,7 +47,12 @@ class VolumeTests(BaseTestCase):
         from couchbase.exceptions import NotFoundError,CouchbaseError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
         self.log.info("########## validating data for bucket : {} ###########".format(bucket))
-        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name),timeout=5000)
+        cb_version= cb_version = RestConnection(server).get_nodes_version()[:3]
+        if cb_version < "5":
+            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name),timeout=5000)
+        else:
+            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name),username=server.rest_username,
+                         password=server.rest_password,timeout=5000)
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
@@ -92,7 +105,10 @@ class VolumeTests(BaseTestCase):
         #load initial documents
         self.create_ddocs_and_views()
         load_thread=[]
+        import Queue
+        queue = Queue.Queue()
         for b in bucket:
+            load_thread.append(Thread(target=lambda  q,args1,args2,args3: q.put(self.load(args1, args2, args3)), args=(queue, self.master, self.num_items, b)))
             load_thread.append(Thread(target=self.load, args=(self.master, self.num_items,b)))
         for t in load_thread:
             t.start()
@@ -291,6 +307,13 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         self.sleep(30)
+        for bk in bucket:
+            self.update_buckets_with_high_ops(self.master,bk,self.num_items, self.num_items*1.5 ,self.batch_size,
+                                   self.threads, 0, self.instances)
+        for bk in bucket:
+            errors=self.check_dataloss_for_high_ops_loader(self.master,bk,self.num_items,updated=True,ops=self.num_items*1.5)
+            print(errors)
+
 
     def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
         """
@@ -338,6 +361,38 @@ class VolumeTests(BaseTestCase):
         if self.zone > 1:
             self._verify_replica_distribution_in_zones(nodes_in_zone)
 
+    def update_buckets_with_high_ops(self, server, bucket, items, ops,
+                                     batch=20000, threads=5, start_document=0,
+                                     instances=1):
+        import subprocess
+        cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {" \
+                     "9} --ops {10} --updates"
+        cb_version = RestConnection(server).get_nodes_version()[:3]
+        if self.num_replicas > 0:
+            cmd_format = "{} --replicate_to 1".format(cmd_format)
+        cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
+                                server.rest_password,
+                                items, batch, threads, start_document,
+                                cb_version, instances, int(ops))
+        self.log.info("Running {}".format(cmd))
+        result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        output = result.stdout.read()
+        error = result.stderr.read()
+        if error:
+            self.log.error(error)
+            self.fail("Failed to run the loadgen.")
+        if output:
+            loaded = output.split('\n')[:-1]
+            total_loaded = 0
+            for load in loaded:
+                total_loaded += int(load.split(':')[1].strip())
+            self.assertEqual(total_loaded, ops,
+                             "Failed to update {} items. Loaded only {} items".format(
+                                 ops,
+                                 total_loaded))
+
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000, threads=5, start_document=0, instances=1):
         import subprocess
         cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
@@ -370,7 +425,7 @@ class VolumeTests(BaseTestCase):
             loaded = output.split('\n')[:-1]
             total_loaded = 0
             for load in loaded:
-                total_loaded += int(load)
+                total_loaded += int(load.split(":")[1].strip())
             self.assertEqual(total_loaded, items,
                              "Failed to load {} items. Loaded only {} items".format(items, total_loaded))
 
@@ -395,61 +450,54 @@ class VolumeTests(BaseTestCase):
         elif self.loader == "high_ops":
             return self.check_dataloss_for_high_ops_loader(server, bucket, num_items)
 
-    def check_dataloss_for_high_ops_loader(self, server, bucket, num_items):
-        from couchbase.cluster import Cluster, PasswordAuthenticator
-        from couchbase.exceptions import NotFoundError, CouchbaseError
-        from couchbase.bucket import Bucket
+    def check_dataloss_for_high_ops_loader(self, server, bucket, items,
+                                           batch=20000, threads=5,
+                                           start_document=0,
+                                           updated=False, ops=0):
+        import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-        if RestConnection(server).get_nodes_version()[:5] < '5':
-            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
-        else:
-            cluster = Cluster("couchbase://{}".format(server.ip))
-            auth = PasswordAuthenticator(server.rest_username, server.rest_password)
-            cluster.authenticate(auth)
-            bkt = cluster.open_bucket(bucket.name)
+
+        cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} " \
+                     "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
+        cb_version = RestConnection(server).get_nodes_version()[:3]
+        if updated:
+            cmd_format = "{} --updated --ops {}".format(cmd_format, int(ops))
+        cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
+                                server.rest_password,
+                                int(items), batch, threads, start_document, cb_version)
+        self.log.info("Running {}".format(cmd))
+        result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        output = result.stdout.read()
+        error = result.stderr.read()
+        errors = []
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
-        batch_start = 0
-        batch_end = 0
-        batch_size = self.batch_size
-        errors = []
-        while num_items > batch_end:
-            if batch_start + batch_size > num_items:
-                batch_end = num_items
-            else:
-                batch_end = batch_start + batch_size
-            keys = []
-            for i in xrange(batch_start, batch_end, 1):
-                key = "Key_{}".format(i)
-                keys.append(key)
-            try:
-                result = bkt.get_multi(keys)
-                self.log.info("Able to fetch keys starting from {0} to {1}".format(keys[0], keys[len(keys) - 1]))
-                for i in range(batch_start, batch_end):
-                    key = "Key_{}".format(i)
-                    value = {'val': i}
-                    if key in result:
-                        val = result[key].value
-                        for k in value.keys():
-                            if k in val and val[k] == value[k]:
-                                continue
-                            else:
-                                vBucketId = VBucketAware._get_vBucket_id(key)
-                                errors.append(("Wrong value for key: {0}, VBucketId: {1}".format(key, vBucketId)))
-                    else:
+        if error:
+            self.log.error(error)
+            self.fail("Failed to run the loadgen validator.")
+        if output:
+            loaded = output.split('\n')[:-1]
+            for load in loaded:
+                if "Missing keys:" in load:
+                    keys = load.split(":")[1].strip().replace('[', '').replace(']', '')
+                    keys = keys.split(',')
+                    for key in keys:
+                        key = key.strip()
+                        key = key.replace('\'', '').replace('\\', '')
                         vBucketId = VBucketAware._get_vBucket_id(key)
-                        errors.append(("Missing key: {0}, VBucketId: {1}".format(key, vBucketId)))
-                self.log.info("Validated key-values starting from {0} to {1}".format(keys[0], keys[len(keys) - 1]))
-            except CouchbaseError as e:
-                self.log.error(e)
-                ok, fail = e.split_results()
-                if fail:
-                    for key in fail:
-                        try:
-                            bkt.get(key)
-                        except NotFoundError:
-                            vBucketId = VBucketAware._get_vBucket_id(key)
-                            errors.append("Missing key: {0}, VBucketId: {1}".format(key, vBucketId))
-            batch_start += batch_size
+                        errors.append(
+                            ("Missing key: {0}, VBucketId: {1}".format(key, vBucketId)))
+                if "Mismatch keys: " in load:
+                    keys = load.split(":")[1].strip().replace('[', '').replace(']', '')
+                    keys = keys.split(',')
+                    for key in keys:
+                        key = key.strip()
+                        key = key.replace('\'', '').replace('\\', '')
+                        vBucketId = VBucketAware._get_vBucket_id(key)
+                        errors.append((
+                                      "Wrong value for key: {0}, VBucketId: {1}".format(
+                                          key, vBucketId)))
         return errors
