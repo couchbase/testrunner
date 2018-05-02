@@ -3,18 +3,23 @@ import json
 import os
 from threading import Thread
 import time
-import string
+import string, re
 import random
 
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
+from upgrade.newupgradebasetest import NewUpgradeBaseTest
+#from security.rbacmain import rbacmain
+#from security.rbac_base import RbacBase
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_cli import CouchbaseCLI
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_SPOCK, LINUX_COUCHBASE_BIN_PATH,\
-                          WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK
+                          WIN_CO UCHBASE_BIN_PATH, COUCHBASE_FROM_SHERLOCK
+
+from couchbase_helper.documentgenerator import BlobGenerator
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
