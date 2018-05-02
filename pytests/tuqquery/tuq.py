@@ -515,10 +515,6 @@ class QueryTests(BaseTestCase):
             remote.execute_command("reboot")
             remote.disconnect()
 
-    '''Helper for test_query_recovery_from_auto_failover'''
-    def run_query(self, server, timeout):
-
-
 ##############################################################################################
 #
 #   ALL
