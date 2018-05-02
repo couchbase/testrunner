@@ -18,7 +18,6 @@ from remote.remote_util import RemoteMachineShellConnection
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_SPOCK, \
                           COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_4DOT6
-from security.rbac_base import RbacBase
 from couchbase_helper.documentgenerator import BlobGenerator
 
 
