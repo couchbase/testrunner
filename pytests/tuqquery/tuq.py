@@ -69,6 +69,7 @@ class QueryTests(BaseTestCase):
         self.array_indexing = self.input.param("array_indexing", False)
         self.dataset = self.input.param("dataset", "default")
         self.gens_load = self.generate_docs(self.docs_per_day)
+        self.no_results = self.input.param("no_results", True)
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
         self.plasma_dgm = self.input.param("plasma_dgm", False)
@@ -183,6 +184,7 @@ class QueryTests(BaseTestCase):
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
+        self.shell.disconnect()
         if not self.input.param("skip_build_tuq", True):
             if hasattr(self, 'shell'):
                o = self.shell.execute_command("ps -aef| grep cbq-engine")
@@ -459,6 +461,63 @@ class QueryTests(BaseTestCase):
             for idx in created_indexes:
                 self.query = "DROP INDEX %s.%s USING VIEW" % ("default", idx)
                 self.run_cbq_query()
+
+    '''MB-27815'''
+    def test_array_indexing_filter_covers(self):
+        self.run_cbq_query(query="CREATE INDEX IX_reporting_visits_name_Person ON default((distinct (array "
+                                 "(vs1.departmentCode) for vs1 in visits end)),visits,firstName,lastName) "
+                                 "WHERE (type = 'Person')")
+
+        try:
+            expected_result = self.run_cbq_query(query="explain select visits from default where type = 'Person' and meta().id "
+                                                     "not like '_sync%' and any v in visits satisfies v.departmentCode = 'HS' "
+                                                     "and Date_format_str(v.startDate, '1111-11-11') = '2018-01-30' END")
+            self.assertTrue('\"cover (any v in (default.visits) satisfies (((v.departmentCode) = \"HS\") and '
+                            '(date_format_str((v.startDate), \"1111-11-11\") = \"2018-01-30\")) end)\": true'
+                            not in expected_result['results'][0]['plan']['~children'][0]['scan']['filter_covers'])
+            self.assertEqual("{u'cover ((`default`.`type`))': u'Person'}", str(expected_result['results'][0]['plan']['~children'][0]['scan']['filter_covers']))
+        finally:
+            self.run_cbq_query(query="DROP INDEX default.IX_reporting_visits_name_Person")
+
+    '''MB-25664/MB-28175'''
+    def test_right_side_like_dependency(self):
+        self.run_cbq_query(query="create index ix400 on default(k0)")
+        try:
+            expected_result = self.run_cbq_query(query='select meta().id from default where k0 like k2')
+            self.assertTrue("Panic" not in str(expected_result), "There should be no panic, however there is. Here are"
+                                                                 "the results returned %s" % str(expected_result))
+        finally:
+            self.run_cbq_query(query="DROP INDEX default.ix400")
+
+    '''MB-29034: Bring down a data node until it is auto-failovered. The bugged behavior caused the query service to never
+       recover.'''
+    def test_query_recovery_from_auto_failover(self):
+        self.shell.execute_command("%s -u Administrator:password -X POST http://%s:%s/settings/autoFailover -d 'enabled=true&timeout=60'"
+                                                 % (self.curl_path, self.master.ip, self.master.port))
+        try:
+            self.log.info("Drop a data server and block all ports on a VM")
+            remote = RemoteMachineShellConnection(self.servers[1])
+            remote.stop_server()
+            remote.execute_command("iptables -A INPUT -p tcp --dport 23:65535 -j DROP")
+            self.log.info("start up the queries, once a query starts to work return from the thread.")
+            # Make the timeout 600 seconds
+            end_time = time.time() + 600
+            while self.no_results and time.time() < end_time:
+                result = self.run_cbq_query('select * from default', server=self.server[0])
+                if result:
+                    self.no_results = False
+                    self.log.info("The query returned results, query service is now active.")
+            if time.time() > end_time:
+                self.log.error("Timeout is exceeded, query never recovered")
+            self.assertFalse(self.no_results, "The query process did not recover")
+        finally:
+            remote.start_server()
+            remote.execute_command("reboot")
+            remote.disconnect()
+
+    '''Helper for test_query_recovery_from_auto_failover'''
+    def run_query(self, server, timeout):
+
 
 ##############################################################################################
 #
