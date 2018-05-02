@@ -79,6 +79,7 @@ class CliBaseTest(BaseTestCase):
         self.field_substitutions = self.input.param("field-substitutions", None)
         self.check_preload_keys = self.input.param("check-preload-keys", True)
         self.debug_logs = self.input.param("debug-logs", False)
+        self.should_fail = self.input.param("should-fail", False)
         info = self.shell.extract_remote_info()
         self.os_version = info.distribution_version.lower()
         type = info.type.lower()
