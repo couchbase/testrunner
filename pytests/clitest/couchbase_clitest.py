@@ -2040,6 +2040,28 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 self.log.info("Remove user {0}".format(rolelist))
                 RbacBase().remove_user_role(["data_monitoring"], rest)
 
+    def test_cmd_set_stats(self):
+        """ When set any items, cmd_set should increase counting number.
+            params: default_bucket=False,sasl_buckets=1
+        /opt/couchbase/bin/cbstats localhost:11210 all -u Administrator -p password -b bucket0 | grep cmd_set
+        cmd_set: 10011
+        """
+
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = self.cli_command_path + "cbstats" + self.cmd_ext + " "
+        cmd += self.master.ip + ":11210 all -u Administrator -p password "
+        cmd += "-b bucket0 | grep cmd_set"
+
+        output, _ = shell.execute_command(cmd)
+        self.assertTrue(self._check_output("0", output))
+        kv_gen = BlobGenerator('create', 'create', self.value_size, end=1000)
+        self._load_all_buckets(self.master, kv_gen, "create",
+                               self.expire_time, flag=self.item_flag)
+
+        output, _ = shell.execute_command(cmd)
+        self.assertTrue(self._check_output("1000", output))
+        shell.disconnect()
+
     def testNodeInit(self):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
