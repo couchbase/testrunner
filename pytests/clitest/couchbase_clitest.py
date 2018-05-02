@@ -18,6 +18,9 @@ from remote.remote_util import RemoteMachineShellConnection
 from testconstants import CLI_COMMANDS, COUCHBASE_FROM_SPOCK, \
                           COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_4DOT6
+from security.rbac_base import RbacBase
+from couchbase_helper.documentgenerator import BlobGenerator
+
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -1973,6 +1976,69 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
                             "Expected error message not found")
+
+    def test_mctimings_with_data_monitoring_role(self):
+        """ This role only works from 5.1 and later
+            params: sasl_buckets=2,default_bucket=False,nodes_init=2,
+                    permission=self_bucket
+            if permission=other_bucket, need to add should-fail=True
+        """
+        if 5.1 > float(self.cb_version[:3]):
+            self.log.info("This test only work for version 5.1+")
+            return
+        if len(self.buckets) < 2:
+            self.fail("This test requires minimum of 2 buckets")
+
+        permission = self.input.param("permission", "all")
+        username = "data_monitoring"
+        bucket_names = []
+        bucket_name = ""
+        rest = RestConnection(self.master)
+        shell = RemoteMachineShellConnection(self.master)
+        for bucket in self.buckets:
+            bucket_names.append(bucket.name)
+        if permission == "all":
+            role = '*'
+            bucket_name = bucket_names[random.randint(0,1)]
+        elif permission == "self_bucket":
+            role = "{0}".format(bucket_names[0])
+            bucket_name = bucket_names[0]
+        elif permission == "other_bucket":
+            role = "{0}".format(bucket_names[1])
+            bucket_name = bucket_names[0]
+        testuser = [{"id": username,
+                         "name": username,
+                         "password": "password"}]
+        rolelist = [{"id": username,
+                         "name": username,
+                         "roles": "data_monitoring[{0}]".format(role)}]
+        kv_gen = BlobGenerator('create', 'create', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, kv_gen, "create",
+                               self.expire_time, flag=self.item_flag)
+        try:
+            status = self.add_built_in_server_user(testuser, rolelist)
+            if not status:
+                self.fail("Failed to add user: {0} with role: {1} "\
+                                             .format(username, role))
+            cmd = self.cli_command_path + "mctimings" + self.cmd_ext
+            cmd += " -h " + self.master.ip + ":11210 -u " + username
+            cmd += " -P password -b " + bucket_name + " --verbose "
+            output, _ = shell.execute_command(cmd)
+            if not self.should_fail:
+                self.assertTrue(self._check_output("The following data is collected", output))
+            else:
+                if self._check_output("The following data is collected", output):
+                    self.fail("This user should not allow to monitor data in this bucket {0}"\
+                                                                      .format(bucket_name))
+                else:
+                    self.log.info("Alright, user bucket A has no permission to check bucket B")
+        except Exception as e:
+            print e
+        finally:
+            shell.disconnect()
+            if status:
+                self.log.info("Remove user {0}".format(rolelist))
+                RbacBase().remove_user_role(["data_monitoring"], rest)
 
     def testNodeInit(self):
         username = self.input.param("username", None)
