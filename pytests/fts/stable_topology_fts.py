@@ -165,13 +165,14 @@ class StableTopFTS(FTSBaseTest):
                                                 consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
             try:
-                shell = RemoteMachineShellConnection(fts_node)
-                shell.stop_server()
+                from fts_base import NodeHelper
+                NodeHelper.stop_couchbase(fts_node)
                 for i in xrange(self.consistency_vectors.values()[0].values()[0]):
                     self.async_perform_update_delete(self.upd_del_fields)
             finally:
-                shell = RemoteMachineShellConnection(fts_node)
-                shell.start_server()
+                NodeHelper.start_couchbase(fts_node)
+                NodeHelper.wait_service_started(fts_node)
+
             # "status":"remote consistency error" => expected_hits=-1
             hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,

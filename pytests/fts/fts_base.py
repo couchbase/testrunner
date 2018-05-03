@@ -3475,11 +3475,13 @@ class FTSBaseTest(unittest.TestCase):
                 time.sleep(6)
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
+            retry_mut_count = 20
             if item_count == None:
-                while True:
+                while True and retry_count:
                     num_mutations_to_index = index.get_num_mutations_to_index()
                     if num_mutations_to_index > 0:
                         self.sleep(5, "num_mutations_to_index: {0} > 0".format(num_mutations_to_index))
+                        retry_mut_count -= 1
                     else:
                         break
 
