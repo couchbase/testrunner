@@ -1017,14 +1017,7 @@ class RQGTests(BaseTestCase):
             sql_result = expected_result
             client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
             if expected_result is None:
-                try:
-                    columns, rows = client._execute_query(query=sql_query)
-                except Exception, ex:
-                    self.log.info(ex)
-                    traceback.print_exc()
-                    client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
-                    columns, rows = client._execute_query(query=sql_query)
-                    pass
+                columns, rows = client._execute_query(query=sql_query)
                 if self.aggregate_pushdown:
                     sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
                 else:

@@ -237,10 +237,10 @@ string_is_null:
 	string_field IS NULL;
 
 string_like_condition:
-	string_field LIKE 'STRING_VALUES%' | string_field LIKE '%STRING_VALUES' | string_field LIKE STRING_VALUES | string_field LIKE '%STRING_VALUES%';
+	string_field LIKE 'STRING_VALUES%' | string_field LIKE STRING_VALUES;
 
 string_not_like_condition:
-	string_field NOT LIKE 'STRING_VALUES%' | string_field NOT LIKE '%STRING_VALUES' | string_field NOT LIKE STRING_VALUES |  string_field NOT LIKE '%STRING_VALUES%';
+	string_field NOT LIKE 'STRING_VALUES%' | string_field NOT LIKE STRING_VALUES;
 
 string_field_list:
 	LIST;
