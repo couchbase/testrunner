@@ -137,3 +137,20 @@ class EventingSanity(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_doc_timer_gets_invalidated_when_docs_are_deleted(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER2,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # This sleep is intentional.
+        # Time for creating docs in destination bucket is 300s after doc gets created in source bucket.
+        # So we wait for time more than that to ensure docTimers are not fired if docs get deleted.
+        self.sleep(360)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
