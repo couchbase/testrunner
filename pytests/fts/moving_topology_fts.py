@@ -206,7 +206,7 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          %(index.name,index.get_indexed_doc_count()))
         task = self._cb_cluster.async_failover(graceful=True)
         task.result()
         self.sleep(60)
@@ -701,12 +701,15 @@ class MovingTopFTS(FTSBaseTest):
         #TESTED
         index = self.create_index_generate_queries()
         services = []
+        tasks = []
         for _ in xrange(self.num_rebalance):
             services.append("fts")
-        tasks = []
-        tasks.append(self._cb_cluster.async_swap_rebalance(
-            num_nodes=self.num_rebalance,
-            services=services))
+        reb_thread = Thread(
+            target=self._cb_cluster.async_swap_rebalance,
+            args=[self.num_rebalance, services])
+        reb_thread.start()
+        # wait for a bit before querying
+        self.sleep(8)
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
@@ -714,6 +717,7 @@ class MovingTopFTS(FTSBaseTest):
                 es_index_name=None,
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.sleep(5)
         self.is_index_partitioned_balanced(index)
         hits, _, _, _ = index.execute_query(query=self.query,
                                          expected_hits=self._num_items)
