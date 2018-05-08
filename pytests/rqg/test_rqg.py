@@ -120,7 +120,8 @@ class RQGTests(BaseTestCase):
             self.log.info("cleanup is %s" % self.skip_cleanup)
             if self.use_mysql and self.reset_database and (not self.skip_cleanup):
                 try:
-                    self.client.drop_database(self.database)
+                    client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+                    client.drop_database(self.database)
                 except Exception, ex:
                     self.log.info(ex)
 
