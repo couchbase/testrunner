@@ -15,6 +15,7 @@ class LogRedactionTests(LogRedactionBase):
         super(LogRedactionTests, self).setUp()
         self.doc_per_day = self.input.param("doc-per-day", 100)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
+        self.interrupt_replicaion = self.input.param("interrupt-replication", False)
 
     def tearDown(self):
         super(LogRedactionTests, self).tearDown()
@@ -119,6 +120,25 @@ class LogRedactionTests(LogRedactionBase):
 #
 #   GSI
 ##############################################################################################
+
+    def set_indexer_logLevel(self, loglevel="info"):
+        """
+        :param loglevel:
+        Possible Values
+            -- info
+            -- debug
+            -- warn
+            -- verbose
+            -- Silent
+            -- Fatal
+            -- Error
+            -- Timing
+            -- Trace
+        """
+        self.log.info("Setting indexer log level to {0}".format(loglevel))
+        server = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(server)
+        status = rest.set_indexer_params("logLevel", loglevel)
 
     def test_gsi_with_crud_with_redaction_enabled(self):
         # load bucket and do some ops
