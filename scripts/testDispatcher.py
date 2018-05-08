@@ -60,8 +60,6 @@ def main():
     parser.add_option('-u','--url', dest='url', default=None)
     parser.add_option('-j','--jenkins', dest='jenkins', default=None)
     parser.add_option('-b','--branch', dest='branch', default='master')
-    parser.add_option('-f', '--framework', dest='framework', default='testrunner')
-
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
     parser.add_option('-d','--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
@@ -148,7 +146,7 @@ def main():
     query = N1QLQuery(queryString )
     results = cb.n1ql_query( queryString )
 
-
+    framework = None
     for row in results:
         try:
             data = row['QE-Test-Suites']
@@ -186,7 +184,14 @@ def main():
                             mailing_list = data['mailing_list']
                         else:
                             mailing_list = 'qa@couchbase.com'
-
+                        if 'mode' in data:
+                            mode = data["mode"]
+                        else:
+                            mode = 'java'
+                        if 'framework' in data:
+                            framework = data["framework"]
+                        else:
+                            framework = 'testrunner'
                         # if there's an additional pool, get the number
                         # of additional servers needed from the ini
                         addPoolServerCount = getNumberOfAddpoolServers(
@@ -206,7 +211,8 @@ def main():
                             'installParameters':installParameters,
                             'slave': slave,
                             'owner': owner,
-                            'mailing_list': mailing_list
+                            'mailing_list': mailing_list,
+                            'mode': mode
                             })
                 else:
                     print data['component'], data['subcomponent'], ' is not supported in this release'
@@ -232,7 +238,8 @@ def main():
         launchStringBase = launchStringBase + '-docker'
     if options.test:
         launchStringBase = launchStringBase + '-test'
-    if options.framework.lower() == "jython":
+#     if options.framework.lower() == "jython":
+    if framework == "jython":
         launchStringBase = launchStringBase + '-jython'
     elif options.jenkins is not None:
         launchStringBase = launchStringBase + '-' + options.jenkins
@@ -244,7 +251,7 @@ def main():
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                          'iniFile={5}&parameters={6}&os={7}&initNodes={' \
                          '8}&installParameters={9}&branch={10}&slave={' \
-                         '11}&owners={12}&mailing_list={13}'
+                         '11}&owners={12}&mailing_list={13}&mode={14}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
 
@@ -402,7 +409,8 @@ def main():
                                                   testsToLaunch[i]['slave'],
                                                   urllib.quote(testsToLaunch[i]['owner']),
                                                   urllib.quote(
-                                                      testsToLaunch[i]['mailing_list']))
+                                                      testsToLaunch[i]['mailing_list']),
+                                                  testsToLaunch[i]['mode'])
 
 
                         if options.serverType.lower() != 'docker':
