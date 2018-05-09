@@ -10,7 +10,9 @@ from memcached.helper.kvstore import KVStore
 # from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
-from testconstants import SHERLOCK_VERSION
+from testconstants import SHERLOCK_VERSION, COUCHBASE_FROM_SHERLOCK,\
+                          COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_WATSON,\
+                          COUCHBASE_FROM_VULCAN
 
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
@@ -2264,3 +2266,147 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 stats_map_before_rebalance, stats_map_after_rebalance,
                 [self.servers[3]], [self.servers[1]], swap_rebalance=True)
         self.post_upgrade(self.servers[:3])
+
+    def test_offline_upgrade_with_add_new_services(self):
+        """
+           test run as below.  Change params as needed.
+           newupgradetests.MultiNodesUpgradeTests.test_offline_upgrade_with_add_new_services,
+           initial_version=4.x.x-xxx,nodes_init=2,ddocs_num=3,pre_upgrade=create_index,
+           post_upgrade=drop_index,doc-per-day=1,dataset=default,groups=simple,
+           after_upgrade_buckets_flush=True,skip_init_check_cbserver=True,
+           gsi_type=memory_optimized,init_nodes=False,upgrade_version=5.5.0-xxx,
+           initial-services-setting='kv,index-kv,n1ql',after_upgrade_services_in=eventing,
+           dgm_run=True
+        """
+        if len(self.servers) < 3 :
+            self.fail("This test needs at least 4 servers to run")
+        initial_services_setting = self.input.param("initial-services-setting", None)
+        after_upgrade_node_in = self.input.param("after_upgrade_node_in", 0)
+        after_upgrade_services_in = self.input.param("after_upgrade_services_in", False)
+        after_upgrade_buckets_in = self.input.param("after_upgrade_buckets_in", False)
+        after_upgrade_buckets_out = self.input.param("after_upgrade_buckets_out", False)
+        after_upgrade_buckets_flush = self.input.param("after_upgrade_buckets_flush", False)
+
+        # Install initial version on the specified nodes
+        nodes_init = 2
+        if 5 <= int(self.initial_version[:1]):
+            nodes_init = 3
+            if initial_services_setting is not None:
+                initial_services_setting += "-kv,fts"
+        self._install(self.servers[:nodes_init])
+        # Configure the nodes with services
+        self.operations(self.servers[:nodes_init], services=initial_services_setting)
+        # get the n1ql node which will be used in pre,during and post upgrade for
+        # running n1ql commands
+        self.n1ql_server = self.get_nodes_from_services_map(
+            service_type="n1ql")
+        # Run the pre upgrade operations, typically creating index
+        if self.initial_version[:5] in COUCHBASE_FROM_SPOCK:
+            self.create_fts_index()
+        self.pre_upgrade(self.servers[:3])
+        seqno_expected = 1
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+            if self.input.param('run_index', False):
+                self.verify_all_queries()
+        if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
+            self.check_seqno(seqno_expected)
+        if self.during_ops:
+            for opn in self.during_ops:
+                if opn != 'add_back_failover':
+                    getattr(self, opn)()
+        upgrade_nodes = self.servers[:nodes_init]
+        for upgrade_version in self.upgrade_versions:
+            self.sleep(self.sleep_time, \
+                "Pre-setup of old version is done. Wait for upgrade to {0} version". \
+                       format(upgrade_version))
+            if self.offline_failover_upgrade:
+                total_nodes = len(upgrade_nodes)
+                for server in upgrade_nodes:
+                    self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip, graceful=True)
+                    self.sleep(timeout=60)
+                    self.rest.set_recovery_type('ns_1@' + upgrade_nodes[total_nodes - 1].ip, "full")
+                    output, error = self._upgrade(upgrade_version, upgrade_nodes[total_nodes - 1])
+                    if "You have successfully installed Couchbase Server." not in output:
+                        print output
+                        self.fail("Upgrade failed. See logs above!")
+                    self.cluster.rebalance(self.servers[:nodes_init], [], [])
+                    total_nodes -= 1
+                if total_nodes == 0:
+                    self.rest = RestConnection(upgrade_nodes[total_nodes])
+            else:
+                for server in upgrade_nodes:
+                    remote = RemoteMachineShellConnection(server)
+                    remote.stop_server()
+                    self.sleep(self.sleep_time)
+                    if self.wait_expire:
+                        self.sleep(self.expire_time)
+                    if self.input.param('remove_manifest_files', False):
+                        for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt,']:
+                            output, error = remote.execute_command("rm -rf /opt/couchbase/{0}"\
+                                                                                 .format(file))
+                            remote.log_command_output(output, error)
+                    if self.input.param('remove_config_files', False):
+                        for file in ['config', 'couchbase-server.node', 'ip',\
+                                                   'couchbase-server.cookie']:
+                            output, error = remote.execute_command(
+                                "rm -rf /opt/couchbase/var/lib/couchbase/{0}".format(file))
+                            remote.log_command_output(output, error)
+                        self.buckets = []
+                    remote.disconnect()
+
+                if self.initial_build_type == "community" and \
+                                self.upgrade_build_type == "enterprise":
+                    upgrade_threads = self._async_update(upgrade_version, upgrade_nodes,\
+                                                                save_upgrade_config=True)
+                else:
+                    upgrade_threads = self._async_update(upgrade_version, upgrade_nodes)
+                # wait upgrade statuses
+                for upgrade_thread in upgrade_threads:
+                    upgrade_thread.join()
+                success_upgrade = True
+                while not self.queue.empty():
+                    success_upgrade &= self.queue.get()
+                if not success_upgrade:
+                    self.fail("Upgrade failed. See logs above!")
+            self.sleep(self.expire_time)
+        self.dcp_rebalance_in_offline_upgrade_from_version2()
+        # Run the post_upgrade operations
+        self._create_ephemeral_buckets()
+        self.post_upgrade(self.servers[:nodes_init])
+        # Add new services after the upgrade
+
+        if after_upgrade_services_in is not False:
+            for upgrade_version in self.upgrade_versions:
+                self._install([self.servers[nodes_init]], version=self.upgrade_versions[0])
+                self.sleep(self.expire_time)
+                try:
+                    self.log.info("Add new node {0}after upgrade".format(self.servers[nodes_init].ip))
+                    self.cluster.rebalance(self.servers[:(nodes_init + 1)], [self.servers[nodes_init]], [],
+                                                         services=[after_upgrade_services_in])
+                except Exception as e:
+                    print "error: ", e
+        if "fts" in after_upgrade_services_in:
+            self.create_fts_index()
+
+        if self.upgrade_versions[0][:5] in COUCHBASE_FROM_VULCAN and \
+                              "eventing" in after_upgrade_services_in:
+            self.dataset = self.input.param("dataset", "default")
+            self.create_eventing_services()
+        # creating new buckets after upgrade
+        if after_upgrade_buckets_in is not False:
+            self.bucket_size = 100
+            self._create_sasl_buckets(self.master, 1)
+            self._create_standard_buckets(self.master, 1)
+            if self.ddocs_num:
+                self.create_ddocs_and_views()
+                gen_load = BlobGenerator('upgrade', 'upgrade-',
+                                          self.value_size, end=self.num_items)
+                self._load_all_buckets(self.master, gen_load, "create",
+                                       self.expire_time, flag=self.item_flag)
+        # deleting buckets after upgrade
+        if after_upgrade_buckets_out is not False:
+            self._all_buckets_delete(self.master)
+        # flushing buckets after upgrade
+        if after_upgrade_buckets_flush is not False:
+            self._all_buckets_flush()

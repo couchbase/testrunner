@@ -18,6 +18,10 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from query_tests_helper import QueryHelperTests
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
+from eventing.eventing_base import EventingBaseTest
+from pytests.eventing.eventing_constants import HANDLER_CODE
+from random import randrange, randint
+from fts.fts_base import FTSIndex
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
@@ -31,7 +35,7 @@ from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
 from testconstants import STANDARD_BUCKET_PORT
 
-class NewUpgradeBaseTest(QueryHelperTests):
+class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
@@ -67,6 +71,8 @@ class NewUpgradeBaseTest(QueryHelperTests):
         self.rest = None
         self.rest_helper = None
         self.is_ubuntu = False
+        self.is_rpm = False
+        self.is_centos7 = False
         self.sleep_time = 15
         self.ddocs = []
         self.item_flag = self.input.param('item_flag', 0)
@@ -76,6 +82,13 @@ class NewUpgradeBaseTest(QueryHelperTests):
         self.ddocs_num = self.input.param("ddocs-num", 0)
         self.view_num = self.input.param("view-per-ddoc", 2)
         self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
+        self.offline_failover_upgrade = self.input.param("offline_failover_upgrade", False)
+        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
+        self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
+        self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
+        self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
+        self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
+        self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.during_ops = None
         if "during-ops" in self.input.test_params:
             self.during_ops = self.input.param("during-ops", None).split(",")
@@ -87,6 +100,7 @@ class NewUpgradeBaseTest(QueryHelperTests):
             self.max_verify = min(self.num_items, 100000)
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
+        os_version = shell.extract_remote_info().distribution_version
         shell.disconnect()
         if type.lower() == 'windows':
             self.is_linux = False
@@ -94,6 +108,10 @@ class NewUpgradeBaseTest(QueryHelperTests):
             self.is_linux = True
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
+        if type.lower() == "centos":
+            self.is_rpm = True
+            if os_version.lower() == "centos 7":
+                self.is_centos7 = True
         self.queue = Queue.Queue()
         self.upgrade_servers = []
         if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
@@ -185,22 +203,34 @@ class NewUpgradeBaseTest(QueryHelperTests):
                 server.hostname = hostname
 
     def operations(self, servers, services=None):
+        if services is not None:
+            if "-" in services:
+                set_services = services.split("-")
+            else:
+                set_services = services.split(",")
+        else:
+            set_services = services
+
+        if 4.5 > float(self.initial_version[:3]):
+            self.gsi_type = "forestdb"
         self.quota = self._initialize_nodes(self.cluster, servers,
                                             self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled,
                                             self.rebalanceIndexPausingDisabled,
                                             self.maxParallelIndexers,
-                                            self.maxParallelReplicaIndexers, self.port)
+                                            self.maxParallelReplicaIndexers, self.port,
+                                            services=set_services)
         if self.port and self.port != '8091':
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
+        if 5.0 <= float(self.initial_version[:3]):
+            self.add_built_in_server_user()
         self.sleep(20, "wait to make sure node is ready")
         if len(servers) > 1:
             if services is None:
                 self.cluster.rebalance([servers[0]], servers[1:], [],
                                        use_hostnames=self.use_hostnames)
             else:
-                set_services = services.split(",")
                 for i in range(1, len(set_services)):
                     self.cluster.rebalance([servers[0]], [servers[i]], [],
                                            use_hostnames=self.use_hostnames,
@@ -211,8 +241,9 @@ class NewUpgradeBaseTest(QueryHelperTests):
         gc.collect()
         if self.input.param('extra_verification', False):
             self.total_buckets += 2
-            print self.total_buckets
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+        if self.dgm_run:
+            self.bucket_size = 256
         self._bucket_creation()
         if self.stop_persistence:
             for server in servers:
@@ -292,6 +323,9 @@ class NewUpgradeBaseTest(QueryHelperTests):
             if self.is_ubuntu:
                 remote.start_server()
             """ remove end here """
+            if 5.0 > float(self.initial_version[:3]) and self.is_centos7:
+                remote.execute_command("systemctl daemon-reload")
+                remote.start_server()
             #remote.disconnect()
             #self.sleep(10)
             self.rest = RestConnection(server)
@@ -706,3 +740,185 @@ class NewUpgradeBaseTest(QueryHelperTests):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
         return index_map, stats_map
+
+    def create_fts_index(self):
+        try:
+            self.log.info("Checking if index already exists ...")
+            name = "default"
+            """ test on one bucket """
+            for bucket in self.buckets:
+                name = bucket.name
+                break
+            SOURCE_CB_PARAMS = {
+                      "authUser": "default",
+                      "authPassword": "",
+                      "authSaslUser": "",
+                      "authSaslPassword": "",
+                      "clusterManagerBackoffFactor": 0,
+                      "clusterManagerSleepInitMS": 0,
+                      "clusterManagerSleepMaxMS": 20000,
+                      "dataManagerBackoffFactor": 0,
+                      "dataManagerSleepInitMS": 0,
+                      "dataManagerSleepMaxMS": 20000,
+                      "feedBufferSizeBytes": 0,
+                      "feedBufferAckThreshold": 0
+                       }
+            self.index_type = 'fulltext-index'
+            self.index_definition = {
+                          "type": "fulltext-index",
+                          "name": "",
+                          "uuid": "",
+                          "params": {},
+                          "sourceType": "couchbase",
+                          "sourceName": "",
+                          "sourceUUID": "",
+                          "sourceParams": SOURCE_CB_PARAMS,
+                          "planParams": {}
+                          }
+            self.name = self.index_definition['name'] = \
+                                self.index_definition['sourceName'] = name
+            fts_node = self.get_nodes_from_services_map("fts", \
+                                servers=self.get_nodes_in_cluster_after_upgrade())
+            if fts_node:
+                rest = RestConnection(fts_node)
+                status, _ = rest.get_fts_index_definition(self.name)
+                if status != 400:
+                    rest.delete_fts_index(self.name)
+                self.log.info("Creating {0} {1} on {2}".format(self.index_type,
+                                                           self.name, rest.ip))
+                rest.create_fts_index(self.name, self.index_definition)
+            else:
+                raise("No FTS node in cluster")
+            self.ops_dist_map = self.calculate_data_change_distribution(
+                create_per=self.create_ops_per , update_per=self.update_ops_per ,
+                delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
+                start=0, end=self.docs_per_day)
+            self.log.info(self.ops_dist_map)
+            self.dataset = "simple"
+            self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
+            self.async_ops_all_buckets(self.docs_gen_map, batch_size=100)
+        except Exception, ex:
+            self.log.info(ex)
+
+    def get_nodes_in_cluster_after_upgrade(self, master_node=None):
+        rest = None
+        if master_node == None:
+            rest = RestConnection(self.master)
+        else:
+            rest = RestConnection(master_node)
+        nodes = rest.node_statuses()
+        server_set = []
+        for node in nodes:
+            for server in self.input.servers:
+                if server.ip == node.ip:
+                    server_set.append(server)
+        return server_set
+
+
+    def create_eventing_services(self):
+        """ Only work after cluster upgrade to 5.5.0 completely """
+        try:
+            rest = RestConnection(self.master)
+            cb_version = rest.get_nodes_version()
+            if 5.5 > float(cb_version[:3]):
+                self.log.info("This eventing test is only for cb version 5.5 and later.")
+                return
+
+            bucket_params = self._create_bucket_params(server=self.master, size=128,
+                                                       replicas=self.num_replicas)
+            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.buckets = RestConnection(self.master).get_buckets()
+            self.src_bucket = RestConnection(self.master).get_buckets()
+            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.buckets = RestConnection(self.master).get_buckets()
+            self.gens_load = self.generate_docs(self.docs_per_day)
+            self.expiry = 3
+
+            self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+            """ must be self.rest to pass in deploy_function"""
+            self.rest = RestConnection(self.restServer)
+
+            self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+            function_name = "Function_{0}_{1}".format(randint(1, 1000000000), self._testMethodName)
+            self.function_name = function_name[0:90]
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+            bk_events_created = False
+            rs_events_created = False
+            try:
+                self.deploy_function(body)
+                bk_events_created = True
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            except Exception as e:
+                self.log.error(e)
+            finally:
+                self.undeploy_and_delete_function(body)
+        except Exception, e:
+            self.log.info(e)
+
+    def generate_docs_simple(self, num_items, start=0):
+        from couchbase_helper.tuq_generators import JsonGenerator
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_simple(start=start, docs_per_day=self.docs_per_day)
+
+    def generate_docs(self, num_items, start=0):
+        try:
+            if self.dataset == "simple":
+                return self.generate_docs_simple(num_items, start)
+            if self.dataset == "array":
+                return self.generate_docs_array(num_items, start)
+            return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
+        except Exception, ex:
+            log.info(str(ex))
+            self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
+
+    def create_save_function_body_test(self, appname, appcode, description="Sample Description",
+                                  checkpoint_interval=10000, cleanup_timers=False,
+                                  dcp_stream_boundary="everything", deployment_status=True,
+                                  skip_timer_threshold=86400,
+                                  sock_batch_size=1, tick_duration=60000, timer_processing_tick_interval=500,
+                                  timer_worker_pool_size=3, worker_count=3, processing_status=True,
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=6
+                                  ):
+        body = {}
+        body['appname'] = appname
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, appcode)
+        fh = open(abs_file_path, "r")
+        body['appcode'] = fh.read()
+        fh.close()
+        body['depcfg'] = {}
+        body['depcfg']['buckets'] = []
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
+        if multi_dst_bucket:
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
+        body['depcfg']['source_bucket'] = self.src_bucket_name
+        body['settings'] = {}
+        body['settings']['checkpoint_interval'] = checkpoint_interval
+        body['settings']['cleanup_timers'] = cleanup_timers
+        body['settings']['dcp_stream_boundary'] = dcp_stream_boundary
+        body['settings']['deployment_status'] = deployment_status
+        body['settings']['description'] = description
+        body['settings']['log_level'] = self.eventing_log_level
+        body['settings']['skip_timer_threshold'] = skip_timer_threshold
+        body['settings']['sock_batch_size'] = sock_batch_size
+        body['settings']['tick_duration'] = tick_duration
+        body['settings']['timer_processing_tick_interval'] = timer_processing_tick_interval
+        body['settings']['timer_worker_pool_size'] = timer_worker_pool_size
+        body['settings']['worker_count'] = worker_count
+        body['settings']['processing_status'] = processing_status
+        body['settings']['cpp_worker_thread_count'] = cpp_worker_thread_count
+        body['settings']['execution_timeout'] = execution_timeout
+        body['settings']['data_chan_size'] = data_chan_size
+        body['settings']['worker_queue_cap'] = worker_queue_cap
+        body['settings']['use_memory_manager'] = self.use_memory_manager
+        if execution_timeout != 3:
+            deadline_timeout = execution_timeout + 1
+        body['settings']['deadline_timeout'] = deadline_timeout
+        return body

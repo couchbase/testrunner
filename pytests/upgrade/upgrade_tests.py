@@ -1,5 +1,5 @@
 from newupgradebasetest import NewUpgradeBaseTest
-import json
+import json, re
 import os
 import zipfile
 import pprint
@@ -10,6 +10,7 @@ import copy
 from membase.helper.cluster_helper import ClusterOperationHelper
 import mc_bin_client
 import threading
+from random import randrange, randint
 from fts.fts_base import FTSIndex
 from memcached.helper.data_helper import  VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
@@ -19,11 +20,16 @@ from couchbase_helper.query_helper import QueryHelper
 from TestInput import TestInputSingleton
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
+from couchbase_helper.document import View
+from eventing.eventing_base import EventingBaseTest
+from pytests.eventing.eventing_constants import HANDLER_CODE
+from lib.testconstants import STANDARD_BUCKET_PORT
+from pytests.query_tests_helper import QueryHelperTests
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.bucket_helper import BucketOperationHelper
 
-class UpgradeTests(NewUpgradeBaseTest):
+class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
@@ -46,6 +52,13 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.max_verify = self.input.param("max_verify", None)
         self.verify_after_events = self.input.param("verify_after_events", True)
         self.online_upgrade_type = self.input.param("online_upgrade_type","swap")
+        self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
+        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
+        self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
+        self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
+        self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
+        self.create_functions_buckets = self.input.param('create_functions_buckets', True)
+        self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.final_events = []
         self.n1ql_helper = None
         self.total_buckets = 1
@@ -515,6 +528,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                         "rebalance done ".format(self.after_upgrade_services_in[0]))
                 self.after_upgrade_services_in.pop(0)
             self.sleep(10, "wait 10 seconds after rebalance")
+            if free_node_in and free_node_in[0] not in self.servers:
+                self.servers.append(free_node_in[0])
         except Exception, ex:
             self.log.info(ex)
             if queue is not None:
@@ -650,6 +665,50 @@ class UpgradeTests(NewUpgradeBaseTest):
         except Exception, ex:
             self.log.info(ex)
             raise
+
+    def create_eventing_services(self, queue=None):
+        """ Only work after cluster upgrade to 5.5.0 completely """
+        try:
+            rest = RestConnection(self.master)
+            cb_version = rest.get_nodes_version()
+            if 5.5 > float(cb_version[:3]):
+                self.log.info("This eventing test is only for cb version 5.5 and later.")
+                return
+
+            bucket_params = self._create_bucket_params(server=self.master, size=128,
+                                                       replicas=self.num_replicas)
+            self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.buckets = RestConnection(self.master).get_buckets()
+            self.src_bucket = RestConnection(self.master).get_buckets()
+            self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.buckets = RestConnection(self.master).get_buckets()
+            self.gens_load = self.generate_docs(self.docs_per_day)
+            self.expiry = 3
+
+            self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+            """ must be self.rest to pass in deploy_function"""
+            self.rest = RestConnection(self.restServer)
+            self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+            function_name = "Function_{0}_{1}".format(randint(1, 1000000000), self._testMethodName)
+            self.function_name = function_name[0:90]
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
+            bk_events_created = False
+            rs_events_created = False
+            try:
+                self.deploy_function(body)
+                bk_events_created = True
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            except Exception as e:
+                self.log.error(e)
+            finally:
+                self.undeploy_and_delete_function(body)
+        except Exception, e:
+            self.log.info(e)
 
     def online_upgrade(self):
         try:

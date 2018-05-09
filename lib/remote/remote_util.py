@@ -1720,6 +1720,7 @@ class RemoteMachineShellConnection:
                 if forcefully:
                     command = 'dpkg -i --force /tmp/{0}'.format(build.name)
         output, error = self.execute_command(command, use_channel=True)
+        self.log_command_output(output, error)
         return output, error
 
     def couchbase_upgrade_win(self, architecture, windows_name, version):

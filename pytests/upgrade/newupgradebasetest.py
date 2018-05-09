@@ -96,6 +96,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.delete_ops_per = self.input.param("delete_ops_per", 0)
         self.update_ops_per = self.input.param("update_ops_per", 0)
         self.docs_per_day = self.input.param("doc-per-day", 49)
+        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
+        self.batch_size = self.input.param("batch_size", 1000)
         self.doc_ops = self.input.param("doc_ops", False)
         if self.doc_ops:
             self.ops_dist_map = self.calculate_data_change_distribution(
@@ -198,24 +200,49 @@ class NewUpgradeBaseTest(BaseTestCase):
                 hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
                 server.hostname = hostname
 
-    def operations(self, servers):
-        self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
-                                            self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port)
+    def operations(self, servers, services=None):
+        if services is not None:
+            if "-" in services:
+                set_services = services.split("-")
+            else:
+                set_services = services.split(",")
+        else:
+            set_services = services
+
+        if 4.5 > float(self.initial_version[:3]):
+            self.gsi_type = "forestdb"
+        self.quota = self._initialize_nodes(self.cluster, servers,
+                                            self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled,
+                                            self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers,
+                                            self.maxParallelReplicaIndexers, self.port,
+                                            services=set_services)
+
         if self.port and self.port != '8091':
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
+        if 5.0 <= float(self.initial_version[:3]):
+            self.add_built_in_server_user()
         self.sleep(7, "wait to make sure node is ready")
         if len(servers) > 1:
-            self.cluster.rebalance([servers[0]], servers[1:], [],
-                                   use_hostnames=self.use_hostnames)
-
+            if services is None:
+                self.cluster.rebalance([servers[0]], servers[1:], [],
+                                       use_hostnames=self.use_hostnames)
+            else:
+                for i in range(1, len(set_services)):
+                    self.cluster.rebalance([servers[0]], [servers[i]], [],
+                                           use_hostnames=self.use_hostnames,
+                                           services=[set_services[i]])
+                    self.sleep(10)
         self.buckets = []
         gc.collect()
         if self.input.param('extra_verification', False):
             self.total_buckets += 2
             print self.total_buckets
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+        if self.dgm_run:
+            self.bucket_size = 256
         self._bucket_creation()
         if self.stop_persistence:
             for server in servers:
@@ -793,3 +820,109 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def _gen_server_key(self, server):
         return "{0}:{1}".format(server.ip, server.port)
+
+    def generate_docs_simple(self, num_items, start=0):
+        from couchbase_helper.tuq_generators import JsonGenerator
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_simple(start=start, docs_per_day=self.docs_per_day)
+
+    def generate_docs(self, num_items, start=0):
+        try:
+            if self.dataset == "simple":
+                return self.generate_docs_simple(num_items, start)
+            if self.dataset == "array":
+                return self.generate_docs_array(num_items, start)
+            return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
+        except Exception, ex:
+            log.info(str(ex))
+            self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
+
+    def create_save_function_body_test(self, appname, appcode, description="Sample Description",
+                                  checkpoint_interval=10000, cleanup_timers=False,
+                                  dcp_stream_boundary="everything", deployment_status=True,
+                                  skip_timer_threshold=86400,
+                                  sock_batch_size=1, tick_duration=60000, timer_processing_tick_interval=500,
+                                  timer_worker_pool_size=3, worker_count=3, processing_status=True,
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=6
+                                  ):
+        body = {}
+        body['appname'] = appname
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, appcode)
+        fh = open(abs_file_path, "r")
+        body['appcode'] = fh.read()
+        fh.close()
+        body['depcfg'] = {}
+        body['depcfg']['buckets'] = []
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
+        if multi_dst_bucket:
+            body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
+        body['depcfg']['source_bucket'] = self.src_bucket_name
+        body['settings'] = {}
+        body['settings']['checkpoint_interval'] = checkpoint_interval
+        body['settings']['cleanup_timers'] = cleanup_timers
+        body['settings']['dcp_stream_boundary'] = dcp_stream_boundary
+        body['settings']['deployment_status'] = deployment_status
+        body['settings']['description'] = description
+        body['settings']['log_level'] = self.eventing_log_level
+        body['settings']['skip_timer_threshold'] = skip_timer_threshold
+        body['settings']['sock_batch_size'] = sock_batch_size
+        body['settings']['tick_duration'] = tick_duration
+        body['settings']['timer_processing_tick_interval'] = timer_processing_tick_interval
+        body['settings']['timer_worker_pool_size'] = timer_worker_pool_size
+        body['settings']['worker_count'] = worker_count
+        body['settings']['processing_status'] = processing_status
+        body['settings']['cpp_worker_thread_count'] = cpp_worker_thread_count
+        body['settings']['execution_timeout'] = execution_timeout
+        body['settings']['data_chan_size'] = data_chan_size
+        body['settings']['worker_queue_cap'] = worker_queue_cap
+        body['settings']['use_memory_manager'] = self.use_memory_manager
+        if execution_timeout != 3:
+            deadline_timeout = execution_timeout + 1
+        body['settings']['deadline_timeout'] = deadline_timeout
+        return body
+
+    def _verify_backup_events_definition(self, bk_fxn):
+        backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[0])
+        events_file_name = "events.json"
+        bk_file_events_dir = "/tmp/backup_events{0}/".format(self.master.ip)
+        bk_file_events_path = bk_file_events_dir + events_file_name
+
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.log.info("create local dir")
+        if os.path.exists(bk_file_events_dir):
+            shutil.rmtree(bk_file_events_dir)
+        os.makedirs(bk_file_events_dir)
+        self.log.info("copy eventing definition from remote to local")
+        shell.copy_file_remote_to_local(backup_path+events_file_name,
+                                        bk_file_events_path)
+        local_bk_def = open(bk_file_events_path)
+        bk_file_fxn = json.loads(local_bk_def.read())
+        for k, v in bk_file_fxn[0]["settings"].iteritems():
+            if v != bk_fxn[0]["settings"][k]:
+                self.log.info("key {0} has value not match".format(k))
+                self.log.info("{0} : {1}".format(v, bk_fxn[0]["settings"][k]))
+        self.log.info("remove tmp file in slave")
+        if os.path.exists(bk_file_events_dir):
+            shutil.rmtree(bk_file_events_dir)
+
+    def _verify_restore_events_definition(self, bk_fxn):
+        backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[0])
+        events_file_name = "events.json"
+        bk_file_events_dir = "/tmp/backup_events{0}/".format(self.master.ip)
+        bk_file_events_path = bk_file_events_dir + events_file_name
+        rest = RestConnection(self.backupset.restore_cluster_host)
+        rs_fxn = rest.get_all_functions()
+
+        if self.ordered(rs_fxn) != self.ordered(bk_fxn):
+            self.fail("Events definition of backup and restore cluster are different")
+
+    def ordered(self, obj):
+        if isinstance(obj, dict):
+            return sorted((k, ordered(v)) for k, v in obj.items())
+        if isinstance(obj, list):
+            return sorted(ordered(x) for x in obj)
+        else:
+            return obj
