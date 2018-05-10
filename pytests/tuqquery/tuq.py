@@ -503,7 +503,7 @@ class QueryTests(BaseTestCase):
             # Make the timeout 600 seconds
             end_time = time.time() + 600
             while self.no_results and time.time() < end_time:
-                result = self.run_cbq_query('select * from default', server=self.server[0])
+                result = self.run_cbq_query('select * from default', server=self.servers[0])
                 if result:
                     self.no_results = False
                     self.log.info("The query returned results, query service is now active.")
