@@ -17,6 +17,7 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from couchbase_helper.tuq_generators import JsonGenerator
+from pytests.fts.fts_callable import FTSCallable
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
@@ -926,3 +927,37 @@ class NewUpgradeBaseTest(BaseTestCase):
             return sorted(ordered(x) for x in obj)
         else:
             return obj
+
+    def create_fts_index_query_compare(self):
+        """
+        Call before upgrade
+        1. creates a default index, one per bucket
+        2. Loads fts json data
+        3. Runs queries and compares the results against ElasticSearch
+        """
+        fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+        for bucket in self.buckets:
+            fts_obj.create_default_index(
+                index_name="index_{0}".format(bucket.name),
+                bucket_name=bucket.name)
+        fts_obj.load_data(self.num_items)
+        fts_obj.wait_for_indexing_complete()
+        for index in fts_obj.fts_indexes:
+            fts_obj.run_query_and_compare(index=index, num_queries=20)
+        return fts_obj
+
+    def update_delete_fts_data_run_queries(self, fts_obj):
+        """
+        To call after (preferably) upgrade
+        :param fts_obj: the FTS object created in create_fts_index_query_compare()
+        """
+        fts_obj.async_perform_update_delete()
+        for index in fts_obj.fts_indexes:
+            fts_obj.run_query_and_compare(index)
+
+    def delete_all_fts_artifacts(self, fts_obj):
+        """
+        Call during teardown of upgrade test
+        :param fts_obj: he FTS object created in create_fts_index_query_compare()
+        """
+        fts_obj.delete_all()
