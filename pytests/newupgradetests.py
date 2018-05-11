@@ -2276,7 +2276,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
            after_upgrade_buckets_flush=True,skip_init_check_cbserver=True,
            gsi_type=memory_optimized,init_nodes=False,upgrade_version=5.5.0-xxx,
            initial-services-setting='kv,index-kv,n1ql',after_upgrade_services_in=eventing,
-           dgm_run=True
+           dgm_run=True,upgrade_test=True
         """
         if len(self.servers) < 3 :
             self.fail("This test needs at least 4 servers to run")

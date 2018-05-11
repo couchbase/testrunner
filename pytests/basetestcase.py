@@ -63,6 +63,7 @@ class BaseTestCase(unittest.TestCase):
         self.bucket_base_params = {}
         self.bucket_base_params['membase'] = {}
         self.master = self.servers[0]
+        self.upgrade_test = self.input.param("upgrade_test", False)
         self.indexManager = self.servers[0]
         if not hasattr(self, 'cluster'):
             self.cluster = Cluster()
@@ -264,7 +265,6 @@ class BaseTestCase(unittest.TestCase):
                                                     self.port, \
                                                     self.quota_percent, \
                                                     services=master_services)
-
                 self.change_env_variables()
                 self.change_checkpoint_params()
 
@@ -505,11 +505,27 @@ class BaseTestCase(unittest.TestCase):
                           port=None, quota_percent=None, services=None):
         quota = 0
         init_tasks = []
+        count = 0
         for server in servers:
             init_port = port or server.port or '8091'
-            assigned_services = services
-            if self.master != server:
-                assigned_services = None
+            if not self.upgrade_test:
+                assigned_services = services
+                if self.master != server:
+                    assigned_services = None
+            else:
+                if services is not None:
+                   assigned_services = []
+                   if len(servers) == len(services):
+                       if len(assigned_services) == 1 :
+                           assigned_services[0] = services[count]
+                       else:
+                           assigned_services.append(services[count])
+                       count += 1
+                   elif len(servers) > len(services):
+                       self.log.info("service will set to first element")
+                       assigned_services.append(services[0])
+                else:
+                   assigned_services = None
             init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                                                       rebalanceIndexPausingDisabled, maxParallelIndexers,
                                                       maxParallelReplicaIndexers, init_port,
