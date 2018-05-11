@@ -1084,10 +1084,6 @@ class RemoteMachineShellConnection:
         cmd = 'echo "%s" > %s/%s' % (''.join(lines), remote_path, filename)
         self.execute_command(cmd)
 
-    def write_remote_file_single_quote(self, remote_path, filename, lines):
-        cmd = 'echo \'%s\' > %s/%s' % (''.join(lines), remote_path, filename)
-        self.execute_command(cmd)
-
     def create_whitelist(self, path, whitelist):
         if not os.path.exists(path):
             self.execute_command("mkdir %s" % path)

@@ -1,4 +1,5 @@
-from lib import testconstants
+import copy, subprocess, os
+
 from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
@@ -10,9 +11,6 @@ from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRe
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 import logging
-import subprocess, os
-from remote.remote_util import RemoteMachineShellConnection
-from pytests.eventing.eventing_constants import EXPORTED_FUNCTION
 from ent_backup_restore.validation_helpers.backup_restore_validations \
                                                  import BackupRestoreValidations
 from testconstants import LINUX_COUCHBASE_BIN_PATH,\
@@ -216,69 +214,3 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self.backup_cluster()
         self.backup_list()
         self.backup_restore_validate()
-
-    def test_eventing_lifecycle_with_couchbase_cli(self):
-        # load some data in the source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
-        # This value is hardcoded in the exported function name
-        script_dir = os.path.dirname(__file__)
-        abs_file_path = os.path.join(script_dir, EXPORTED_FUNCTION.NEW_BUCKET_OP)
-        fh = open(abs_file_path, "r")
-        lines = fh.read()
-        shell = RemoteMachineShellConnection(self.servers[0])
-        info = shell.extract_remote_info().type.lower()
-        if info == 'linux':
-            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
-        elif info == 'windows':
-            self.cmd_ext = ".exe"
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
-        elif info == 'mac':
-            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
-        else:
-            raise Exception("OS not supported.")
-        # create the json file need on the node
-        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        remote_client = RemoteMachineShellConnection(eventing_node)
-        remote_client.write_remote_file_single_quote("/root", "Function_396275055_test_export_function.json", lines)
-        # import the function
-        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "import",
-                                     "SUCCESS: Events imported",
-                                     file_name="Function_396275055_test_export_function.json")
-        # deploy the function
-        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "deploy",
-                                     "SUCCESS: Function deployed")
-        self.verify_eventing_results("Function_396275055_test_export_function", self.docs_per_day * 2016,
-                                     skip_stats_validation=True)
-        # list the function
-        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "list",
-                                     " Status: Deployed")
-        # export the function
-        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export",
-                                     "SUCCESS: Function exported to: Function_396275055_test_export_function2.json",
-                                     file_name="Function_396275055_test_export_function2.json")
-        # check if the exported function actually exists
-        exists = remote_client.file_exists("/root", "Function_396275055_test_export_function2.json")
-        # check if the exported file exists
-        if not exists:
-            self.fail("file does not exist after export")
-        # undeploy the function
-        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "undeploy",
-                                     "SUCCESS: Function undeployed")
-        # delete the function
-        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "delete",
-                                     "SUCCESS: Function deleted")
-
-    def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None):
-        remote_client = RemoteMachineShellConnection(host)
-        cmd = "couchbase-cli eventing-function-setup -c {0} -u {1} -p {2} --{3} --name {4}".format(
-            host.ip, host.rest_username, host.rest_password, operation, function_name)
-        if file_name:
-            cmd += " --file {0}".format(file_name)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
-        log.info(command)
-        output, error = remote_client.execute_command(command)
-        if error or not filter(lambda x: result in x, output):
-            self.fail("couchbase-cli event-setup function {0} failed: {1}".format(operation, output))
-        else:
-            log.info("couchbase-cli event-setup function {0} succeeded : {1}".format(operation, output))
