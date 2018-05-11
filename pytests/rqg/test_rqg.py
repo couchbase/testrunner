@@ -1,4 +1,5 @@
 import sys
+import random
 import paramiko
 from basetestcase import BaseTestCase
 import json
@@ -628,18 +629,30 @@ class RQGTests(BaseTestCase):
             self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue = failure_record_queue, table_name= table_name)
             self._populate_delta_buckets(table_name)
 
-
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
-        n1ql_query = data["n1ql"]
-
-        if (n1ql_query.find("simple_table")>0) and ((self.database+"_"+"simple_table") not in n1ql_query):
-            n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-
         sql_query = data["sql"]
         indexes = data["indexes"]
         table_name = data["bucket"]
         expected_result = data["expected_result"]
+        n1ql_query = data["n1ql"]
+
+        if "NUMERIC_VALUE1" in n1ql_query:
+            limit = random.randint(1, 30)
+            n1ql_query = n1ql_query.replace("NUMERIC_VALUE1", str(limit))
+            sql_query = sql_query.replace("NUMERIC_VALUE1", str(limit))
+            if limit < 10:
+                offset = limit - 2
+            else:
+                offset = limit - 10
+            if offset < 0:
+                offset = 0
+            n1ql_query = n1ql_query.replace("NUMERIC_VALUE2", str(offset))
+            sql_query = sql_query.replace("NUMERIC_VALUE2", str(offset))
+
+        if (n1ql_query.find("simple_table")>0) and ((self.database+"_"+"simple_table") not in n1ql_query):
+            n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
         result_run = {}
         result_run["n1ql_query"] = n1ql_query
@@ -911,7 +924,6 @@ class RQGTests(BaseTestCase):
             return {"success":True, "result": "Pass"}
         except Exception, ex:
             return {"success":False, "result": str(ex)}
-
 
     def _run_queries_and_verify(self, n1ql_query=None, sql_query=None, expected_result=None):
         if not self.create_primary_index:
