@@ -505,25 +505,11 @@ class BaseTestCase(unittest.TestCase):
                           port=None, quota_percent=None, services=None):
         quota = 0
         init_tasks = []
-        count = 0
         for server in servers:
             init_port = port or server.port or '8091'
-            assigned_services = None
-            if services is not None:
-                if len(services) < 2 :
-                    if self.master != server:
-                        assigned_services = None
-                else:
-                    assigned_services = []
-                    if len(servers) == len(services):
-                        if len(assigned_services) == 1 :
-                            assigned_services[0] = services[count]
-                        else:
-                            assigned_services.append(services[count])
-                        count += 1
-                    elif len(servers) > len(services):
-                        self.log.info("service will set to first element")
-                        assigned_services.append(services[0])
+            assigned_services = services
+            if self.master != server:
+                assigned_services = None
             init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                                                       rebalanceIndexPausingDisabled, maxParallelIndexers,
                                                       maxParallelReplicaIndexers, init_port,
