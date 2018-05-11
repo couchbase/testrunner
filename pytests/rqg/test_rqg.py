@@ -623,6 +623,7 @@ class RQGTests(BaseTestCase):
                             table_map=map,
                             n1ql_queries=data_info)
             verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_name)
+            self.sleep(2)
             self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue=failure_record_queue, table_name=table_name)
             self._populate_delta_buckets(table_name)
 
@@ -776,7 +777,6 @@ class RQGTests(BaseTestCase):
 
     def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue, failure_record_queue=None, table_name=None):
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
-        client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
         if n1ql_query.find("copy_simple_table") > 0:
@@ -788,19 +788,24 @@ class RQGTests(BaseTestCase):
 
         test_data["n1ql_query"] = n1ql_query
         sql_query = test_data["sql_query"]
+
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
+
         self.log.info("SQL :: {0}".format(sql_query))
         self.log.info("N1QL :: {0}".format(n1ql_query))
+
         crud_ops_run_result = None
-        self._run_queries_and_verify_crud(n1ql_query=verification_query, sql_query=verification_query, expected_result=None, table_name=table_name)
+        client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
         try:
             self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
-            client._db_execute_query(query=sql_query)
+            client._insert_execute_query(query=sql_query)
         except Exception, ex:
             self.log.info(ex)
-            crud_ops_run_result ={"success": False, "result": str(ex)}
+            crud_ops_run_result = {"success": False, "result": str(ex)}
+            client._close_mysql_connection()
+        client._close_mysql_connection()
         if crud_ops_run_result is None:
             query_index_run = self._run_queries_and_verify_crud(n1ql_query=verification_query, sql_query=verification_query, expected_result=None, table_name=table_name)
         else:
@@ -1050,12 +1055,13 @@ class RQGTests(BaseTestCase):
     def _run_queries_and_verify_crud(self, n1ql_query=None, sql_query=None, expected_result=None, table_name=None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
-        n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
-        # Run n1ql query
+        if n1ql_query.find(self.database) <= 0:
+            n1ql_query = n1ql_query.replace("simple_table", self.database+"_"+"simple_table")
         hints = self.query_helper._find_hints(sql_query)
         for i, item in enumerate(hints):
             if "simple_table" in item:
                 hints[i] = hints[i].replace("simple_table", self.database+"_"+"simple_table")
+
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
@@ -1073,6 +1079,7 @@ class RQGTests(BaseTestCase):
                 self.log.info("number of results returned from sql and n1ql are different")
                 self.log.info("sql query is {0}".format(sql_query))
                 self.log.info("n1ql query is {0}".format(n1ql_query))
+
                 if (len(sql_result) == 0 and len(n1ql_result) == 1) or (len(n1ql_result) == 0 and len(sql_result) == 1) or (len(sql_result) == 0):
                     return {"success": True, "result": "Pass"}
             try:
@@ -1188,7 +1195,7 @@ class RQGTests(BaseTestCase):
             self._setup_and_load_buckets_from_files()
 
         self._initialize_n1ql_helper()
-        #create copy of simple table if this is a merge operation
+        # create copy of simple table if this is a merge operation
         self.sleep(10)
         if self.gsi_type == "memory_optimized":
             os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip, self.indexer_memQuota))

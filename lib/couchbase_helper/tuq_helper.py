@@ -114,7 +114,6 @@ class N1QLHelper():
 
     def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"], aggregate_pushdown=False):
         new_n1ql_result = []
-
         for result in n1ql_result:
             if result != {}:
                 new_n1ql_result.append(result)
@@ -185,9 +184,10 @@ class N1QLHelper():
             actual_result = self._gen_dict(n1ql_result)
         actual_result = sorted(actual_result)
         expected_result = sorted(sql_result)
+
         if len(actual_result) != len(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
-            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (len(actual_result), len(expected_result), extra_msg))
+            raise Exception("Results are incorrect. Actual num %s. Expected num: %s.:: %s \n" % (len(actual_result), len(expected_result), extra_msg))
         if not self._result_comparison_analysis(actual_result, expected_result):
             msg = "The number of rows match but the results mismatch, please check"
             extra_msg = self._get_failure_message(expected_result, actual_result)
