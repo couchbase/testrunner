@@ -9,7 +9,7 @@ class LogRedactionBase(BaseTestCase):
     def setUp(self):
         super(LogRedactionBase, self).setUp()
         self.log_redaction_level = self.input.param("redaction_level", "none")
-        self.interrupt_replicaion = self.input.param("interrupt-replication", False)
+        self.interrupt_replication = self.input.param("interrupt-replication", False)
 
     def tearDown(self):
         super(LogRedactionBase, self).tearDown()
