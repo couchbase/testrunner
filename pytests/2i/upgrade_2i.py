@@ -31,11 +31,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.whereCondition= self.input.param("whereCondition"," job_title != \"Sales\" ")
         query_template += " WHERE {0}".format(self.whereCondition)
         self.load_query_definitions = []
-        self.initial_index_number = self.input.param("initial_index_number", 3)
+        self.initial_index_number = self.input.param("initial_index_number", 1)
         for x in range(self.initial_index_number):
-            index_name = "index_name_"+ str(x)
+            index_name = "index_name_" + str(x)
             query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
-                                query_template=query_template, groups=["simple"])
+                                               query_template=query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
         if not self.build_index_after_create:
             self.build_index_after_create = True
@@ -455,7 +455,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             log.info("====== Indexer Mode Set to {0}=====".format(self.post_upgrade_gsi_type))
         else:
             self.info("====== Indexer Mode is not set to {0}=====".format(self.post_upgrade_gsi_type))
-            raise
         for th in upgrade_th:
             th.join()
         self._run_tasks([kv_ops])
@@ -535,7 +534,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                         self._recreate_equivalent_indexes(node)
                 else:
                     self.multi_create_index()
-                self._verify_create_index_api()
                 self._verify_scan_api()
                 self._create_replica_indexes()
                 self.multi_query_using_index(verify_results=False)
@@ -546,6 +544,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._run_tasks([kvOps_tasks])
         for thread in threads:
             thread.join()
+        self.sleep(60)
+        self._verify_create_index_api()
         buckets = self._create_plasma_buckets()
         self.load(self.gens_load, buckets=buckets, flag=self.item_flag, batch_size=self.batch_size)
         self.multi_create_index(buckets=buckets,query_definitions=self.query_definitions)
@@ -611,13 +611,19 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             actual_result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
             log.info(actual_result)
             old_api = False
+            api_two = False
             for node, vals in node_map.iteritems():
                 if vals["version"] < "5":
                     old_api = True
                     break
-            if not old_api:
+                elif vals["version"] < "5.5":
+                    api_two = True
+            if not old_api and api_two:
                 msg = "IndexScan2"
                 self.assertIn(msg, str(actual_result), "IndexScan2 is not used for Spock Nodes")
+            elif not old_api and not api_two:
+                msg = "IndexScan3"
+                self.assertIn(msg, str(actual_result), "IndexScan3 is not used for Vulcan Nodes")
 
     def _create_replica_indexes(self):
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
