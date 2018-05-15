@@ -699,6 +699,8 @@ class QueryHelper(object):
 
     def _covert_fields_template_to_value(self, sql = "", table_map = {}, sql_map=None):
         string_field_names = self._search_fields_of_given_type(["varchar", "text", "tinytext", "char"], table_map)
+        if "primary_key_id" in string_field_names:
+            string_field_names.remove("primary_key_id")
         numeric_field_names = self._search_fields_of_given_type(["int", "mediumint", "double", "float", "decimal"], table_map)
         datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
         bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
@@ -801,14 +803,9 @@ class QueryHelper(object):
         index_name_with_occur_fields_where = None
         index_name_with_expression = None
         index_name_fields_only = None
-        #print "in _convert_sql_template_to_value_for_secondary_indexes"
-        #import pdb;pdb.set_trace()
         sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
-        #print "calling sql to n1ql"
         n1ql = self._gen_sql_to_nql(sql)
-        #print n1ql
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type ="sql")
-        #sql = sql.replace("FOR t_2"," ")
         n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type ="n1ql")
         map = {
                 "n1ql":n1ql,
