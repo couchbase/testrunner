@@ -126,6 +126,7 @@ class EventingRecovery(EventingBaseTest):
         # kill memcached on kv and eventing when eventing is processing mutations
         for node in [kv_node, eventing_node]:
             self.kill_memcached_service(node)
+        self.sleep(120)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

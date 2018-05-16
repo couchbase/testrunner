@@ -428,7 +428,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def kill_erlang_service(self, server):
         remote_client = RemoteMachineShellConnection(server)
         os_info = remote_client.extract_remote_info()
-        log.info("os_info : {0}", os_info)
+        log.info("os_info : {0}".format(os_info))
         if os_info.type.lower() == "windows":
             remote_client.kill_erlang(os="windows")
         else:

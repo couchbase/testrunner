@@ -67,7 +67,7 @@ class EventingNegative(EventingBaseTest):
             self.rest.save_function(body['appname'], body)
             self.rest.deploy_function(body['appname'], body)
         except Exception as ex:
-            if "Source bucket missing" not in str(ex):
+            if "ERR_BUCKET_MISSING" not in str(ex):
                 self.fail("Function save/deploy succeeded even when src/dst/metadata buckets doesn't exist")
 
     def test_deploy_function_where_source_and_metadata_buckets_are_same(self):
@@ -103,7 +103,7 @@ class EventingNegative(EventingBaseTest):
             self.rest.save_function(body['appname'], body)
             self.rest.deploy_function(body['appname'], body)
         except Exception as ex:
-            if "Source bucket is memcached, should be either couchbase or ephemeral" not in str(ex):
+            if "ERR_SOURCE_BUCKET_MEMCACHED" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be memcached buckets")
 
     def test_src_metadata_and_dst_bucket_flush_and_delete_when_eventing_is_processing_mutations(self):
