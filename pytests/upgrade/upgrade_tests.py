@@ -710,6 +710,44 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         except Exception, e:
             self.log.info(e)
 
+    def create_cbas_services(self, queue=None):
+        """
+           This test only need max 4 servers to run and only upgrade to vulcan and later
+           Command to run:
+            upgrade.upgrade_tests.UpgradeTests.test_upgrade,items=5000,initial_version=4.6.4-xxxx,
+            nodes_init=3,initialize_events=kv_ops_initialize,upgrade_services_in='kv:index',
+            after_events=rebalance_in-create_cbas_services,after_upgrade_services_in=cbas,
+            dgm_run=true,upgrade_test=True,skip_init_check_cbserver=true,released_upgrade_version=5.5.0-xxx
+        """
+        try:
+            self.validate_error = False
+            rest = RestConnection(self.master)
+            cb_version = rest.get_nodes_version()
+            if 5.5 > float(cb_version[:3]):
+                self.log.info("This analytic test is only for cb version 5.5 and later.")
+                return
+            self.log.info("Get cbas nodes in cluster")
+            cbas_node = self.get_nodes_from_services_map(service_type="cbas")
+            cbas_rest = RestConnection(self.servers[self.nodes_init])
+            self.get_services_map()
+
+            kv_nodes = copy.deepcopy(self.servers)
+            kv_maps = [x.replace(":8091", "") for x in self.services_map["kv"]]
+            self.log.info("Get kv node in cluster")
+            for i, node in enumerate(kv_nodes):
+                if node.ip not in kv_maps:
+                    del kv_nodes[i]
+            self.cbas_node = cbas_node
+            self.load_sample_buckets(servers=kv_nodes, bucketName="travel-sample",
+                                              total_items=31591, rest=cbas_rest)
+            self.test_create_dataset_on_bucket()
+        except Exception as e:
+            self.log.info(e)
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
     def online_upgrade(self):
         try:
             self.log.info("online_upgrade")

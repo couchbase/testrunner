@@ -317,7 +317,7 @@ class RestConnection(object):
             self.eventing_baseUrl = "http://{0}:{1}/".format(self.hostname, self.eventing_port)
 
         # Initialization of CBAS related params
-        self.cbas_base_url = ""
+        self.cbas_base_url = "http://{0}:{1}".format(self.ip, 8095)
         if hasattr(self.input, 'cbas'):
             if self.input.cbas:
                 self.cbas_node = self.input.cbas

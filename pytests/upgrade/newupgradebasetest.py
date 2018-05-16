@@ -1,7 +1,7 @@
 import re
 import testconstants
 import gc
-import sys
+import sys, json
 import traceback
 import Queue
 from threading import Thread
@@ -66,6 +66,12 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_build_type = self.input.param('initial_build_type', None)
         self.stop_persistence = self.input.param('stop_persistence', False)
         self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
+        self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
+        self.cb_server_ip = self.input.param("cb_server_ip", None)
+        self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
+        self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
+        self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid', self.cbas_dataset_name)
+        self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid', self.cbas_bucket_name)
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
@@ -961,3 +967,140 @@ class NewUpgradeBaseTest(BaseTestCase):
         :param fts_obj: he FTS object created in create_fts_index_query_compare()
         """
         fts_obj.delete_all()
+
+    """ for cbas test """
+    def load_sample_buckets(self, servers=None, bucketName=None, total_items=None,
+                                                                        rest=None):
+        """ Load the specified sample bucket in Couchbase """
+        self.assertTrue(rest.load_sample(bucketName),
+                        "Failure while loading sample bucket: {0}".format(bucketName))
+
+        """ check for load data into travel-sample bucket """
+        if total_items:
+            import time
+            end_time = time.time() + 600
+            while time.time() < end_time:
+                self.sleep(20)
+                num_actual = 0
+                if not servers:
+                    num_actual = self.get_item_count(self.master,bucketName)
+                else:
+                    for server in servers:
+                        num_actual += self.get_item_count(server,bucketName)
+                if int(num_actual) == total_items:
+                    self.log.info("{0} items are loaded in the {1} bucket"\
+                                           .format(num_actual ,bucketName))
+                    break
+                self.log.info("{0} items are loaded in the {1} bucket"\
+                                        .format(num_actual, bucketName))
+            if int(num_actual) != total_items:
+                return False
+        else:
+            self.sleep(120)
+
+        return True
+
+    def execute_statement_on_cbas_via_rest(self, statement, mode=None, rest=None,
+                                           timeout=120, client_context_id=None,
+                                           username=None, password=None):
+        """
+        Executes a statement on CBAS using the REST API using REST Client
+        """
+        pretty = "true"
+        if not rest:
+            rest = RestConnection(self.cbas_node)
+        try:
+            self.log.info("Running query on cbas: {0}".format(statement))
+            response = rest.execute_statement_on_cbas(statement, mode, pretty,
+                                                      timeout, client_context_id,
+                                                      username, password)
+            response = json.loads(response)
+            if "errors" in response:
+                errors = response["errors"]
+            else:
+                errors = None
+
+            if "results" in response:
+                results = response["results"]
+            else:
+                results = None
+
+            if "handle" in response:
+                handle = response["handle"]
+            else:
+                handle = None
+
+            return response["status"], response[
+                "metrics"], errors, results, handle
+
+        except Exception,e:
+            raise Exception(str(e))
+
+    def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
+                              cb_server_ip=None,
+                              validate_error_msg=False,
+                              username = None, password = None):
+        """
+        Creates a bucket on CBAS
+        """
+        if cb_server_ip:
+            cmd_create_bucket = "create bucket " + cbas_bucket_name + \
+                              " with {\"name\":\"" + cb_bucket_name + \
+                              "\",\"nodes\":\"" + cb_server_ip + "\"};"
+        else:
+            '''DP3 doesn't need to specify cb server ip as cbas node is
+               part of the cluster.
+            '''
+            cmd_create_bucket = "create bucket " + cbas_bucket_name + \
+                            " with {\"name\":\"" + cb_bucket_name + "\"};"
+        status, metrics, errors, results, _ = \
+                   self.execute_statement_on_cbas_via_rest(cmd_create_bucket,
+                                                           username=username,
+                                                           password=password)
+
+        if validate_error_msg:
+            return self.validate_error_in_response(status, errors)
+        else:
+            if status != "success":
+                return False
+            else:
+                return True
+
+    def create_dataset_on_bucket(self, cbas_bucket_name, cbas_dataset_name,
+                                 where_field=None, where_value = None,
+                                 validate_error_msg=False, username = None,
+                                 password = None):
+        """
+        Creates a shadow dataset on a CBAS bucket
+        """
+        cmd_create_dataset = "create shadow dataset {0} on {1};".format(
+                                     cbas_dataset_name, cbas_bucket_name)
+        if where_field and where_value:
+            cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";"\
+                                              .format(cbas_dataset_name, cbas_bucket_name,
+                                                      where_field, where_value)
+        status, metrics, errors, results, _ = \
+                        self.execute_statement_on_cbas_via_rest(cmd_create_dataset,
+                                                                username=username,
+                                                                password=password)
+        if validate_error_msg:
+            return self.validate_error_in_response(status, errors)
+        else:
+            if status != "success":
+                return False
+            else:
+                return True
+
+    def test_create_dataset_on_bucket(self):
+        # Create bucket on CBAS
+        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
+                                   cb_bucket_name=self.cb_bucket_name,
+                                   cb_server_ip=self.cb_server_ip)
+
+        # Create dataset on the CBAS bucket
+        result = self.create_dataset_on_bucket(
+            cbas_bucket_name=self.cbas_bucket_name_invalid,
+            cbas_dataset_name=self.cbas_dataset_name,
+            validate_error_msg=self.validate_error)
+        if not result:
+            self.fail("FAIL : Actual error msg does not match the expected")

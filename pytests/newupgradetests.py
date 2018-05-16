@@ -1,5 +1,5 @@
 import Queue
-import copy
+import copy, json
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -7,6 +7,8 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
+from fts.stable_topology_fts import StableTopFTS
+from cbas.cbas_functional_tests import CBASFunctionalTests
 # from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
@@ -2277,6 +2279,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
            gsi_type=memory_optimized,init_nodes=False,upgrade_version=5.5.0-xxx,
            initial-services-setting='kv,index-kv,n1ql',after_upgrade_services_in=eventing,
            dgm_run=True,upgrade_test=True
+           if test failover upgrade, add param offline_failover_upgrade=True
         """
         if len(self.servers) < 3 :
             self.fail("This test needs at least 4 servers to run")
@@ -2323,12 +2326,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if self.offline_failover_upgrade:
                 total_nodes = len(upgrade_nodes)
                 for server in upgrade_nodes:
-                    self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip, graceful=True)
+                    self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
+                                                                      graceful=True)
                     self.sleep(timeout=60)
-                    self.rest.set_recovery_type('ns_1@' + upgrade_nodes[total_nodes - 1].ip, "full")
-                    output, error = self._upgrade(upgrade_version, upgrade_nodes[total_nodes - 1])
+                    self.rest.set_recovery_type('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
+                                                                                     "full")
+                    output, error = self._upgrade(upgrade_version,
+                                                  upgrade_nodes[total_nodes - 1])
                     if "You have successfully installed Couchbase Server." not in output:
-                        print output
                         self.fail("Upgrade failed. See logs above!")
                     self.cluster.rebalance(self.servers[:nodes_init], [], [])
                     total_nodes -= 1
@@ -2378,22 +2383,42 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         if after_upgrade_services_in is not False:
             for upgrade_version in self.upgrade_versions:
-                self._install([self.servers[nodes_init]], version=self.upgrade_versions[0])
+                self._install([self.servers[nodes_init]],
+                               version=self.upgrade_versions[0])
                 self.sleep(self.expire_time)
                 try:
-                    self.log.info("Add new node {0}after upgrade".format(self.servers[nodes_init].ip))
-                    self.cluster.rebalance(self.servers[:(nodes_init + 1)], [self.servers[nodes_init]], [],
-                                                         services=[after_upgrade_services_in])
+                    self.log.info("Add new node {0}after upgrade"\
+                                  .format(self.servers[nodes_init].ip))
+                    self.cluster.rebalance(self.servers[:(nodes_init + 1)],
+                                            [self.servers[nodes_init]], [],
+                                             services=[after_upgrade_services_in])
                 except Exception as e:
-                    print "error: ", e
-        if "fts" in after_upgrade_services_in:
-            self.create_fts_index()
+                    self.fail(e)
+        if 5 > int(self.initial_version[:1]) and after_upgrade_services_in:
+            if "fts" in after_upgrade_services_in:
+                self.create_fts_index()
+        if 5 > int(self.upgrade_versions[0][:1]) and after_upgrade_services_in:
+            if "cbas" in after_upgrade_services_in:
+                self.load_sample_buckets(servers=list(set([self.master,
+                                              self.servers[nodes_init]])),
+                                              bucketName="travel-sample",
+                                              total_items=31591)
 
         if self.upgrade_versions[0][:5] in COUCHBASE_FROM_VULCAN and \
-                              "eventing" in after_upgrade_services_in:
-            self.dataset = self.input.param("dataset", "default")
-            self.create_eventing_services()
-        # creating new buckets after upgrade
+                 after_upgrade_services_in:
+            if "eventing" in after_upgrade_services_in:
+                self.dataset = self.input.param("dataset", "default")
+                self.create_eventing_services()
+            if "cbas" in after_upgrade_services_in:
+                self.validate_error = False
+                cbas_node = self.get_nodes_from_services_map(service_type="cbas")
+                cbas_rest = RestConnection(self.servers[nodes_init])
+                kv_nodes = self.get_nodes_from_services_map(service_type="kv")
+                self.cbas_node = cbas_node
+                self.load_sample_buckets(servers=self.servers[:nodes_init],
+                                         bucketName="travel-sample",
+                                         total_items=31591, rest=cbas_rest)
+                self.test_create_dataset_on_bucket()
         if after_upgrade_buckets_in is not False:
             self.bucket_size = 100
             self._create_sasl_buckets(self.master, 1)
