@@ -820,6 +820,7 @@ class EventingRebalance(EventingBaseTest):
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
             self.kill_consumer(eventing_nodes[0])
+            self.kill_consumer(self.servers[self.nodes_init])
             self.kill_producer(eventing_nodes[1])
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
