@@ -1,5 +1,6 @@
 import logging
 import random
+import time
 
 from newtuq import QueryTests
 from couchbase_helper.cluster import Cluster
@@ -808,6 +809,25 @@ class BaseSecondaryIndexingTests(QueryTests):
                 else:
                     is_cluster_healthy = True
         return is_cluster_healthy
+
+    def wait_until_indexes_online(self, timeout=600):
+        rest = RestConnection(self.master)
+        init_time = time.time()
+        check = False
+        while not check:
+            index_status = rest.get_index_status()
+            log.info(index_status)
+            for index_info in index_status.values():
+                for index_state in index_info.values():
+                    if index_state["status"] == "Ready":
+                        check = True
+                    else:
+                        check = False
+                        time.sleep(1)
+                        next_time = time.time()
+                        break
+            check = check or (next_time - init_time > timeout)
+        return check
 
     def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
         """

@@ -1,5 +1,4 @@
 import logging
-import pdb
 import random
 
 from couchbase.bucket import Bucket
@@ -37,7 +36,8 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         self._query_index("pre_upgrade")
 
     def tearDown(self):
-        super(UpgradeSecondaryIndexInt64, self).tearDown()
+        pass
+        #super(UpgradeSecondaryIndexInt64, self).tearDown()
 
     def test_offline_upgrade(self):
         upgrade_nodes = self.nodes_out_list
@@ -56,7 +56,11 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             self.upgrade_servers.append(server)
-        self.sleep(120)
+        msg = "Cluster is not healthy after upgrade"
+        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+        log.info("Cluster is healthy")
+        self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
+        log.info("All indexes are online")
         self.add_built_in_server_user()
         self.sleep(20)
         if self.initial_version.split("-")[0] in UPGRADE_VERS:
@@ -105,15 +109,20 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             rebalance.result()
             self._remove_equivalent_indexes(node)
             self.sleep(60)
-            if self.initial_version.split("-")[0] in UPGRADE_VERS:
-                self.multi_drop_index()
-                self.sleep(100)
-                self._create_indexes()
-                self.sleep(100)
-            self._query_index("post_upgrade")
-            self._verify_post_upgrade_results()
-            self._update_int64_dataset()
-            self._query_for_long_num()
+        msg = "Cluster is not healthy after upgrade"
+        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+        log.info("Cluster is healthy")
+        if self.initial_version.split("-")[0] in UPGRADE_VERS:
+            self.multi_drop_index()
+            self.sleep(100)
+            self._create_indexes()
+            self.sleep(100)
+        self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
+        log.info("All indexes are online")
+        self._query_index("post_upgrade")
+        self._verify_post_upgrade_results()
+        self._update_int64_dataset()
+        self._query_for_long_num()
 
     def test_online_upgrade_with_rebalance(self):
         upgrade_nodes = self.servers[:self.nodes_init]
@@ -148,6 +157,11 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             if "index" in node_services_list:
                 self._recreate_equivalent_indexes(node)
             self.sleep(30)
+        msg = "Cluster is not healthy after upgrade"
+        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+        log.info("Cluster is healthy")
+        self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
+        log.info("All indexes are online")
         self._query_index("post_upgrade")
         self._verify_post_upgrade_results()
         self._update_int64_dataset()
@@ -173,6 +187,11 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             self.sleep(100)
             self._create_indexes()
             self.sleep(100)
+        msg = "Cluster is not healthy after upgrade"
+        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+        log.info("Cluster is healthy")
+        self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
+        log.info("All indexes are online")
         self._query_index("post_upgrade")
         self._verify_post_upgrade_results()
         self._update_int64_dataset()
@@ -197,26 +216,16 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                 self.sleep(100)
                 self._create_indexes()
                 self.sleep(100)
+            msg = "Cluster is not healthy after upgrade"
+            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            log.info("Cluster is healthy")
+            self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
+            log.info("All indexes are online")
             self._query_index("post_upgrade")
-            self._verify_post_upgrade_results()
-            self._update_int64_dataset()
-            self._query_for_long_num()
-
-    def test_fresh_install(self):
-        self.multi_drop_index()
-        query_results = {}
-        for query_def in self.query_definitions:
-            if query_def.index_name not in query_results.keys():
-                query_results[query_def.index_name] = []
-                for query in query_def.query_template:
-                    query = query.format("`#primary`")
-                    results = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-                    query_results[query_def.index_name].append(results["results"])
-        self.query_results["pre_upgrade"] = query_results
-        self._create_indexes()
-        self.sleep(100)
-        self._query_index("post_upgrade")
-        self._verify_post_upgrade_results()
+            if ver == self.upgrade_to:
+                self._verify_post_upgrade_results()
+                self._update_int64_dataset()
+                self._query_for_long_num()
 
     def _create_int64_dataset(self):
         generators = []
@@ -338,11 +347,9 @@ class SecondaryIndexIndexInt64(BaseSecondaryIndexingTests):
                 query_results = self.n1ql_helper.run_cbq_query(query=index_query, server=self.n1ql_node)
                 primary_query = query.format("#primary")
                 primary_results = self.n1ql_helper.run_cbq_query(query=primary_query, server=self.n1ql_node)
-                self._verify_post_upgrade_results(self, query_def.index_name, index_query, query_results, primary_results)
-        self.sleep(100)
-        self._verify_post_upgrade_results()
+                self._verify_aggregate_pushdown_results(query_def.index_name, index_query, query_results, primary_results)
 
-    def _verify_post_upgrade_results(self, index_name, query, query_results, primary_results):
+    def _verify_aggregate_pushdown_results(self, index_name, query, query_results, primary_results):
         wrong_results = {}
         if "long_num" in index_name or "long_arr" in index_name or not index_name.endswith("_long_num_name"):
             return
@@ -371,7 +378,6 @@ class QueryDefs(SQLDefinitionGenerator):
                             query_template=["SELECT long_num FROM default use index ({0}) where long_num = 2147483600",
                                             "SELECT long_num FROM default use index ({0}) where long_num > 2147483600",
                                             "SELECT long_num FROM default use index ({0}) where long_num > 2147483599 and long_num < 2147483601",
-                                            #"SELECT long_num FROM default use index ({0}) where (long_num % 10 != 0)".format(index_name_prefix + "_long_num"),
                                             "SELECT long_num FROM default where long_num is not null"],
                             groups=["all", "simple_index"]))
         definitions_list.append(
