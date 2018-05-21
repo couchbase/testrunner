@@ -82,9 +82,23 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self.after_gen_delete = BlobGenerator('upgrade', 'upgrade',\
                                       self.value_size, start=self.num_items * .5,\
                                                          end=self.num_items* 0.75)
+        initial_services_setting = self.input.param("initial-services-setting", None)
         self._install(self.servers[:self.nodes_init])
+        if not self.init_nodes and initial_services_setting is not None:
+            self.initialize_nodes(self.servers[:self.nodes_init],
+                                  services=initial_services_setting)
         self._log_start(self)
-        self.cluster.rebalance([self.master], self.servers[1:self.nodes_init], [])
+        if len(self.servers[:self.nodes_init]) > 1:
+            if initial_services_setting is None:
+                self.cluster.rebalance([self.servers[0]], self.servers[1:], [],
+                                       use_hostnames=self.use_hostnames)
+            else:
+                set_services = self.initial_services(initial_services_setting)
+                for i in range(1, len(set_services)):
+                    self.cluster.rebalance([self.servers[0]], [self.servers[i]], [],
+                                           use_hostnames=self.use_hostnames,
+                                           services=[set_services[i]])
+                    self.sleep(10)
         """ sometimes, when upgrade failed and node does not install couchbase
             server yet, we could not set quota at beginning of the test.  We
             have to wait to install new couchbase server to set it properly here """
@@ -102,10 +116,12 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self.success_run = True
         self.failed_thread = None
         self.generate_map_nodes_out_dist_upgrade(self.after_upgrade_services_out_dist)
-        self.upgrade_services_in = self.get_services(self.in_servers_pool.values(),
+        if self.upgrade_services_in != "same":
+            self.upgrade_services_in = self.get_services(self.in_servers_pool.values(),
                                           self.upgrade_services_in, start_node = 0)
         self.after_upgrade_services_in = self.get_services(self.out_servers_pool.values(),
                                            self.after_upgrade_services_in, start_node = 0)
+        self.fts_obj = None
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -137,13 +153,13 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             cluster_ops = ["rebalance_in", "rebalance_out", "rebalance_in_out"]
             for event in self.after_events[0].split("-"):
                 if event in cluster_ops:
-                    self.log.info("There are cluster ops after upgrade.  Need to "
+                    self.log.info("\n\nThere are cluster ops after upgrade.  Need to "
                                   "install free nodes in upgrade version")
                     self._install(out_nodes)
                     break
             self.generate_map_nodes_out_dist_upgrade(\
                                       self.after_upgrade_services_out_dist)
-            self.log.info("*** Start operations after upgrade is done ***")
+            self.log.info("\n\n*** Start operations after upgrade is done ***")
             self.add_built_in_server_user()
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
@@ -774,6 +790,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         for i in range(self.nodes_init / self.swap_num_servers):
             servers_in = {}
             new_servers = copy.deepcopy(servers)
+            servicesNodeOut = ""
             for key in out_servers.keys():
                 servers_in[key] = out_servers[key]
                 out_servers[key].upgraded = True
@@ -781,6 +798,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 if len(servers_in) == self.swap_num_servers:
                     break
             servers_out = {}
+            node_out = None
             new_servers.update(servers_in)
             for key in servers.keys():
                 if len(servers_out) == self.swap_num_servers:
@@ -792,9 +810,16 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             self.log.info("current {0}".format(servers))
             self.log.info("will come inside {0}".format(servers_in))
             self.log.info("will go out {0}".format(servers_out))
+            rest = RestConnection(servers_out.values()[0])
+            servicesNodeOut = rest.get_nodes_services()
+            servicesNodeOut = ",".join(servicesNodeOut[servers_out.keys()[0]] )
             self._install(servers_in.values())
             old_vbucket_map = self._record_vbuckets(self.master, servers.values())
-            if self.upgrade_services_in != None and len(self.upgrade_services_in) > 0:
+            if self.upgrade_services_in == "same":
+                self.cluster.rebalance(servers.values(), servers_in.values(),\
+                                                         servers_out.values(),
+                                    services=[servicesNodeOut])
+            elif self.upgrade_services_in != None and len(self.upgrade_services_in) > 0:
                 self.cluster.rebalance(servers.values(),
                                     servers_in.values(),
                       servers_out.values(), services = \
@@ -1021,6 +1046,13 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             self.dataset = "default"
             self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
             self.async_ops_all_buckets(self.docs_gen_map, batch_size=100)
+        except Exception, ex:
+            self.log.info(ex)
+
+    def create_fts_index_query(self, queue=None):
+        try:
+            self.fts_obj = self.create_fts_index_query_compare()
+            return self.fts_obj
         except Exception, ex:
             self.log.info(ex)
             if queue is not None:

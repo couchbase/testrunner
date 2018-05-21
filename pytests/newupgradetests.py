@@ -8,6 +8,7 @@ from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
 from fts.stable_topology_fts import StableTopFTS
+from pytests.fts.fts_callable import FTSCallable
 from cbas.cbas_functional_tests import CBASFunctionalTests
 # from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
@@ -2296,6 +2297,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             nodes_init = 3
             if initial_services_setting is not None:
                 initial_services_setting += "-kv,fts"
+                self.is_fts_in_pre_upgrade = True
         self._install(self.servers[:nodes_init])
         # Configure the nodes with services
         self.operations(self.servers[:nodes_init], services=initial_services_setting)
@@ -2305,7 +2307,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             service_type="n1ql")
         # Run the pre upgrade operations, typically creating index
         if self.initial_version[:5] in COUCHBASE_FROM_SPOCK:
-            self.create_fts_index()
+            fts_obj = self.create_fts_index_query_compare()
         self.pre_upgrade(self.servers[:3])
         seqno_expected = 1
         if self.ddocs_num:
@@ -2332,7 +2334,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.rest.set_recovery_type('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
                                                                                      "full")
                     output, error = self._upgrade(upgrade_version,
-                                                  upgrade_nodes[total_nodes - 1])
+                                                  upgrade_nodes[total_nodes - 1],
+                                                  fts_query_limit=10000000)
                     if "You have successfully installed Couchbase Server." not in output:
                         self.fail("Upgrade failed. See logs above!")
                     self.cluster.rebalance(self.servers[:nodes_init], [], [])
@@ -2362,10 +2365,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
                 if self.initial_build_type == "community" and \
                                 self.upgrade_build_type == "enterprise":
-                    upgrade_threads = self._async_update(upgrade_version, upgrade_nodes,\
-                                                                save_upgrade_config=True)
+                    upgrade_threads = self._async_update(upgrade_version, upgrade_nodes,
+                                                                save_upgrade_config=True,
+                                                                fts_query_limit=10000000)
                 else:
-                    upgrade_threads = self._async_update(upgrade_version, upgrade_nodes)
+                    upgrade_threads = self._async_update(upgrade_version, upgrade_nodes,
+                                                               fts_query_limit=10000000)
                 # wait upgrade statuses
                 for upgrade_thread in upgrade_threads:
                     upgrade_thread.join()
@@ -2394,9 +2399,17 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                              services=[after_upgrade_services_in])
                 except Exception as e:
                     self.fail(e)
-        if 5 > int(self.initial_version[:1]) and after_upgrade_services_in:
-            if "fts" in after_upgrade_services_in:
-                self.create_fts_index()
+
+        if not self.is_fts_in_pre_upgrade:
+            if after_upgrade_services_in and "fts" in after_upgrade_services_in:
+                self.log.info("Create, run and verify fts after upgrade")
+                fts_obj = self.create_fts_index_query_compare()
+                fts_obj.delete_all()
+        elif self.is_fts_in_pre_upgrade:
+            self.log.info("Query fts after upgrade to verify")
+            for index in fts_obj.fts_indexes:
+               fts_obj.run_query_and_compare(index=index, num_queries=20)
+            fts_obj.delete_all()
         if 5 > int(self.upgrade_versions[0][:1]) and after_upgrade_services_in:
             if "cbas" in after_upgrade_services_in:
                 self.load_sample_buckets(servers=list(set([self.master,

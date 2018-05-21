@@ -3,6 +3,7 @@ import time
 import copy
 import json
 from fts_base import FTSIndex, CouchbaseCluster
+from lib.membase.api.exception import FTSException
 from es_base import ElasticSearchBase
 from TestInput import TestInputSingleton
 from lib.couchbase_helper.documentgenerator import JsonDocGenerator
@@ -33,8 +34,9 @@ class FTSCallable:
     def __init__(self, nodes, es_validate=False):
         self.log = logger.Logger.get_logger()
         self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log)
-        self.cb_cluster.set_buckets()
+        self.cb_cluster.get_buckets()
         self.fts_indexes = self.cb_cluster.get_indexes()
+        """ have to have a elastic search node to run these tests """
         self.elastic_node = TestInputSingleton.input.elastic
         self.compare_es = es_validate
         self.es = None
@@ -58,7 +60,7 @@ class FTSCallable:
         index = FTSIndex(self.cb_cluster,
                          name=index_name,
                          source_name=bucket_name)
-        rest = RestConnection(self.cb_cluster.get_master_node())
+        rest = RestConnection(self.cb_cluster.get_random_fts_node())
         index.create(rest)
         return index
 
@@ -156,8 +158,7 @@ class FTSCallable:
         """ Deletes all fts and es indexes if any"""
         for index in self.fts_indexes:
             index.delete()
-        for es_index in self.es.get_indices():
-            es_index.delete()
+        self.es.delete_indices()
 
     def async_load_data(self):
         """ Loads data into CB and ES"""
@@ -209,7 +210,7 @@ class FTSCallable:
                 failed_queries.append(task.query_index + 1)
 
         if fail_count:
-            raise("%s out of %s queries failed! - %s" % (fail_count,
+            raise Exception("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,
                                                              failed_queries))
         else:

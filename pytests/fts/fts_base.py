@@ -2020,6 +2020,8 @@ class CouchbaseCluster:
         return total_hits, hit_list, time_taken, status, facets
 
     def get_buckets(self):
+        if not self.__buckets:
+            self.__buckets = RestConnection(self.__master_node).get_buckets()
         return self.__buckets
 
     def get_bucket_by_name(self, bucket_name):
@@ -2208,6 +2210,8 @@ class CouchbaseCluster:
             self._kv_gen[ops] = kv_gen
 
         tasks = []
+        if not self.__buckets:
+            self.__buckets = RestConnection(self.__master_node).get_buckets()
         for bucket in self.__buckets:
             kv_gen = copy.deepcopy(self._kv_gen[ops])
             tasks.append(

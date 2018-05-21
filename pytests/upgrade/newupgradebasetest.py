@@ -131,6 +131,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.partitions_per_pindex = \
             self.input.param("max_partitions_pindex", 32)
         self.index_kv_store = self.input.param("kvstore", None)
+        self.fts_obj = None
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -180,6 +181,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         params['init_nodes'] = self.init_nodes
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
+        if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
+            params['fts_query_limit'] = 10000000
+
         self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
@@ -207,7 +211,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
                 server.hostname = hostname
 
-    def operations(self, servers, services=None):
+    def initial_services(self, services=None):
         if services is not None:
             if "-" in services:
                 set_services = services.split("-")
@@ -215,6 +219,22 @@ class NewUpgradeBaseTest(BaseTestCase):
                 set_services = services.split(",")
         else:
             set_services = services
+        return set_services
+
+    def initialize_nodes(self, servers, services=None):
+        set_services = self.initial_services(services)
+        if 4.5 > float(self.initial_version[:3]):
+            self.gsi_type = "forestdb"
+        self.quota = self._initialize_nodes(self.cluster, servers,
+                                            self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled,
+                                            self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers,
+                                            self.maxParallelReplicaIndexers, self.port,
+                                            services=set_services)
+
+    def operations(self, servers, services=None):
+        set_services = self.initial_services(services)
 
         if 4.5 > float(self.initial_version[:3]):
             self.gsi_type = "forestdb"
@@ -934,23 +954,30 @@ class NewUpgradeBaseTest(BaseTestCase):
         else:
             return obj
 
-    def create_fts_index_query_compare(self):
+    def create_fts_index_query_compare(self, queue=None):
         """
         Call before upgrade
         1. creates a default index, one per bucket
         2. Loads fts json data
         3. Runs queries and compares the results against ElasticSearch
         """
-        fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
-        for bucket in self.buckets:
-            fts_obj.create_default_index(
-                index_name="index_{0}".format(bucket.name),
-                bucket_name=bucket.name)
-        fts_obj.load_data(self.num_items)
-        fts_obj.wait_for_indexing_complete()
-        for index in fts_obj.fts_indexes:
-            fts_obj.run_query_and_compare(index=index, num_queries=20)
-        return fts_obj
+        try:
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+            for bucket in self.buckets:
+                self.fts_obj.create_default_index(
+                    index_name="index_{0}".format(bucket.name),
+                    bucket_name=bucket.name)
+            self.fts_obj.load_data(self.num_items)
+            self.fts_obj.wait_for_indexing_complete()
+            for index in self.fts_obj.fts_indexes:
+                self.fts_obj.run_query_and_compare(index=index, num_queries=20)
+            return self.fts_obj
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
 
     def update_delete_fts_data_run_queries(self, fts_obj):
         """
@@ -967,6 +994,17 @@ class NewUpgradeBaseTest(BaseTestCase):
         :param fts_obj: he FTS object created in create_fts_index_query_compare()
         """
         fts_obj.delete_all()
+
+    def run_fts_query_and_compare(self, queue=None):
+        try:
+            self.log.info("Verify fts via queries again")
+            self.update_delete_fts_data_run_queries(self.fts_obj)
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
 
     """ for cbas test """
     def load_sample_buckets(self, servers=None, bucketName=None, total_items=None,

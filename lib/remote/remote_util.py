@@ -1690,8 +1690,22 @@ class RemoteMachineShellConnection:
         except IOError:
             pass
 
-    def couchbase_upgrade(self, build, save_upgrade_config=False, forcefully=False):
+    def couchbase_upgrade(self, build, save_upgrade_config=False, forcefully=False,
+                                                             fts_query_limit=None):
+        server_type = None
+        success = True
+        start_server_after_install = True
+        track_words = ("warning", "error", "fail")
+        if build.name.lower().find("membase") != -1:
+            server_type = 'membase'
+            abbr_product = "mb"
+        elif build.name.lower().find("couchbase") != -1:
+            server_type = 'couchbase'
+            abbr_product = "cb"
+        else:
+            raise Exception("its not a membase or couchbase?")
         # upgrade couchbase server
+        nonroot_path_start = "/"
         self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
@@ -1725,6 +1739,17 @@ class RemoteMachineShellConnection:
                     command = 'dpkg -i --force /tmp/{0}'.format(build.name)
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
+        linux = ["deb", "rpm"]
+        if fts_query_limit:
+            if self.info.deliverable_type in linux:
+                o, e = \
+                    self.execute_command("sed -i 's/export PATH/export PATH\\n"
+                            "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},hideUI=false/'\
+                            {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
+                                                              nonroot_path_start))
+                success &= self.log_command_output(o, e, track_words)
+                self.stop_couchbase()
+                self.start_couchbase()
         return output, error
 
     def couchbase_upgrade_win(self, architecture, windows_name, version):
@@ -3640,7 +3665,7 @@ class RemoteMachineShellConnection:
             if "centos 7" in self.info.distribution_version.lower():
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
-                shell.send("service couchbase-server restart\n")
+                shell.send("systemctl restart couchbase-server.service\n")
             else:
                 shell.send('/etc/init.d/couchbase-server restart\n')
         shell.close()

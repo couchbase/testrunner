@@ -22,6 +22,7 @@ from eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from random import randrange, randint
 from fts.fts_base import FTSIndex, FTSBaseTest
+from pytests.fts.fts_callable import FTSCallable
 from cbas.cbas_base import CBASBaseTest
 from pprint import pprint
 from testconstants import CB_REPO
@@ -98,6 +99,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid',
                                                                  self.cbas_bucket_name)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
+        self.is_fts_in_pre_upgrade = self.input.param('is_fts_in_pre_upgrade', False)
         self.during_ops = None
         if "during-ops" in self.input.test_params:
             self.during_ops = self.input.param("during-ops", None).split(",")
@@ -130,6 +132,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                 self.log.warn("http://developer.couchbase.com/documentation/server/4.0/install/upgrading.html")
                 self.upgrade_versions = self.input.param('initial_version', '4.1.0-4963')
                 self.upgrade_versions = self.upgrade_versions.split(";")
+        self.fts_obj = None
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -177,6 +180,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
         params['init_nodes'] = self.init_nodes
+        if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
+            params['fts_query_limit'] = 10000000
         if version:
             params['version'] = version
         if self.initial_build_type is not None:
@@ -250,6 +255,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         gc.collect()
         if self.input.param('extra_verification', False):
             self.total_buckets += 2
+#        if not self.total_buckets:
+#            self.total_buckets = 1
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         if self.dgm_run:
             self.bucket_size = 256
@@ -261,7 +268,10 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                     client.stop_persistence()
             self.sleep(10)
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, gen_load, "create", self.expire_time,
+        if self.is_fts_in_pre_upgrade:
+            self.create_fts_index_query_compare()
+        else:
+            self._load_all_buckets(self.master, gen_load, "create", self.expire_time,
                                                              flag=self.item_flag)
         if not self.stop_persistence:
             self._wait_for_stats_all_buckets(servers)
@@ -320,13 +330,20 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None, save_upgrade_config=False):
+    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,
+                                                            save_upgrade_config=False,
+                                                            fts_query_limit=None):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
-            self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
-            self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
-            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=save_upgrade_config, forcefully=self.is_downgrade)
+            self.assertTrue(appropriate_build.url,
+                            msg="unable to find build {0}".format(upgrade_version))
+            self.assertTrue(remote.download_build(appropriate_build),
+                                          "Build wasn't downloaded!")
+            o, e = remote.couchbase_upgrade(appropriate_build,\
+                                            save_upgrade_config=save_upgrade_config,\
+                                            forcefully=self.is_downgrade,
+                                            fts_query_limit=fts_query_limit)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             """ remove this line when bug MB-11807 fixed """
             if self.is_ubuntu:
@@ -335,8 +352,6 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             if 5.0 > float(self.initial_version[:3]) and self.is_centos7:
                 remote.execute_command("systemctl daemon-reload")
                 remote.start_server()
-            #remote.disconnect()
-            #self.sleep(10)
             self.rest = RestConnection(server)
             if self.is_linux:
                 self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
@@ -345,6 +360,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             if not skip_init:
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)
+            remote.disconnect()
+            self.sleep(10)
             return o, e
         except Exception, e:
             print traceback.extract_stack()
@@ -363,7 +380,9 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         if queue is not None:
             queue.put(True)
 
-    def _async_update(self, upgrade_version, servers, queue=None, skip_init=False, info=None, save_upgrade_config=False):
+    def _async_update(self, upgrade_version, servers, queue=None, skip_init=False,
+                      info=None, save_upgrade_config=False,
+                      fts_query_limit=None):
         self.log.info("servers {0} will be upgraded to {1} version".
                       format([server.ip for server in servers], upgrade_version))
         q = queue or self.queue
@@ -371,7 +390,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         for server in servers:
             upgrade_thread = Thread(target=self._upgrade,
                                     name="upgrade_thread" + server.ip,
-                                    args=(upgrade_version, server, q, skip_init, info, save_upgrade_config))
+                                    args=(upgrade_version, server, q, skip_init, info,
+                                          save_upgrade_config, fts_query_limit))
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads
@@ -932,7 +952,48 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         body['settings']['deadline_timeout'] = deadline_timeout
         return body
 
-    """ for cbas """
+    def create_fts_index_query_compare(self):
+        """
+        Call before upgrade
+        1. creates a default index, one per bucket
+        2. Loads fts json data
+        3. Runs queries and compares the results against ElasticSearch
+        """
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+        for bucket in self.buckets:
+            self.fts_obj.create_default_index(
+                index_name="index_{0}".format(bucket.name),
+                bucket_name=bucket.name)
+        self.fts_obj.load_data(self.num_items)
+        self.fts_obj.wait_for_indexing_complete()
+        for index in self.fts_obj.fts_indexes:
+            self.fts_obj.run_query_and_compare(index=index, num_queries=20)
+        return self.fts_obj
+
+    def update_delete_fts_data_run_queries(self, fts_obj):
+        """
+        To call after (preferably) upgrade
+        :param fts_obj: the FTS object created in create_fts_index_query_compare()
+        """
+        fts_obj.async_perform_update_delete()
+        for index in fts_obj.fts_indexes:
+            fts_obj.run_query_and_compare(index)
+
+    def delete_all_fts_artifacts(self, fts_obj):
+        """
+        Call during teardown of upgrade test
+        :param fts_obj: he FTS object created in create_fts_index_query_compare()
+        """
+        fts_obj.delete_all()
+
+    def run_fts_query_and_compare(self):
+        try:
+            self.log.info("Verify fts via queries again")
+            self.update_delete_fts_data_run_queries(self.fts_obj)
+        except Exception, ex:
+            print ex
+
+    """ for cbas test """
     def load_sample_buckets(self, servers=None, bucketName=None,
                                   total_items=None, rest=None):
         """ Load the specified sample bucket in Couchbase """
