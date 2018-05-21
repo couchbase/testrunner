@@ -2279,32 +2279,35 @@ class CouchbaseCluster:
             'vb_active_perc_mem_resident')[self.__master_node]
         start = items
         while int(current_active_resident) > active_resident_ratio:
+            batch_size = 1000
             if int(current_active_resident) - active_resident_ratio > 5:
                 end = start + batch_size * 100
+                batch_size = batch_size * 100
             else:
                 end = start + batch_size * 10
-            self.__log.info("loading %s keys ..." % (end - start))
+                batch_size = batch_size * 10
 
+            self.__log.info("Generating %s keys ..." % (end - start))
             kv_gen = JsonDocGenerator(seed,
                                       encoding="utf-8",
                                       start=start,
                                       end=end)
-
+            self.__log.info("Loading %s keys ..." % (end - start))
             tasks = []
             for bucket in self.__buckets:
-
                 tasks.append(self.__clusterop.async_load_gen_docs(
-                    self.__master_node, bucket.name, kv_gen, bucket.kvs[kv_store],
+                    self.__master_node, bucket.name, copy.deepcopy(kv_gen), bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
                     pause_secs, timeout_secs, compression=self.sdk_compression))
 
-                if es:
-                    tasks.append(es.async_bulk_load_ES(index_name='default_es_index',
+            if es:
+                tasks.append(es.async_bulk_load_ES(index_name='default_es_index',
                                                        gen=kv_gen,
                                                        op_type='create'))
 
-                for task in tasks:
-                    task.result()
+            for task in tasks:
+                task.result(timeout=2000)
+
             start = end
             current_active_resident = StatsCommon.get_stats(
                 [self.__master_node],
