@@ -689,7 +689,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
         output, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes,
                                            expect_failure=True, alter_index=self.alter_index)
-        if "Error occured Cannot Process Move Index - Rebalance/MoveIndex In Progress" not in error:
+        if "Cannot Process Move Index - Rebalance/MoveIndex In Progress" not in str(error):
             self.fail("cbindex move succeeded during a rebalance")
         else:
             self.log.info("Index alteration failed as expected")
@@ -1442,7 +1442,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                            expect_failure=True,
                                            alter_index=self.alter_index)
 
-        if "Error occured Unable to find Index service for destination" not in error:
+        if "Unable to find Index service for destination" not in str(error):
             self.fail(
                 "cbindex move did not fail with expected error message")
         else:
@@ -1459,7 +1459,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if self.alter_index:
             expected_err_msg = "syntax error"
 
-        if expected_err_msg not in error:
+        if expected_err_msg not in str(error):
             self.fail(
                 "cbindex move did not fail with expected error message")
         else:
@@ -1477,7 +1477,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if self.alter_index:
             expected_err_msg = "not found"
 
-        if expected_err_msg not in error:
+        if expected_err_msg not in str(error):
             self.fail(
                 "cbindex move did not fail with expected error message")
         else:
