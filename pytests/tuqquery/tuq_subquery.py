@@ -118,7 +118,7 @@ class QuerySubqueryTests(QueryTests):
         try:
             self.run_cbq_query()
         except CBQError as e:
-            self.assertTrue('Expression must be a group key or aggregate: ((select raw sum((`VMs`.`memory`)) from (`default`.`VMs`) as `VMs`)[0])' in str(e))
+            self.assertTrue('Expression must be a group key or aggregate: (correlated (select raw sum((`VMs`.`memory`)) from (`default`.`VMs`) as `VMs`)[0])' in str(e))
 
     def test_update_unset(self):
         self.query = 'UPDATE default a unset name  where "windows" in ( SELECT RAW VMs.os FROM a.VMs) limit 2 returning a.*,meta().id '

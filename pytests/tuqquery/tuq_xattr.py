@@ -646,6 +646,10 @@ class QueryXattrTests(QueryTests):
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx8")
             self.run_cbq_query(query="DROP INDEX default.idx15")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [self.servers[self.nodes_init]])
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
 
     def test_system_xattr_rebalance_in_query(self):
         self.reload_data()
@@ -686,6 +690,10 @@ class QueryXattrTests(QueryTests):
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx8")
             self.run_cbq_query(query="DROP INDEX default.idx15")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [self.servers[self.nodes_init]])
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
 
     def test_hard_failover_and_full_recovery_and_gsi_rebalance(self):
         self.reload_data()
@@ -705,7 +713,6 @@ class QueryXattrTests(QueryTests):
         self.sleep(30)
 
         try:
-
             # failover the indexer node
             failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=False)
             failover_task.result()
@@ -722,12 +729,12 @@ class QueryXattrTests(QueryTests):
 
             self.run_xattrs_query(query, '', '_system3', 'idx8', 'default', xattr_data=self.system_xattr_data)
 
+            # Run a user xattr query
+            self.run_xattrs_query(query2, '', 'user3', 'idx15', 'default', xattr_data=self.user_xattr_data)
+
             # Run a virtual xattr query
             self.run_xattrs_query("SELECT meta().xattrs.`$document` FROM default", "", "$document", "", "default",
                                   primary_compare=False, xattr_type='virtual')
-
-            # Run a user xattr query
-            self.run_xattrs_query(query2, '', 'user3', 'idx15', 'default', xattr_data=self.user_xattr_data)
 
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx8")
@@ -747,7 +754,6 @@ class QueryXattrTests(QueryTests):
 
         query = "SELECT meta().xattrs._system3 FROM default where meta().id is not missing and meta().xattrs._system3.field1.sub_field1a > 0"
         query2 = "SELECT meta().xattrs.user3, meta().xattrs.user3.field1, meta().xattrs.user3.field1.sub_field1a FROM default where meta().xattrs.user3.field1.sub_field1a is not missing"
-        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
 
         self.sleep(30)

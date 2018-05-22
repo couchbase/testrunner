@@ -2741,7 +2741,7 @@ class QueryTests(BaseTestCase):
                 all_docs_list.append(val)
         return all_docs_list
 
-    def _verify_results(self, actual_result, expected_result):
+    def _verify_results_base64(self, actual_result, expected_result):
         msg = "Results are incorrect. Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result))
         self.assertEquals(len(actual_result), len(expected_result), msg)
         msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s Expected first and last 100: %s." \

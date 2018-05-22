@@ -4070,20 +4070,22 @@ class QuerySanityTests(QueryTests):
     def test_let_string(self):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
-            self.query = "select name, join_date date from %s let join_date = tostr(join_yr) || '-' || tostr(join_mo)" % (bucket.name)
 
+            self.query = "select name, join_date as date from %s let join_date = tostr(join_yr) || '-' || tostr(join_mo)" % (bucket.name)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            self.query = "select name, join_date date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by meta().id limit 10" % (bucket.name)
-
-            actual_list2 = self.run_cbq_query()
-            actual_result2 = actual_list2['results']
-            expected_result = [{"name" : doc["name"],
-                                "date" : '%s-%s' % (doc['join_yr'], doc['join_mo'])}
+            expected_result = [{"name": doc["name"],
+                                "date": '%s-%s' % (doc['join_yr'], doc['join_mo'])}
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
-            expected_result2 = [{u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}]
             self._verify_results(actual_result, expected_result)
+
+            self.query = "select name, join_date as date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by meta().id limit 10" % (bucket.name)
+            actual_list2 = self.run_cbq_query()
+            actual_result2 = actual_list2['results']
+            actual_result2 = sorted(actual_result2)
+            expected_result2 = [{u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-21', u'name': u'employee-18'}, {u'date': u'0102-4', u'name': u'employee-16'}, {u'date': u'0102-7', u'name': u'employee-6'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-1', u'name': u'employee-7'}, {u'date': u'1102-21', u'name': u'employee-23'}, {u'date': u'1102-8', u'name': u'employee-20'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-8'}]
+            expected_result2 = sorted(expected_result2)
             self._verify_results(actual_result2,expected_result2)
 
     def test_letting(self):
