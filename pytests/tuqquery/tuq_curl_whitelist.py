@@ -224,15 +224,15 @@ class QueryWhitelistTests(QueryTests):
         self.rest.create_whitelist(self.master, {"all_access": True, "all_access": False})
 
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
-                                                 %self.curl_path)
+                                                 % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
-        query="select curl("+ url +")"
+        query="select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'],self.jira_error_msg))
+                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
         self.rest.create_whitelist(self.master, {"all_access": False, "all_access": True})
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
@@ -250,7 +250,7 @@ class QueryWhitelistTests(QueryTests):
         # Whitelist should not accept this setting and thus leave the above settting of all_access = False intact
         response, content = self.rest.create_whitelist(self.master, {"all_access": False, "allowed_urls": "blahblahblah"})
         result = json.loads(content)
-        self.assertEqual(result['errors']['allowed_urls'], "Invalid array")
+        self.assertEqual(result['errors']['allowed_urls'], "Invalid type: Must be a list of non-empty strings")
         n1ql_query = 'select * from default limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -370,7 +370,7 @@ class QueryWhitelistTests(QueryTests):
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
-        query="select curl("+ url +", %s" % options + ")"
+        query="select curl(" + url + ", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
@@ -381,7 +381,7 @@ class QueryWhitelistTests(QueryTests):
                                                            "allowed_urls": "blahblahblah",
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
         result = json.loads(content)
-        self.assertEqual(result['errors']['allowed_urls'], "Invalid array")
+        self.assertEqual(result['errors']['allowed_urls'], "Invalid type: Must be a list of non-empty strings")
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
@@ -392,7 +392,7 @@ class QueryWhitelistTests(QueryTests):
         response, content = self.rest.create_whitelist(self.master, {"all_access": False,
                                                            "disallowed_urls":"blahblahblahblahblah"})
         result = json.loads(content)
-        self.assertEqual(result['errors']['disallowed_urls'], "Invalid array")
+        self.assertEqual(result['errors']['disallowed_urls'], "Invalid type: Must be a list of non-empty strings")
 
     '''Should not be able to curl localhost even if you are on the localhost unless whitelisted'''
     def test_localhost(self):
