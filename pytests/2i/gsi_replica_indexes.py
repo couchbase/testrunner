@@ -583,10 +583,6 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info("Index building failed as expected")
 
         self.sleep(30)
-        index_map = self.get_index_map()
-        self.n1ql_helper.verify_replica_indexes_build_status(index_map,
-                                                             len(nodes) - 2,
-                                                             defer_build=False)
 
         nodes_all = self.rest.node_statuses()
         for node in nodes_all:
@@ -945,7 +941,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
-        self.sleep(30)
+        self.sleep(180)
 
         index_map = self.get_index_map()
         self.log.info("Index map after drop index: %s", index_map)
@@ -3393,9 +3389,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if error and not filter(lambda x: 'Backup successfully completed' in x,
                                 output):
             self.fail("cbbackupmgr backup failed")
-        elif not filter(lambda x: 'Restore completed successfully' in x,
+        elif not filter(lambda x: 'Backup successfully completed' in x,
                             output):
-            raise Exception("cbbackupmgr restore failed")
+            raise Exception("cbbackupmgr backup failed")
 
     def _create_restore(self, server, username="Administrator",
                         password="password"):
