@@ -905,46 +905,48 @@ class DMLQueryTests(QueryTests):
 ############################################################################################################################
 
     def test_merge_delete_match(self):
-        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        self.assertTrue(len(self.buckets) >= 2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
-        self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        self.query = 'MERGE INTO %s USING %s on key meta().id when matched then delete where meta(%s).id = "%s"' % (self.buckets[0].name, self.buckets[1].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['metrics']['mutationCount'], 1, 'Merge deleted more data than intended')
+        self.query = 'select * from default where meta().id = "%s"' % (keys[0])
+        self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Merge did not delete the item intended')
 
     def test_prepared_merge_delete_match(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
-        query = 'MERGE INTO %s USING %s on key "%s" when matched then delete'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        self.query = 'MERGE INTO %s USING %s on key meta().id when matched then delete where meta(%s).id = "%s"' % (self.buckets[0].name, self.buckets[1].name, self.buckets[1].name, keys[0])
         prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
         actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.query = 'select * from default where meta().id = "%s"' % (keys[0])
+        self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Merge did not delete the item intended')
 
     def test_merge_delete_match_limit(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='delete_match')
-        self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete limit 1'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        self.query = 'MERGE INTO %s USING %s on key meta().id when matched then delete limit 1' % (self.buckets[0].name, self.buckets[1].name)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
-        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
+        self.assertEqual(actual_result['metrics']['mutationCount'], 1, 'Merge deleted more data than intended')
 
     def test_merge_delete_where_match(self):
-        #self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete_where')
-        self.log.info(keys)
-        self.query = 'MERGE INTO %s USING %s s0 on key "%s" when matched then delete where s0.name LIKE "%s"'  % (self.buckets[0].name, self.buckets[1].name, keys[0],"employee")
+        self.query = 'MERGE INTO %s USING %s s0 on key meta().id when matched then delete where meta(s0).id = "%s" AND s0.name = "%s"' % (self.buckets[0].name, self.buckets[1].name, keys[0],"employee-1")
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['metrics']['mutationCount'], 1, 'Merge deleted more data than intended')
+        self.query = 'select * from default where meta().id = "%s"' % (keys[0])
+        self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Merge did not delete the item intended')
 
     def test_merge_update_match_set(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
