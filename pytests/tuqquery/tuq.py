@@ -21,6 +21,9 @@ from security.rbac_base import RbacBase
 from couchbase_helper.tuq_generators import TuqGenerators
 #from xdcr.upgradeXDCR import UpgradeTests
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
+from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
+import couchbase.subdocument as SD
 
 
 JOIN_INNER = "INNER"
@@ -30,7 +33,9 @@ JOIN_RIGHT = "RIGHT"
 
 class QueryTests(BaseTestCase):
     def setUp(self):
-        if not self._testMethodName == 'suite_setUp' and str(self.__class__).find('upgrade_n1qlrbac') == -1:
+        if not self._testMethodName == 'suite_setUp' \
+                and str(self.__class__).find('upgrade_n1qlrbac') == -1 \
+                and str(self.__class__).find('n1ql_upgrade') == -1:
             self.skip_buckets_handle = True
         else:
             self.skip_buckets_handle = False
@@ -2080,24 +2085,24 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
 
     '''Convert output of remote_util.execute_commands_inside to json'''
-    def convert_to_json(self,output_curl):
+    def convert_to_json(self, output_curl):
         new_curl = "{" + output_curl
         json_curl = json.loads(new_curl)
         return json_curl
 
     '''Convert output of remote_util.execute_command to json
        (stripping all white space to match execute_command_inside output)'''
-    def convert_list_to_json(self,output_of_curl):
+    def convert_list_to_json(self, output_of_curl):
         new_list = [string.replace(" ", "") for string in output_of_curl]
         concat_string = ''.join(new_list)
-        json_output=json.loads(concat_string)
+        json_output = json.loads(concat_string)
         return json_output
 
     '''Convert output of remote_util.execute_command to json to match the output of run_cbq_query'''
     def convert_list_to_json_with_spacing(self,output_of_curl):
         new_list = [string.strip() for string in output_of_curl]
         concat_string = ''.join(new_list)
-        json_output=json.loads(concat_string)
+        json_output = json.loads(concat_string)
         return json_output
 
 ##############################################################################################
@@ -2806,6 +2811,30 @@ class QueryTests(BaseTestCase):
 #
 ##############################################################################################
 
+    def run_common_body(self, index_list, queries_to_run):
+        try:
+            for idx in index_list:
+                self.run_cbq_query(query=idx[0])
+
+            for query in queries_to_run:
+                query_results = self.run_cbq_query(query=query[0])
+                self.assertEqual(query_results['metrics']['resultCount'], query[1])
+        finally:
+            for idx in index_list:
+                drop_query = "DROP INDEX %s.%s" % (idx[1][0], idx[1][1])
+                self.run_cbq_query(query=drop_query)
+
+##############################################################################################
+#
+#   tuq_xattrs.py helpers
+#
+##############################################################################################
+
+##############################################################################################
+#
+#   tuq_xdcr.py helpers
+#
+##############################################################################################
     # Tentative fixes for this implemented inside of tuq_xdcr itself, leaving these here until we have verified fix
     # def _override_clusters_structure(self):
     #     UpgradeTests._override_clusters_structure(self)

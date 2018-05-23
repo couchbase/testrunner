@@ -428,6 +428,7 @@ class RebalanceTask(Task):
             task_manager.schedule(self)
         except Exception as e:
             self.state = FINISHED
+            traceback.print_exc()
             self.set_exception(e)
 
     def add_nodes(self, task_manager):

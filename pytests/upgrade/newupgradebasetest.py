@@ -35,6 +35,7 @@ from testconstants import CE_EE_ON_SAME_FOLDER
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
+        self.log.info("==============  NewUpgradeBaseTest setup has started ==============")
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
                                   "2.5.2", "3.0.0", "3.0.1",
                                   "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
@@ -132,8 +133,11 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.input.param("max_partitions_pindex", 32)
         self.index_kv_store = self.input.param("kvstore", None)
         self.fts_obj = None
+        self.log.info("==============  NewUpgradeBaseTest setup has completed ==============")
+
 
     def tearDown(self):
+        self.log.info("==============  NewUpgradeBaseTest tearDown has started ==============")
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
                        len(self._resultForDoCleanups.failures or \
                            self._resultForDoCleanups.errors)) or \
@@ -169,8 +173,9 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
             if self.upgrade_servers:
-                self._install(self.upgrade_servers,version=self.initial_version)
+                self._install(self.upgrade_servers)
         self.sleep(20, "sleep 20 seconds before run next test")
+        self.log.info("==============  NewUpgradeBaseTest tearDown has completed ==============")
 
     def _install(self, servers):
         params = {}
@@ -215,7 +220,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if services is not None:
             if "-" in services:
                 set_services = services.split("-")
-            else:
+            elif "," in services:
                 set_services = services.split(",")
         else:
             set_services = services

@@ -301,7 +301,8 @@ class BaseTestCase(unittest.TestCase):
                     self.services = self.get_services(self.servers[:self.nodes_init], self.services_init)
                     self.cluster.rebalance(self.servers[:1], \
                                            self.servers[1:self.nodes_init], \
-                                           [], services=self.services)
+                                           [], \
+                                           services=self.services)
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
                     self.services = self.get_services(self.servers, self.services_init)
@@ -311,6 +312,7 @@ class BaseTestCase(unittest.TestCase):
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
+                traceback.print_exc()
                 self.fail(e)
 
             if self.dgm_run:
